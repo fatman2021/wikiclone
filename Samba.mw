@@ -1,0 +1,54 @@
+[http://www.broadbandbuyer.co.uk/Shop/ShopDetail.asp?ProductID=7226 Thomson TG587n] is a decent wireless-N broadband router (currently offered by O2 on high-end packages). This router has 2 USB ports for content sharing.
+
+== Configuring Content Sharing using Thomson Web Interface ==
+The configuration is quite simple. Open the web interface (default to 192.168.1.254) and go to the following section
+{{Code|Thomson Content Sharing|<pre>Toolbox->Content Sharing->Configure</pre>}}
+
+We only care about the first section ( Network File Server (Windows Networking) ). Let's assume your configuration looks like this
+{{Code|Thomson Content Sharing Configuration|<pre>
+Server Name: O2-Foobar
+Server Description: My Media Server
+Workgroup: WORKGROUP
+Server Enabled: Yes (this must be enabled)
+</pre>}}
+
+Make sure that you have selected your disk (Only '''FAT32''' or '''NTFS''' format for now) on ''List of connected disks'' field
+
+The Network File Server exposes the following two folders to the clients
+* Media
+* Shared
+
+== Client Configuration ==
+The shares are accessible through the smb:// protocol. The smbfs has been replaced by the cifs protocol so this is what we will use to access the disk from our Gentoo box
+
+=== Kernel Configuration ===
+The kernel needs to be configured like this
+{{Kernel||<pre>
+File Systems --->
+     [*] Network File Systems --->
+        [*] CIFS support (advanced network filesystem, SMBFS successor)--->
+             [*] CIFS Statistics
+                  [*] Extended Statistics
+             [*] CIFS Extended Attributes
+                  [*] CIFS POSIX Extentions
+</pre>}}
+
+=== Necessary System Tools ===
+We don't really want the full samba package, hence we will install only the [http://packages.gentoo.org/package/net-fs/mount-cifs net-fs/mount-cifs] package
+{{ShellRoot|emerge -av mount-cifs}}
+
+=== Mount the shared content ===
+Now that our client is fully configured we can access the shares like this
+==== Create the mount point ====
+{{ShellRoot|mkdir -p /mnt/My-Disk/<nowiki>{</nowiki>Media,Shared<nowiki>}</nowiki>}}
+==== Mount the exported folders ====
+{{ShellRoot|mount.cifs //O2-Foobar/Media /mnt/My-Disk/Media -o guest}}
+{{ShellRoot|mount.cifs //O2-Foobar/Shared /mnt/My-Disk/Shared -o guest}}
+
+===== Automatically mount shares on every boot =====
+If you want to automatically mount your shares on every boot, then edit your '''/etc/fstab''' to look like this
+{{Code|Edit /etc/fstab|<pre>
+//O2-Foobar/Media /mnt/My-Disk/Media cifs guest
+//O2-Foobar/Shared /mnt/My-Disk/Shared cifs guest
+</pre>}}
+{{Note|In case you get permission problems when trying to create files and folders in your disk, try to use gid=<your_user_gid), uid=<your_user_uid> in your '''/etc/fstab''' entries}}
