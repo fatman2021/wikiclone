@@ -2,10 +2,6 @@ The '''Linux Terminal Server Project''' ([http://www.ltsp.org/ website]) is a co
 
 This guide shows you how to install and configure the Gentoo LTSP 5 port. This guide assumes some knowledge of thin client architecture and experience in manually installing Gentoo. Also, you need a server and client with the specifications listed in the [http://sourceforge.net/apps/mediawiki/ltsp/index.php?title=Ltsp_LtspDocumentationUpstream LTSP manual]. Concerning the client networkcard, only PXE is included in this manual. 
 
-{{Warning|LTSP and some other software used in this guide are not in the stable Portage tree.}}
-{{Note|This tutorial uses '''x86''' as architecture for the client install}}
-{{Note|You should be using 5.2.17}}
-
 Several resources can help you speed you on your way in time of need. Others are listed in the Resources section. For more online LTSP help, you can visit #ltsp on one of the [http://freenode.net/irc_servers.shtml freenode irc servers].
 * [http://sourceforge.net/apps/mediawiki/ltsp/index.php?title=Ltsp_LtspDocumentationUpstream LTSP Administrator's Reference]
 * [https://launchpad.net/ltsp LTSP upstream development page]
@@ -15,15 +11,115 @@ Bugs can be reported in two locations. Check [[LTSP#Known Issues|known issues]] 
 * [http://bugs.gentoo.org/177580 Gentoo] - For issues related to Gentoo
 * [https://bugs.launchpad.net/ltsp/+bugs Upstream] - For issues related to LTSP itself
 
+{{Warning|LTSP and some other software used in this guide are not in the stable Portage tree.}}
+{{Note|This tutorial uses '''x86''' as architecture for the client install}}
+{{Note|You should be using 5.2.17}}
 
 
+== Server Preparation ==
+
+=== Installation ===
+Gentoo's LTSP packages are stored in the [http://git.overlays.gentoo.org/gitweb/?p=proj/ltsp.git;a=summary ltsp-overlay]. To [http://www.gentoo.org/proj/en/overlays/userguide.xml use] the Gentoo LTSP-Overlay, get it with {{Package|layman}}. Because ltsp resides in the git overlays, the git USE flag is needed.
+
+{{ShellRoot|layman -a ltsp}}
+
+In case you are using stable settings for your architecture, add the following to package.keywords.
+
+{{ShellRoot|<nowiki>echo "net-misc/ltsp-server" >> /etc/portage/package.keywords</nowiki>}}
+{{ShellRoot|<nowiki>echo "sys-fs/ltspfs" >> /etc/portage/package.keywords</nowiki>}}
+{{ShellRoot|<nowiki>echo "net-misc/ldminfod" >> /etc/portage/package.keywords</nowiki>}}
+{{ShellRoot|<nowiki>echo "sys-apps/quickstart" >> /etc/portage/package.keywords</nowiki>}}
+<!-- {{Note|Add "extras" to /etc/make.conf}} -->
+
+The LTSP server package needs a tftp and dhcp server (dhcp or dnsmasq). In this tutorial {{Package|tftp-hpa}} and {{Package|dnsmasq}} are [[#DHCP and PXE-boot|used]]. It also requires a system logger which can accept client messages over tcp, for which {{Package|syslog-ng}} is [[#System Logging|used]] in this tutorial. Don't forget to add a window manager, ltsp-client won't log in if no window manager is installed on the server.
+{{ShellRoot|emerge syslog-ng dnsmasq tftp-hpa}}
+{{ShellRoot|emerge ltsp-server}}
+
+=== Kernel ===
+Besides the obvious drivers, the server kernel ought to have the following settings. If you're going to use NFS to serve the chroot environments, make sure to compile it in as well and reboot afterwards.
+
+{{Kernel|LTSP server|<pre>
+File systems  --->
+  [*] FUSE (Filesystem in Userspace) support
+  [*] Network File Systems  --->
+    <*> NFS server support
+    [*]  NFS server support for NFS version 3
+</pre>}}
+
+=== DHCP and PXE-boot ===
+First, setup the server to provide client machines with a kernel at boottime. Install a few packages on the server. The PXE boot loader is provided by {{Package|syslinux}}. Dnsmasq is a simple DHCP/DNS server. Advanced TFTP is one of the TFTP server options, and the only one to support multicast TFTP.<sup>'''[[#External links|1]]'''</sup>
+The chroot environments as well as the kernels served at boot time are stored in /opt/ltsp. Configure dnsmasq as a DHCP server:
+
+{{File|/etc/dnsmasq.conf|edit settings as you please|<pre>
+# Listen only to this interface
+interface=eth1
+
+# Set up the local-only domain
+local=/lan.outerrim/
+expand-hosts
+domain=lan.outerrim
+
+# Assign names based on mac adress
+dhcp-host=00:1e:68:c2:ff:ee,endor,192.168.1.54,24h
+
+# Any other DHCP request gets one from these
+dhcp-range=192.168.1.100,192.168.1.120,12h
+
+# Never forward plain names (without a dot or domain part)
+domain-needed
+# Never forward addresses in the non-routed address spaces.
+bogus-priv
+
+# Set the root directory for files available via FTP.
+tftp-root=/var/lib/tftpboot
+dhcp-boot=/pxelinux.0
+</pre>}}
+
+
+Configure {{Package|tftp-hpa}} next. This is used for the client nodes to retrieve the kernel and initrd/initramfs, before they mount their root filesystems via NFS.<sup>'''[[#External links|1]]'''</sup>
+
+{{ShellRoot|mkdir /var/lib/tftpboot}}
+
+{{File|/etc/conf.d/in.tftpd|this path is an ltsp default|<pre>
+INTFTPD_PATH="/var/lib/tftpboot/"
+</pre>}}
+
+Set up the PXE boot loader next. First, copy the executable into the TFTP root from where it was installed. Create the configuration directory after that and populate it with a default file. In the example configuration, the system mounts the local client disk after booting and loading the kernel from the server. Make sure the kernel and initramfs are in /var/lib/tftpboot. You can test the work so far with a working kernel and system.
+
+{{ShellRoot|cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/pxelinux.0}}
+{{ShellRoot|mkdir /var/lib/tftpboot/pxelinux.cfg}}
+
+{{File|/var/lib/tftpboot/pxelinux.cfg/default||<pre>
+
+kernel kernel-YOURKERNELVERSION
+append initrd=initramfs-YOURKERNELVERSION root=/dev/nfs nfsroot=YOURSERVERIP:/opt/ltsp/x86
+</pre>}}
+
+
+Start the services, now and at every boot
+{{ShellRoot|/etc/init.d/dnsmasq start && /etc/init.d/in.tftpd start}}
+{{ShellRoot|rc-update add dnsmasq default && rc-update add in.tftpd default}}
+
+=== NFS and Xinetd ===
+The chroot environments are shared with NFS. Xinetd is used for '''ldminfod''' and '''nbd''' sharing. By default only the localhost is allowed access, so edit the /etc/xinetd.conf and restart the service.
+
+{{File|/etc/xinetd.conf||<pre>
+...
+only_from = 192.168.0.1/24
+...
+</pre>}}
+
+{{ShellRoot|/etc/init.d/nfs start}}
+{{ShellRoot|/etc/init.d/xinetd start}}
+{{ShellRoot|rc-update add nfs default}}
+{{ShellRoot|rc-update add xinetd default}}
 
 
 === Known Issues ===
 * If you get an emerge error for "=dev-lang/python-2.6* is not installed", with a "die "$(python_get_implementational_package) is not installed";", this means that some of your binary packages were installed against Python 2.6, Remove your binary packages to let them compile against your new python environment.
 
 * Several programs will fight for the virtual terminals on the clients. Comment out getty in inittab:
-{{File|/opt/ltsp/x86/etc/inittab|<pre>
+{{File|/opt/ltsp/x86/etc/inittab|commenting example|<pre>
 ...
 # TERMINALS
 #c1:12345:respawn:/sbin/agetty 38400 tty1 linux
