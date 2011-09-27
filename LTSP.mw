@@ -185,11 +185,146 @@ unset your locale, remove the directory and restart:
 After invoking the ltsp-build-client command, the environment is preparing. For each architecture the first build takes up the most time because binary packages are created from source in the first run. These binary packages are stored in /usr/portage/packages through a bind mount on your server. Any consequent builds use these packages to speed up the process.
 
 === Finishing the Install ===
-Some things still need to be done after building the environment. First up is the kernel, which needs to be put in your tftroot. In the default setup, this is copied from the chroot in {{Path|/opt/ltsp}} and copied to the tftproot in an ltsp subdir in /var/lib/tftpboot, /tftpboot or /srv/tftp, if one exists. Calling ltsp-update-kernels with a different tftproot location:
+Some things still need to be done after building the environment. First up is the kernel, which needs to be put in your tftroot. In the default setup, this is copied from the chroot in /opt/ltsp and copied to the tftproot in an ltsp subdir in /var/lib/tftpboot, /tftpboot or /srv/tftp, if one exists. Calling ltsp-update-kernels with a different tftproot location:
 
 {{ShellRoot|<nowiki>ltsp-update-kernels --tftpdirs="/opt/tftproot"</nowiki>}}
 
 Your pxelinux configuration has to be updated to reflect the changes in the setup. See the [[#DHCP and PXE-boot|PXE boot section]] for more info.
+
+
+== Client Configuration ==
+While some properties of the client's environment are more or less statically set in the chroot environment, others can be changed at boot time. 
+The lts.conf file allows properties to be set for all clients or for each workstation specifically. Explaining the syntax of the file goes
+beyond the scope of this tutorial, but it is explained on the [http://sourceforge.net/apps/mediawiki/ltsp/index.php?title=Ltsp_LtsConf LTSP wiki] and in the lts.conf man page. The latter is available after emerging the '''ltsp-docs''' package.
+
+The lts.conf file is downloaded at client boot time from a preconfigured location in the tftproot, namely /ltsp/x86/lts.conf. Create your lts.conf
+there and change your architecture if applicable.
+
+{{File|/var/lib/tftpboot/ltsp/x86/lts.conf||<pre>
+[default]
+</pre>}}
+
+{{Note|If your tftp server has another ip than your nfs server, you will have to change it in the ltsp-client-setup init file.}}
+
+The script that invokes the download is /etc/init.d/ltsp-client-setup. Together with /etc/init.d/ltsp-client it is responsible for settings
+like the swap configuration, sound daemon, and date among others. While ''ltsp-client-setup'' performs the environment settings, ''ltsp-client'' starts the sound
+daemon and the ldm login process. Some of these settings will now be discussed in detail.
+
+=== System Logging ===
+System logging is performed by {{Package|sysklogd}}. Log files are not stored locally however, but sent to the server specified by SYSLOG_HOST in ''lts.conf''.
+While executing, the ltsp-client-setup script adds the syslog-ng configuration to perform this. To allow the server to process these incoming log messages,
+some changes have to be made in that configuration as well. In the syslog-ng setting below, messages are logged to a file named after each client's
+fully qualified domain name.
+
+{{File|/etc/syslog-ng/syslog-ng.conf||<pre>
+source net { udp(); };
+destination remote { file("/var/log/remote/$FULLHOST"); };
+log { source(net); destination(remote); };
+</pre>}}
+
+{{ShellRoot|/etc/init.d/syslog-ng restart}}
+
+=== LDM ===
+If all is well, LDM will be started by ''ltsp-client'' and you can proceed to log in with a user on the server. If not, you might want to check if the LDM Info Daemon is disabled in /etc/xinitd.d/ldminfod. When the X server cannot start it might help to add your own xorg.conf file. As many different xorg.conf files can exist for many different clients in the same chroot, make sure to name them properly.
+
+{{File|/opt/ltsp/tftproot/ltsp/x86/lts.conf||<pre>
+[acer-aspire-one]
+  X_CONF = /etc/X11/xorg-acer-aspire-one.conf
+
+[00:1E:68:C2:FF:EE]
+  LIKE=acer-aspire-one
+</pre>}}
+
+For a user to be able to login over ssh from the thin client to the server, the client needs the server ssh-keys. Although executed when building the client, these can be updated to the clients chroot with the following command:
+{{ShellRoot|ltsp-update-sshkeys}}
+
+If you want another window manager, install it on the server and put the following in the LTSP configuration file (replace Fluxbox with the window manager of your choice).
+{{File|/var/lib/tftpboot/ltsp/x86/lts.conf||<pre>
+  LDM_SESSION = /usr/bin/fluxbox
+</pre>}}
+
+=== Sound ===
+As you might have seen in the list of emerged dependencies for ltsp, both for the client and the server, [http://pulseaudio.org/wiki/AboutPulseAudio PulseAudio] was among them. PulseAudio allows for playing audio applications on the server, while hearing it through the client's soundcard. The application running on the server sends its audio output to the pulse server instead of the server's soundcard. The pulse client on the ltsp client receives this output and lets alsa proces it to the client's soundcard. In addition to {{Package|pulseaudio}}, its alsa-plugin needs to be installed on both client and server with the ''pulseaudio'' use flag enabled.
+
+{{ShellRoot|emerge alsa-plugins}}
+
+The kernel alsa-driver is used, so ''alsa-utils'' doesn't need to be installed. In order for alsa to route the incoming audio data to pulse, the following needs to be added on the server. 
+
+{{File|/etc/asound.conf||<pre>
+pcm.!default {
+        type pulse
+}
+
+ctl.!default {
+        type pulse
+}
+</pre>}}
+
+Also, because the server's soundcard is not used, hardware detection can be turned off in /etc/pulse/default.pa. The RTP sender module does need to be loaded for obvious reasons.
+
+
+== Tips & Tricks ==
+Several optional tips and tricks concerning LTSP can be found here. They are not Gentoo specific.
+
+=== Local Apps ===
+If you want apps to run on the client itself, a few changes need to be made. First of all, an extra line in your lts.conf.
+{{File|/var/lib/tftpboot/ltsp/x86/lts.conf||<pre>
+[default]
+  LOCAL_APPS = True
+</pre>}}
+
+Each application which has to run locally, needs to be installed in the client chroot. You can do this by [[LTSP#Chrooting|chrooting]] into to client chroot environment and emerging the desired packages. It is also possible to combine this with your '''ltsp-build-client''' by adding the packages to the [[LTSP#Configuration|build client configuration]].
+
+When logged in on your LTSP client, you can now run an application locally by running the following command.
+{{Shell|ltsp-localapps <command>}}
+
+=== NBD Swap from USB ===
+The '''nbdswapd''' allows clients to use swap space through a NBD. For this to work, the '''ltsp-server''' has to be emerged with the nbd USE flag enabled. Also, the lts.conf needs to be updated and the nbdswapd.conf has to contain the mountpoint of your usb stick and the desired swap size (64Mb by default).
+
+{{File|/etc/ltsp/nbdswapd.conf||<pre>
+SIZE=128
+SWAPDIR=/mnt/usbswap
+</pre>}}
+
+{{File|/var/lib/tftpboot/ltsp/x86/lts.conf||<pre>
+[default]
+  NBD_SWAP = True
+</pre>}}
+
+=== LDM Greeter ===
+The language of the texts in LDM are controlled by the client's locale. Some of the texts come from gtk while most are derived from ldm. You can see in 
+/opt/ltsp/x86/usr/share/locale/your-language/LC_MESSAGES if '''ldm.po''' is available. If it is, the ldm messages will be translated if you set 
+the client's language locale correctly.
+
+If it isn't, to translate the file, download the template translation file from the 
+[http://bazaar.launchpad.net/~ltsp-upstream/ltsp/ldm-trunk/annotate/head%3A/po//ldm.pot LTSP upstream LDM trunk] and translate it. Compile it and copy the
+binary to locale dir with:
+
+{{ShellRoot|msgfmt -cv -o ldm.mo my-language.po}}
+{{ShellRoot|cp ldm.mo /opt/ltsp/x86/usr/share/locale/your-language/LC_MESSAGES/.}}
+
+{{Note|You can tribute to the LTSP effort by mailing your translation to the ltsp-developer mailing list.}}
+
+The themes of the LDM greeter are stored in /opt/ltsp/x86/usr/share/ldm/themes where the symlink '''default''' points to the chosen theme.
+
+=== Move the Chroot ===
+You might want to move the client chroot installation on the server. This can be easily done with the following command. Don't forget to change to NFS entry in /etc/exports and reload it on the server prior to booting the client again.
+
+{{ShellRoot|<nowiki>find /opt/ltsp/x86/. -depth -print | cpio -pdm /path/to/new/dir/.</nowiki>}}
+{{ShellRoot|<nowiki>exportfs -r</nowiki>}}
+
+If you want to copy the installation to another computer, archive it with tar, copy the archive and unpack it on the other server. Remember to not only install NFS on the new server and copy the /etc/exports file, but also the network boot file used by the PXE.
+
+{{ShellRoot|<nowiki>tar -cvzf /ltspx86.tgz --one-file-system --exclude=/lost+found /opt/ltsp/x86</nowiki>}}
+{{ShellRoot|<nowiki>tar -xvzf /root/ltspx86.tgz -C /opt/ltsp</nowiki>}}
+
+=== Slightly faster boot ===
+Because the client chroot uses OpenRC, some services can boot parallel, providing a slightly faster boot.
+
+{{File|/opt/ltsp-dev/x86/etc/rc.conf||<pre>
+rc_parallel="YES"
+</pre>}}
+
 
 === Known Issues ===
 * If you get an emerge error for "=dev-lang/python-2.6* is not installed", with a "die "$(python_get_implementational_package) is not installed";", this means that some of your binary packages were installed against Python 2.6, Remove your binary packages to let them compile against your new python environment.
