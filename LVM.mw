@@ -191,6 +191,49 @@ To remove the MIRROR:
 {{ShellRoot|lvconvert -m0 /dev/vg0/lvol1}}
 If one half of the MIRROR fails, the other one will be automatically converted into a not mirrored LV (loose the ''mirror'' atribute). LVM is different from Linux RAID1 that it doesn't read/write from both mirrored images, there is no performace increase.
 
+=== LVM2 Snapshots ===
+A snapshot is another LV, which takes in all the changes that were made in another LV to show the content of that LV in a different state. We once again use our two hard drives and create LV ''lvol1'' this time with 60% of VG ''vg0'':
+{{ShellRoot|pvcreate /dev/loop[0-1] <br/>
+vgcreate vg0 /dev/loop[0-1] <br/>
+lvcreate -l 60%VG -n lvol1 vg0 <br/>
+mkfs.ext4 /dev/vg0/lvol1 <br/>
+mount /dev/vg0/lvol1 /mnt/data}}
+Now we create a snapshot of ''lvol1'' named ''08092011_lvol1'' and give it 10% of VG ''vg0'':
+{{ShellRoot|lvcreate -l 10%VG -s -n 08092011_lvol1 /dev/vg0/lvol1}}
+{{Important|if a snapshot exceeds it's maximum size, it disappears}}
+Mount our snapshot somewhere else:
+{{ShellRoot|mkdir /mnt/08092011_data<br/>
+mount /dev/vg0/08092011_lvol1 /mnt/08092011_data}}
+We could now access data in ''lvol1'' from a previous state.<br/>
+Since LVM2, snapshots are writeable LV, so we could use them to let a project go on into two different directions:
+{{ShellRoot|lvcreate -l 10%VG -s -n project1_lvol1 /dev/vg0/lvol1<br/>
+lvcreate -l 10%VG -s -n project2_lvol1 /dev/vg0/lvol1<br/>
+mkdir /mnt/project1 /mnt/project2<br/>
+mount /dev/vg0/project1_lvol1 /mnt/project1<br/>
+mount /dev/vg0/project2_lvol1 /mnt/project2}}
+Now we have three different versions of LV ''lvol1'', the original and two snapshots which can be used parallel and changes are written to the snapshots.
+{{Note|the original LV ''lvol1'' cannot be reduced in size or removed if snapshots of it exist. Snapshots can be increased in size without growing the file system on them, but they cannot exceed the size of the original LV}}
+
+=== LVM2 Stripeset ===
+The STRIPSET is the same as RAID0, data is written to several devices at the same time to increase performance. In LVM2 it is possible to distribute LV over several PV for the same effect. We create three PV and then VG ''vg0'':
+{{ShellRoot|pvcreate /dev/loop[0-2]<br/>
+vgcreate vg0 /dev/loop[0-2]}}
+VG ''vg0'' consists of three different hard drives and now we can create our LV and spread it over them:
+{{ShellRoot|lvcreate -i 3 -l 20%VG -n lvm_stripe vg0}}
+The option -i 3 indicates that we want to spread it over 3 PV in out VG vg0:
+{{Code|pvscan|<pre>
+    Logging initialised at Thu Sep  8 22:19:27 2011
+    Set umask from 0022 to 0077
+    Wiping cache of LVM-capable devices
+    Wiping internal VG cache
+    Walking through all physical volumes
+  PV /dev/loop0   VG vg0   lvm2 [2.00 GiB / 1.60 GiB free]
+  PV /dev/loop1   VG vg0   lvm2 [2.00 GiB / 1.60 GiB free]
+  PV /dev/loop2   VG vg0   lvm2 [2.00 GiB / 1.60 GiB free]
+  Total: 3 [5.99 GiB] / in use: 3 [5.99 GiB] / in no VG: 0 [0   ]
+    Wiping internal VG cache</pre>}}
+On each PV 400MB got reserved for our LV ''lvm_stripe'' in VG ''vg0''
+
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
 * [http://tldp.org/HOWTO/LVM-HOWTO/ LVM tldp.org]
