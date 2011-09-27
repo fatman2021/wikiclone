@@ -1,0 +1,116 @@
+[http://en.wikipedia.org/wiki/DisplayLink DisplayLink] is a technology that enables monitors to work via USB. In general the local GPU renders the picture, the frambuffer device compresses the data and sends it to the external device via USB.<br/>
+
+== Installation ==
+Enable the DisplayLink ''framebuffer device'' in your kernel:
+{{Kernel||<pre>Device Drivers --->
+    Graphics support --->
+        <M> Support for frame buffer devices --->
+            <M> Displaylink USB Framebuffer support</pre>}}
+After booting into the new kernel the external monitor should show a green background image. That means the kernel module is loaded and the device works, it also creates the device in /dev/fb0.
+{{Note|if you have already other framebuffer devices with your AMD driver, it will be /dev/fb1...}}
+The X driver '''x11-drivers/xf86-video-displaylink''' is only available in the X11 overlay. Assuming ''layman'' is already configured, you add it with the following command:
+{{ShellRoot|layman -a x11}}
+Then update your /etc/make.conf with the new graphics card:
+{{File|/etc/make.conf||<pre>
+VIDEO_CARDS="... displaylink ..."</pre>}}
+{{Note|check if it pulls the X driver with ''emerge -DuN world'', if not install it manually}}
+
+=== One X-Server ===
+TODO
+
+=== Two X-Server ===
+This method is failsafe and should work with any graphics card installed. We start two instances of X-Server for each device and then use a software called ''x2x'' to move the input devices between them.
+* two independent instances and desktops
+* Input devices follow the mouse courser
+
+==== Software ====
+For this method, we need another input device driver called {{Package|x11-drivers/xf86-input-void}}:
+{{File|/etc/make.conf||<pre>
+INPUT_DEVICES="... void ..."</pre>}}
+{{Note|check if it pulls the X driver with ''emerge -DuN world'', if not install it manually}}
+The program {{Package|x11-misc/x2x}} is available in portage and can be installed via:
+{{ShellRoot|emerge -av x11-misc/x2x}}
+
+==== xorg.conf.DL ====
+We configure two independent /etc/X11/xorg.conf for each device and initialize the desktop using ~/.xinitrc scripts.<br/>
+Create this file in /etc/X11/ and name it xorg.conf.DL:
+{{File|/etc/X11/xorg.conf.DL||<pre>
+Section "Device"
+    Identifier "DisplayLinkDevice"
+    driver "displaylink"
+    Option "fbdev" "/dev/fb0"    # You have to use the correct framebuffer device here
+EndSection
+
+Section "Monitor"
+    Identifier "DisplayLinkMonitor"
+EndSection
+
+Section "Screen"
+    Identifier "Default Screen"
+    Device "DisplayLinkDevice"
+    Monitor "DisplayLinkMonitor"
+    SubSection "Display"
+        Depth 16         # 24bit works fine but for USB 2.0 a lot of data
+        Modes "1280x1024"
+    EndSubSection
+EndSection
+
+Section "ServerLayout"
+    Identifier "Server Layout"
+    Screen 0 "Default Screen" 0 0
+    Option "AllowMouseOpenFail" "True"
+    InputDevice "Keyboard0" "CoreKeyboard"
+    InputDevice "Mouse0" "CorePointer"
+EndSection
+
+Section "ServerFlags"
+    Option "AllowEmptyInput" "false"
+    Option "AutoAddDevices" "false"
+    Option "AutoEnableDevices" "false"
+EndSection
+
+Section "InputDevice"
+    Identifier "Keyboard0"
+    Driver "void"
+EndSection
+
+Section "InputDevice"
+    Identifier "Mouse0"
+    Driver "void"
+EndSection</pre>}}
+
+==== .xinitrc2 ====
+Next we create the ~/.initrc2 for our external display. Create and customize the file to your needs, here is an example:
+{{Note|DPMS is turned off, because I once had trouble to wake up the monitor again}}
+{{File|~/.xinitrc2||<pre>
+# DPMS stuff
+## turn on monitor
+xset dpms force on
+## disable sleep modes etc.
+xset -dpms
+## disable screensaver
+xset s off
+
+# turn off beep
+xset -b
+
+# activate zapping (ctrl+alt+Bksp killall X)
+setxkbmap -option terminate:ctrl_alt_bksp
+
+# Set the background using feh
+feh --bg-scale /usr/share/slim/themes/capernoited/background.jpg
+
+# compositoring
+xcompmgr -c -t-5 -l-5 -r4.2 -o.55 &
+
+# start programs
+wicd-client &
+mrxvt &
+# start the actual window manager
+exec /usr/bin/awesome</pre>}}
+
+== Links ==
+* [http://libdlo.freedesktop.org/wiki/ libdlo freedesktop.org]
+* [http://displaylink.org/forum/forumdisplay.php?f=29 Linux Forum displaylink.org]
+* [http://plugable.com/category/linux/ Linux plugable.com]
+* [http://plugable.com/2009/11/16/setting-up-usb-multiseat-with-displaylink-on-linux-gdm-up-to-2-20/ Setting up Multiseat plugable.com]
