@@ -25,6 +25,9 @@ You can install LVM2 using the following command:
 {{ShellRoot|emerge lvm2}}
 The package comes with a start-stop-daemon, which we start and add to the boot runlevel:
 {{ShellRoot|/etc/init.d/lvm start && rc-update add lvm boot}}
+The configuration files are located in
+{{Code|Configuration Files|<pre>
+/etc/lvm/lvm.conf</pre>}}
 
 == Usage ==
 LVM organizes storage in three different levels as follows:
@@ -130,6 +133,43 @@ Before we remove a Logical Volume (LV) we should unmount and deactivate, so no f
 {{ShellRoot|umount /dev/vg0/lvol1 && lvchange -a n /dev/vg0/lvol1}}
 The following command removes the LV named lvol1 from VG named vg0:
 {{ShellRoot|lvremove /dev/vg0/lvol1}}
+
+== Examples ==
+We can create some scenarios using loopback devices, so no real storage devices are used.
+
+=== Preperation ===
+First we need to make sure the loopback module is loaded. If you want to play around with partitions, use the following option:
+{{ShellRoot|modprobe -r loop && modprobe loop max_part{{=}}63}}
+{{Note|you cannot reload the module, if it is built into the kernel}}
+Now we need to either tell LVM to not use ''udev'' to scan for devices or change the filers in /etc/lvm/lvm.conf. In this case we just temporarely do not use ''udev'':
+{{File|/etc/lvm/lvm.conf||<pre>
+<nowiki>obtain_device_list_from_udev = 0</nowiki></pre>}}
+{{Important|this is for testing only, you want to change the setting back when dealing with real devices since it is much faster}}
+We create some image files, that will become our storage devices (uses ~6GB of real hard drive space):
+{{ShellRoot|mkdir /var/lib/lvm_img <br/>
+dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm0.img bs{{=}}1024 count{{=}}2097152 <br/>
+dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm1.img bs{{=}}1024 count{{=}}2097152 <br/>
+dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm2.img bs{{=}}1024 count{{=}}2097152}}
+Check which loopback devices are available:
+{{ShellRoot|losetup -a}}
+We assume all loopback devices are available and create our hard drives:
+{{ShellRoot|losetup /dev/loop0 /var/lib/lvm_img/lvm0.img <br/>
+losetup /dev/loop1 /var/lib/lvm_img/lvm1.img <br/>
+losetup /dev/loop2 /var/lib/lvm_img/lvm2.img}}
+Now we can use /dev/loop[0-2] as we would use any other hard drive in the system.
+{{Note|On the next reboot, all the loopback devices will be released and the folder /var/lib/lvm_img can be deleted}}
+
+=== Two Hard Drives ===
+In this example, we will initialize two hard drive as PV and then create the VG ''vg0'':
+{{ShellRoot|pvcreate /dev/loop[0-1] <br/>
+vgcreate vg0 /dev/loop[0-1]}}
+Now lets create the LV ''lvol1'' in our VG ''vg0'' and take the maximum space available:
+{{ShellRoot|lvcreate -l 100%FREE -n lvol1 vg0}}
+Create the file system and mount it to /mnt/data:
+{{ShellRoot|mkfs.ext4 /dev/vg0/lvol1 <br/>
+mount /dev/vg0/lvol1 /mnt/data}}
+Now we have the capacity of 2GB from each hard drive available in /mnt/data as one 4GB device.
+{{Note|The same applies to RAID systems, if you want to create one VG use /dev/md[X-Y] instead}}
 
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
