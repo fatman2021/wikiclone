@@ -115,6 +115,82 @@ only_from = 192.168.0.1/24
 {{ShellRoot|rc-update add xinetd default}}
 
 
+== Client Install ==
+The ltsp-server package amongst others ships a command called '''ltsp-build-client'''. This command is responsible for building the entire chroot environment. And while ltsp-build-client and available plugins setup the environment, [http://dev.gentoo.org/~agaffney/quickstart.php Quickstart] actually builds it.
+
+=== Configuration ===
+You can invoke the build script with command line arguments or configure the config file in /etc/ltsp/ltsp-build-client.conf. Commandline options take precedence over config file options. If you encounter some problems and have to perform ltsp-build-client again, the program tells you to remove the entire chroot environment. It is recommended to first copy the downloaded stage outside the chroot and point the ltsp-build-client command to it, so it won't have to be downloaded again.
+
+{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+# A custom stage location.
+STAGE_URI=file:///opt/ltsp/stages/stage3-x86-current.tar.bz2
+
+# The root dir for <arch> installations.
+BASE=/opt/ltsp
+
+# The build architecture for the chroot.
+ARCH=x86
+
+# Extra packages that are not in the quickstart profile, useful for localapps
+PACKAGES="xterm"
+
+# Set a custom kernel sources package
+KERNEL_SOURCES="=sys-kernel/gentoo-sources-2.6.34-r12"
+
+# And a matching kernel config to download from somewhere
+KERNEL_CONFIG_URI="tftp://192.168.0.1/ltsp/x86/gentoo-sources-2.6.34-r12.config"
+</pre>}}
+
+=== Kernel ===
+A separate section for the client kernel is in order. A standard Genkernel kernel is created during the installation when configuration changes are made. It's advisable to take a closer look at the client's kernel config and use the config during the client install.
+
+{{Kernel|LTSP client|<pre>
+General setup  --->
+  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support 
+
+[*] Networking support  ---> 
+  Networking options  --->
+    [*] IP: kernel level autoconfiguration
+      [*] IP: DHCP support
+      [*] IP: BOOTP support 
+
+Device Drivers -->
+  [*] Block devices  --->
+    <M>   Network block device support
+
+File systems  ---> 
+  <*> Kernel automounter version 4 support (also supports v3)
+  <*> FUSE (Filesystem in Userspace) support
+  [*] Network File Systems  --->
+    <M>   NFS client support
+    [*]     NFS client support for NFS version 3
+    [*]     NFS client support for the NFSv3 ACL protocol extension
+    [*]     NFS client support for NFS version 4 (EXPERIMENTAL)
+</pre>}}
+
+=== Building the Client ===
+By default, the packaged quickstart profile in /etc/ltsp/quickstart/profile.qs is used with no debug options. Another profile can be selected with command line options. The kernel config you just made can be used in the build process by adding the server vars to ltsp-build-client.conf (See in [[#Configuration|Configuration section]] above).
+
+{{ShellRoot|<nowiki>ltsp-build-client --quickstart-profile=/root/myprofile.qs --quickstart-debug --quickstart-verbose</nowiki>}}
+
+
+{{Note|ltsp-build-client does not work witch all locale. quickstart actually requires 'C' locale. So if ltsp-build-client shouts with the following message:
+
+No fetcher for protocol: file
+
+unset your locale, remove the directory and restart:
+
+{{ShellRoot|<nowiki>unset LANG; unset LC_ALL; ltsp-build-client --purge</nowiki>}}}}
+
+After invoking the ltsp-build-client command, the environment is preparing. For each architecture the first build takes up the most time because binary packages are created from source in the first run. These binary packages are stored in /usr/portage/packages through a bind mount on your server. Any consequent builds use these packages to speed up the process.
+
+=== Finishing the Install ===
+Some things still need to be done after building the environment. First up is the kernel, which needs to be put in your tftroot. In the default setup, this is copied from the chroot in {{Path|/opt/ltsp}} and copied to the tftproot in an ltsp subdir in /var/lib/tftpboot, /tftpboot or /srv/tftp, if one exists. Calling ltsp-update-kernels with a different tftproot location:
+
+{{ShellRoot|<nowiki>ltsp-update-kernels --tftpdirs="/opt/tftproot"</nowiki>}}
+
+Your pxelinux configuration has to be updated to reflect the changes in the setup. See the [[#DHCP and PXE-boot|PXE boot section]] for more info.
+
 === Known Issues ===
 * If you get an emerge error for "=dev-lang/python-2.6* is not installed", with a "die "$(python_get_implementational_package) is not installed";", this means that some of your binary packages were installed against Python 2.6, Remove your binary packages to let them compile against your new python environment.
 
