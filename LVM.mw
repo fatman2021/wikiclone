@@ -30,6 +30,69 @@ LVM organizes storage in three different levels as follows:
 * Physical Volumes (PV) are grouped together in Volume Groups (VG)
 * Logical Volumes (LV) are managed in Volume Groups (VG)
 
+=== PV (Physical Volume) ===
+Physical Volumes are the actual hardware or storage system LVM builds up upon.
+
+==== Partitioning ====
+The partition type for ''LVM'' is ''8e''(Linux LVM):
+{{ShellRoot|fdisk /dev/sdX}}
+In fdisk, you can create MBR partitions using the '''n''' key and then change the partition type with the '''t''' key to ''8e''. We will end up with one primary partition /dev/sdX1 of partition type ''8e'' (Linux LVM).
+{{Note|this step is not needed, since LVM can initialize whole hard drives as PV. Actual not using partitioning avoids LVM to be restricted to certain limits of MBR or GPT tables}}
+
+==== Create PV ====
+The following command creates a Physical Volume (PV) on the two first primary partitions of /dev/sdX and /dev/sdY:
+{{ShellRoot|pvcreate /dev/sd[X-Y]1}}
+
+==== List PV ====
+The folloing command lists all active Physical Volumes (PV) in the system:
+{{ShellRoot|pvdisplay}}
+You can scan for PV in the system, to troubleshoot not properly initialized or lost storage devices:
+{{ShellRoot|pvscan}}
+
+==== Remove PV ====
+LVM automatically distributed the data onto all available PV, if not told otherwise. To make sure there is no data left on our device before we remove it, use the following command:
+{{ShellRoot|pvmove -v /dev/sdX1}}
+This might take a long time and once finished, there should be no data left on /dev/sdX1. We first remove the PV from our Volume Group (VG) and then the actual PV:
+{{ShellRoot|vgreduce vg0 /dev/sdX1 && pvremove /dev/sdX1}}
+{{Note|If a whole hard drives was once initialized as PV, then you have to remove it before it can be properly partitioned again. That is because PV have no valid MBR table}}
+
+=== VG (Volume Group) ===
+Volume Groups (VG) consist of one or more Physical Volumes (PV) and show up as /dev/<VG name>/ in the device file system.
+
+==== Create VG ====
+The following command creates a Volume Group (VG) named ''vg0'' on two previously initialized Physical Volumes (PV) named /dev/sdX1 and /dev/sdY1:
+{{ShellRoot|vgcreate vg0 /dev/sd[X-Y]1}}
+
+==== List VG ====
+The folloing command lists all active Volume Groups (VG) in the system:
+{{ShellRoot|vgdisplay}}
+You can scan for VG in the system, to troubleshoot not properly created or lost VGs:
+{{ShellRoot|vgscan}}
+
+==== Extend VG ====
+With the following command, we extend the exisiting Volume Group (VG) vg0 onto the Physical Volume (PV) /dev/sdZ1:
+{{ShellRoot|vgextend vg0 /dev/sdZ1}}
+
+==== Reduce VG ====
+Before we can remove a Physical Volume (PV), we need to make sure that LVM has no data left on the device. To move all data off that PV and distribute it onto the other available, use the following command:
+{{ShellRoot|pvmove -v /dev/sdX1}}
+This might take a while and once finished, we can remove the PV from our VG:
+{{ShellRoot|vgreduce vg0 /dev/sdX1}}
+
+==== Remove VG ====
+Before we can remove a Volume Group (VG), we have to remove all existing Snapshots, all Logical Volumes (LV) and all Physical Volumes (PV) but one. The following command removes the VG named vg0:
+{{ShellRoot|vgremove vg0}}
+
+=== LV (Logical Volume) ===
+Logical Volumes (LV) are created and managed in Volume Groups (VG), once created they show up as /dev/<VG name>/<LV name> and can be used like normal partitions.
+
+==== Create LV ====
+With the following command, we create a Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 with a size of 150MB:
+{{ShellRoot|lvcreate -L 150M -n lvol1 vg0}}
+There are other useful options to set the size of a new LV like:
+* -l 100%FREE = maximum size of the LV within the VG
+* -l 50%VG = 50% size of the whole VG
+
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
 * [http://tldp.org/HOWTO/LVM-HOWTO/ LVM tldp.org]
