@@ -137,7 +137,7 @@ The following command removes the LV named lvol1 from VG named vg0:
 == Examples ==
 We can create some scenarios using loopback devices, so no real storage devices are used.
 
-=== Preperation ===
+=== Preparation ===
 First we need to make sure the loopback module is loaded. If you want to play around with partitions, use the following option:
 {{ShellRoot|modprobe -r loop && modprobe loop max_part{{=}}63}}
 {{Note|you cannot reload the module, if it is built into the kernel}}
@@ -233,6 +233,53 @@ The option -i 3 indicates that we want to spread it over 3 PV in out VG vg0:
   Total: 3 [5.99 GiB] / in use: 3 [5.99 GiB] / in no VG: 0 [0   ]
     Wiping internal VG cache</pre>}}
 On each PV 400MB got reserved for our LV ''lvm_stripe'' in VG ''vg0''
+
+== Troubleshooting ==
+LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
+
+=== vgcfgrestore ===
+In /etc/lvm/archive and /etc/lvm/backup are files which contain logs about metadata changes in LVM. To see what states of the VG are available to be restored:
+{{Code|vgcfgrestore --list vg0|<pre>
+  File:         /etc/lvm/archive/vg0_00002-923283887.vg
+  VG name:      vg0
+  Description:  Created *before* executing 'lvremove /dev/vg0/lvol1'
+  Backup Time:  Sat Sep 10 20:02:05 2011
+
+  File:         /etc/lvm/backup/vg0
+  VG name:      vg0
+  Description:  Created *after* executing 'lvremove /dev/vg0/lvol1'
+  Backup Time:  Sat Sep 10 20:02:05 2011</pre>}}
+In this example we removed the LV ''lvol1'' by accident and want it back in our VG ''vg0'':
+{{ShellRoot|vgcfgrestore -f /etc/archive/vg0_00002-923283887.vg vg0}}
+{{Important|This is not the data in the LV itself that will be restored, just the LV is recreated as it was distributed on the PV before and you have a good chance that the files are still on the PV if they weren't overwritten yet}}
+
+=== Replace PV ===
+We want to replace a PV and then restore the metadata to a new one, so that we reach the same state as before the device stopped working. To display all PV in a VG (even lost ones) use the following command:
+{{ShellRoot|vgdisplay --partial --verbose}}
+In this example I let /dev/loop1 (unknown device) fail:
+{{Code|vgdisplay --partial --verbose|<pre>
+--- Physical volumes ---
+  PV Name               unknown device
+  PV UUID               3B0yFN-zKDY-yICo-fT0M-nJwS-3wZf-UEjvd1
+  PV Status             allocatable
+  Total PE / Free PE    511 / 0
+
+  PV Name               /dev/loop2
+  PV UUID               4AuFVX-PWnX-qpWl-fpoS-euCV-SISW-IX6ceF
+  PV Status             allocatable
+  Total PE / Free PE    511 / 511</pre>}}
+Using the UUID, we can tell LVM to restore new hardware and be implemented within the VG as the old one was.
+{{ShellRoot|pvcreate --restorefile /etc/archive/<METADATA-DATEI> --uuid <UUID> /dev/loop3}}
+Then we restore the VG to the state before the PV failed:
+{{ShellRoot|vgcfgrestore -f /etc/archive/<METADATA-DATEI> vg0}}
+Now you can replay your file backup if you haven't already restored the PV itself.
+
+=== Deactivate LV ===
+You can deactivate LV with the following command:
+{{ShellRoot|umount /dev/vg0/lvol1
+lvchange -a n /dev/vg0/lvol1}}
+You will not be able to mount the LV anywhere before it got reactivated:
+{{ShellRoot|lvchange -a y /dev/vg0/lvol1}}
 
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
