@@ -21,6 +21,8 @@ Device Drivers  --->
 * readline = Enables support for libreadline, a GNU line-editing library that almost everyone wants
 * static-libs = Build static libraries
 {{Note|there are some development USE flags which are not listed here}}
+You can install LVM2 using the following command:
+{{ShellRoot|emerge lvm2}}
 The package comes with a start-stop-daemon, which we start and add to the boot runlevel:
 {{ShellRoot|/etc/init.d/lvm start && rc-update add lvm boot}}
 
@@ -92,6 +94,42 @@ With the following command, we create a Logical Volume (LV) named lvol1 in Volum
 There are other useful options to set the size of a new LV like:
 * -l 100%FREE = maximum size of the LV within the VG
 * -l 50%VG = 50% size of the whole VG
+
+==== List LV ====
+The folloing command lists all Logical Volumes (LV) in the system:
+{{ShellRoot|lvdisplay}}
+You can scan for LV in the system, to troubleshoot not properly created or lost LVs:
+{{ShellRoot|lvscan}}
+
+==== Extend LV ====
+With the following command, we can extend the Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 to 500MB:
+{{ShellRoot|lvextend -L500M /dev/vg0/lvol1}}
+{{Note|use -L+350M to increase the current size of a LV by 350MB}}
+Once the LV is extended, we need to grow the file system as well (in this example we used ext4 and the LV is mounted to /mnt/data):
+{{ShellRoot|resize2fs /mnt/data 500M}}
+
+==== Reduce LV ====
+Before we can reduce the size of our Logical Volume (LV) without corrupting existing data, we have to shrink the file system on it. In this example we used ext4, the LV needs to be unmounted to shrink the file system:
+{{ShellRoot|umount /mnt/data <br/>
+e2fsck -f /dev/vg0/lvol1 <br/>
+resize2fs /dev/vg0/lvol1 150M}}
+Now we are ready to reduce the size of our LV:
+{{ShellRoot|lvreduce -L150M /dev/vg0/lvol1}}
+{{Note|use -L-350M to reduce the current size of a LV by 350MB}}
+
+==== LV Permissions ====
+Logical Volumes (LV) can be set to be ''read only'' storage devices.
+{{ShellRoot|lvchange -p r /dev/vg0/lvol1}}
+The LV needs to be remounted for the changes to take affect:
+{{ShellRoot|mount -o remount /dev/vg0/lvol1}}
+To set the LV to be read/write again:
+{{Root|lvchange -p rw /dev/vg0/lvol1 && mount -o remount /dev/vg0/lvol1}}
+
+==== Remove LV ====
+Before we remove a Logical Volume (LV) we should unmount and deactivate, so no further write activity can take place:
+{{ShellRoot|umount /dev/vg0/lvol1 && lvchange -a n /dev/vg0/lvol1}}
+The following command removes the LV named lvol1 from VG named vg0:
+{{ShellRoot|lvremove /dev/vg0/lvol1}}
 
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
