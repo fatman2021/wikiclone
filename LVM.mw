@@ -171,6 +171,26 @@ mount /dev/vg0/lvol1 /mnt/data}}
 Now we have the capacity of 2GB from each hard drive available in /mnt/data as one 4GB device.
 {{Note|The same applies to RAID systems, if you want to create one VG use /dev/md[X-Y] instead}}
 
+=== /etc/fstab ===
+Here is an example of an entry in /etc/fstab (using ext4):
+{{File|/etc/fstab||<pre>
+/dev/vg0/lvol1  /mnt/data  ext4  noatime  0 2</pre>}}
+
+=== LVM2 MIRROR ===
+We use two hard drives and create our LV ''lvol1'' like in the first example. This time we use 40% of the size of our VG ''vg0'', because we need some space in the VG for the MIRROR and log files:
+{{ShellRoot|pvcreate /dev/loop[0-1] <br/>
+vgcreate vg0 /dev/loop[0-1] <br/>
+lvcreate -l 40%VG -n lvol1 vg0 <br/>
+mkfs.ext4 /dev/vg0/lvol1 <br/>
+mount /dev/vg0/lvol1 /mnt/data}}
+To create our copy of /dev/vg0/lvol1 on the PV /dev/loop1, use the following command:
+{{ShellRoot|lvconvert -m1 /dev/vg0/lvol1 --corelog /dev/loop1}}
+LVM will now ensure that a full copy (MIRROR) of /dev/vg0/lvol1 exists on /dev/loop1 and is not distributed between other PVs.
+{{Note|this is very I/O intensive, --corelog writes the log files for the conversion into memory}}
+To remove the MIRROR:
+{{ShellRoot|lvconvert -m0 /dev/vg0/lvol1}}
+If one half of the MIRROR fails, the other one will be automatically converted into a not mirrored LV (loose the ''mirror'' atribute). LVM is different from Linux RAID1 that it doesn't read/write from both mirrored images, there is no performace increase.
+
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
 * [http://tldp.org/HOWTO/LVM-HOWTO/ LVM tldp.org]
