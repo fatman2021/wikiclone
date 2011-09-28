@@ -94,5 +94,103 @@ To create a pool with RAIDZ2 and four hard drives:
 To delete the zpool:
 {{ShellRoot|zpool destroy zfs_test}}
 
+==== Spares/Replace vdev ====
+You can add ''hot-spares'' into your zpool. In case a failure, those are already installed and available to replace faulty vdevs.
+In this example, we use RAIDZ1 with three hard drives and a zpool named ''zfs_test'':
+{{ShellRoot|zpool add zfs_test spare /dev/loop3}}
+{{ShellRoot|zpool status}}
+The status of /dev/loop3 will stay AVAIL until it is set to be ''online'', now we let /dev/loop0 fail:
+{{ShellRoot|zpool offline zfs_test /dev/loop0}}
+{{Code|zpool status|<pre>
+NAME        STATE     READ WRITE CKSUM
+zfs_test    DEGRADED     0     0     0
+  raidz1-0  DEGRADED     0     0     0
+    loop0   OFFLINE      0     0     0
+    loop1   ONLINE       0     0     0
+    loop2   ONLINE       0     0     0
+spares
+  loop3     AVAIL</pre>}}
+We replace /dev/loop0 with our spare /dev/loop3:
+{{ShellRoot|zpool replace zfs_test /dev/loop0 /dev/loop3}}
+{{Code|zpool status|<pre>
+  pool: zfs_test
+ state: DEGRADED
+status: One or more devices has been taken offline by the administrator.
+        Sufficient replicas exist for the pool to continue functioning in a
+        degraded state.
+action: Online the device using 'zpool online' or replace the device with
+        'zpool replace'.
+ scrub: resilver completed after 0h0m with 0 errors on Sun Aug 21 22:29:22 2011
+config:
+
+        NAME         STATE     READ WRITE CKSUM
+        zfs_test     DEGRADED     0     0     0
+          raidz1-0   DEGRADED     0     0     0
+            spare-0  DEGRADED     0     0     0
+              loop0  OFFLINE      0     0     0
+              loop3  ONLINE       0     0     0  46.5K resilvered
+            loop1    ONLINE       0     0     0
+            loop2    ONLINE       0     0     0
+        spares
+          loop3      INUSE     currently in use
+
+errors: No known data errors</pre>}}
+{{Note|the file system got automatically resilvered onto /dev/loop3 and the zpool was all the time online}}
+Now we remove the failed vdev /dev/loop0 and start a manual scrubbing:
+{{ShellRoot|zpool detach zfs_test /dev/loop0 && zpool scrub}}
+{{Code|zpool status|<pre>
+  pool: zfs_test
+ state: ONLINE
+ scrub: scrub completed after 0h0m with 0 errors on Sun Aug 21 22:37:52 2011
+config:
+
+        NAME        STATE     READ WRITE CKSUM
+        zfs_test    ONLINE       0     0     0
+          raidz1-0  ONLINE       0     0     0
+            loop3   ONLINE       0     0     0
+            loop1   ONLINE       0     0     0
+            loop2   ONLINE       0     0     0
+
+errors: No known data errors</pre>}}
+
+==== Zpool Version Update ====
+With every update of {{Package|sys-fs/zfs-fuse}}, you are likely to also get a more recent ZFS version. Also the status of your zpools will indicate a warning that a new version is available and the zpools could be upgraded.<br/>
+To display the current version on a zpool:
+{{Code|zpool upgrade -v|<pre>
+This system is currently running ZFS pool version 23.
+
+The following versions are supported:
+
+VER  DESCRIPTION
+---  --------------------------------------------------------
+ 1   Initial ZFS version
+ 2   Ditto blocks (replicated metadata)
+ 3   Hot spares and double parity RAID-Z
+ 4   zpool history
+ 5   Compression using the gzip algorithm
+ 6   bootfs pool property
+ 7   Separate intent log devices
+ 8   Delegated administration
+ 9   refquota and refreservation properties
+ 10  Cache devices
+ 11  Improved scrub performance
+ 12  Snapshot properties
+ 13  snapused property
+ 14  passthrough-x aclinherit
+ 15  user/group space accounting
+ 16  stmf property support
+ 17  Triple-parity RAID-Z
+ 18  Snapshot user holds
+ 19  Log device removal
+ 20  Compression using zle (zero-length encoding)
+ 21  Deduplication
+ 22  Received properties
+ 23  Slim ZIL</pre>}}
+{{Warning|systems with a lower version installed will not be able to import a zpool of a higher version}}
+To upgrade the version of zpool ''zfs_test'':
+{{ShellRoot|zpool upgrade zfs_test}}
+To upgrade the version of all zpools in the system:
+{{Root|zpool upgrade -a}}
+
 == Links ==
 * [http://zfs-fuse.net/ zfs-fuse.net]
