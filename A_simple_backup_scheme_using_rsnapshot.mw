@@ -1,0 +1,130 @@
+These days, with digital storage cheaper than ever, and people accumulating increasing amounts of invaluable digital data (e.g., family videos), there is no excuse not to have a backup regime in case of hardware failure.  
+
+This article describes a simple automated backup scheme using the tool '''[http://www.rsnapshot.org rsnapshot]''', which is based on [http://en.wikipedia.org/wiki/Rsync rsync].  ''rsnapshot'' makes a specified number of incremental backups of specified filetrees, using [http://en.wikipedia.org/wiki/Hard_link hard links] to save space on the backup medium.
+
+==Setup==
+===Preliminaries===
+* Install {{package|app-backup/rsnapshot}}
+
+* Add an entry like the following in your ''fstab'':
+{{file|/etc/fstab||<pre>/dev/disk/by-label/backup    /mnt/backup    ext4    noatime,nodiratime,noauto    0 0</pre>}}
+In this example, the filesystem is ''ext4'', identified by the label ''backup'', and attaches to a special mount point ''/mnt/backup''.  The ''noauto'' option means that this backup filesystem will not be mounted by default.
+
+* In this article, we will be describing separate daily, weekly and monthly backups.  Set up the points for these intervals on the backup filesystem:
+{{ShellRoot|mkdir /mnt/backup/daily}}
+{{ShellRoot|mkdir /mnt/backup/weekly}}
+{{ShellRoot|mkdir /mnt/backup/monthly}}
+
+===Cron scripts===
+Create [http://en.wikipedia.org/wiki/Cron cron] scripts for the different backup intervals:
+{{file|/etc/cron.daily/rsnapshot.daily||<pre>#!/bin/sh
+
+echo "### RSNAPSHOT DAILY ###"
+mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/daily.conf daily || echo "Backup failure"
+umount /mnt/backup
+echo
+</pre>
+}}
+{{file|/etc/cron.weekly/rsnapshot.weekly||<pre>#!/bin/sh
+
+echo "### RSNAPSHOT WEEKLY ###"
+mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/weekly.conf daily || echo "Backup failure"
+umount /mnt/backup
+echo
+</pre>
+}}
+{{file|/etc/cron.daily/rsnapshot.monthly||<pre>#!/bin/sh
+
+echo "### RSNAPSHOT MONTHLY ###"
+mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/monthly.conf daily || echo "Backup failure"
+umount /mnt/backup
+echo
+</pre>
+}}
+
+===rsnapshot configuration files===
+Set up the ''rsnapshot'' configuration files referred to in the scripts above.  
+{{Note|''rsnapshot'' configuration files are '''tab delimited'''.}}
+{{Note|Filetree specifications are in ''rsync'' format.  See the ''rsync'' man page for details.}}
+First a base configuration:
+{{file|/etc/rsnapshot.d/base.conf||
+<pre>
+# Default config version
+config_version	1.2
+
+# So the hard disk is not polluted in case the backup filesystem is not available
+no_create_root	1
+
+# Standard settings
+cmd_cp			/bin/cp
+cmd_rm			/bin/rm
+cmd_rsync		/usr/bin/rsync
+link_dest		1
+
+# For convenience, so that mount points can be taken as backup starting points
+one_fs			1
+</pre>
+}}
+Then, here are sample configuration files for daily, weekly and monthly backups:
+{{file|/etc/rsnapshot.d/daily.conf||
+<pre>
+include_conf   /etc/rsnapshot.d/base.conf
+
+# Interval specific root so things are rotated synchronously
+snapshot_root   /mnt/backup/daily/
+
+# Daily (30 increments)
+interval	daily	30
+backup		/home/me/		localhost/
+</pre>
+}}
+
+{{file|/etc/rsnapshot.d/weekly.conf||
+<pre>
+include_conf   /etc/rsnapshot.d/base.conf
+
+# Interval specific root so things are rotated synchronously
+snapshot_root	/mnt/backup/weekly/
+
+# Weekly (12 increments)
+interval	weekly	12
+backup		/etc/				localhost/
+backup		/var/db/pkg/world	localhost/
+backup		/boot/					localhost/
+</pre>
+}}
+
+{{file|/etc/rsnapshot.d/monthly.conf||
+<pre>
+include_conf   /etc/rsnapshot.d/base.conf
+
+# Interval specific root so things are rotated synchronously
+snapshot_root	/mnt/backup/monthly/
+
+# Monthly (6 increments)
+exclude		/home/me/
+exclude		/home/system/
+exclude		/tmp/**
+exclude		/usr/portage/distfiles/**
+exclude		/boot/
+exclude		/home/scratch/**
+exclude		/var/tmp/ccache/**
+interval	monthly				6
+backup		/					localhost/
+</pre>
+}}
+In these files, the second argument of ''backup'' gives a name to the backup, usually referring to the machine (in this case, ''localhost'').  This can be changed to any name of your choosing.
+
+==Restoration==
+To restore the ''localhost'' backups, use
+{{ShellRoot|mount /mnt/backup}}
+{{ShellRoot|rsync -a /mnt/backup/monthly/localhost/monthly.0/ /mnt/myroot/}}
+{{ShellRoot|rsync -a /mnt/backup/weekly/localhost/weekly.0/ /mnt/myroot/}}
+{{ShellRoot|rsync -a /mnt/backup/weekly/localhost/weekly.0/ /mnt/myroot/}}
+where ''/mnt/myroot'' is the mount point of the filesystem you wish to restore.
+
+==Possible improvements==
+It is also possible to make remote backups via '''[http://en.wikipedia.org/wiki/Rsync rsync]''' or '''[http://en.wikipedia.org/wiki/Secure_Shell SSH]''' -- see the ''rsnapshot'' man page for details.
+
+==Links==
+* [http://www.rsnapshot.org|'''rsnapshot''' homepage]
