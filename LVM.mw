@@ -22,9 +22,9 @@ Device Drivers  --->
 * selinux = Enable Security Enhanced Linux (SELinux) support
 * static-libs = Install static libraries
 You can install LVM2 using the following command:
-{{ShellRoot|emerge lvm2}}
+{{RootCmd|emerge lvm2}}
 The package comes with a start-stop-daemon, which we start and add to the boot runlevel:
-{{ShellRoot|/etc/init.d/lvm start && rc-update add lvm boot}}
+{{RootCmd|/etc/init.d/lvm start && rc-update add lvm boot}}
 The configuration files are located in
 {{Code|Configuration Files|<pre>
 /etc/lvm/lvm.conf</pre>}}
@@ -40,25 +40,25 @@ Physical Volumes are the actual hardware or storage system LVM builds up upon.
 
 ==== Partitioning ====
 The partition type for ''LVM'' is ''8e''(Linux LVM):
-{{ShellRoot|fdisk /dev/sdX}}
+{{RootCmd|fdisk /dev/sdX}}
 In fdisk, you can create MBR partitions using the '''n''' key and then change the partition type with the '''t''' key to ''8e''. We will end up with one primary partition /dev/sdX1 of partition type ''8e'' (Linux LVM).
 {{Note|this step is not needed, since LVM can initialize whole hard drives as PV. Actual not using partitioning avoids LVM to be restricted to certain limits of MBR or GPT tables}}
 
 ==== Create PV ====
 The following command creates a Physical Volume (PV) on the two first primary partitions of /dev/sdX and /dev/sdY:
-{{ShellRoot|pvcreate /dev/sd[X-Y]1}}
+{{RootCmd|pvcreate /dev/sd[X-Y]1}}
 
 ==== List PV ====
 The folloing command lists all active Physical Volumes (PV) in the system:
-{{ShellRoot|pvdisplay}}
+{{RootCmd|pvdisplay}}
 You can scan for PV in the system, to troubleshoot not properly initialized or lost storage devices:
-{{ShellRoot|pvscan}}
+{{RootCmd|pvscan}}
 
 ==== Remove PV ====
 LVM automatically distributed the data onto all available PV, if not told otherwise. To make sure there is no data left on our device before we remove it, use the following command:
-{{ShellRoot|pvmove -v /dev/sdX1}}
+{{RootCmd|pvmove -v /dev/sdX1}}
 This might take a long time and once finished, there should be no data left on /dev/sdX1. We first remove the PV from our Volume Group (VG) and then the actual PV:
-{{ShellRoot|vgreduce vg0 /dev/sdX1 && pvremove /dev/sdX1}}
+{{RootCmd|vgreduce vg0 /dev/sdX1 && pvremove /dev/sdX1}}
 {{Note|If a whole hard drives was once initialized as PV, then you have to remove it before it can be properly partitioned again. That is because PV have no valid MBR table}}
 
 === VG (Volume Group) ===
@@ -66,109 +66,109 @@ Volume Groups (VG) consist of one or more Physical Volumes (PV) and show up as /
 
 ==== Create VG ====
 The following command creates a Volume Group (VG) named ''vg0'' on two previously initialized Physical Volumes (PV) named /dev/sdX1 and /dev/sdY1:
-{{ShellRoot|vgcreate vg0 /dev/sd[X-Y]1}}
+{{RootCmd|vgcreate vg0 /dev/sd[X-Y]1}}
 
 ==== List VG ====
 The folloing command lists all active Volume Groups (VG) in the system:
-{{ShellRoot|vgdisplay}}
+{{RootCmd|vgdisplay}}
 You can scan for VG in the system, to troubleshoot not properly created or lost VGs:
-{{ShellRoot|vgscan}}
+{{RootCmd|vgscan}}
 
 ==== Extend VG ====
 With the following command, we extend the exisiting Volume Group (VG) vg0 onto the Physical Volume (PV) /dev/sdZ1:
-{{ShellRoot|vgextend vg0 /dev/sdZ1}}
+{{RootCmd|vgextend vg0 /dev/sdZ1}}
 
 ==== Reduce VG ====
 Before we can remove a Physical Volume (PV), we need to make sure that LVM has no data left on the device. To move all data off that PV and distribute it onto the other available, use the following command:
-{{ShellRoot|pvmove -v /dev/sdX1}}
+{{RootCmd|pvmove -v /dev/sdX1}}
 This might take a while and once finished, we can remove the PV from our VG:
-{{ShellRoot|vgreduce vg0 /dev/sdX1}}
+{{RootCmd|vgreduce vg0 /dev/sdX1}}
 
 ==== Remove VG ====
 Before we can remove a Volume Group (VG), we have to remove all existing Snapshots, all Logical Volumes (LV) and all Physical Volumes (PV) but one. The following command removes the VG named vg0:
-{{ShellRoot|vgremove vg0}}
+{{RootCmd|vgremove vg0}}
 
 === LV (Logical Volume) ===
 Logical Volumes (LV) are created and managed in Volume Groups (VG), once created they show up as /dev/<VG name>/<LV name> and can be used like normal partitions.
 
 ==== Create LV ====
 With the following command, we create a Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 with a size of 150MB:
-{{ShellRoot|lvcreate -L 150M -n lvol1 vg0}}
+{{RootCmd|lvcreate -L 150M -n lvol1 vg0}}
 There are other useful options to set the size of a new LV like:
 * -l 100%FREE = maximum size of the LV within the VG
 * -l 50%VG = 50% size of the whole VG
 
 ==== List LV ====
 The folloing command lists all Logical Volumes (LV) in the system:
-{{ShellRoot|lvdisplay}}
+{{RootCmd|lvdisplay}}
 You can scan for LV in the system, to troubleshoot not properly created or lost LVs:
-{{ShellRoot|lvscan}}
+{{RootCmd|lvscan}}
 
 ==== Extend LV ====
 With the following command, we can extend the Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 to 500MB:
-{{ShellRoot|lvextend -L500M /dev/vg0/lvol1}}
+{{RootCmd|lvextend -L500M /dev/vg0/lvol1}}
 {{Note|use -L+350M to increase the current size of a LV by 350MB}}
 Once the LV is extended, we need to grow the file system as well (in this example we used ext4 and the LV is mounted to /mnt/data):
 {{Note|Some file systems do support online-resizing, like ext4 otherwise you have to umount the file system first}}
-{{ShellRoot|resize2fs /mnt/data 500M}}
+{{RootCmd|resize2fs /mnt/data 500M}}
 
 ==== Reduce LV ====
 Before we can reduce the size of our Logical Volume (LV) without corrupting existing data, we have to shrink the file system on it. In this example we used ext4, the LV needs to be unmounted to shrink the file system:
-{{ShellRoot|umount /mnt/data <br/>
-e2fsck -f /dev/vg0/lvol1 <br/>
-resize2fs /dev/vg0/lvol1 150M}}
+{{RootCmd|umount /mnt/data
+|e2fsck -f /dev/vg0/lvol1
+|resize2fs /dev/vg0/lvol1 150M}}
 Now we are ready to reduce the size of our LV:
-{{ShellRoot|lvreduce -L150M /dev/vg0/lvol1}}
+{{RootCmd|lvreduce -L150M /dev/vg0/lvol1}}
 {{Note|use -L-350M to reduce the current size of a LV by 350MB}}
 
 ==== LV Permissions ====
 Logical Volumes (LV) can be set to be ''read only'' storage devices.
-{{ShellRoot|lvchange -p r /dev/vg0/lvol1}}
+{{RootCmd|lvchange -p r /dev/vg0/lvol1}}
 The LV needs to be remounted for the changes to take affect:
-{{ShellRoot|mount -o remount /dev/vg0/lvol1}}
+{{RootCmd|mount -o remount /dev/vg0/lvol1}}
 To set the LV to be read/write again:
-{{ShellRoot|lvchange -p rw /dev/vg0/lvol1 && mount -o remount /dev/vg0/lvol1}}
+{{RootCmd|lvchange -p rw /dev/vg0/lvol1 && mount -o remount /dev/vg0/lvol1}}
 
 ==== Remove LV ====
 Before we remove a Logical Volume (LV) we should unmount and deactivate, so no further write activity can take place:
-{{ShellRoot|umount /dev/vg0/lvol1 && lvchange -a n /dev/vg0/lvol1}}
+{{RootCmd|umount /dev/vg0/lvol1 && lvchange -a n /dev/vg0/lvol1}}
 The following command removes the LV named lvol1 from VG named vg0:
-{{ShellRoot|lvremove /dev/vg0/lvol1}}
+{{RootCmd|lvremove /dev/vg0/lvol1}}
 
 == Examples ==
 We can create some scenarios using loopback devices, so no real storage devices are used.
 
 === Preparation ===
 First we need to make sure the loopback module is loaded. If you want to play around with partitions, use the following option:
-{{ShellRoot|modprobe -r loop && modprobe loop max_part{{=}}63}}
+{{RootCmd|modprobe -r loop && modprobe loop max_part{{=}}63}}
 {{Note|you cannot reload the module, if it is built into the kernel}}
 Now we need to either tell LVM to not use ''udev'' to scan for devices or change the filers in /etc/lvm/lvm.conf. In this case we just temporarely do not use ''udev'':
 {{File|/etc/lvm/lvm.conf||<pre>
 <nowiki>obtain_device_list_from_udev = 0</nowiki></pre>}}
 {{Important|this is for testing only, you want to change the setting back when dealing with real devices since it is much faster}}
 We create some image files, that will become our storage devices (uses ~6GB of real hard drive space):
-{{ShellRoot|mkdir /var/lib/lvm_img <br/>
-dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm0.img bs{{=}}1024 count{{=}}2097152 <br/>
-dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm1.img bs{{=}}1024 count{{=}}2097152 <br/>
-dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm2.img bs{{=}}1024 count{{=}}2097152}}
+{{RootCmd|mkdir /var/lib/lvm_img
+|dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm0.img bs{{=}}1024 count{{=}}2097152
+|dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm1.img bs{{=}}1024 count{{=}}2097152
+|dd if{{=}}/dev/zero of{{=}}/var/lib/lvm_img/lvm2.img bs{{=}}1024 count{{=}}2097152}}
 Check which loopback devices are available:
-{{ShellRoot|losetup -a}}
+{{RootCmd|losetup -a}}
 We assume all loopback devices are available and create our hard drives:
-{{ShellRoot|losetup /dev/loop0 /var/lib/lvm_img/lvm0.img <br/>
-losetup /dev/loop1 /var/lib/lvm_img/lvm1.img <br/>
-losetup /dev/loop2 /var/lib/lvm_img/lvm2.img}}
+{{RootCmd|losetup /dev/loop0 /var/lib/lvm_img/lvm0.img
+|losetup /dev/loop1 /var/lib/lvm_img/lvm1.img
+|losetup /dev/loop2 /var/lib/lvm_img/lvm2.img}}
 Now we can use /dev/loop[0-2] as we would use any other hard drive in the system.
 {{Note|On the next reboot, all the loopback devices will be released and the folder /var/lib/lvm_img can be deleted}}
 
 === Two Hard Drives ===
 In this example, we will initialize two hard drive as PV and then create the VG ''vg0'':
-{{ShellRoot|pvcreate /dev/loop[0-1] <br/>
-vgcreate vg0 /dev/loop[0-1]}}
+{{RootCmd|pvcreate /dev/loop[0-1]
+|vgcreate vg0 /dev/loop[0-1]}}
 Now lets create the LV ''lvol1'' in our VG ''vg0'' and take the maximum space available:
-{{ShellRoot|lvcreate -l 100%FREE -n lvol1 vg0}}
+{{RootCmd|lvcreate -l 100%FREE -n lvol1 vg0}}
 Create the file system and mount it to /mnt/data:
-{{ShellRoot|mkfs.ext4 /dev/vg0/lvol1 <br/>
-mount /dev/vg0/lvol1 /mnt/data}}
+{{RootCmd|mkfs.ext4 /dev/vg0/lvol1
+|mount /dev/vg0/lvol1 /mnt/data}}
 Now we have the capacity of 2GB from each hard drive available in /mnt/data as one 4GB device.
 {{Note|The same applies to RAID systems, if you want to create one VG use /dev/md[X-Y] instead}}
 
@@ -179,51 +179,51 @@ Here is an example of an entry in /etc/fstab (using ext4):
 
 === LVM2 MIRROR ===
 We use two hard drives and create our LV ''lvol1'' like in the first example. This time we use 40% of the size of our VG ''vg0'', because we need some space in the VG for the MIRROR and log files:
-{{ShellRoot|pvcreate /dev/loop[0-1] <br/>
-vgcreate vg0 /dev/loop[0-1] <br/>
-lvcreate -l 40%VG -n lvol1 vg0 <br/>
-mkfs.ext4 /dev/vg0/lvol1 <br/>
-mount /dev/vg0/lvol1 /mnt/data}}
+{{RootCmd|pvcreate /dev/loop[0-1]
+|vgcreate vg0 /dev/loop[0-1]
+|lvcreate -l 40%VG -n lvol1 vg0
+|mkfs.ext4 /dev/vg0/lvol1
+|mount /dev/vg0/lvol1 /mnt/data}}
 To create our copy of /dev/vg0/lvol1 on the PV /dev/loop1, use the following command:
-{{ShellRoot|lvconvert -m1 /dev/vg0/lvol1 --corelog /dev/loop1}}
+{{RootCmd|lvconvert -m1 /dev/vg0/lvol1 --corelog /dev/loop1}}
 LVM will now ensure that a full copy (MIRROR) of /dev/vg0/lvol1 exists on /dev/loop1 and is not distributed between other PVs.
 {{Note|this is very I/O intensive, --corelog writes the log files for the conversion into memory}}
 To remove the MIRROR:
-{{ShellRoot|lvconvert -m0 /dev/vg0/lvol1}}
+{{RootCmd|lvconvert -m0 /dev/vg0/lvol1}}
 If one half of the MIRROR fails, the other one will be automatically converted into a not mirrored LV (loose the ''mirror'' atribute). LVM is different from Linux RAID1 that it doesn't read/write from both mirrored images, there is no performace increase.
 
 === LVM2 Snapshots ===
 A snapshot is an LV as copy of another LV, which takes in all the changes that were made in the original LV to show the content of that LV in a different state. We once again use our two hard drives and create LV ''lvol1'' this time with 60% of VG ''vg0'':
-{{ShellRoot|pvcreate /dev/loop[0-1] <br/>
-vgcreate vg0 /dev/loop[0-1] <br/>
-lvcreate -l 60%VG -n lvol1 vg0 <br/>
-mkfs.ext4 /dev/vg0/lvol1 <br/>
-mount /dev/vg0/lvol1 /mnt/data}}
+{{RootCmd|pvcreate /dev/loop[0-1]
+|vgcreate vg0 /dev/loop[0-1]
+|lvcreate -l 60%VG -n lvol1 vg0
+|mkfs.ext4 /dev/vg0/lvol1
+|mount /dev/vg0/lvol1 /mnt/data}}
 Now we create a snapshot of ''lvol1'' named ''08092011_lvol1'' and give it 10% of VG ''vg0'':
-{{ShellRoot|lvcreate -l 10%VG -s -n 08092011_lvol1 /dev/vg0/lvol1}}
+{{RootCmd|lvcreate -l 10%VG -s -n 08092011_lvol1 /dev/vg0/lvol1}}
 {{Important|if a snapshot exceeds it's maximum size, it disappears}}
 Mount our snapshot somewhere else:
-{{ShellRoot|mkdir /mnt/08092011_data<br/>
-mount /dev/vg0/08092011_lvol1 /mnt/08092011_data}}
+{{RootCmd|mkdir /mnt/08092011_data
+|mount /dev/vg0/08092011_lvol1 /mnt/08092011_data}}
 We could now access data in ''lvol1'' from a previous state.<br/>
 Since LVM2, snapshots are writeable LV, so we could use them to let a project go on into two different directions:
-{{ShellRoot|lvcreate -l 10%VG -s -n project1_lvol1 /dev/vg0/lvol1<br/>
-lvcreate -l 10%VG -s -n project2_lvol1 /dev/vg0/lvol1<br/>
-mkdir /mnt/project1 /mnt/project2<br/>
-mount /dev/vg0/project1_lvol1 /mnt/project1<br/>
-mount /dev/vg0/project2_lvol1 /mnt/project2}}
+{{RootCmd|lvcreate -l 10%VG -s -n project1_lvol1 /dev/vg0/lvol1
+|lvcreate -l 10%VG -s -n project2_lvol1 /dev/vg0/lvol1
+|mkdir /mnt/project1 /mnt/project2
+|mount /dev/vg0/project1_lvol1 /mnt/project1
+|mount /dev/vg0/project2_lvol1 /mnt/project2}}
 Now we have three different versions of LV ''lvol1'', the original and two snapshots which can be used parallel and changes are written to the snapshots.
 {{Note|the original LV ''lvol1'' cannot be reduced in size or removed if snapshots of it exist. Snapshots can be increased in size without growing the file system on them, but they cannot exceed the size of the original LV}}
 
 === LVM2 Stripeset ===
 The STRIPSET is the same as RAID0, data is written to several devices at the same time to increase performance. In LVM2 it is possible to distribute LV over several PV for the same effect. We create three PV and then VG ''vg0'':
-{{ShellRoot|pvcreate /dev/loop[0-2]<br/>
-vgcreate vg0 /dev/loop[0-2]}}
+{{RootCmd|pvcreate /dev/loop[0-2]
+|vgcreate vg0 /dev/loop[0-2]}}
 VG ''vg0'' consists of three different hard drives and now we can create our LV and spread it over them:
-{{ShellRoot|lvcreate -i 3 -l 20%VG -n lvm_stripe vg0}}
+{{RootCmd|lvcreate -i 3 -l 20%VG -n lvm_stripe vg0}}
 The option -i 3 indicates that we want to spread it over 3 PV in out VG vg0:
-{{Code|pvscan|<pre>
-    Logging initialised at Thu Sep  8 22:19:27 2011
+{{RootCmd|pvscan
+|output=<pre>    Logging initialised at Thu Sep  8 22:19:27 2011
     Set umask from 0022 to 0077
     Wiping cache of LVM-capable devices
     Wiping internal VG cache
@@ -240,8 +240,8 @@ LVM has only MIRROR and snapshots to provide some level of redundancy. However t
 
 === vgcfgrestore ===
 In /etc/lvm/archive and /etc/lvm/backup are files which contain logs about metadata changes in LVM. To see what states of the VG are available to be restored:
-{{Code|vgcfgrestore --list vg0|<pre>
-  File:         /etc/lvm/archive/vg0_00002-923283887.vg
+{{RootCmd|vgcfgrestore --list vg0
+|output=<pre>  File:         /etc/lvm/archive/vg0_00002-923283887.vg
   VG name:      vg0
   Description:  Created *before* executing 'lvremove /dev/vg0/lvol1'
   Backup Time:  Sat Sep 10 20:02:05 2011
@@ -251,15 +251,15 @@ In /etc/lvm/archive and /etc/lvm/backup are files which contain logs about metad
   Description:  Created *after* executing 'lvremove /dev/vg0/lvol1'
   Backup Time:  Sat Sep 10 20:02:05 2011</pre>}}
 In this example we removed the LV ''lvol1'' by accident and want it back in our VG ''vg0'':
-{{ShellRoot|vgcfgrestore -f /etc/archive/vg0_00002-923283887.vg vg0}}
+{{RootCmd|vgcfgrestore -f /etc/archive/vg0_00002-923283887.vg vg0}}
 {{Important|This is not the data in the LV itself that will be restored, just the LV is recreated as it was distributed on the PV before and you have a good chance that the files are still on the PV if they weren't overwritten yet}}
 
 === Replace PV ===
 We want to replace a PV and then restore the metadata to a new one, so that we reach the same state as before the device stopped working. To display all PV in a VG (even lost ones) use the following command:
-{{ShellRoot|vgdisplay --partial --verbose}}
+{{RootCmd|vgdisplay --partial --verbose}}
 In this example I let /dev/loop1 (unknown device) fail:
-{{Code|vgdisplay --partial --verbose|<pre>
---- Physical volumes ---
+{{RootCmd|vgdisplay --partial --verbose
+|output=<pre>--- Physical volumes ---
   PV Name               unknown device
   PV UUID               3B0yFN-zKDY-yICo-fT0M-nJwS-3wZf-UEjvd1
   PV Status             allocatable
@@ -270,17 +270,17 @@ In this example I let /dev/loop1 (unknown device) fail:
   PV Status             allocatable
   Total PE / Free PE    511 / 511</pre>}}
 Using the UUID, we can tell LVM to restore new hardware and be implemented within the VG as the old one was.
-{{ShellRoot|pvcreate --restorefile /etc/archive/<METADATA-FILE> --uuid <UUID> /dev/loop3}}
+{{RootCmd|pvcreate --restorefile /etc/archive/<METADATA-FILE> --uuid <UUID> /dev/loop3}}
 Then we restore the VG to the state before the PV failed:
-{{ShellRoot|vgcfgrestore -f /etc/archive/<METADATA-FILE> vg0}}
+{{RootCmd|vgcfgrestore -f /etc/archive/<METADATA-FILE> vg0}}
 Now you can replay your file backup if you haven't already restored the PV itself.
 
 === Deactivate LV ===
 You can deactivat a LV with the following command:
-{{ShellRoot|umount /dev/vg0/lvol1<br/>
-lvchange -a n /dev/vg0/lvol1}}
+{{RootCmd|umount /dev/vg0/lvol1
+|lvchange -a n /dev/vg0/lvol1}}
 You will not be able to mount the LV anywhere before it got reactivated:
-{{ShellRoot|lvchange -a y /dev/vg0/lvol1}}
+{{RootCmd|lvchange -a y /dev/vg0/lvol1}}
 
 == Links ==
 * [http://sourceware.org/lvm2/ lvm2]
