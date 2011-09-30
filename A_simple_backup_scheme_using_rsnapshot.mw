@@ -10,11 +10,6 @@ This article describes a simple automated backup scheme using the tool '''[http:
 {{file|/etc/fstab||<pre>/dev/disk/by-label/backup    /mnt/backup    ext4    noatime,nodiratime,noauto    0 0</pre>}}
 In this example, the filesystem is ''ext4'', identified by the label ''backup'', and attaches to a special mount point ''/mnt/backup''.  The ''noauto'' option means that this backup filesystem will not be mounted by default.
 
-* In this article, we will be describing separate daily, weekly and monthly backups.  Set up the points for these intervals on the backup filesystem:
-{{RootCmd|mkdir /mnt/backup/daily
-|mkdir /mnt/backup/weekly
-|mkdir /mnt/backup/monthly}}
-
 ===Cron scripts===
 Create [http://en.wikipedia.org/wiki/Cron cron] scripts for the different backup intervals:
 {{file|/etc/cron.daily/rsnapshot.daily||<pre>#!/bin/sh
@@ -64,15 +59,16 @@ link_dest		1
 
 # For convenience, so that mount points can be taken as backup starting points
 one_fs			1
+
+# Store all backups in one directory per host.
+# A useful alternative may be to create separate directory for each interval.
+snapshot_root   /mnt/backup/
 </pre>
 }}
 Then, here are sample configuration files for daily, weekly and monthly backups:
 {{file|/etc/rsnapshot.d/daily.conf||
 <pre>
 include_conf   /etc/rsnapshot.d/base.conf
-
-# Interval specific root so things are rotated synchronously
-snapshot_root   /mnt/backup/daily/
 
 # Daily (30 increments)
 interval	daily	30
@@ -83,9 +79,6 @@ backup		/home/me/		localhost/
 {{file|/etc/rsnapshot.d/weekly.conf||
 <pre>
 include_conf   /etc/rsnapshot.d/base.conf
-
-# Interval specific root so things are rotated synchronously
-snapshot_root	/mnt/backup/weekly/
 
 # Weekly (12 increments)
 interval	weekly	12
@@ -98,9 +91,6 @@ backup		/boot/					localhost/
 {{file|/etc/rsnapshot.d/monthly.conf||
 <pre>
 include_conf   /etc/rsnapshot.d/base.conf
-
-# Interval specific root so things are rotated synchronously
-snapshot_root	/mnt/backup/monthly/
 
 # Monthly (6 increments)
 exclude		/home/me/
@@ -118,9 +108,9 @@ In these files, the second argument of ''backup'' gives a name to the backup, us
 ==Restoration==
 To restore the ''localhost'' backups specified above, we would use
 {{RootCmd|mount /mnt/backup
-|rsync -a /mnt/backup/monthly/localhost/monthly.0/ /mnt/myroot/
-|rsync -a /mnt/backup/weekly/localhost/weekly.0/ /mnt/myroot/
-|rsync -a /mnt/backup/weekly/localhost/weekly.0/ /mnt/myroot/}}
+|rsync -a /mnt/backup/localhost/monthly.0/ /mnt/myroot/
+|rsync -a /mnt/backup/localhost/weekly.0/ /mnt/myroot/
+|rsync -a /mnt/backup/localhost/daily.0/ /mnt/myroot/}}
 where ''/mnt/myroot'' is the mount point of the fresh root filesystem. In the paths above ''*.0'' refers to the latest increment.
 
 ==Possible improvements==
