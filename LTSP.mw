@@ -171,14 +171,6 @@ By default, the packaged quickstart profile in /etc/ltsp/quickstart/profile.qs i
 
 {{RootCmd|<nowiki>ltsp-build-client --quickstart-profile=/root/myprofile.qs --quickstart-debug --quickstart-verbose</nowiki>}}
 
-
-{{Note|ltsp-build-client does not work witch all locale. quickstart actually requires 'C' locale. So if ltsp-build-client shouts with the following message:
-{{RootCmd|ltsp-build-client ...
-|output=No fetcher for protocol: file}}
-unset your locale, remove the directory and restart:
-{{RootCmd|unset LANG; unset LC_ALL; ltsp-build-client --purge}}
-}}
-
 After invoking the ltsp-build-client command, the environment is preparing. For each architecture the first build takes up the most time because binary packages are created from source in the first run. These binary packages are stored in /usr/portage/packages through a bind mount on your server. Any consequent builds use these packages to speed up the process.
 
 === Finishing the Install ===
@@ -315,16 +307,57 @@ If you want to copy the installation to another computer, archive it with tar, c
 {{RootCmd|<nowiki>tar -cvzf /ltspx86.tgz --one-file-system --exclude=/lost+found /opt/ltsp/x86</nowiki>
 |tar -xvzf /root/ltspx86.tgz -C /opt/ltsp}}
 
-=== Slightly faster boot ===
-Because the client chroot uses OpenRC, some services can boot parallel, providing a slightly faster boot.
+=== X11 Keyboard Layout ===
+At the moment, X configuration is disabled. Therefore, all LTSP X settings (in lts.conf) does not work, especially XKBLAYOUT. For setting the X layout of clients do the following:
 
-{{File|/opt/ltsp-dev/x86/etc/rc.conf||<pre>
-rc_parallel="YES"
+{{Root|mkdir /opt/ltsp/x86/etc/X11/xorg.conf.d/}}
+{{Root|cp /opt/ltsp/x86/usr/share/X11/xorg.conf.d/10-evdev.conf /opt/ltsp/x86/etc/X11/xorg.conf.d/10-evdev.conf}}
+
+Then edit the file and add the line to the keyboard section of the evdev.conf
+{{File|/opt/ltsp/x86/etc/X11/xorg.conf.d/10-evdev.conf||<pre>
+Option "XkbLayout" "fr"
 </pre>}}
 
+=== Debugging ===
+Below some practical debug tips.
+
+==== Chrooting ====
+When chrooting into the client, you don't have a portage (and layman) tree in the client chroot by default. In the installation, the server portage tree (among others) is bind mounted in the client tree, which means the client chroot actually uses the server's copied portage tree. To chroot into a client, perform the following actions:
+
+When I want to go in a client chroot, I perform the following actions to mimic this behaviour. Let's say the chroot is in /opt/ltsp/x86:
+
+{{ShellRoot| mount /usr/portage/ /opt/ltsp/x86/usr/portage -o bind}}
+{{ShellRoot| mount /var/lib/layman /opt/ltsp/x86/var/lib/layman -o bind}}
+{{ShellRoot| mount -t proc none /opt/ltsp/x86/proc}}
+{{ShellRoot| mount -o bind /dev /opt/ltsp/x86/dev}}
+{{ShellRoot| chroot /opt/ltsp/x86 /bin/bash}}
+
+==== SSHD ====
+Logging in to a booted client with ssh might also be useful. You need to perform three actions for this.
+# Chroot into the client.
+# Add sshd to the default runlevel.
+# Add /etc/ssh to the copy_dirs variable in /etc/conf.d/ltsp-client-setup.
+
+==== Log Files ====
+On client:
+* /var/log/ldm.log
+* /var/log/Xorg.7.log
+On server:
+* /var/log/remote/<host>
+* /home/<user>/.xsession-errors
+
+==== Commands ====
+On client:
+{{ShellRoot|pulseaudio -vvv}}
+
+On Server:
+{{ShellRoot|echo $PULSE_AUDIO}} should return tcp:<client ip>:4713
+{{ShellRoot|xrestop}} Top like statistics of X11 client's server side resource usage
+{{ShellRoot|nmap -p 4713 <client ip>}} to check if client's Pulse Audio daemon is listing on port 4713
 
 === Known Issues ===
 * If you get an emerge error for "=dev-lang/python-2.6* is not installed", with a "die "$(python_get_implementational_package) is not installed";", this means that some of your binary packages were installed against Python 2.6, Remove your binary packages to let them compile against your new python environment.
+
 
 * Several programs will fight for the virtual terminals on the clients. Comment out getty in inittab:
 {{File|/opt/ltsp/x86/etc/inittab|commenting example|<pre>
@@ -337,3 +370,41 @@ rc_parallel="YES"
 #c5:2345:respawn:/sbin/agetty 38400 tty5 linux
 #c6:2345:respawn:/sbin/agetty 38400 tty6 linux
 ...</pre>}}
+
+
+* {{Note|ltsp-build-client does not work witch all locale. quickstart actually requires 'C' locale. So if ltsp-build-client shouts with the following message:
+{{RootCmd|ltsp-build-client ...
+|output=No fetcher for protocol: file}}
+unset your locale, remove the directory and restart:
+{{RootCmd|unset LANG; unset LC_ALL; ltsp-build-client --purge}}
+}}
+
+
+== External links ==
+
+'''Diskless Install'''
+* [http://www.gentoo.org/doc/en/altinstall.xml#doc_chap4 Gentoo Diskless install using PXE boot]
+* [http://www.gentoo.org/doc/en/diskless-howto.xml Diskless Nodes with Gentoo]
+* [http://syslinux.zytor.com/wiki/index.php/PXELINUX Syslinux' PXE Linux page]
+* [http://etherboot.org/wiki/index.php Etherboot Project page]
+
+'''Union Mounts'''
+* [http://www.linuxjournal.com/article/7714 Unionfs: Bringing Filesystems Together]
+* [http://aufs.sourceforge.net/ Aufs]
+* [http://www.mail-archive.com/aufs-users@lists.sourceforge.net/msg00687.html aufs example]
+* [https://svn.gentooexperimental.org/genkernel/doc/HOWTO-Genkernel-SSI.txt HOWTO Simple NFS Single System Image with Genkernel 4]
+
+'''PulseAudio'''
+* [http://developer.novell.com/wiki/index.php/Feisty/HOWTO:_PulseAudio Ubuntu Feisty LTSP PulseAudio Howto]
+* [http://www.pulseaudio.org/wiki/PerfectSetup PulseAudio: The Perfect Setup]
+* [http://www.linux.com/feature/119926 Why you should care about PulseAudio (and how to start doing it)]
+
+'''Other'''
+* [http://wiki.ltsp.org/twiki/bin/view/Ltsp/IntegratingLtsp Integrating LTSP-5 into your favorite Linux distro]
+* [http://en.opensuse.org/LTSP/Tips_and_Tricks OpenSUSE LTSP Tips & Tricks]
+* [http://freenx.berlios.de/ FreeNX]
+* [http://www.tuxradar.com/content/ltsp-thin-clients-made-easy LTSP: Thin clients made easy]
+* [http://ubuntuforums.org/showthread.php?t=377397 A Beginner "How To" for gtkrc themes]
+* [https://help.ubuntu.com/community/UbuntuLTSP Ubuntu Community LTSP docs]
+
+{{CC-by-sa-3.0}}
