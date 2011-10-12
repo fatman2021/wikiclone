@@ -1,0 +1,286 @@
+Next to the usual support for ebuilds, portage supports building and installing binary packages.
+This guide explains how to create them, how to install them and how to setup binary package server.
+
+= Preliminaries =
+
+Terms used in this guide:
+binhost or binary package server: The system that creates and redistributed binary packages.
+client system: The system that downloads and installs binary packages.
+
+Tools used in this guide:
+If not explicitly stated all referenced tools are part of sys-apps/portage. This guide was written with sys-apps/portage-2.1.10 in mind.
+
+The guide is structured as follows. The first part out lines some use cases for binary packages and
+binary package servers. The second part describes how to create binary packages on a gentoo system.
+The third part describes how to redistribute the binary packages. The fourth part covers the configuration
+and tipical workflow for client systems. The last part covers advanced topics.
+
+= Motivation =
+
+== Keeping similar systems updated ==
+
+Having to compile everything from source can become time consuming at times. Maintaing
+several similar systems, possibly some of them rather slow, can be much easier if only
+one system has to compile everything from source and the other systems reuse the binary packages.
+
+== Doing safe updates ==
+
+For mission critical systems it is important to stay usable as much as possible. This can be done
+a staging server that performs all updates first and once the staging server is in a good state
+updates can be applied to the critical system.
+
+A variant of this appoach is to do the updates in a chroot on the same system and use the binaries
+created there on the real system.
+
+== As a backup ==
+
+Sometimes binary package are the only way of recovering a broken system (i.e. broken compiler).
+Having them around either on a binary package server or locally can be a great help.
+
+== Updating very old systems ==
+
+The task of updating very old systems can be greatly easied using binary packages. It is usually easier
+to install binary packages as those don't require the build time dependencies to be installed / updated
+and the failures in the build process for them can be avoided.
+
+
+= Creating binary packages =
+
+Depending on what you want to use the binary packages for, there are several ways to configure emerge.
+
+The most common way is to create binary packages whenever a package is installed using an ebuild.
+To do so, enable the FEATURE 'buildpkg' (see man make.conf).
+
+To create binary packages on demand use the --buildpkg (-b) option for emerge. All packages installed
+from ebuilds with this command will have a binary package created. There also exists the --buildpkgonly (-B)
+which only create binary packages, but doesn't install the package. This option is not recommanded, because
+it requires that all build time dependencies are already installed. If this requirment is not met, packages
+will fail to build.
+
+A third option is to create binary packages from already installed packages using 'quickpkg'. 'quickpkg' takes
+one or more dependency atoms or package set (for portage versions supporting this) as argument and creates
+binary packages for all installed packages matching these atoms. One ceavate with this methode is that it relies
+on the installed files, which is espcially a problem for config files, which frequently are modified compared
+to what the package originally installed. Files which are protected by CONFIG_PROTECT (see man portage) aren't
+included by default. To include them use the --include-config or --include-unmodified-config option (see man quickpkg).
+
+== How to not create binary packages ==
+
+Sometimes it is desirable to not build binary packages for some packages. The most common reason being that the
+package does not perform noticeable amounts of work during building, like kernel sources or packages that only
+install an upstream provided binary package.
+
+This is only achievable if FEATURES 'buildpkg' is used to create binary packages. To do so you need to remove
+'buildpkg' from FEATURES for this specific package using /etc/portage/package.env (see man portage).
+
+== Configuring paths ==
+
+By default binary packages are stored in the path defined as PKGDIR in /etc/make.conf. It defaults to
+PORTDIR/packages, which itself defaults to /usr/portage/packages.
+
+== Other configuration variables ==
+
+For binary packages to be usable on other system they must full fill some requirements.
+First of all architecture and CHOST must match.
+Second the C(XX)FLAGS have to choosen in a way that both the binary package server and the
+client systems can run the binaries.
+Third, USE flags for processor specific features like MMX, SSE,... have either to be chosen in a
+way that all systems have the enabled features or the packages using these features have to be
+rebuild on the client systems from source.
+
+= Setting up a binary package host =
+
+Portage supports the following protocols for downloading binary packages:
+* ftp
+* ftps
+* http
+* https
+* ssh
+
+Portage itself does not act as server that redistributes the binary packages. Instead you have to install
+a server that provides one of the protocolls above.
+
+Example using www-servers/lighttpd to setup an http server.
+
+{{RootCmd|emerge www-servers/lighttpd
+|Open /etc/lighttpd/lighttpd.conf and change server.document-root to PKGDIR
+|/etc/init.d/lighttpd start}}
+
+Pointing your browser to http://127.0.0.1/Packages should download the Packages
+file in PKGDIR (assuming you already have binary packages).
+
+Example using net-misc/openssh to setup an ssh server
+
+{{RootCmd|emerge net-misc/openssh
+| #FIXME: configure ssh to actually be reachable
+| /etc/init.d/sshd start}}
+
+= Maintaining a binary package server =
+
+This chapter covers issues beyond keeping the server updated.
+
+== Removing outdated binary packages ==
+
+app-portage/gentoolkit provides a tool called 'eclean' that does exactly this.
+
+The following command will remove all binary packages that have no correspong ebuild.
+{{RootCmd|eclean packages}}
+There are some options to fine tune its behavior (see man eclean).
+
+A less customizable option is 'qpkg' from app-portage/portage-utils.
+{{RootCmd|qpkg -c}}
+
+
+== Recreating / updating the Packages file ==
+
+PKGDIR contains a file called Packages. This file is a cache for the
+metadata of all binary packages in PKGDIR. The file is updated whenever portage
+adds a binary package to PKGDIR. Similarily eclean updates it when it removes
+binary packages.
+
+If for some reason binary packages are simply deleted or copied into PKGDIR or the Packages
+get corrupted or deleted, then it needs to be updated / recreated. This is done using 'emaint.
+
+{{RootCmd|emaint binhost --fix}}
+
+= Installing binary packages =
+
+== Configuration variables ==
+
+=== PKGDIR ===
+
+The PKGDIR (set in make.conf) variable decides where binary packages are stored. This directoy is always required
+when using binary packages as the binary packages downloaded from the binary package server will be stored there
+too.
+
+=== PORTAGE_BINHOST ===
+
+The PORTAGE_BINHOST (set in make.conf) is a space sperated URI list. This way it is possible to use several
+binary package servers simultaniously. The URI must always point to the place where the Packages file resides on
+the binary package server.
+
+Examples:
+
+PORTAGE_BINHOST="http://some-server.xy/"
+PORTAGE_BINHOST="ssh://user@some-server.xy/usr/portage/packages"
+
+The support for muliple binary package servers is somewhat incomplete. If several servers serve a binary package
+for the same package version, then only the first one will be consiered. This can be problematic when these binary
+packages differ in their USE configuration and the USE configuration of a later binary package would match the systems configuration.
+
+=== FEATURES ===
+
+The 'getbinpkg' feature tells portage to always use the configured binary package server. Enabling this feature
+is equivalent to the emerge option -g (see below).
+
+The 'binpkg-logs' controls if log files for successful binary package installs should be kept. It is only relevant if
+PORT_LOGDIR is set. It is enabled by default.
+
+== emerge options ==
+
+There are four options that tell portage to use binary packages. Some restrict portage to local binary
+packages already present in PKGDIR, some also allow fetching them from binary package servers. They
+also decide if only binary packages should be considered or both ebuilds and binary packages should
+be used.
+
+For local binary packages and ebuilds use:
+--usepkg (-k)
+
+For local binary packages only:
+--usepkgonly (-K)
+
+For local and remote binary packages and ebuilds:
+--getbinpkg (-g)
+
+For local and remote binary packages only:
+--getbinpkgonly (-G)
+
+The options ignoring ebuilds require binary packages to be present for every needed package or 'emerge'
+will report an error. These options are useful to sync a system against a binary package server while avoiding
+any compilation on the client system.
+
+=== Excluding binary packages ===
+
+Soetimes (when using -k or -g) it is desirable to use an ebuild over a binary package. This
+can be accomplished with the --usepkg-exclude option. All binary packages given with this option will be
+ignored.
+
+Example:
+{{RootCmd|emerge -uDNg world --usepkg-exclude "sys-kernel/gentoo-sources virtual/*"}}
+
+=== Reinstalling changed binary packages ===
+
+The --rebuilt-binaries option will reinstall every binary that has been rebuild since the package was installed.
+This is useful in case rebuilding tools like revdep-rebuild or python-updater are run on the binary package server.
+
+A related option is --rebuilt-binaries-timestamp. It causes emerge not to consider binary packages for a re-install
+if those binary packages have been built before the given time stamp. This is useful to avoid re-installing all packages,
+if the binary package server had to be rebuild from scratch.
+
+= Advanced topics=
+
+== Creating snapshots of PKGDIR ==
+
+When deplyoing binary packages for a large number of client systems it might become worthwhile
+to create snapshots of PKGDIR. The client systems then don't use PKGDIR directly but use binary
+packages from the snapshot.
+
+Snapshots can be created using the /usr/lib64/portage/bin/binhost-snapshot tool.
+
+It takes four arguments, a source directory (PKGDIR), a target directory that must not exist,
+a URI and a binary package server directory.
+
+What then happens is that PKGDIR gets copied to the target dir. In the binary package server directory
+a packages file is created which contains the provided URI.
+
+Client systems need to use an URI that points to the binary package server directory. From there they
+will be redirected to the URI that was given to binhost-snapshot. This URI has to refer to the target directory.
+
+== The binary package format ==
+
+Binary packages created by portage have the file name ending tbz2. These files consist of two parts an .tar.bz2
+archive containing the files that will be installed on the system and an xpak archive containg the metadata, the
+ebuild and the envorionment file. See 'man xpak' for a description of the format.
+
+=== Taking a tbz2 apart ===
+
+In app-portage/portage-utils some tools exists, to that are able to split or create tbz2 and xpak files.
+
+The following command will split the tbz2 into a tar.bz2 and an xpak file.
+{{Cmd|qtbz2 -s <package>.tbz2}}
+
+The xpak file can be examinated using qxpak.
+List the contents:
+
+{{Cmd|qxpak -l <package>.xpak}}
+
+The next command will extrace a file called USE which contains the enabled use flags for this package.
+
+{{Cmd|qxpak -x package-manager-0.xpak CATEGORY}}
+
+== The PKGDIR layout ==
+
+The currently used format version 2 has the following layout.
+
+PKGDIR
+  |
+  |--> Packages
+  |--> <category>*
+		|
+		|--> <pkgname-version>.tbz2*
+
+Binary package server clients are pointed to PKGDIR.
+
+As described earlier the Packages file is a metadata cache for the contained binary packages. This greatly
+improves dependency resolution speed over format 1.
+
+The old format version 1, which should no longer be used has the following layout.
+
+PKGDIR
+  |
+  |--> All/<pkgname-version>.tbz2
+  |--> <category>*
+		|
+		|--> symlinks to ../All/<pkgname-version>.tbz2
+
+Portage still supports this format and falls back to it if the Packages file does not exist.
