@@ -40,4 +40,46 @@ Of course, this could also be a case of a broken build system in which some targ
 
 It is very common for SConstruct files to ignore variables like ''CC'', ''CFLAGS'' and especially ''LDFLAGS''. The first one needs to be always passed explicitly to the build system (that's what ''econf'' does); sometimes exporting it using ''tc-export'' will work as well. The latter ones are often missed by project developers and need patching to be set.
 
+== Why you should NOT use SCons in your project ==
+
+SCons lacks many basic features required from a complete build system and thus it is mostly about reimplementing the wheel a dozen times. And doing that means a lot of pain to users and developers which have to adjust to custom solutions and be hit by repeating bugs in custom implementations.
+
+=== Ignorance of compilation environment settings ===
+
+Although SCons is aware itself of a few compilers and various kinds of compilation flags, it doesn't actually query the environment for those.
+
+Autotools and multiple custom build systems query the environment variables ''CC'', ''CXX'', ''CFLAGS'', ''CXXFLAGS'', ''LDFLAGS'' (some ''CPPFLAGS'' and ''LIBS'' as well) to get the compiler and flags being used. Some others (like plain Makefiles) allow user to pass those as command line arguments.
+
+With SCons, you have to declare all those variables explicitly. And this means that you are free to name them as you like, and user is obligated to look up help for every single project to see their names. As long as they are declared at all, which makes users obligated to report bugs and wait for fixes.
+
+=== No default installation paths/command ===
+
+SCons is very poorly suited for installing. Although it is common to create ''install'' alias for installing programs, that's no rule. Thus, users can't trust that and once again have to look up which command to use to install a project. As long as project is installable at all...
+
+SCons doesn't define any default installation paths at all. This means that author has to specify them all, and make them adjustable via custom variables. Users once again have to look help up and hope the path they need to adjust is actually there.
+
+It is also quite common that SCons project lack correct ''DESTDIR'' setting for fake installation root where files should be installed by the ''install'' alias while keeping non-''DESTDIR'' paths within the package itself.
+
+=== No support for library SONAMEs ===
+
+SCons is not suited for building *nix libraries either. It can only build plain static and shared libraries (so-called ''modules'') which are not suitable for versioning. Thus, projects have to manually add custom, linker-specific options to set the SONAME and then additional commands to set up the SONAME symlinks.
+
+And once again, building these two types of libraries has to be added manually while libtool uses common rules to build both static and/or shared variant as requested by user.
+
+=== No automation possible ===
+
+As shown above, there's no single common thing about SCons build systems. Users have to look up help on each project and create per-project build commands. While with autotools, a simple set of build commands can be created which will suit almost all projects.
+
+Simplest autotools ebuild will look like:
+
+{{Code|Simplest ebuild using autotools|<pre>EAPI=4</pre>}}
+
+And that's all! All ''configure'' scripts take the same common arguments, and all (automake) projects support ''make install DESTDIR=...'' With SCons, all that has to be specified explicitly.
+
+=== Constant reconfiguration ===
+
+Calling SCons for almost anything means performing the configure tests. This includes calling ''scons --help'' to get the options to adjust performed tests. And yes, it tests fail hard, you won't see the help.
+
+With autotools, you can easily pre-configure a package and build it later. With SCons, you have to pass all the options every call or they will be reset to defaults. That involves passing ''CC'' to separate ''install'' call, or you're likely to rebuild the package using the default compiler.
+
 [[Category:Core system]]
