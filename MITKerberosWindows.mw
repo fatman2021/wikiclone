@@ -94,7 +94,51 @@ LoadModule auth_kerb_module modules/mod_auth_kerb.so
 
 === Integrating pam/nss ===
 
-TODO
+==== Setup ====
+
+{{File|/etc/portage/package.use/pam.conf||<pre>
+sys-auth/pambase pam_krb5
+</pre>}}
+
+{{RootCmd|emerge --update --deep --newuse @world}}
+
+{{RootCmd|emerge nss_ldap}}
+
+{{File|/etc/ldap.conf|Update the following variables:|<pre>
+#host 127.0.0.1
+base DC=mydomain,DC=com
+uri ldap://dc.mydomain.com/
+binddn CN=ldapbind,CN=Users,DC=mydomain,DC=com
+bindpw secret
+scope sub
+nss_paged_results yes
+nss_schema rfc2307bis
+# RFC 2307 (AD) mappings
+nss_map_objectclass posixAccount user
+nss_map_objectclass shadowAccount user
+nss_map_attribute uid sAMAccountName
+nss_map_attribute homeDirectory unixHomeDirectory
+nss_map_attribute shadowLastChange pwdLastSet
+nss_map_objectclass posixGroup group
+nss_map_attribute uniqueMember member
+pam_login_attribute sAMAccountName
+pam_filter objectclass=User
+pam_password ad
+sasl_secprops maxssf=0
+</pre>}}
+
+{{File|/etc/nssswitch.conf|Update the following variables:|<pre>
+passwd:      files ldap
+shadow:      files ldap
+group:       files ldap
+netgroup:    ldap files
+</pre>}}
+
+==== Test ====
+
+{{Cmd|id user1|output=uid=10012(user1) gid=100(users) groups=100(users)}}
+
+Login to user1 with domain password using ssh.
 
 === Integrating sshd ===
 
