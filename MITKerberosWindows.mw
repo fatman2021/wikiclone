@@ -1,0 +1,153 @@
+= MIT Kerberos Windows Domain Integration =
+
+== Prerequisites ==
+
+# Make sure you have ntpd setup operational. NOTE: You cannot use Windows SNTP as clock source for NTP.
+#: However you can do the other way around, having NTP host which is the clock source of Windows SNTP.
+# DNS and Reverse-DNS lookup must be operational, make sure both your domain controller and the designated host are available in both modes.
+{{Cmd
+|dig host.name.com
+host ip.add.re.s
+}}
+
+== Setup kerberos ==
+
+{{File|/etc/portage/package.use/samba.conf||<pre>
+net-fs/samba ads ldap
+</pre>}}
+
+{{RootCmd|emerge mit-krb5 samba}}
+
+{{File|/etc/krb5.conf||<pre>
+[libdefaults]
+        default_realm = MY_DOMAIN.COM
+        forwardable = true
+
+[realms]
+
+[domain_realm]
+
+[logging]
+        kdc = FILE:/var/log/krb5kdc.log
+        admin_server = FILE:/var/log/kadmin.log
+        default = FILE:/var/log/krb5lib.log
+</pre>}}
+
+{{Note|The forwardable true is optional, however having this makes *NIX behaves more like windows in delegated authentication}}
+
+Testing:
+{{Cmd|kinit user}}
+
+== Joining Domain ==
+
+{{File|/etc/samba/smb.conf|Update the following fields|<pre>
+workgroup = MY_WORKGROUP
+security = ads
+kerberos method = system keytab
+client use spnego = yes
+realm = MY_DOMAIN.COM
+</pre>}}
+
+{{RootCmd
+|net ads join -U Administrator
+|net ads testjoin|output=Join is OK
+|net ads keytab create -U Administrator
+}}
+
+=== Integrating Apache Web Server ===
+
+==== Setup ====
+
+{{Note|Integrating Apache Web Server does not require any pam/nss integration}}
+
+{{RootCmd|emerge mod_auth_kerb}}
+
+{{RootCmd|net ads keytab add HTTP -U Administrator}}
+
+==== Optional, test ticket ====
+
+{{RootCmd
+|klist -k /etc/krb5.keytab
+|kinit -kt /etc/krb5.keytab -S HTTP/server.name@MY_DOMAIN.COM 'SERVER$'
+}}
+
+{{RootCmd
+| chgrp apache /etc/krb5.keytab
+| chmod g+r /etc/krb5.keytab
+}}
+
+==== Configuration ====
+
+{{File|/etc/apache2/11_mod_auth_kerb.conf||<pre>
+<IfDefine AUTH_KERB>
+LoadModule auth_kerb_module modules/mod_auth_kerb.so
+
+<Directory "/var/www/private">
+        AuthType Kerberos
+        AuthName "Kerberos Login"
+        Krb5Keytab /etc/krb5.keytab
+        KrbAuthRealms MY_DOMAIN.COM
+        Require valid-user
+</Directory>
+</IfDefine>
+</pre>}}
+
+=== Integrating pam/nss ===
+
+TODO
+
+=== Integrating sshd ===
+
+First integrate pam/nss.
+
+{{File|/etc/ssh/sshd_config|Set the following:|<pre>
+GSSAPIAuthentication yes
+</pre>}}
+
+=== Integrating Samba Server ===
+
+First integrate pam/nss.
+
+{{RootCmd|net ads keytab add cifs -U Administrator}}
+
+{{File|/etc/pam.d/samba|Set all to system-remote-login|<pre>
+auth       include      system-remote-login
+account    include      system-remote-login
+session    include      system-remote-login
+password   include      system-remote-login
+</pre>}}
+
+== Clients ==
+
+{{Note|Setup client does not require any system wide modification (pam/nss), nor
+joining the domain.}}
+
+First authenticate using kinit
+{{Cmd|kinit user}}
+
+Validate ticket:
+{{Cmd|klist}}
+
+=== Firefox ===
+
+# Go to about:config
+# Set network.negotiate-auth.trusted-uris to .my_domain.com
+# Use only fully qualified DNS names to access internal web sites.
+
+=== Samba Client ===
+
+{{File|~/.smb.conf||<pre>
+[global]
+        workgroup = MY_DOMAIN
+        realm = MY_DOMAIN.COM
+        security = ads
+        client use spnego = yes
+</pre>}}
+
+{{File|~/.profile add|Add:|<pre>
+export SMB_CONF_PATH=~/.smb.conf
+</pre>}}
+
+
+[[Category:Software]]
+[[Category:Security]]
