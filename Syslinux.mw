@@ -1,0 +1,117 @@
+= Syslinux Bootloader =
+
+People probably don't know that [http://packages.gentoo.org/package/sys-boot/syslinux syslinux] bootloader is good replacement to other "advanced" bootloaders such as Grub.
+
+For sure syslinux is better maintained than Grub, so after long time of using Grub [[Alonbl|I]] switched.
+
+Unlike Grub syslinux is well behaved bootloader and does not need any special requirement.
+
+syslinux components:
+* syslinux - FAT filesystem bootloader.
+* extlinux - ext2 filesystem bootloader.
+* pxelinux - network pxe bootloader.
+* isolinux - ISO-9660 (cdrom) bootloader.
+
+This manual should be kept simple for most of common usages (extlinux, syslinux), for advanced usages refer to upstream site or other pages.
+
+== Installation ==
+
+{{RootCmd|emerge syslinux}}
+
+{{Warning|Assuming /dev/sda1 is the boot partition, if not make the adjustments!}}
+
+Install MBR:
+{{RootCmd|cat /usr/share/syslinux/mbr.bin > /dev/sda}}
+
+Set boot partition as active:
+{{RootCmd|fdisk /dev/sda|output=<pre>
+Command (m for help): a
+Partition number (1-4): 1
+Command (m for help): w
+</pre>}}
+
+=== extlinux bootloader installation ===
+
+{{Warning|Assuming /dev/sda1 is the boot partition, if not make the adjustments!}}
+
+{{RootCmd
+|mount /dev/sda1 /boot
+|extlinux --install /boot
+|umount /boot
+}}
+
+=== syslinux bootloader installation ===
+
+{{Note|Most probably you don't need to use FAT filesystem these days, consider ext2 filesystem for your boot partition}}
+
+{{Warning|Assuming /dev/sda1 is the boot partition, if not make the adjustments!}}
+
+{{RootCmd
+|mount /dev/sda1 /boot
+|syslinux --install /dev/sda1
+|umount /boot
+}}
+
+== Configuration ==
+
+Configuration file varies between bootloaders:
+* syslinux - syslinux.cfg
+* extlinux - extlinux.conf
+* isolinux - isolinux.cfg
+
+The configuration format is the same.
+
+=== Simple configuration ===
+
+{{File|extlinux.conf||<pre>
+LABEL x86_64-3.1.0-gentoo-r1
+KERNEL kernel-x86_64-3.1.0-gentoo-r1
+INITRD initramfs-x86_64-3.1.0-gentoo-r1
+APPEND real_root=/dev/sda3
+</pre>}}
+
+=== Menu configuration ===
+
+The following configuration provides a simple text menu example.
+
+This is done via the vesamenu module, in some cases where vesa is not compatible, the simpler menu module will work.
+
+Logic:
+# Do not wait for user interaction and select the "menu" configuration.
+# The "menu" configuration entry actually loads the "vesamenu.c32" module.
+# The vesamenu module reads the same configuration file, but now present entries as menu entries.
+# The "menu" entry will be hidden.
+# After 3 seconds (3*10=30) The default x86_64-3.1.0-gentoo-r1 entry will be selected.
+
+Copy the VESA menu module into the boot filesystem.
+{{RootCmd|cp /usr/share/syslinux/vesamenu.c32 /boot}}
+
+{{File|extlinux.conf||<pre>
+PROMPT 0
+DEFAULT menu
+
+TIMEOUT 30
+ONTIMEOUT x86_64-3.1.0-gentoo-r1
+
+MENU TITLE Boot
+
+LABEL x86_64-3.1.0-gentoo-r1
+KERNEL kernel-x86_64-3.1.0-gentoo-r1
+INITRD initramfs-x86_64-3.1.0-gentoo-r1
+APPEND real_root=/dev/sda3
+
+LABEL x86_64-3.1.0-gentoo
+KERNEL kernel-x86_64-3.1.0-gentoo
+INITRD initramfs-x86_64-3.1.0-gentoo
+APPEND real_root=/dev/sda3
+
+LABEL menu
+MENU HIDE
+KERNEL vesamenu.c32
+</pre>}}
+
+== Author ==
+
+[[User:Alonbl|Alon Bar-Lev]]
+
+[[Category:Software]]
