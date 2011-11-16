@@ -44,9 +44,31 @@ Simply emerge gvfs with USE="ios", and it should auto-mount it for you.
 == {{Package|app-pda/ifuse}} ==
 First, emerge ifuse, then try running it: 
 {{RootCmd|emerge -av ifuse}}
-{{RootCmd|ifuse /media/iphone}}
+
+Users wishing to access the idevice must be members of the '''plugdev''' group, and must have write-access to the mount point.
+[RootCommand|gpasswd -a USER plugdev]
+Remember, you need to start a new user session after doing this for it to take effect. Most users quit their window manager and re-enter it to do this.
+
+Create a mount-point for the '''Media''' folder on the device.
+{{RootCmd|mkdir /media/ipad-Media]
+
+Create some App-specific mount points (I use the AppIDs as directory names, more on finding them later)
+{{RootCommand|mkdir /media/ipad-com.apple.iBooks /media/ipad-com.olimsoft.oplayer.hd.lite}}
+
+Set appropriate permissions.
+{{RootCmd|chown root:plugdev /media/ipad*}}
+{{RootCmd|chmod 775 /media/ipad*}}
+
+Now mount the device as a user. First, the Media "partition":  
+{{Command|ifuse /media/ipad-Media}}
+Now an App's Documents folder: 
+{{Command|ifuse --appid com.olimsoft.oplayer.hd.lite /media/ipad-com.olimsoft.oplayer.hd.lite}}
+Finally, the device root (jailbroken devices only): (UNTESTED)
+{{Command|ifuse --root /media/ipad-root}}
 
 If the preceding steps worked, this should be enough to mount the device. This can be automated using udev and whatnot (see udev documentation for this). 
+
+You should note that the author's experience is that throughput is slow, and is seriously affected by multiple copies in parallel - '''iotop''' reports transfer rates of approximately 1200 KiB/s for a single transfer, but a total of 600 KiB/s for two in parallel. 
 
 === ifuse Troubleshooting === 
 
@@ -57,14 +79,25 @@ GnuTLS error: A TLS packet with unexpected length was received.}}
 
 In 2010, this could be solved by re-merging {{Package|net-libs/gnutls}} and {{Package|dev-libs/libgcrypt}}. [http://forums.gentoo.org/viewtopic-t-783245.html Forum Thread].
 
+==== Permissions ==== 
+Make sure that you are mounting as a normal user. 
+
 = Transferring Media = 
 
 == {{Package|app-pda/gtkpod}} == 
-For transferring audio files to the idevice
+For transferring audio files to the idevice, mount the Media partition, make sure that your user can read and write files there and point gtkpod at it.
 
 == To Specific Applications ==
 '''ifuse''' can also mount areas of the ipad '''by AppID''', which allows the user to transfer files, which may then be used by the particular application. The AppID is [http://stackoverflow.com/questions/555424/what-is-the-app-id-that-the-apple-developer-connection-site-is-asking-me-for a kind of namespace], particular to each application. 
 
+To find these AppIDs, you must install {{Package|app-pda/ideviceinstaller}}. 
+{{RootCmd|emerge app-pda/ideviceinstaller}}
+List the AppIDs of the Apps currently installed on your device. 
+{{Command|ideviceinstaller -l}}
+Mount by AppID: 
+{{Command|ifuse --appid com.apple.iBooks /media/ipad-com.apple.iBooks}}
+
+Now you are free to copy files to the mounted folder, which will be accessible to that App (iBooks in this example). 
 
 = References = 
 *[http://marcansoft.com/blog/2009/10/iphone-syncing-on-linux-part-2/ Marcan's Blog]
