@@ -1,0 +1,81 @@
+== System Deployment ==
+Since multi-system installations aren't exotic anymore, all possibility exists to do just that or to just keep everything on one box.
+
+=== Optional packages ===
+Since a webserver (apache recommended) is required for things such as webmail and postfixadmin those should be installed. Instructions can be found for [http://en.gentoo-wiki.com/wiki/Apache2|Apache2] and for [http://en.gentoo-wiki.com/wiki/PHP|PHP]).
+
+{{Note|For the impatient, installing apache with php is as simple as setting the proper useflags and emerging {{Package|dev-lang/php}} which will pull in {{Package|www-servers/apache}}.
+The following useflags should be set as minimum.
+{{UseFlag
+|apache2//r/Installs the apache2 webserver./Required if using any of the web-functions (webmail, postfixadmin)
+|vhosts//r/Allows virtual webservers to be installed/Strongly recommended to use virtual hosts. A little harder to use/configure, but well worth it.
+|imap//r/Installs courier-imap/Required when using webmail
+|postgres//r/Adds postgresql support to php/Optional depending on which db is preferred.
+|mysql//r/Adds mysql support to php/Optional depending on which db is preferred.
+}}
+{{Note|Unless explicitly needed, only install one of the two database UseFlags.}}
+
+Then just emerge it.
+{{RootCmd|emerge -av dev-lang/php}}
+}}
+
+=== Required packages ===
+Other then apache/php as mentioned above, the following packages are required. Only install packages that you want to use of course where there is choice. E.g. don't install both mysql and postgres (unless you use them for different purposes of course, both dba's can live happily together). Some packages may be pulled in as per useflag from other packages.
+
+Also, as packages get updated and configuration options change, please update this document where changes where needed in the specific sections.
+
+Find below an overview of packages which will be installed and configured throughout this document.
+
+On the webserver, these packages need to be installed:
+*{{Package|app-admin/webmin}}
+*{{Package|www-apps/postfixadmin}}
+*{{Package|mail-client/roundcube}}
+*{{Package|www-misc/awstats}}
+
+On the mailserver, these packages will need to be installed:
+*{{Package|dev-db/postgresql-server}}
+*{{Package|net-mail/courier-imap}}
+*{{Package|net-libs/courier-authlib}}
+*{{Package|dev-libs/cyrus-sasl}}
+*{{Package|mail-filter/amavisd-new}}
+*{{Package|mail-filter/spamassassin}}
+*{{Package|app-antivirus/clamav}}
+*{{Package|mail-mta/postfix}}
+*{{Package|mail-filter/gld}}
+
+== Before you Start ==
+At this point you just want to get to the good stuff. Before digging into this, the following is strongly suggested.
+#  READ THIS DOCUMENT. This is a long document and there are many opportunities to go off the rails. If you take the time to become familiar with all of the steps and understand the role each of the packages play, recovery from mistakes will be much quicker.
+# Not all of the packages included in this HOWTO are required to get the basic mail server working. SMTP Authorization, Web Administration Tools, SPAM filtering, etc. are not absolute necessities to offer mail services, just really good things to have. By reading through this first, you can figure out which ones you do not want or need and save yourself the work of installing them to begin with.
+# Like all HOWTOs, this one pretty well assumes that everything in your system is going to be where it should be and that everything will go right at each step. In reality, things will go wrong, at which time the web will prove to be an invaluable resource in resolving whatever issues you may hit.
+# A key to testing all of this is having at least one domain (and two would be better if you want to test virtual domains), with the appropriate MX records setup. There are many DNS options out there so a couple of domains and supporting DNS services shouldn't cost more then $10 for the year. This is not the time to go cheap. Invest the money and make your life a whole lot simpler.
+# Pay close attention to the messages displayed after you emerge any packages. Depending on the state of your machine when you started all of this, the installation of these packages may result in the need to update some of your configuration files. You will be prompted and can use etc-update to handle the process. There are no instructions in this HOWTO covering this as what you face will be different for each machine.
+# Be sure your system is up to date. Complete an {{RootCmd|emerge --sync}} and {{RootCmd|emerge -avuDN world}} before starting this. A number of problems may be run into due to old applications not mixing with new utilities.
+
+
+Finally, to avoid a lot of rework on this, check UseFlags variables in your /etc/make.conf file before starting to compiling anything. If the wrong flags are set, you will most likely need to recompile things later to ensure the support needed to make this work is compiled in.
+
+{{UseFlag
+|ipv6///IPv6 support/Since IPv6 is marginally deployed yet, it's hard to test. Turn it on after testing it works with regular IPv4, and make additions to this document where needed.
+|mysql///MySQL support/If mysql support is desired enable this.
+|postgres//r/Postgresql support/If postgres support is desired enable this.
+|ssl/d/r/Secure Socket Layer connections/Strongly recommended.
+|sasl//r/Simple Authentication and Security Layer/Strongly recommended.
+|vda//r/Quota support for postfix/Adds support for virtual delivery agent quota enforcing.
+|maildir//r/maildir support/Chose the maildir format supported by Postfix (one of the reasons for choosing Postfix).
+|mbox///mbox support/Absolutly do not use mbox.
+|imap//r/Support for IMAP/One of the main interfaces offerd by this HOWTO to let clients access e-mail.
+|vhosts//r/Support virtual hosts/Strongly recommended.
+|bzip2//r/bzip2 decompression support/Required by the virusscanner.
+|urandom//r/Used by cyrus-sasl/Strongly recommended.
+|authdaemond//r/Authdaemond/Need by courier-imap.
+|crypt//r/Crypt functions for PHP/Used for passwords in the webinterface.
+|spell//r/Spell checking for PHP/Used by webmail.
+|geoip//r/IP to Location mapping for spamassasin etc.
+|spamassassin//r/Spamassassin/Recommended if spamfiltering is required.
+|clamdtop//r/ClamAV 'top' like tool/If heavy load on the mailserver exists, due to clamav running alot, clamdtop can help a lot debugging it.
+}}
+
+With the correct useflags set, emerging just postfix will pull in most, if not all packages due to useflags.
+
+{{RootCmd|emerge -av postfix}}
