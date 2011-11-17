@@ -1,0 +1,112 @@
+[[Category:Hardware]]
+This is a stub for using TV Tuners with Gentoo Linux.
+
+(Need entries for for kernel config of analog and digital tuner drivers.)
+
+(Need entries for your preferred method of viewing and recording.  I use the console and figured some would be interested how I do this. ;-)
+
+== Analog Tuner ==
+=== Scan for Channels ===
+
+== Digital Tuner ==
+=== Scan for Channels ===
+To get a list of channels from your digital TV USB or PCI tuning device, use dvbscan.
+
+{{Cmd|emerge media-tv/linuxtv-dvb-apps}}
+
+For the US over-the-air digital TV:
+{{Cmd|dvbscan -a 0 /usr/share/dvb/atsc/us-ATSC-center-frequencies-8VSB >$HOME/.mplayer/channels.conf.new}}
+
+==== Channel Naming Problems of DVBSCAN ====
+The channel naming scheme for over-the-air digital TV is likely not well thought out in your area.&nbsp; The first field of this file is the lettered name field, of which, you may likely see duplicate identical names and no channel numbers.&nbsp; The remainder of the fields relate to the frequency.
+
+For my area, the channel number reported by dvbscan on stdout is correct, but the channel lettered identification contains identical duplicates or is not well named.&nbsp; I have already emailed the linux-media mailing list on Sep 29 2011 to include a switch for writing the channel number to the file instead of the channel letter identification.
+
+For the meantime, I've found a method of creating duplicate frequency entries, and then replacing the channel letter name field with the channel's number.&nbsp; More duplicated entries can be created to eleviate the need for typing ".1" for the first channel.
+
+{{File|$HOME/.mplayer/channels.conf.example||<pre>
+KUAC-DTO:189028615:8VSB:49:52:3
+9:189028615:8VSB:49:52:3
+9.1:189028615:8VSB:49:52:3
+
+KUAC-DTO:189028615:8VSB:65:68:4
+9.2:189028615:8VSB:65:68:4
+
+KUAC-DT:189028615:8VSB:81:84:5
+9.3:189028615:8VSB:81:84:5
+
+KUAC-DT:189028615:8VSB:97:100:6
+9.4:189028615:8VSB:97:100:6
+
+KTVF DT:545028615:8VSB:65:68:4
+11:545028615:8VSB:65:68:4
+11.1:545028615:8VSB:65:68:4
+
+KTVF DT:545028615:8VSB:49:52:3
+11.2:545028615:8VSB:49:52:3
+</pre>}}
+
+=== Playing Channels ===
+There's a multitude of media players, of which, mplayer seems to be the most popular and lightest on resources.
+ 
+{{Cmd|mplayer dvb://11}}
+
+MPlayer will use the first field of each line within the channels.conf file for playback.&nbsp; If you have duplicate entries like I do and haven't renamed them as I've done so above, you'll need to specify the entire line from the channels.conf to play the second, third, fourth, ... duplicated entries:
+
+{{Cmd|mplayer 'dvb://KTVF DT:545028615:8VSB:49:52:3'}}
+
+=== Guide Data ===
+There's a console based EPG TV Guide tool that grabs the EPG data and prints to stdout, but cannot be used at the same time on single tuner based cards.  (Can't recall the name of the tool.)
+
+=== Scheduling ===
+You can schedule to records a channel by creating a script to record (mencoder) a certain number of minutes (or hours) using vixie-cron (ie. crontab -e).
+
+{{File|$HOME/bin/record-ch9.1-60m.sh||<pre>
+#!/bin/bash - 
+#===============================================================================
+#
+#          FILE:  record-ch9-60m.sh
+# 
+#         USAGE:  ./record-ch9-60m.sh 
+# 
+#   DESCRIPTION:  Record Channel 9 for 60 minutes
+# 
+#       OPTIONS:  ---
+#  REQUIREMENTS:  ---
+#          BUGS:  ---
+#         NOTES:  ---
+#        AUTHOR: Roger Zauner (rdz), rogerx [dot] oss [AT] gmail.com
+#       COMPANY: N/A
+#       CREATED: 06/16/2010 01:48:13 PM AKDT
+#      REVISION:  ---
+#===============================================================================
+
+set -o nounset                              # Treat unset variables as an error
+#set -o xtrace                              # Enable trace debugging
+
+mencoder 'dvb://KUAC-DTC:189028615:8VSB:49:52:3' -really-quiet -of avi \
+  -ovc copy -oac copy -o /stored/tv/ch9_60min-`date +%Y%m%d-%H%M`.mpg &
+
+pidof_mencoder=`echo $!`
+
+sleep 59m # Only record for 58-59 minutes so we don't conflict next scheduled
+          # recording.
+
+kill $pidof_mencoder
+</pre>}}
+
+Setup a crontab entry, as user, root or within /etc/cron, but I prefer a user cron entry.
+{{Cmd|crontab -e}}
+
+<pre>
+  # Record Doctor Who
+  #   Sundays @ 23:00
+  #0 23 * * 0 $HOME/bin/record-ch9.1-60m.sh
+  0 23 * * Sun $HOME/bin/record-ch9.1-60m.sh 
+  #   Thursdays @ 20:00
+  #0 20 * * 4 $HOME/bin/record-ch9.1-60m.sh
+  0 20 * * Thu $HOME/bin/record-ch9.1-60m.sh
+</pre>
+
+Save and exit your console editor of choice.&nbsp; No need to restart cron as changes take effect immediately.
+(Read 'man 5 crontab' for an explanation of crontab field names.)
