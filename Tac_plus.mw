@@ -1,0 +1,183 @@
+From Wikipedia, the free encyclopedia:
+
+''In computer networking, TACACS+ (Terminal Access Controller Access-Control System Plus) is a Cisco Systems proprietary protocol which provides access control for routers, network access servers and other networked computing devices via one or more centralized servers. TACACS+ provides separate authentication, authorization and accounting services.''
+
+TACACS+ is a protocol for AAA services (Authentication, Authorisation, Accounting), very similar to RADIUS. 
+Servers using RADIUS or TACACS protocol are often called NAS (Network Access Server), not to be confused with NAS - (Network Attached Storage).
+
+== About ==
+
+This document describes how to configure and use the most recent version of tac_plus provided by [http://www.shrubbery.net/tac_plus/ Shrubbery Networks].
+
+This installation howto uses tac_plus-4.0.4.19 as reference. General configuration and troubleshooting tips should also apply to older tac_plus versions available in the portage.
+(tac_plus-4.0.4.14, tac_plus-4.0.4.15).
+
+== Installation ==
+
+Emerge tac_plus with finger skey tcpd USE flag enabled.
+{{RootCmd|<nowiki>USE="finger skey tcpd" emerge net-nds/tac_plus</nowiki>}}
+
+== Configuration ==
+
+Shrubbery tac_plus is lacking a good documentation. 
+General configuration is split up in 3 main sections:
+
+* ACL (Access Lists)
+* group 
+* users
+
+{{Warning|The sequence ACL, groups, users in the file /etc/tac_plus/tac_plus.conf is important}}
+Further configuration tips at [http://www.shrubbery.net/tac_plus/FAQ tac_plus FAQ]
+
+Ways to configure user authentication with tac_plus:
+* Authentication to local passwd file '''/etc/passwd'''
+* Authentication to LDAP server with '''PAM'''
+* Authentication to password configured in '''/etc/tac_plus/tac_plus.conf'''
+
+User authentication with '''/etc/passwd''' example:
+
+{{File|/etc/tac_plus/tac_plus.conf||<pre>
+key = 123-my_tacacs_key
+
+group = netadmin {
+        default service = permit
+        login = file /etc/passwd
+        service = exec {
+                priv-lvl = 15
+                }
+}
+
+user = jimi {
+        member = netadmin
+}
+</pre>
+}}
+
+{{Note|tac_plus versions to 4.0.4.19 supports only user authentication with LDAP. Group membership has to be defined in tac_plus configuration file.}}
+
+User authentication with '''PAM''' example:
+
+{{File|/etc/tac_plus/tac_plus.conf||<pre>
+key = 123-my_tacacs_key
+
+group = netadmin {
+        default service = permit
+        service = exec {
+                priv-lvl = 15
+                }
+}
+
+user = jimi {
+        login = PAM
+        member = netadmin
+}
+</pre>
+}}
+
+== Network equipment configuration ==
+
+TACACS+ protocol is supported on a variety of network equipment. Following companies implemented TACACS+ protocol communication support for its products:
+
+* Cisco (IOS, CatOS)
+* Juniper (ScreenOS, JUNOS)
+* Huawei
+* HP
+* OneAccess
+
+Basic AAA (Authentication, Authorization, Accounting) configuration on a cisco IOS component.
+
+* substitute ''tacacs-server'' host with IP address of the tac_plus server
+* For ''key'' choose the key which is configured in '''/etc/tac_plus/tac_plus.conf'''
+
+<pre>
+!
+aaa new-model
+aaa authentication login default group tacacs+ local
+aaa authentication enable default group tacacs+
+aaa authorization exec default group tacacs+ local
+!
+tacacs-server host 192.168.255.254 key 123-my_tacacs_key
+!
+line con 0
+ login authentication default
+!
+line vty 0 15
+ login authentication default
+!
+</pre>
+
+== Final configuration steps ==
+
+Start tac_plus daemon: 
+{{RootCmd|/etc/init.d/tac_plus start}}
+
+Add tac_plus to the default runlevel: 
+{{RootCmd|rc-update add tac_plus default}}
+
+Verify tac_plus is running: 
+{{RootCmd|<nowiki>ps -ef |grep tac_plus</nowiki>}}
+<pre>
+root      8123     1  0 21:29 ?        00:00:00 /usr/bin/tac_plus -C /etc/tac_plus/tac_plus.conf
+</pre>
+
+== Troubleshooting ==
+
+Checking if tac_plus is listening on port 49
+{{RootCmd|<nowiki>netstat -tulpen | grep tac_plus</nowiki>}}
+
+Daemon listens on all local interfaces 0.0.0.0
+<pre>
+tcp        0      0 0.0.0.0:49              0.0.0.0:*               LISTEN      0          27930913   8455/tac_plus
+</pre>
+
+Looking for configuration errors if daemon fails to start
+{{RootCmd|tail -f /var/log/messages}}
+
+Possible output:
+<pre>
+2011-04-09T21:26:28.847493+02:00 server tac_plus[7749]: Reading config
+2011-04-09T21:26:28.847605+02:00 server tac_plus[7749]: Error Unrecognised keyword default for user on line 51
+2011-04-09T21:26:28.851096+02:00 server /etc/init.d/tac_plus[7738]: ERROR: tac_plus failed to start
+</pre>
+
+Check tacacs communication between tacacs-server and a network component.
+Run tcpdump on the local tacacs-server:
+{{RootCmd|tcpdump -i eth0 tcp port 49}}
+
+Example output to a successful user login on
+
+<pre>
+22:53:01.692185 IP switch.11384 > server.tacacs: S 2173305858:2173305858(0) win 4128 <mss 1460>
+22:53:01.692221 IP server.tacacs > switch.11384: S 4283961231:4283961231(0) ack 2173305859 win 5840 <mss 1460>
+22:53:01.693690 IP switch.11384 > server.tacacs: . ack 1 win 4128
+22:53:01.793233 IP switch.11384 > server.tacacs: P 1:43(42) ack 1 win 4128
+22:53:01.793282 IP server.tacacs > switch.11384: . ack 43 win 5840
+22:53:01.808601 IP server.tacacs > switch.11384: P 1:29(28) ack 43 win 5840
+22:53:01.993368 IP switch.11384 > server.tacacs: P 43:68(25) ack 29 win 4100
+22:53:02.002160 IP server.tacacs > switch.11384: P 29:47(18) ack 68 win 5840
+22:53:02.002187 IP server.tacacs > switch.11384: F 47:47(0) ack 68 win 5840
+22:53:02.004152 IP switch.11384 > server.tacacs: . ack 48 win 4082
+22:53:02.096209 IP switch.11384 > server.tacacs: FP 68:68(0) ack 48 win 4082
+22:53:02.096231 IP server.tacacs > switch.11384: . ack 69 win 5840
+22:53:02.123615 IP switch.11385 > server.tacacs: S 4146347262:4146347262(0) win 4128 <mss 1460>
+22:53:02.123641 IP server.tacacs > switch.11385: S 4294861878:4294861878(0) ack 4146347263 win 5840 <mss 1460>
+22:53:02.127410 IP switch.11385 > server.tacacs: . ack 1 win 4128
+22:53:02.229706 IP switch.11385 > server.tacacs: P 1:62(61) ack 1 win 4128
+22:53:02.229751 IP server.tacacs > switch.11385: . ack 62 win 5840
+22:53:02.229890 IP server.tacacs > switch.11385: P 1:52(51) ack 62 win 5840
+22:53:02.229923 IP server.tacacs > switch.11385: F 52:52(0) ack 62 win 5840
+22:53:02.232297 IP switch.11385 > server.tacacs: . ack 53 win 4077
+22:53:02.330097 IP switch.11385 > server.tacacs: FP 62:62(0) ack 53 win 4077
+22:53:02.330118 IP server.tacacs > switch.11385: . ack 63 win 5840
+</pre>
+
+== External links ==
+
+* [http://www.shrubbery.net/tac_plus/FAQ tac_plus FAQ]
+* http://tacacs.org/
+* http://packetlife.net/blog/2010/sep/27/basic-aaa-configuration-ios/
+* http://en.wikipedia.org/wiki/AAA_protocol
+* http://www.stben.net/tacacs/users_guide.html
+* http://gentoo-portage.com/Search?search=tac_plus
+
+[[Category:Software]]
