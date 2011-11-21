@@ -1,0 +1,70 @@
+git-bisect is a tool in {{package|dev-vcs/git}} to find kernel patches that cause problems between versions. 
+=== How it works ===
+2.6.39.1 is working fine and the problem occurs with the 2.6.39.2 upgrade. Let there be 8 patches between 2.6.39.1 and 2.6.39.2. When you start to bisect, it enables only half of those patches and you build you kernel with 4 of the 8 patches between those two versions.<br>
+Now you boot your new compiled kernel and see if you can reproduce the problem. If the kernel is good you take the second half of those 8 patches to build the next kernel, if the kernel is bad you take half of the patches used to narrow down on the patch that causes problems.<br>
+For this given example, here is what might happen to find the bad patch (each step you have to build the kernel and reboot into it). We call the patches 1,2,3,4,5,6,7,8:<br>
+# 2.6.39.1 + 1,2,3,4
+# bad -> 2.6.39.1 + 1,2
+# good -> 2.6.39.1 + 3,4
+# bad -> 2.6.39.1 + 3
+# bad -> patch 3 it is!
+=== Usage ===
+Step by step example to bisect Linux-2.6.39
+==== Get the git sources ====
+Get the git sources for the branch you are using:
+{{RootCmd|cd /usr/src
+|git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-2.6.39.y.git linux-2.6.39}}
+This creates a folder named linux-2.6.39 in /usr/src
+==== Link the new sources ====
+Create the symbolic link to the git sources in /usr/src, mount /boot (if needed) and change into the folder:
+{{RootCmd|ln -s linux-2.6.39 linux
+|mount /boot
+|cd /usr/src/linux}}
+==== Start bisect ====
+Once here we need to start bisect and tell him which kernel version works and which doesn't. In our example 2.6.39.1 has no problems and 2.6.39.2 contains a bad patch. The name could also contain an -rcX at the end, which means it's a release candidate, you would have to append that like v2.6.39.1-rc3. I use tee to log every output of bisect into the file bisect.log.
+{{RootCmd|git bisect start | tee -a /root/bisect.log
+|git bisect bad v2.6.39.2 | tee -a /root/bisect.log
+|git bisect good v2.6.39.1 | tee -a /root/bisect.log}}]
+{{Note|Try to narrow the versions down as much as possible before starting the bisect, you might need to recompile the kernel a lot of times otherwise.}}
+==== Build the kernel ====
+Now compile your kernel as usual using e.g. genkernel or just make to build it and anything you might need to boot, like initramfs for LVM, Raid etc. Here is the normal 08/15 method using make.
+{{RootCmd|cp ../linux-2.6.39.1/.config
+|make oldconfig
+|make -j4 && make modules_install && make install
+|reboot}}
+==== Bad bisect ====
+Once booted into the new kernel (make sure your bootloader is booting the new kernel), test if the problem still perists. In this example we assume the problem is still there, so we tell bisect. It will now take half the used patchset and we have to build our next kernel. 
+{{RootCmd|mount /boot
+|cd /usr/src/linux
+|git bisect bad | tee -a /root/bisect.log}}
+Goto [[#Build the kernel]]
+==== Good bisect ====
+Now test again and let's say this time the problem is gone, so we tell bisect, build the next kernel and reboot.
+{{RootCmd|mount /boot
+|cd /usr/src/linux
+|git bisect good | tee -a /root/bisect.log}}
+Goto [[#Build the kernel]]
+==== Final bisect ====
+You repeat those steps [[#Bad bisect]] and [[#Good bisect]] until it shows the content of the bad patch, like shown below (there is more text in the output, this is just half of it).
+{{Code|Final output|<pre>87cc4d1e3e05af38c7c51323a3d86fe2572ab033 is the first bad commit
+commit 87cc4d1e3e05af38c7c51323a3d86fe2572ab033
+Author: Chris Wright <chrisw@sous-sol.org>
+Date: Sat May 28 13:15:04 2011 -0500
+
+intel-iommu: Dont cache iova above 32bit
+
+commit 1c9fc3d11b84fbd0c4f4aa7855702c2a1f098ebb upstream.
+
+Mike Travis and Mike Habeck reported an issue where iova allocation
+would return a range that was larger than a device's dma mask.
+
+https://lkml.org/lkml/2011/3/29/423</pre>}}
+With this information, you can create a bug report at [http://bugs.gentoo.org bugs.gentoo.org] and tell the developers what patch causes problems. The bisect.log file can be attached to the bug report. 
+==== Log file ====
+If you did not create the logfile, you can use the following command to create some log output.
+{{RootCmd|git bisect log}}
+==== Reset bisect ====
+If you get stuck somewhere or made a mistake, you can reset.
+{{RootCmd|git bisect reset}}
+=== Links ===
+[http://book.git-scm.com/5_finding_issues_-_git_bisect.html git-scm.com]
