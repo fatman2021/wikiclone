@@ -1,0 +1,78 @@
+== Introduction ==
+
+SNMP - Simple Network Management Protocol. SNMP is supported by almost all network equipment available.
+SNMP is a powerful protocol able to configure and request network equipment data remotely.
+
+This document describes howto install and to configure SNMP '''Read Only''' access to your equipment. 
+The SNMP version used in this configuration below is '''SNMP v2c'''.
+
+== Installation ==
+
+To install SNMP daemon use following command:
+
+{{RootCmd|emerge -va net-snmp}}
+
+To have basic Read Only SNMP access enabled there is no specific USE flag needed. 
+
+It is safe to disable '''all''' USE flags which are provided by the net-snmp ebuild.
+
+== Configuration ==
+
+Edit the <tt>/etc/snmpd/snmpd.conf</tt> file and add the ''community'' and the ''IP access list''.
+
+{{Warning|NEVER use the default communities which are called '''public''' and '''private''', these are considered a potential security risk, also if SNMP access is secured by a IP access list}}
+
+* Substitute the SNMP community '''my-own-SNMP-community''' with your own SNMP community.
+* Substitute the '''10.255.255.0/24''' network with your own IP network where SNMP access should be allowed from.
+* Substitute the '''syslocation''' and '''syscontact''' with your own valid data.
+
+{{File|/etc/snmp/snmpd.conf||<pre>
+com2sec local     127.0.0.1/32          my-own-SNMP-community
+com2sec local     10.255.255.0/24       my-own-SNMP-community
+#
+group MyROGroup v1         local
+group MyROGroup v2c        local
+group MyROGroup usm        local
+view all    included  .1                               80
+access MyROGroup "" any     noauth    exact  all    none   none
+#
+syslocation London
+syscontact Admin {Admin@example.com}
+</pre>
+}}
+
+It is suggested to put valid data into the '''syslocation''' and '''syscontact''' fields, so in a support case when your hardware is monitored by a NMS (Network Management System) the responsible staff has the data right there where it is needed (in the NMS). 
+
+In a large network or enterprise it is not easy to describe for the network staff where particular network equipment has been placed. Sometimes there is a high fluctuation of the network staff, and after some time network equipment gets lost because nobody knows anymore where it has been placed, or whom to contact when a network equipment has failed. 
+
+So be aware to put valid data in there, your network staff will be thankful if you do so, it helps them to resolve outages quicker if something fails on a particular component that is monitored with SNMP.
+
+== Starting the daemon ==
+
+To start the snmpd daemon do following
+
+{{RootCmd|/etc/init.d/snmpd start}}
+
+== Testing SNMP Access ==
+
+To test SNMP access, or rather poll SNMP data your SNMP client has to be within the IP range of the previously configured access list (here 10.255.255.0/24), to be allowed to ask for SNMP statistics.
+* Substitute the IP '''192.168.10.254''' with the target host where SNMP access is enabled
+* Substitute the SNMP community '''my-own-SNMP-community''' with your own SNMP community
+
+{{Cmd|snmpwalk -v2c -c my-own-SNMP-community 192.168.10.254}}
+
+== Troubleshooting ==
+
+Verify the SNMP daemon is running on a particular host:
+
+{{RootCmd|<nowiki>netstat -tulpen | grep 161</nowiki>}}
+
+positive Output
+<pre>
+udp        0      0 0.0.0.0:161             0.0.0.0:*                           0          4307       2393/snmpd
+</pre>
+
+* SNMP v1 and SNMP v2c is using UDP
+* SNMP v3 which is secure uses TCP
+
+[[Category:Server and Security]]
