@@ -1,0 +1,154 @@
+= Basic Postfix HOWTO =
+
+== Introduction ==
+Over the years, postfix has become the new defacto standard amongs MTA's. It has beaten qmail which in turn had taken down sendmail from the throne. This document wil describe how to setup and test a basic postfix server.
+
+== Pre-installation ==
+Depending on the used USE flag settings and other installed packages on the system, such as a different MTA (e.g. ssmtp, exim, qmail, sendmail, etc.) postfix may be blocked or worse. By default gentoo has installed {{Package|mail-mta/ssmtp}} installed which may block postfix from installing. If portage cannot unmerge the block, it may be required to manually uninstall ssmtp. {{RootCmd|emerge -C ssmtp}}
+
+== Installation ==
+Postfix uas several useflags that may desired for certain bigger setups. Though they can be set already none will be used as this is supposed to install, configure and test a basic postfix server.
+
+{{USEflag|package=mail-mta/postfix
+|hardened++yes
+|ipv6++yes
+|ldap
+|ldap-bind
+|pam
+|postgres++yes
+|sasl++yes
+|sqlite
+|ssl++yes
+|vda++yes
+|cdb
+|doc
+|dovecot-sasl
+|mbox
+|mysql
+|nis
+}}
+
+{{RootCmd|emerge -av postfix|output=[ebuild  N     ] mail-mta/postfix-2.8.4  USE="hardened ipv6 ldap ldap-bind pam postgres sasl sqlite ssl vda -cdb -doc -dovecot-sasl -mbox -mysql -nis (-selinux)" 0 kB}}
+
+== Configuration ==
+=== Fully Qualified Domain Name (FQDN) ===
+Though not entirely related, for a MTA to function properly, it is imperative that its hostname is set up correctly. Under Gentoo '''/etc/conf.d/hostname''' and '''/etc/conf.d/net''' are the files responsible for this. In this example the mailserver is named ''foo' on the domain ''example.com''.
+
+{{File|/etc/conf.d/net|Setup domain name|<pre>dns_domain_lo="example.com"</pre>}}
+{{File|/etc/conf.d/hostname|Setup hostname|<pre>HOSTNAME="foo"</pre>}}
+
+{{Note|Do not use ''mail.example.com'' just because it may be externally known as such. Use the actual name of the system.}}
+
+Verifying that the FQDN is setup properly for the domain.
+{{Cmd|hostname --fqdn|output=foo.example.com}}
+
+If for any reason the FQDN cannot be set properly, postfix needs to be told what it's FQDN is. Otherwise leave it at its commented default.
+{{File|/etc/postfix/main.cf|Inform postfix of its fqdn|<pre>
+# INTERNET HOST AND DOMAIN NAMES
+#
+myhostname = foo.example.com
+#
+mydomain = example.com
+</pre>}}
+
+=== Trust and Relay ===
+This is one really important thing to get right. By default, postfix install is pretty tight, only allowing users on the same subnet as the mail server to relay through postfix. If this gets messed around with, it can potentially open the door to all users from anywhere. It is begging for abuse by spam merchants and the domain will be quickly blacklisted. Kind of defeats the purpose of setting up a personal mail server, if nobody will talk or listen to it.
+
+Since later, relay control will be through SMTP Authorization later, postfix can be tightened even further then default. It is much easier to test if internal systems aren't allowed to relay either. Nobody gets to go through. Also it has the benefit, if an internal system is compromised, they cannot use it as launch pad to gain open relay access to the mail server. Long and short of it is, that only the mail server itself is considered a trusted system, all others must login. 
+{{File|/etc/postfix/main.cf|Trust no-one|<pre>
+# TRUST AND RELAY CONTROL
+mynetworks_style = host
+</pre>}}
+{{Note|Internal servers don't have to to use this server to relay, a server can still use ssmtp to e-mail its monitoring information if needed.}}
+
+=== Address extensions ===
+Postfix has a neat feature called address extensions. With address extensions it becomes possible to have several aliases under one mailbox. The way it works if a message arrives for testuser+spam@example.com postfix will try to deliver the message to testuser+spam first, if no such user is found, it will be delivered to testuser@example.com. This can be quite useful for all these sites that require email address registration. Signing up with testuser+somesite@example.com would allow one to easily filter and trace where a message originated from. If for example some unsolicited mail was delivered to that address, it could have come from somesite. Also amavis will later use this to deliver spam.
+{{File|/etc/postfix/main.cf|Address extensions|<pre>
+# ADDRESS EXTENSIONS (e.g., user+foo)
+recipient_delimiter = +
+</pre>}}
+
+=== Wrapping configuration up ===
+==== maildir ====
+When postfix completes merging and the USEflag for ''mailbox'' is set, it adds the mailbox directive in at the bottom of the file, instead of the section where it should be. It is recommended to move the ''home_mailbox = .maildir/'' to its appropriate location to simplify merging of updates later.
+
+Finally for testing purposes it is recommended to temporarly enable these features.
+
+==== Soft-Bounce ====
+Soft-Bounce decreases chances of mail going all over the place due to an invalid setup.
+{{File|/etc/postfix/main.cf|Soft Bounce|<pre>soft_bounce = yes</pre>}}
+
+==== Verbose SMTP ====
+Before testing the basic mail server, the verbose flag of the smtp server should be enabled by adding a -v to the smtp daemon.
+{{File|/etc/postfix/master.cf|Verbose smtpd|<pre>
+# ==========================================================================
+# service type  private unpriv  chroot  wakeup  maxproc command + args
+#               (yes)   (yes)   (yes)   (never) (100)
+# ==========================================================================
+smtp      inet  n       -       n       -       -       smtpd -v
+</pre>}}
+
+That is all that will be configured for now. There are other parameters that other HOWTO's would want to change already, but they are not needed yet. They will be setup later when virtual users are being setup with the database connection. 
+
+==== Starting Postfix ====
+Before starting postfix for the first time, the local alias database has to be compiled. If this is not done, postfix may seem to start normally, but won't work and the log will be spammed by errors.
+{{File|/var/log/mail.log|Mail startup debugging|Mar 16 11:40:32 foo postfix/smtpd[18923]: fatal: open database /etc/mail/aliases.db: No such file or directory}}
+
+The default local alias database contains rfc required default local accounts and pseudo accounts. Simply run the newaliases command to generate the database.
+{{RootCmd|newaliases}}
+
+Now it is time to start postfix for the very first time.
+{{RootCmd|/etc/init.d/postfix start}}
+
+It can be very usefull to monitor the mail log file using ''tail -f''.
+{{File|/var/log/mail.log|Monitoring Postfix startup|<pre>
+Nov 23 15:26:42 foo postfix/postfix-script[13433]: starting the Postfix mail system
+Nov 23 15:26:42 foo postfix/master[13434]: daemon started -- version 2.8.4, configuration /etc/postfix
+</pre>}}
+
+== Testing Postfix ==
+Now that postfix is running properly, it should accept connection from telnet on port 25 and send mail to anywhere in the world. Replace the example <username>@<validdomain>.<tld> with a real e-mail address to see it work.
+{{Cmd|telnet foo.example.com 25|output=<pre>
+Trying 127.0.0.1...
+Connected to foo.example.com.
+Escape character is '^]'.
+220 foo.example.com ESMTP Postfix
+mail from:me@somewhere.com
+250 2.1.0 Ok
+rcpt to:<username>@<validdomain>.<tld>
+250 2.1.5 Ok
+data
+354 End data with <CR><LF>.<CR><LF>
+Testmail to ensure Postfix is working.
+.
+250 2.0.0 Ok: queued as 6705C20E32
+quit
+221 2.0.0 Bye
+Connection closed by foreign host.
+</pre>}}
+
+Looking at /var/log/mail.log it can be verified that the message got properly relayed. 
+{{File|/var/log/mail.log|Mail relaying test|<pre>
+Nov 23 16:13:02 foo postfix/smtpd[28494]: connect from foo.example.com[127.0.0.1]
+Nov 23 16:13:49 foo postfix/smtpd[28494]: 6705C20E32: client=foo.example.com[127.0.0.1]
+Nov 23 16:13:51 foo postfix/cleanup[28508]: 6705C20E32: message-id=<20111123151349.6705C20E32@foo.example.com>
+Nov 23 16:13:51 foo postfix/qmgr[28490]: 6705C20E32: from=<me@somewhere.com>, size=314, nrcpt=1 (queue active)
+Nov 23 16:13:52 foo postfix/smtp[28510]: 6705C20E32: to=<<username>@<validdomain>.<tld>>, relay=mail.<validdomain><.tld>[5.6.7.8]:25, delay=19, delays=18/0.02/0.37/0.32, dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as 469A684F8)
+Nov 23 16:13:52 foo postfix/qmgr[28490]: 6705C20E32: removed
+Nov 23 16:13:54 foo postfix/smtpd[28494]: disconnect from foo.example.com[127.0.0.1]
+</pre>}}
+
+Performing the same test from a different host should fail, as it is untrusted.
+{{Cmd|telnet foo.example.com 25|output=<pre>
+Trying foo.example.com...
+Connected to foo.example.com.
+Escape character is '^]'.
+220 foo.example.com ESMTP Postfix
+mail from:me@somewhere.com
+250 2.1.0 Ok
+rcpt to:<username>@<validdomain>.<tld>
+454 4.7.1 <<username>@<validdomain>.<tld>>: Relay access denied
+quit
+221 2.0.0 Bye
+Connection closed by foreign host.
+</pre>}}
