@@ -1,27 +1,45 @@
-[[Category:Kernel]]
-There are a lot of posts about kdump you'll find on Google, but most are distro-specific and leave out how to actually make it work if it isn't already configured.  The best post I've found is [http://www.mjmwired.net/kernel/Documentation/kdump/ this one], which this procedure is largely based on.
+This article explains how to capture the kernel crash dumps ('''kdump'''). Kdumps are produced by kernel panic or lockup.
 
-To keep things simple I'm going to just use a single kernel for the system and recovery, which creates just a few limitations on your kernel configuration.
+To be simple, just a single kernel is used both for the ordinary system and recovery. The described method is almost distro independent.
+
+== Preparation ==
+
 {{Emerge|kexec-tools}}
-This is a mandatory package.
 
 Check your kernel configuration for the following settings:
 {{Kernel||<pre>CONFIG_KEXEC=y
 CONFIG_SYSFS=y
-CONFIG_DEBUG_INFO=Y (technically not needed, but what's the point?)
+CONFIG_DEBUG_INFO=Y (technically not necessary, but it's like -g to gcc)
 CONFIG_CRASH_DUMP=y
 CONFIG_PROC_VMCORE=y
 CONFIG_RELOCATABLE=y</pre>}}
-Edit your grub.conf and add to your boot line crashkernel=64M for up to around 12GB of system RAM
-Create ''/etc/local.d/kdump.start'' containing:
+
+To the kernel boot option, add <code>crashkernel=64M</code> for up to around 12GB of system RAM. 
+
+Create {{Highlight|/etc/local.d/kdump.start}} containing:
 {{Code|/etc/local.d/kdump.start|<pre>#!/bin/bash
 kexec -p /[path-to-kernel] --append="root=[root-device] single irqpoll maxcpus=1 reset_devices"</pre>}}
 
 Now make this file executable:
 {{RootCmd|chmod u+x /etc/local.d/kdump.start}}
 
-That's it.  Note that your kernel has to be reachable, and the typical gentoo config leaves /boot unmounted, so you'll either need to remove noauto from your fstab or place a copy of your kernel elsewhere.  
+Note that your kernel has to be readable. (A typical gentoo config leaves /boot unmounted, so you'll either need to remove noauto from your fstab or place a copy of your kernel elsewhere.  )
 
-I didn't get this working with an initramfs - this is supposed to be possible but obviously the more complexity the trickier.
+=== Initramfs? ===
+It's not yet known how to do it sucessfully with an initramfs.
 
-With these changes whenever you get a kernel panic or lockup (hard/soft if the kernel is set to detect them) the system will use kexec to run the kernel in crash mode, relocated to a reserved area of memory.  The rest of RAM will be untouched. When the system boots up log in and copy /proc/vmcore to a file - this is your crash dump. Then reboot your system to get back to a normal configuration - you shouldn't continue to operate in this state.
+== Usage ==
+First, run the above script.
+{{RootCmd|/etc/local.d/kdump.start}}
+It loads the rescue kernel image which is run after kernel crash.
+
+Whenever you get a kernel panic or lockup (hard/soft if the kernel is set to detect them), kexec runs the kernel in crash mode, relocated to a reserved area of memory.  The rest of RAM will be untouched. When the system boots up log in and copy {{Highlight|/proc/vmcore}} to a file - this is your crash dump. Then reboot your system to get back to a normal configuration; you shouldn't continue to operate in this state.
+
+== See also ==
+* [http://en.gentoo-wiki.com/wiki/Kexec Kexec] in Gentoo Wiki.
+* [http://www.mjmwired.net/kernel/Documentation/kdump/ Kernel documentation on kdump]
+
+== Original article ==
+This article is based on [http://rich0gentoo.wordpress.com/2011/11/11/kdump-on-gentoo/ KDump on Gentoo] by rich0, and the first version is posted by the author.
+
+[[Category:Kernel]]
