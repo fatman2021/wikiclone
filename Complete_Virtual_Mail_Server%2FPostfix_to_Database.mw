@@ -110,3 +110,50 @@ virtual_mailbox_maps = pgsql:/etc/postfix/pgsql/virtual_mailbox_maps.cf
 # Any aliases that are supported by this system
 virtual_alias_maps = pgsql:/etc/postfix/pgsql/virtual_alias_maps.cf
 </pre>}}
+
+=== Testing the database connection ===
+Postfix needs to be restarted to make it connect to the database.
+{{RootCmd|/etc/init.d/postfix restart}}
+Check for any problems in '''/var/log/mail.log''', such as incorrect permissions.
+
+Using telnet the mailserver can be tested again to check whether the database is properly used.
+{{Cmd|telnet localhost 25|output=<pre>
+Trying 127.0.0.1...
+Connected to foo.example.com.
+Escape character is '^]'.
+220 foo.example.com ESMTP Postfix
+mail from:me@you.com
+250 2.1.0 Ok
+rcpt to:testuser@example.com
+250 2.1.5 Ok
+data
+354 End data with <CR><LF>.<CR><LF>
+Testmail to ensure Postfix is still working.
+.
+250 2.0.0 Ok: queued as EA94F164C7
+mail from:me@you.com
+250 2.1.0 Ok
+rcpt to:test.user@example.com
+250 2.1.5 Ok
+data
+354 End data with <CR><LF>.<CR><LF>
+Testmail to ensure Postfix is still really working.
+.
+250 2.0.0 Ok: queued as 3A276164C7
+quit
+221 2.0.0 Bye
+Connection closed by foreign host.
+</pre>}}
+{{File|/var/log/mail.log|Verify test messages|<pre>
+Mar 16 19:25:15 foo postfix/smtpd[32321]: connect from unknown[127.0.0.1]
+Mar 16 19:25:32 foo postfix/smtpd[32321]: EA94F164C7: client=unknown[127.0.0.1]
+Mar 16 19:25:42 foo postfix/cleanup[32330]: EA94F164C7: message-id=<>
+Mar 16 19:25:42 foo postfix/qmgr[31681]: EA94F164C7: from=<me@you.com>, size=215, nrcpt=1 (queue active)
+Mar 16 19:25:42 foo postfix/virtual[32332]: EA94F164C7: to=<testuser@example.com>, relay=virtual, delay=22, delays=22/0.02/0/0.05, dsn=2.0.0, status=sent (delivered to maildir)
+Mar 16 19:25:42 foo postfix/qmgr[31681]: EA94F164C7: removed
+Mar 16 19:26:05 foo postfix/smtpd[32321]: 3A276164C7: client=unknown[127.0.0.1]
+Mar 16 19:26:14 foo postfix/cleanup[32330]: 3A276164C7: message-id=<>
+Mar 16 19:26:14 foo postfix/qmgr[31681]: 3A276164C7: from=<me@you.com>, size=199, nrcpt=1 (queue active)
+Mar 16 19:26:15 foo postfix/smtp[32338]: 3A276164C7: to=<test.user@example.com>, orig_to=<test.user@example.com>, relay=virtual, delay=23, delays=22/0.02/0.57/0.39, dsn=2.0.0, status=sent (delivered to maildir)
+Mar 16 19:26:15 foo postfix/qmgr[31681]: 3A276164C7: removed
+</pre>}}
