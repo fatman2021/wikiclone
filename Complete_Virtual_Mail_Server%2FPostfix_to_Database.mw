@@ -22,13 +22,16 @@ GRANT SELECT ON mailbox TO postfix;
 </pre>}}
 
 === Queering ===
+All these queries are tested on the database to ensure the queries are written properly. This does require however that the database has been filled to be useful. When postfixadmin is used, this can be done easily from the UI. Otherwise, simple ''INSERT'' SQL queries need to be written and executed.
 ==== PostgreSQL ====
 Linking postfix to a database isn't that special, postfix just executes predefined SQL routines. These SQL queries will be stored in a file per query in a directory.
 {{RootCmd|mkdir /etc/postfix/pgsql}}
 Be aware that any errors in the configuration information in these files can be pretty tricky to track down. Be meticulous with both the contents of the files and their names. Many errors in these files will be announced in the mail log such as "user example@example.com doesn't exist" without much further explanations.
 
 {{Note|In the following files, the variable 'hosts' is commented on purpose. When no hosts are defined, the local unix socket is used.}}
-{{File|/etc/postfix/pgsql/virtual_mailbox_domains.cf|virtal_mailbox_domains|<pre>
+
+
+{{File|/etc/postfix/pgsql/virtual_mailbox_domains.cf|virtual_mailbox_domains|<pre>
 # virtual_mailbox_domains.cf
 user            = postfix
 password        = $password
@@ -43,6 +46,67 @@ postfix=> SELECT description FROM domain WHERE domain = 'example.com' AND backup
 ----------------------
  An example domain.
 (1 row)
-
 </pre>}}
 {{Note|Postfix does not care about the result in this query, it is more of a yes/no answer.}}
+
+
+{{File|/etc/postfix/pgsql/virtual_mailbox_maps.cf|virtual_mailbox_maps|<pre>
+# virtual_mailbox_maps.cf
+user            = postfix
+password        = $password
+dbname          = postfix
+#hosts          = localhost
+query           = SELECT maildir FROM mailbox WHERE local_part='%u' AND domain='%d' AND active='1';
+</pre>}}
+Also here, it's best again to execute the query on the database.
+{{RootCmd|psql -U postfix postfix|output=<pre>
+postfix=> SELECT maildir FROM mailbox WHERE local_part='testuser' AND domain='example.com' AND active='1';
+      maildir
+-------------------
+ example.com/testuser/
+(1 row)
+</pre>}}
+
+
+{{File|/etc/postfix/pgsql/virtual_mailbox_maps.cf|virtual_mailbox_maps|<pre>
+# virtual_mailbox_maps.cf
+user            = postfix
+password        = $password
+dbname          = postfix
+#hosts          = localhost
+query           = SELECT goto FROM alias WHERE address='%s' AND active='1';
+</pre>}}
+Run there query on the database to verify it's output.
+{{RootCmd|psql -U postfix postfix|output=<pre>
+postfix=> SELECT goto FROM alias WHERE address='testuser@example.com' AND active='1';
+       goto       
+------------------
+ testuser@example.com
+(1 row)
+</pre>}}
+{{Note|postfixadmin creates an alias for each user. This is not required for postfix to function properly, it is something ''needed'' for postfixadmin.}}
+
+=== Access rights ===
+Only postfix should have access rights to these files, as they contain passwords.
+{{RootCmd|chown postfix:postfix -R /etc/postfix/|chmod 660 /etc/postfix/*/virtual_*.cf}}
+
+=== Connecting postfix to the queries ===
+==== Postgres ====
+{{File|/etc/postfix/main.cf|Connect postfix to postgres|<pre>
+#
+# Settings required to support virtual mail delivery using lookups in
+# the Postgres database.
+#
+
+# Set the base address for all virtual mailboxes
+virtual_mailbox_base = /var/vmail
+
+# A list of all virtual domains serviced by this instance of postfix.
+virtual_mailbox_domains = pgsql:/etc/postfix/pgsql/virtual_mailbox_domains.cf
+
+# Look up the mailbox location based on the email address received.
+virtual_mailbox_maps = pgsql:/etc/postfix/pgsql/virtual_mailbox_maps.cf
+
+# Any aliases that are supported by this system
+virtual_alias_maps = pgsql:/etc/postfix/pgsql/virtual_alias_maps.cf
+</pre>}}
