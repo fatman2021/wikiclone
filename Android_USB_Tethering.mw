@@ -1,23 +1,36 @@
+== Introduction ==
+'''''Tethering''' means sharing the Internet connection of an Internet-capable mobile phone with other devices. This sharing can be offered over a wireless LAN (Wi-Fi), or over Bluetooth, or by physical connection using a cable'' ([http://en.wikipedia.org/wiki/Tethering Wikipedia]).
+
+Our focus in this article will be the '''USB tethering'''.<br />
+Your Android mobile phone can behave as an external network interface <tt>usbN</tt>, connected via the USB infrastructure. The <tt>usbN</tt> interface is in turn connected to the mobile phone LAN, providing dhcp server, DNS server, gateway and so on.<br />
+That's how your mobile phone can provide an Internet connection to another device.
+
+Android phones are already equipped to provide this functionality. Simply connect the USB cable and go to Settings -> Wireless settings -> Tethering -> Tethering USB).
+
+What you need is some kernel and network configuration on the other side (e.g. your laptop).
+
 == Tested Device ==
 
 '''Google Nexus One'''<br />
 '''LG P350''' (Android 2.2.1 build FRG83)
 
-== Configuration ==
+== Kernel configuration ==
 
-{{Note|Be sure you have "EXPERIMENTAL - Prompt for development and/or incomplete code/drivers" enabled.}}
 {{Kernel|.config 3.0.6-gentoo|<pre>
+General setup  --->
+    [*] Prompt for development and/or incomplete code/drivers
 Device Drivers --->
     [*] Network device support --->
         USB Network Adapters --->
             [*] Multi-purpose USB Networking Framework
-                <*> CDC Ethernet support
-                <*> CDC EEM support
-                <*> Simple USB Network Links (CDC Ethernet subset)
-                <*>   Host for RNDIS and ActiveSync devices
+                <M> CDC Ethernet support
+                <M> CDC EEM support
+                <M> Simple USB Network Links (CDC Ethernet subset)
+                <M>   Host for RNDIS and ActiveSync devices
             [*] Embedded ARM Linux links
 </pre>}}
-
+You can either build the options in the kernel or leave them as module.<br />
+The ''RNDIS'' option seems to be needed in some situation only. See [http://forums.gentoo.org/viewtopic-t-843255-postdays-0-postorder-asc-start-0.html this thread] to learn more.
 == Testing ==
 {{RootCmd|dmesg}}
 <pre>
@@ -41,9 +54,20 @@ usb0: no IPv6 routers present
 </pre>
 
 {{RootCmd|ifconfig -a}}
-If you see <tt>usb0</tt> you are all set.
+If you see <tt>usb0</tt> (or whatever number you'll get) you are all set.
 
 == Connecting ==
+Since the mobile phone LAN changes its addresses, you need a DHCP client to configure the <tt>usbN</tt> device.
+
+If you are on a laptop, you probably have a DHCP client. If not, emerge {{Package|net-misc/dhcpcd}}.
+{{RootCmd|emerge --ask --verbose net-misc/dhcpcd}}
+
+Then, simply run it.
 {{RootCmd|dhcpcd usb0}}
+
+Run the usual checks to verify your connection.
+{{RootCmd|ifconfig usb0}}
+{{RootCmd|route}}
+{{RootCmd|cat /etc/resolv.conf}}
 
 [[Category:Hardware]]
