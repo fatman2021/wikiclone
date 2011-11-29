@@ -17,7 +17,7 @@ Making things only slightly more complex, cyrus-sasl can be used to communicate 
 Ideally the last option would be used solution, as one authentication back-end would be used, courier-authlib. The cyrus-sasl plugin to talk to courier-authlib however will only work via a unix socket and thus if courier-authlib is not running on the same host as cyrus-sasl this would not work. The first approach should thus only be used if courier-authlib can not be used.
 
 == Installing cyrus-sasl ==
-A key feature of cyrus-sasl that is required is the ''crypt'' useflag. It needs to be enabled or it will not work. Cyrus-sasl with the correct useflag should have been pulled in earlier whilst emerging postfix.
+A key feature of cyrus-sasl that is required is the ''crypt'' useflag. It needs to be enabled or crypted passwords from the database cannot be authenticated with. Cyrus-sasl with the correct useflag should have been pulled in earlier whilst emerging postfix.
 
 {{USEflag|package=dev-libs/cyrus-sasl
 |authdaemond++Yes
@@ -27,27 +27,101 @@ A key feature of cyrus-sasl that is required is the ''crypt'' useflag. It needs 
 
 == Configuring postfix with cyrus-sasl ==
 Postfix needs a few options to tell it to use sasl in its '''main.cf'''. These are not mentioned in the config file so they should be added.
-{{File|/etc/postfix/main.cf|<pre>
+{{File|/etc/postfix/main.cf|Add sasl support to postfix.|<pre>
 # Postifx to SASL authentication
+broken_sasl_auth_clients = no
 smtpd_sasl_auth_enable = yes
 smtpd_sasl_security_options = noanonymous
 smtpd_sasl_local_domain =
-broken_sasl_auth_clients = no
+smtpd_sasl_authenticated_header = yes
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
 </pre>}}
+{{Warning|''smtpd_sasl_authenticated_header'' prints the username used to authenticate with cyrus when sending mail into the mail header. Especially mails that go to publicly archived mailing lists, this header will be seen world wide. For testing purpouses it is enabled here.}}
 
 == Configuring cyrus-sasl ==
 ===  with authdaemond ===
-gpasswd -a postfix mail
+Postfix queries the socket created by authdaemond which is protected by the ''mail'' user and group and thus postfix needs to be granted access.
+{{RootCmd|gpasswd -a postfix mail}}
+Next cyrus-sasl needs to be told to authenticate with authdaemond.
+{{File|/etc/sasl2/smtpd.conf|Authenticate with authdaemond|<pre>
+pwcheck_method: authdaemond
+mech_list: LOGIN PLAIN
+authdaemon_path: /var/lib/courier/authdaemon/socket
 
-== Configuring cyrus-sasl ==
+log_level: 5
+</pre>}}
+
 === with postgresql ===
 {{File|/etc/sasl2/smtpd.conf|Direct database authentication|<pre>
+sasl_pwcheck_method: auxprop
+sasl_auxprop_plugin: pgsql
+password_format: crypt
+mech_list: LOGIN PLAIN
+
 sql_engine: pgsql
 #sql_hostnames: localhost
 sql_database: postfix
 sql_user: postfix
 sql_passwd: $password
-sql_select: SELECT password FROM mailbox WHERE username='%u' AND active='true'
-sql_usessl: no
+sql_select: SELECT password FROM mailbox WHERE local_part='%u' AND active='1'
+</pre>}}
+
+== Testing ==
+To verify sasl support telnet can be used to check for the ''AUTH'' statement.
+{{Cmd|telnet foo.example.com 25|output=<pre>
+220 foo.example.com ESMTP Postfix
+EHLO example.com
+250-foo.example.com
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-AUTH LOGIN PLAIN
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250 DSN
+quit
+221 2.0.0 Bye
+Connection closed by foreign host.
+</pre>}}
+{{Note|If a mail-client is being used that does not work properly, '''broken_sasl_auth_clients = yes''' can be used in postfix's ''main.cf'' to get an additional entry here, ''250-AUTH'''='''LOGIN PLAIN''.}}
+
+Next test is to use a remote host and try to login to send a test message.
+{{Warning|Although it is quite common to authenticate against mail servers (pop/imap/webmail/smtp) through plain text logins it is incredibly unsecure (and can be protected against, which is described later in this howto). When sending plain text login data (which base64 encoded data still is, it's very easy to decode) over the big bad internet, only use a testuser or atleast a test password.}}
+
+If perl with the base64 module is installed, it can be used to generate base64 encoded data. Otherwise [http://farhadi.ir/works/base64 base64 conversion] can be done online. Again, be very careful when using production data on untrusted sites.
+{{Cmd|perl -MMIME::Base64 -e 'print encode_base64("testuser");'|output=<pre>dGVzdHVzZXI=</pre>}}
+
+{{Cmd|telnet foo.example.com 25|output=<pre>
+Trying 1.2.3.4...
+Connected to foo.example.com.
+Escape character is '^]'.
+220 foo.example.com ESMTP Postfix
+HELO example.com
+250 foo.example.com
+AUTH LOGIN
+334 VXNlcm5hbWU6 (base64 decode: 'Username:')
+dGVzdHVzZXI= (base64 encoded from: 'testuser')
+334 UGFzc3dvcmQ6 (base64 decode: 'Password:')
+c2VjcmV0 (base64 encoded from: 'secret')
+235 2.7.0 Authentication successful
+mail from:me@you.com
+250 2.1.0 Ok
+rcpt to:<validuser>@<validexternaldomain>.<tld>
+250 2.1.5 Ok
+data
+354 End data with <CR><LF>.<CR><LF>
+Subject: Test message
+Test message to ensure Postfix is only relaying with smtp authorisation.
+.
+250 2.0.0 Ok: queued as 82F97606
+quit
+221 2.0.0 Bye
+Connection closed by foreign host.
+</pre>}}
+
+== Wrapping it up ==
+Once everything is working as expected, debugging can be disabled (or the line can be removed entirely even).
+{{File|/etc/sasl/smtpd.conf|Disable debugging|<pre>
+log_level: 0
 </pre>}}
