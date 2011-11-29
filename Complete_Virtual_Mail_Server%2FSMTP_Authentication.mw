@@ -1,0 +1,53 @@
+== Introducing ==
+So far only localhost is allowed to send mail. Unfortunately postfix cannot work with courier-authlib directly. An intermediary solution exists however, {{Package|dev-libs/cyrus-sasl}}. There are three ways cyrus-sasl can get authentication information. Either directly from the database, locally or remotely. A setup using this approach would look like this.
+<pre>
+  courier-imap -> courier-authlib --\
+                                     +--> database 
+  postfix ------> cyrus-sasl -------/
+</pre>
+
+Making things only slightly more complex, cyrus-sasl can be used to communicate through courier-authlib and thus letting courier-authlib do the authentication.
+
+<pre>
+  courier-imap -----------\
+                           +-> courier-authlib -> database
+  postfix -> cyrus-sasl --/
+</pre>
+
+Ideally the last option would be used solution, as one authentication back-end would be used, courier-authlib. The cyrus-sasl plugin to talk to courier-authlib however will only work via a unix socket and thus if courier-authlib is not running on the same host as cyrus-sasl this would not work. The first approach should thus only be used if courier-authlib can not be used.
+
+== Installing cyrus-sasl ==
+A key feature of cyrus-sasl that is required is the ''crypt'' useflag. It needs to be enabled or it will not work. Cyrus-sasl with the correct useflag should have been pulled in earlier whilst emerging postfix.
+
+{{USEflag|package=dev-libs/cyrus-sasl
+|authdaemond++Yes
+|crypt++Yes
+}}
+{{Note|Whatever database choice was made before, support for it will be built here aswell. If for any reason, mostly security, the additional database code is not wanted, it is possible to emerge without any of the database useflags set.}}
+
+== Configuring postfix with cyrus-sasl ==
+Postfix needs a few options to tell it to use sasl in its '''main.cf'''. These are not mentioned in the config file so they should be added.
+{{File|/etc/postfix/main.cf|<pre>
+# Postifx to SASL authentication
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain =
+broken_sasl_auth_clients = no
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+</pre>}}
+
+== Configuring cyrus-sasl ==
+===  with authdaemond ===
+gpasswd -a postfix mail
+
+== Configuring cyrus-sasl ==
+=== with postgresql ===
+{{File|/etc/sasl2/smtpd.conf|Direct database authentication|<pre>
+sql_engine: pgsql
+#sql_hostnames: localhost
+sql_database: postfix
+sql_user: postfix
+sql_passwd: $password
+sql_select: SELECT password FROM mailbox WHERE username='%u' AND active='true'
+sql_usessl: no
+</pre>}}
