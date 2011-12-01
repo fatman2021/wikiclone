@@ -1,0 +1,77 @@
+This guide will show you how to configure Postfix to use DomainKeys and DKIM
+
+== Notes ==
+DomainKeys has been obsoleted by DKIM. However I have decided to show you how to use it should you wish too.
+
+The maximum size for all txt records in a DNS cannot exceed 512 bytes. This means that you cannot use 1024 bit for both DKIM and DomainKeys. If you need to use both DKIM and DomainKeys you will have to choose one 1024 bit and the other one 512 bit so that it can fit in the 512 bytes.
+
+== DKIM ==
+
+{{RootCmd|emerge -a dkim-milter}}
+{{RootCmd|emerge --config mail-filter/dkim-milter}}
+
+Set selector name to "mydkim" (without the quotes),select "[1] 1024 bits" for your key. Your key will be created now. Copy it now and we will paste it into your Bind file later.
+
+Edit the following file. Defaults are fine except for the following.
+
+{{File|/etc/mail/dkim-filter/dkim-filter.conf||<pre>
+   Domain                  domain.tld
+   KeyFile                 /etc/mail/dkim-filter/mydkim.private
+   Selector                mydkim
+   UMask                   000   
+</pre>}}
+
+Now edit your bind configuration.
+
+{{File|/var/bind/domain.tld.hosts||<pre>
+   mydkim._domainkey.domain.tld. IN TXT "v=DKIM1; g=*; k=rsa; p=yourkeyhere;"
+</pre>}}
+
+Now edit your postfix configuration. The following is two separate lines.
+
+{{File|/etc/postfix/main.cf||<pre>
+   smtpd_milters     = unix:/var/run/dkim-filter/dkim-filter.sock
+   non_smtpd_milters = unix:/var/run/dkim-filter/dkim-filter.sock
+</pre>}}
+
+== Domainkeys ==
+{{RootCmd|emerge -a dk-milter}}
+{{RootCmd|emerge --config mail-filter/dk-milter}}
+
+Set selector name to "mydk" (without the quotes), Before selecting "[1] 512 bits" for your key see the "Notes" below. Your key will be created now. Copy it now and we will paste it into your Bind file later.
+
+Edit the following file making sure to replace domain.tld with your domain.
+
+{{File|/etc/conf.d/dk-filter||<pre>ADDITIONAL_OPTS="-l -b sv -d domain.tld -H -s /etc/mail/dk-filter/mydk.private -S mydk \
+-C badsignature=reject,dnserror=tempfail,internal=tempfail,nosignature=accept,signaturemissing=reject"</pre>}}
+
+Now edit your bind configuration. The following is two separate lines. 
+
+{{File|/var/bind/domain.tld.hosts||<pre>domainkey.domain.tld. IN TXT "o=-"
+mydk._domainkey.domain.tld. IN TXT "k=rsa; p=yourkeyhere;"</pre>}}
+
+Now edit your postfix configuration. The following is two separate lines. We just append the DomainKeys to the DKIM line.
+
+{{File|/etc/postfix/main.cf||<pre>smtpd_milters     = unix:/var/run/dkim-filter/dkim-filter.sock, unix:/var/run/dk-filter/dk-filter.sock 
+non_smtpd_milters = unix:/var/run/dkim-filter/dkim-filter.sock, unix:/var/run/dk-filter/dk-filter.sock</pre>}}
+
+== Services ==
+
+Start up all the services...
+{{RootCmd|/etc/init.d/dk-filter start}}
+{{RootCmd|/etc/init.d/dkim-filter start}}
+{{RootCmd|/etc/init.d/postfix start}}
+{{RootCmd|/etc/init.d/named start}}
+
+You may want to configure these services to start at boot
+
+{{RootCmd|rc-update add dk-filter default}}
+{{RootCmd|rc-update add dkim-filter default}}
+{{RootCmd|rc-update add postfix default}}
+{{RootCmd|rc-update add named default}}
+
+That's it, you should now have DKIM and DomainKey signed emails.
+
+== Testing ==
+
+You can test your Domainkey/DKIM setup by sending a blank email to check-auth@verifier.port25.com. You will receive an email within about 30 seconds letting you know if your Domainkey/DKIM passes the test.
