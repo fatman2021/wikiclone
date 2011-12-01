@@ -206,30 +206,16 @@ You can schedule to records a channel by creating a script to record (mencoder) 
 ===== Create a recording script =====
 One method is to create a script for each channel, such as the one below.&nbsp; One problem with this is, transmitter technicians keep changing the channel naming and frequencies.&nbsp; So it's wise to use my suggestion about creating aliases within the channels.conf file, noted at the beginning.
 
-{{Note|Mencoder within the below script will tend to remux an already broadcasted MPEG2 stream even though specifying 'copy', causing A/V sync issues.&nbsp; As a result, I've gone ahead and created a more elaborate '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' which can be found on my server.&nbsp; The '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' script accepts a channel number and number of minutes and can be used via cron.&nbsp;  This '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' supersedes the below simpler script.&nbsp; This record-dvb.sh script uses a combination of azap|czap|tzap and cat|dd commands instead of mencoder.&nbsp; Bug: azap -r option requires more then a one digit char for a channel identifier! (ie. Not '9', use '9.1' instead}}}
+{{Note|Mencoder within the below script will tend to remux an already broadcasted MPEG2 stream even though specifying 'copy', causing A/V sync issues.&nbsp; As a result, I've gone ahead and created a more elaborate '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' which can be found on my server.&nbsp; The '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' script accepts a channel number and number of minutes and can be used via cron.&nbsp;  This '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' supersedes the below simpler script.&nbsp; This record-dvb.sh script uses a combination of azap or czap or tzap and dd commands instead of mencoder.&nbsp; Bug: azap -r option requires more then a one digit char for a channel identifier! (ie. Not '9', use '9.1' instead)}}
 
+====== Recording using MPlayer's Mencoder ======
 {{File|~/bin/record-ch9.1-60m.sh||<pre>
 #!/bin/bash - 
 #===============================================================================
-#
-#          FILE:  record-ch9-60m.sh
-# 
-#         USAGE:  ./record-ch9-60m.sh 
-# 
-#   DESCRIPTION:  Record Channel 9 for 60 minutes
-# 
-#       OPTIONS:  ---
-#  REQUIREMENTS:  ---
-#          BUGS:  ---
-#         NOTES:  ---
-#        AUTHOR: Roger Zauner (rdz), rogerx [dot] oss [AT] gmail.com
-#       COMPANY: N/A
-#       CREATED: 06/16/2010 01:48:13 PM AKDT
-#      REVISION:  ---
+# FILE:         record-ch9-60m.sh
+# USAGE:        ./record-ch9-60m.sh 
+# DESCRIPTION:  Record Channel 9 for 60 minutes
 #===============================================================================
-
-set -o nounset                              # Treat unset variables as an error
-#set -o xtrace                              # Enable trace debugging
 
 mencoder 'dvb://KUAC-DTC:189028615:8VSB:49:52:3' -really-quiet -of avi \
   -ovc copy -oac copy -o /stored/tv/ch9_60min-`date +%Y%m%d-%H%M`.mpg &
@@ -241,6 +227,22 @@ sleep 59m # Only record for 58-59 minutes so we don't conflict next scheduled
 
 kill $pidof_mencoder
 </pre>}}
+
+====== Recording using zap and cat|dd (Preferred Method)======
+A combination of azap, czap or tzap, along side cat or dd can be used to record from a digital DVB device.&nbsp; I've already taken the liberty and done much of the work and created the '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' already posted within the above Note.&nbsp;
+
+The '''[http://rogerx.freeshell.org/files/bin/record-dvb.sh record-dvb.sh]''' accepts the channel id and number of minutes as options.&nbsp; The script then calls /usr/bin/azap alongside /bin/dd and backgrounds them both, then sleeps for the specified amount of time.&nbsp; File naming is also handled well within the script and only modifying the variables at the very top of the script should be required.
+
+To test this recording method on your computer, issue the following two commands.
+
+Set the channel using azap, czap or tzap:
+{{Cmd|$ azap -c $HOME/.mplayer/channels.conf -r 9.1}}
+
+Once a successful channel lock has been established, use /bin/cat or /bin/dd to record the stream:
+{{Cmd|$ cat /dev/dvb/adapter0/dvr0 > test.mpg}}
+{{Cmd|<nowiki>$ dd if=/dev/dvb/adapter0/dvr0 of=test.mpg conv=noerror</nowiki>}}
+
+{{Note|Using /bin/cat on large files may spawn a "Value too large for defined data type" even though you do have large file support compiled in both kernel and system.&nbsp; A work-around is to use /bin/dd.}}
 
 ===== Schedule a recording =====
 Setup a crontab entry, as user, root or within /etc/cron, but I prefer a user cron entry.
