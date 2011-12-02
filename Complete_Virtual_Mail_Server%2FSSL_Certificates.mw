@@ -11,6 +11,60 @@ There are a few issues that arise when using multiple domains on a single IP. Ap
 == Obtaining an SSL Certificate ==
 There are currently 2 and a half ways to obtain an SSL certificate. Purchase a certiciate from one of the [http://en.wikipedia.org/wiki/DigiNotar#Issuance_of_fraudulent_certificates reputable] providers is an option. Using a self-signed certificate can also be done, though may have implications with warnings on users clients. The half option, which is the recommended option when not using a bought certiciate is using a certificate from [http://cacert.org cacert.org]. They are working hard on getting their certificate included into the main browsers and operating systems, but most of all, it is free and gratis.
 
+=== CACert.org signed ===
+CACert.org offers a simple script to assist with generating SSL certificates. The [http://wiki.cacert.org/CSRGenerator csr] script should be downloaded and executed. In this example, the mail server will be called imap but will have aliases configured in dns for mail, pop, pop3, pop3s, imaps and foo. More can be added of course as fit. Note that foo was added because that is the name of the system offering the imap service. It is not named foo because the postfix or web or any other server is named foo.
+
+{{Cmd|sh csr|output=<pre>
+Private Key and Certificate Signing Request Generator
+This script was designed to suit the request format needed by
+the CAcert Certificate Authority. www.CAcert.org
+
+Short Hostname (ie. imap big_srv www2): foo
+FQDN/CommonName (ie. www.example.com) : foo.example.com
+Type SubjectAltNames for the certificate, one per line. Enter a blank line to finish
+SubjectAltName: DNS:mail.example.com
+SubjectAltName: DNS:imap.example.com
+SubjectAltName: DNS:imaps.example.com
+SubjectAltName: DNS:pop.example.com
+SubjectAltName: DNS:pop3.example.com
+SubjectAltName: DNS:pop3s.example.com
+SubjectAltName: DNS:mail.example.net
+SubjectAltName: DNS:imap.example.net
+SubjectAltName: DNS:imaps.example.net
+SubjectAltName: DNS:pop.example.net
+SubjectAltName: DNS:pop3.example.net
+SubjectAltName: DNS:pop3s.example.net
+SubjectAltName: DNS:
+Running OpenSSL...
+Generating a 2048 bit RSA private key
+.................+++
+..................................+++
+writing new private key to '/root/imap.example.com_privatekey.pem'
+-----
+Copy the following Certificate Request and paste into CAcert website to obtain a Certificate.
+When you receive your certificate, you 'should' name it something like foo.example.com_server.pem
+
+-----BEGIN CERTIFICATE REQUEST-----
+MIIDHTsdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfsdfasdf
+<snip>
+asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfpyqT
+-----END CERTIFICATE REQUEST-----
+
+
+The Certificate request is also available in /root/foo_csr.pem
+The Private Key is stored in /root/foo_privatekey.pem
+</pre>}}
+
+This has generated a ''certificate sign request'', which can be used by any root CA to sign with, not only CACert.org. In the case of CACert.org however, under ''Server Certificates'' there is a link named ''New'' which opens an edit box for the above certificate request. Make sure that the radio button is set to ''Sign by class 3 root certificate''. The bit including '''-----BEGIN CERTIFICATE REQUEST-----''' until, including '''-----END CERTIFICATE REQUEST-----''' needs to be pasted into the edit field and then submitted via the submit button. The server will then verify the request and upon that generate the certificate. The certificate then needs to be copy and pasted, including the '''BEGIN''' and '''END''' markers again into a new file, named foo.example.com_crt.pem. A link to the certificate will also be e-mailed to the e-mail address bound to the ca-cert.org account.
+{{RootCmd|cat > foo.example.com_crt.pem|output=<pre>
+-----BEGIN CERTIFICATE-----
+MIIGhzClkjhlkjhlkjhkljhkljhkljhkljhkljhkljhlkjhkljhkljhlkjhkljhk
+<snip>
+kljhlkjhkljhlkjhlkjhlkjhkljhkljhlkjhlkjhkljhk==
+-----END CERTIFICATE-----
+</pre>}}
+This should leave 3 files, foo.example.com_&#91;privatekey, csr, crt&#93;.pem. This will also be the naming convention followed during the rest of this document.
+
 == Apache ==
 Setting up [[Apache2|Apache]] and [[Apache2/SSL|Apache with SSL]] are already very well described elsewhere and yields a working SSL enabled webserver. Postfixadmin, if used externally, should ideally be secured such that it only works over https. Roundcube or webmail in general, can also be setup to be secured by SSL, but should or can be still open to plain http.
 
@@ -26,4 +80,35 @@ If anything, securing IMAP with SSL is extremly recommended. Using a secure conn
 Courier-imap comes with two easy scripts to generate selfsigned SSL certificates, ''mkpop3dcert'' and ''mkimapdcert''. These scripts parse '''/etc/courier-imap/pop3d.cnf''' and '''/etc/courier-imap/imapd.cnf''' respectively. It may be an idea to first use self signed certificates and then swap those out for signed certificates as it can make testing a little bit easier. If self-signed certificates are a must, edit the aforementioned files, otherwise the defaults will suffice.
 {{RootCmd|mkpop3dcert|mkimapdcert}}
 {{Warning|Currently, as mentioned in gentoo bug [https://bugs.gentoo.org/show_bug.cgi?id&#61;251047 &#35;251047] config files use an incorrect format and thus an error may occur. See the bug for more details.}}
-{{Note|The two generated certificates are named /etc/courier-imap/pop3d.pem and /etc/courier-imap/imapd.pem.
+{{Note|The two generated certificates are named /etc/courier-imap/pop3d.pem and /etc/courier-imap/imapd.pem. If self signed certificates are insisted upon, the default paths in the config files pointing to these files should be checked as mentioned below.}}
+
+=== Signed ===
+Courier-imap does actually not use the three separate files as most applications do and needs them specially formatted.
+The file starts with the private key.
+{{Note|If no courier-imap directory exists in /etc/ssl, it needst o be manually created. {{RootCmd|mkdir -p /etc/ssl/courier-imap/}}
+{{RootCmd|cat foo.example.com_privatekey.pem > /etc/ssl/courier-imap/foo.example.com.pem}}
+
+This then is followed by the signed certificate.
+{{RootCmd|cat foo.example.com_crt.pem >> /etc/ssl/courier-imap/foo.example.com.pem}}
+
+And to the end, are Diffie-Hellman parameters added.
+{{RootCmd|openssl gendh 1024 >> /etc/ssl/courier-imap/foo.example.com.pem}}
+
+The resulting file should have a contents like this.
+{{File|etc/ssl/courier-imap/foo.example.com.pem|imap certificate|<pre>
+-----BEGIN CERTIFICATE REQUEST-----
+MIIDHTsdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfsdfasdf
+<snip>
+asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfpyqT
+-----END CERTIFICATE REQUEST-----
+-----BEGIN CERTIFICATE-----
+MIIGhzClkjhlkjhlkjhkljhkljhkljhkljhkljhkljhlkjhkljhkljhlkjhkljhk
+<snip>
+kljhlkjhkljhlkjhlkjhlkjhkljhkljhlkjhlkjhkljhk==
+-----END CERTIFICATE-----
+-----BEGIN DH PARAMETERS-----
+MIGHAoGBAPF7fJnfw+VPPev9FAkf2XJNFimn4ik+zkXXuHD5t9Oke1Yx224WTocq
+KJ+Zv9onecK0MPYRUj8PPqqy+Q00pScW9+qPSr9T2sEG/meKjLqqA3XQf4Gwzqco
+SUG0PEjiYNNfe966p9E1vp6yN5+gSyu6zv9Vn+cfYY2q7d3a4x9rAgEC
+-----END DH PARAMETERS-----
+</pre>}}
