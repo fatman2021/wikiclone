@@ -1,0 +1,29 @@
+== Introduction ==
+With security and privacy being a increasingly important issue nowadays, Using SSL to secure the server seems like a no-brainer. Apache, Courier-imap and postfix all can be secured using SSL.
+
+== Installing SSL ==
+SSL is a dependency and a compile time option to most packages. {{Package|dev-libs/openssl}} being the key ingredient, should be pulled in from the '''ssl''' useflag. If it wasn't set before enable it and update all packages using it.
+{{Emerge|params=--newuse|world}}
+
+== SNI ==
+There are a few issues that arise when using multiple domains on a single IP. Apache has solved this issue using [http://wiki.apache.org/httpd/NameBasedSSLVHostsWithSNI|SNI] that makes it possible to have several certificates on a single IP. Both the browser and the server need to support this however. IMAP (and POP3) nor SMTP really support this. The only real way to support multiple hosts on a single IP is have a certificate, that covers all domains. Not pretty but can work.
+
+== Obtaining an SSL Certificate ==
+There are currently 2 and a half ways to obtain an SSL certificate. Purchase a certiciate from one of the [http://en.wikipedia.org/wiki/DigiNotar#Issuance_of_fraudulent_certificates reputable] providers is an option. Using a self-signed certificate can also be done, though may have implications with warnings on users clients. The half option, which is the recommended option when not using a bought certiciate is using a certificate from [http://cacert.org cacert.org]. They are working hard on getting their certificate included into the main browsers and operating systems, but most of all, it is free and gratis.
+
+== Apache ==
+Setting up [[Apache2|Apache]] and [[Apache2/SSL|Apache with SSL]] are already very well described elsewhere and yields a working SSL enabled webserver. Postfixadmin, if used externally, should ideally be secured such that it only works over https. Roundcube or webmail in general, can also be setup to be secured by SSL, but should or can be still open to plain http.
+
+Roundcube has one nice option for this however, to force all incoming requests over https. This means that when a users opens http://webmail.example.com, he will get immediately redirected to https://webmail.example.com. If using a proper SSL certificate this is strongly recommended. When using a self-signed certificate, or a CA-cert.org certificate that does not have the root installed to all users, this should remain off however.
+{{File|/var/www/webmail.example.com/htdocs/roundcube/config/main.inc.php|Force https|<pre>
+$rcmail_config['force_https'] = true;
+</pre>}}
+
+== Courier-imap ==
+If anything, securing IMAP with SSL is extremly recommended. Using a secure connection for IMAP, means that if the password is sent in plain text, this is still done over the secured IMAP connection so no issue.
+
+=== Self-Signed ===
+Courier-imap comes with two easy scripts to generate selfsigned SSL certificates, ''mkpop3dcert'' and ''mkimapdcert''. These scripts parse '''/etc/courier-imap/pop3d.cnf''' and '''/etc/courier-imap/imapd.cnf''' respectively. It may be an idea to first use self signed certificates and then swap those out for signed certificates as it can make testing a little bit easier. If self-signed certificates are a must, edit the aforementioned files, otherwise the defaults will suffice.
+{{RootCmd|mkpop3dcert|mkimapdcert}}
+{{Warning|Currently, as mentioned in gentoo bug [https://bugs.gentoo.org/show_bug.cgi?id&#61;251047 &#35;251047] config files use an incorrect format and thus an error may occur. See the bug for more details.}}
+{{Note|The two generated certificates are named /etc/courier-imap/pop3d.pem and /etc/courier-imap/imapd.pem.
