@@ -76,13 +76,13 @@ $rcmail_config['force_https'] = true;
 == Courier-imap ==
 If anything, securing IMAP with SSL is extremly recommended. Using a secure connection for IMAP, means that if the password is sent in plain text, this is still done over the secured IMAP connection so no issue.
 
-=== Self-Signed ===
+=== Create Self-Signed Certificate ===
 Courier-imap comes with two easy scripts to generate selfsigned SSL certificates, ''mkpop3dcert'' and ''mkimapdcert''. These scripts parse '''/etc/courier-imap/pop3d.cnf''' and '''/etc/courier-imap/imapd.cnf''' respectively. It may be an idea to first use self signed certificates and then swap those out for signed certificates as it can make testing a little bit easier. If self-signed certificates are a must, edit the aforementioned files, otherwise the defaults will suffice.
 {{RootCmd|mkpop3dcert|mkimapdcert}}
 {{Warning|Currently, as mentioned in gentoo bug [https://bugs.gentoo.org/show_bug.cgi?id&#61;251047 &#35;251047] config files use an incorrect format and thus an error may occur. See the bug for more details.}}
 {{Note|The two generated certificates are named /etc/courier-imap/pop3d.pem and /etc/courier-imap/imapd.pem. If self signed certificates are insisted upon, the default paths in the config files pointing to these files should be checked as mentioned below.}}
 
-=== Signed ===
+=== Create Signed Certificate ===
 Courier-imap does actually not use the three separate files as most applications do and needs them specially formatted.
 The file starts with the private key.
 {{Note|If no courier-imap directory exists in /etc/ssl, it needst o be manually created. {{RootCmd|mkdir -p /etc/ssl/courier-imap/}}
@@ -112,3 +112,36 @@ KJ+Zv9onecK0MPYRUj8PPqqy+Q00pScW9+qPSr9T2sEG/meKjLqqA3XQf4Gwzqco
 SUG0PEjiYNNfe966p9E1vp6yN5+gSyu6zv9Vn+cfYY2q7d3a4x9rAgEC
 -----END DH PARAMETERS-----
 </pre>}}
+
+=== Configure SSL ===
+As noted above, the certificate entails both pop3 as imap hostnames and it is thus assumed pop3 and imap are running on the same IP/host. This is not required however, pop3 could be very well a different machine with the same (not advised) or its own certificate.
+==== POP3 ====
+{{File|/etc/courier-imap/pop3d-ssl|Configure certificate|<pre>
+##NAME: POP3DSSLSTART:0
+POP3DSSLSTART=YES
+
+##NAME: TLS_CERTFILE:0
+TLS_CERTFILE=/etc/ssl/courier-imap/foo.example.com.pem
+</pre>}}
+
+Starting this server should allow pop3 to work through SSL.
+{{RootCmd|/etc/init.d/courier-pop3-ssl restart}}
+==== IMAP ====
+{{File|/etc/courier-imap/pop3d-ssl|Configure certificate|<pre>
+##NAME: IMAPDSSLSTART:0
+IMAPDSSLSTART=YES
+
+##NAME: TLS_CERTFILE:0
+TLS_CERTFILE=/etc/ssl/courier-imap/foo.example.com.pem
+</pre>}}
+
+Starting this server should allow imap to work through SSL.
+{{RootCmd|/etc/init.d/courier-imapd-ssl restart}}
+
+=== Testing SSL ===
+Testing becomes more difficult, as telnet can not be used anymore. The best option is to start up a mail-client such as thunderbird, configure a normal connection first to verify everything works, which should as telnet worked properly before and then enable the SSL option for the account and see it still working. The default imap-ssl port is 993. '''STARTTLS''' can be checked whether it is enabled only, via telnet, by checking for the STARTTLS Capability.
+{{Note|Some email clients are not complete in the TLS implementation, to help these clients out you can change the value of TLS_STARTTLS_PROTOCOL in /etc/courier-imap/imapd-ssl from TLS1 to SSL3.}}
+
+If SSL secured services now work as expected, they can be added to the default runlevel.
+{{RootCmd|rc-update add courier-pop3d-ssl default|rc-update add courier-imapd-ssl default}}
+{{Note|As mentioned before, only add pop3 if it is really needed.}}
