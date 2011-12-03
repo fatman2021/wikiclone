@@ -11,6 +11,12 @@ There are a few issues that arise when using multiple domains on a single IP. Ap
 == Obtaining an SSL Certificate ==
 There are currently 2 and a half ways to obtain an SSL certificate. Purchase a certiciate from one of the [http://en.wikipedia.org/wiki/DigiNotar#Issuance_of_fraudulent_certificates reputable] providers is an option. Using a self-signed certificate can also be done, though may have implications with warnings on users clients. The half option, which is the recommended option when not using a bought certiciate is using a certificate from [http://cacert.org cacert.org]. They are working hard on getting their certificate included into the main browsers and operating systems, but most of all, it is free and gratis.
 
+=== Self signed ===
+Most applications pre-generate self signed certificates and tend to install then into /etc/ssl. A new self-signed certificate can be easily created using OpenSSL.
+
+{{RootCmd|mkdir -p /etc/ssl/postfix/|cd /etc/ssl/postfix/|/etc/ssl/misc/CA.pl -newca|/etc/ssl/misc/CA.pl -newreq-nodes|/etc/ssl/misc/CA.pl -sign}}
+This should have created three files: '''/etc/ssl/postfix/newkey.pem''', '''/etc/ssl/postfix/''', '''/etc/ssl/postfix/newcrt.pem''' and it's accompanying CA Root certificate '''/etc/ssl/postfix/demoCA/cacert.pem'''. It is probably advised to rename them to something more logical. 
+
 === CACert.org signed ===
 CACert.org offers a simple script to assist with generating SSL certificates. The [http://wiki.cacert.org/CSRGenerator csr] script should be downloaded and executed. In this example, the mail server will be called imap but will have aliases configured in dns for mail, pop, pop3, pop3s, imaps and foo. More can be added of course as fit. Note that foo was added because that is the name of the system offering the imap service. It is not named foo because the postfix or web or any other server is named foo.
 
@@ -145,3 +151,30 @@ Testing becomes more difficult, as telnet can not be used anymore. The best opti
 If SSL secured services now work as expected, they can be added to the default runlevel.
 {{RootCmd|rc-update add courier-pop3d-ssl default|rc-update add courier-imapd-ssl default}}
 {{Note|As mentioned before, only add pop3 if it is really needed.}}
+
+== Securing SMTP with SSL ==
+The certificates for use with postfix should be stored in ''/etc/ssl/postfix/'' or if using the same certificates as with courier-imap they should be stored in ''/etc/ssl/postfix/''. If using CACert.org, then it's root certificate needs to be used. Gentoo pre-installs the CACert.org root certificate and should be used.
+
+{{File|/etc/postfix/main.cf|Certificate configuration for SMTP|<pre>
+# SSL Authentication
+smtpd_use_tls = yes
+smtpd_tls_auth_only = no
+smtpd_tls_loglevel = 3
+smtpd_tls_key_file = /etc/ssl/postfix/smtp.example.com_privatekey.pem
+smtpd_tls_cert_file = /etc/ssl/postfix/smtp.example.com_crt.pem
+smtpd_tls_CAfile = /etc/ssl/certs/cacert.org.pem
+smtpd_tls_received_header = yes
+smtpd_tls_session_cache_timeout = 3600s
+tls_random_source = dev:/dev/urandom
+</pre>}}
+{{Note|For debugging purposes '''smtpd_tls_loglevel''' has been increased to ''3''. Also '''smtpd_tls_auth_only &#35; no''' means users (and webmail) can still log in insecurely. Putting this option to yes forces all clients to use only authenticated connections.}}
+
+Now '''STARTTLS''' can be used to use an authenticated connection over port 25. '''SSL/TLS''' support on port ''465'' (smtp'''s''') however should be enabled as well. Courier-imap did this automatically, postfix needs a change to ''master.cf''.
+
+{{File|/etc/postfix/master.cf|Enable smtps support|<pre>
+smtps     inet  n       -       n       -       -       smtpd
+  -o smtpd_tls_wrappermode=yes
+</pre>}}
+
+== Testing ==
+To test if all connections work as wanted, a recent version of Thunderbird works best. When adding a new account, Thunderbird will try to connect using '''STARTTLS''' on the default port. If that would fail, or if a manual connection is tried, its possible to use '''SSL/TLS''' via the '''993''' and '''465''' ports and hit the re-test button. This should allow the account to be created using secure connections.
