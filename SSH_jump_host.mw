@@ -6,13 +6,15 @@ The idea is to use ProxyCommand to automatically execute ''ssh'' command on remo
 * SSH access to the gateway machine and the internal one
 * Gateway machine has Netcat installed
 
-== Setup ==
+== Dynamic jumphost list ==
+Just concatenate your jumphost(s) and you destination host via the + sign. You don't have to setup a static configuration in your config.
+=== Setup ===
 {{File|~/.ssh/config|Add this text|<pre>
 Host *+*
 ProxyCommand ssh $(echo %h | sed 's/+[^+]*$//;s/\([^+%%]*\)%%\([^+]*\)$/\2 -l \1/;s/:/ -p /') nc -w1 $(echo %h | sed 's/^.*+//;/:/!s/$/ %p/;s/:/ /')
 </pre>}}
 
-== Usage ==
+=== Usage ===
 {{Cmd|ssh host1+host2}}
 If usernames on machines differ, specify them:
 {{Cmd|ssh user1%host1+host2 -l user2}}
@@ -23,15 +25,59 @@ It works with scp command, too:
 {{Cmd|scp filename host1+host2:~/}}
 {{Note|The column and path at the end is needed so that scp recognizes it as remote.}}
 
-=== Tips ===
-To ease the connecting even further:
-* Set these commands as [http://en.wikipedia.org/wiki/Alias_%28command%29 shell aliases]
-* To avoid typing passwords use [http://www.gentoo.org/doc/en/articles/openssh-key-management-p1.xml OpenSSH keys]
-
-=== Multiple jumps ===
+==== Multiple jumps ====
 The same syntax can be used to make jumps over multiple machines:
 {{Cmd|ssh host1+host2+host3}}
 {{Note|All but the last jump host need the ProxyCommand set in their SSH configuration.}}
+
+== Static jumphost list ==
+Static jumphost list means, that you know the jumphost or jumphosts you need, to reach a host. Therefore you can create a static jumphost 'routing' in you '''.ssh/config'''. The advantage in comparision to the dynamic jumphost option is, that you don't have to provide the .ssh config on jumphosts between your maschine and all the other jumphosts between you and the final host you want to jump to.
+=== Setup ===
+{{File|~/.ssh/config|Add this text|<pre>
+### First jumphost. Directly reachable
+Host alphajump
+  HostName jumphost1.example.org
+
+### Host to jump to via jumphost1.example.org
+Host behindalpha
+  HostName behindalpha.example.org
+  ProxyCommand  ssh alphajump netcat -w 120 %h %p 
+</pre>}}
+
+=== Usage ===
+{{Cmd|ssh behindalpha}}
+If usernames on machines differ, specify them by modifing the correspondent ProxyCommand line:
+{{File|~/.ssh/config|Modify correspondent ProxyCommand|<pre>
+ProxyCommand  ssh -l otheruser behindalpha netcat -w 120 %h %p
+</pre>}}
+It works with scp command, too:
+{{Cmd|scp filename behindalphabeta:~/}}
+{{Note|The column and path at the end is needed so that scp recognizes it as remote.}}
+
+
+==== Multiple jumps ====
+The same syntax can be used to make jumps over multiple machines:
+{{File|~/.ssh/config|Add this text|<pre>
+### First jumphost. Directly reachable
+Host alphajump
+  HostName jumphost1.example.org
+
+### Second jumphost. Only reachable via jumphost1.example.org
+Host betajump
+  HostName jumphost2.example.org
+  ProxyCommand  ssh alphajump netcat -w 120 %h %p 
+
+### Host only reachable via alphajump and betajump
+Host behindalphabeta
+  HostName behindalphabeta.example.org
+  ProxyCommand  ssh betajump netcat -w 120 %h %p 
+</pre>}}
+{{Cmd|ssh behindalphabeta}}
+
+== Tips ==
+To ease the connecting even further:
+* Set these commands as [http://en.wikipedia.org/wiki/Alias_%28command%29 shell aliases]
+* To avoid typing passwords use [http://www.gentoo.org/doc/en/articles/openssh-key-management-p1.xml OpenSSH keys]
 
 == Links ==
 * [http://glandium.org/blog/?p=308 SSH through jump hosts]
