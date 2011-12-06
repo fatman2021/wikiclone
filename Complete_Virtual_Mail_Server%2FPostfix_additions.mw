@@ -1,0 +1,17 @@
+== Introduction ==
+At this point, Postfix should be running well and users through mailclients and webmail should have no problem sending and receiving e-mail securely. Tweaking the postfix installation can give a little more performance, make it a bit more secure and having a bit redundancy never hurts either.
+
+== Redundancy ==
+=== Introduction to backup-mx ===
+For redundancy postfix offers the feature of ''backup mx''. Backup mx allows another mailhost to catch e-mail for a domain when the main mailserver is for whatever reason not responding. A backup mx server will try to deliver the mail to the original mailserver. This all sounds just perfect, however backup mx is dead. Spam killed it. Well almost. The problem with backup mx nowadays is, due to spam, mail can end up bouncing the wrong way and the backup mx server may thus end up on a spam block list. If a secondary mailserver is setup, it needs to know all of the users from the primary domain so that it can bounce ''unknown users''. A simple way to do this, is having the entire database synchronized between primary and secondary mailserver. Caveat being however the 'backupmx' flag in the domain table. This would need to be inverted on the secondary mailserver.
+=== Configuring backup-mx ===
+The database already knows about backup domains. If a domain ''has'' a backup mail server, the '''backupmx''' field is set to '''1''' in the '''domain''' table. Connecting postfix to the database requires a file with connection information.
+{{File|/etc/postfix/pgsql/relay_domains.cf|relay_domains.cf|<pre>
+# virtual_mailbox_domains.cf
+user            = postfix
+password        = $password
+dbname          = postfix
+#hosts          = localhost
+query           = SELECT description FROM domain WHERE domain='%s' AND backupmx='1' AND active='1';
+</pre>}}
+This then needs to be configured into postfix, in addition to the '''permit_mx_backup''' option which needs to be supplemented to the ''smtp_recipient_restrictions''
