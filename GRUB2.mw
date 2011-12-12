@@ -33,6 +33,59 @@ Before going further, one could back the boot device MBR with something like:
 or simply its boot loader with something like (here one can go as far as 446 bytes):
 {{RootCmd|dd if<nowiki>=</nowiki>/dev/sda of<nowiki>=</nowiki>/root/sda.mbr bs<nowiki>=</nowiki>440 count<nowiki>=</nowiki>1}}
 
+Here, one has to make a [0x]ef00 partition type. Here is an example of such a GPT partitioned disk with BIOS boot [0xef02] partition and an EFI [0xef00] partition. Here the output of the `p' command in gdisk main menu.
+{{RootCmd|gdisk /dev/sdc|output=<pre>
+GPT fdisk (gdisk) version 0.8.1
+
+Partition table scan:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.
+
+Command (? for help): p
+Disk /dev/sdc: 976773168 sectors, 465.8 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): AA369F4D-37A4-4C0D-A357-DC24B99A6337
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 976773134
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048       828377087   395.0 GiB   8E00  Linux LVM
+   2       828377088       891291647   30.0 GiB    0700  Microsoft basic data
+   3       891291648       975177727   40.0 GiB    0700  Microsoft basic data
+   4       975177728       976754687   770.0 MiB   8300  Linux filesystem
+   5       976754688       976756735   1024.0 KiB  EF02  BIOS boot partition
+   6       976756736       976773134   8.0 MiB     EF00  EFI System
+
+Command (? for help): 
+</pre>}}
+{{Note|Note that do not have to enter the `0x' hexadecimal prefix in GPT fdisk.}}
+parted gives a somewhat different output with a slightly different semantics for the same device, here is the output.
+{{RootCmd|parted /dev/sdc|output=<pre>
+GNU Parted 3.0
+Using /dev/sdc
+(parted) print
+...
+Sector size (logical/physical): 512B/512B
+Partition Table: gpt
+
+Number  Start   End    Size    File system  Name                  Flags
+ 1      1049kB  424GB  424GB                Linux LVM             lvm
+ 2      424GB   456GB  32.2GB               Microsoft basic data
+ 3      456GB   499GB  42.9GB               Microsoft basic data
+ 4      499GB   500GB  807MB   ext2         Linux filesystem
+ 5      500GB   500GB  1049kB               BIOS boot partition   bios_grub
+ 6      500GB   500GB  8396kB               EFI System            boot
+
+(parted)
+</pre>}}
+Creating partions in gdisk is pretty straight and quick forward for somebody who use fdisk. Just type `n' in the main menu provide a beginning and end if need be and then type the partition type ef00 for EFI for example. That's all.
+
 === UEFI installation ===
 
 Before setting up UEFI boot, one has to partition the boot device with a GPT compatible disk tools like GPT fdisk or gdisk, parted or gparted (a gtk gui) or other tools that I did not bother to try at this point. It's advised to have something greater than 200MB and maybe smaller than 500MB for multi boot systems. GPT disk is a powerfull tools than can be used to setup a few advanced settings like hybrid MBR or the number of alignment sectors. The default 2048 sectors (1MiB) is a sane default which will permit to make use of sector 34-2048 to embed GRUB2 core.img for example if one forgot to leave some space for BIOS boot partition.
