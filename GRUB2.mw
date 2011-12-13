@@ -319,8 +319,44 @@ An UEFI dual boot could be achieved with the following, if, for example, the def
 
 == Troubleshooting and Quirks ==
 
-=== Fancy theming ===
-=== GPT Hybrid MBR workaround ===
+=== Fancy theming and settings ===
+
+It may happen that relying on automated doesn't work out of the box entirely and a few setting from `/etc/default/grub' aren't included in grub.cfg. In that case including a custom file in `/etc/grub.d/' may be necessary to make sure everything would be included. I had to add a custom file to get a few settings respected as the following file.
+
+{{File|/etc/grub.d/01_header||<pre>#!/bin/sh
+exec tail -n +3 $0
+
+insmod fat
+insmod font
+set gfxmode<nowiki>=</nowiki>1280x800
+set gfxpayload<nowiki>=</nowiki>keep
+load_video
+insmod gfxterm
+terminal_output gfxterm
+loadfont ${prefix}/unifont.pf2
+insmod jpeg
+background_image ${prefix}/background-${gfxmode}.jpg
+set menu_color_normal<nowiki>=</nowiki>white/black
+set menu_color_highlight<nowiki>=</nowiki>black/magenta
+</pre>}}
+
+=== GPT hybrid MBR workaround ===
+
+GRUB2 require an EE00 partition type first in the MBR partition list entry, but that may pose a problem to boot other OSs in the same disk especially MSDOS/Windows, to recognize a GPT partitioned disk with or without hybrid MBR. A workaround would be simply removing any protective EE00 partition, with fdisk for example but not gdisk! (it won't work with gdisk as the ''fake'' partition is just there to protect GPT main table), and boot in BIOS/MBR mode. Just remember to not use other disk tools but gdisk (it should work with [g]parted) to resize after that, else, use gdisk to add protective EE00 partitions to protect at least GPT main and backup partition before using any non GPT aware tools if necessary.
+
+There's another issue, MSDOS/Windows may not find any suitable partition to boot from if there's a EE00 partition protecting GPT main partition table (sector 1-2047). This is happened to me and I had to remove the protective EE00 protective partition before getting a valid MBR partition list in [MS]DOS tools (to format a partition for example, the tools recognized a GPT partitioned disk at least). And then use gdisk to recompute the CHS value for hybrid MBR (in the ''recovery and transformation'' menu, or in the ''expert'' main menu).
+
+=== Commons errors ===
+
+If you're getting this error:
+{{GenericCmd|<pre>Attempting to install GRUB to a partition disk or to a partition.  This is a BAD idea.
+Embedding is not possible.  GRUB can only be installed in this setup by using blocklists. 
+However, blocklists are UNRELIABLE and their use is discouraged.
+</pre>}}
+this could mean that:
+:* 1st: A `/boot' partition is not mounted, simply run as root `mount /boot'.
+:* 2nd: If you're trying to install GRUB2 in traditional BIOS/GPT setup, this could mean more likely that there isn't any EF02 or boot_partition to embed core.img. A little partition of a few hundreds kilo bytes may be enough, although it's good to align it's partition to something like 2048 sectors to avoid performance penalty, so a 1MiB partition should do.
+:* If you're trying to install GRUB2 in a partition e.g. `/dev/sda5' in BIOS/MBR setup (who did try it to BIOS/GPT?), simply add `--force' cmdline switch to get going. You should be fine with either enough gap before the first sector of the partition or else use chattr command (as described above) to get going.
 
 == References ==
 
