@@ -143,6 +143,89 @@ And everything should goes as expected. I couldn't install GRUB2 without an EF02
 
 === BIOS/GPT partitioned dis and with hybrid MBR installation ===
 
+Multi booting OSs that aren't aware of GPT partitioned disk, e.g. Windows 7 or Windows XP for those who still use that thing--that's because MSDOS/Windows cannot boot from anything else than BIOS/MBR aside from MSDOS/Windows 7 and possibly 8 from EFI platforms,--require this tricky workaround. The thing to keep in mind is that playing with a hybrid MBR can be tricky so, nothing in this sub-section should be taken as solid rock working but rather simply guidances to experiment to get something working.
+
+First of, GRUB2 should boot and should recognize a partition table be it GPT or MBR simply by loading the associated module (part_gpt or part_msods). So it should be expected to be able to boot on BIOS/MBR or BIOS/GPT depending on GRUB2 loaded module? Nothing is far from the truth, because, the previous sections outlined the differences between installing GRUB2 on BIOS/MBR and BIOS/GPT. I don't know how grub2-install behave when trying to install in BIOS/MBR mode with an EF02 (or bios_boot in parted terms) partition because I did not simply try it. 
+
+Actually there's simple thing that would determine grub2-install to install in BIOS/MBR or BIOS/GPT: it's the presence of a EE00 (GPT protective) and being the first partition in the MBR with that. With a hybrid MBR, GRUB2 will install just fine if and only if the first partition in the MBR table is an EE00 partition. An EF02 partition should be present anywhere in the disk and not necesseraly in the MBR list to leave a few room to embed core.img in the disk tough. 
+{{Note|In this case one do ''not'' have to add/list an EE00 partition in the hybrid MBR list manually, gdisk will prompt you to list one first if booting with GRUB2 before listing the provided list (up to 3 partition) by the user.}}
+
+Creating a hybrid MBR is easy with gdisk: just hit `r' (recovery and transformation) in the main, then hit `h' (CHS recompute) in that menu, and then enter a series of partition (less or equal to 3) in the order you want it to be, and then enter the hexadecimal partition type without the `0x' prefix or accept the default with hitting repeatedly with `Y', and enable only a single boot flag as the following example.
+
+{{RootCmd|gdisk /dev/sdg|output=<pre>
+GPT fdisk (gdisk) version 0.8.1
+
+Partition table scan:
+  MBR: MBR only
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid MBR and GPT. Which do you want to use?
+ 1 - MBR
+ 2 - GPT
+ 3 - Create blank GPT
+
+Your answer: 2</pre>}}
+
+{{RootCmd|gdisk /dev/sdg|output=<pre>
+...
+Using GPT and creating fresh protective MBR.
+
+Command (? for help): r
+Recovery/transformation command (? for help): p
+Disk /dev/sdg: 625142448 sectors, 298.1 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 744E8BF3-39A4-4908-8646-AC2E5661C8CF
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 625142414
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048       566233087   270.0 GiB   8300  Linux filesystem
+   2       566233088       625142414   28.1 GiB    0700  Microsoft basic data
+Recovery/transformation command (? for help): h
+
+WARNING! Hybrid MBRs are flaky and dangerous! If you decide not to use one,
+just hit the Enter key at the below prompt and your MBR partition table will
+be untouched.
+
+Type from one to three GPT partition numbers, separated by spaces, to be
+added to the hybrid MBR, in sequence: 2 1
+Place EFI GPT (0xEE) partition first in MBR (good for GRUB)? (Y/N): N
+
+
+Creating entry for GPT partition #2 (MBR partition #1)
+Enter an MBR hex code (default 07): 
+Set the bootable flag? (Y/N): Y
+
+Creating entry for GPT partition #1 (MBR partition #2)
+Enter an MBR hex code (default 83): 
+...
+Unused partition space(s) found. Use one to protect more partitions? (Y/N): N
+
+Recovery/transformation command (? for help): o
+
+Disk size is 625142448 sectors (298.1 GiB)
+MBR disk identifier: 0x00000000
+MBR partitions:
+
+Number  Boot  Start Sector   End Sector   Status      Code
+   1      *      566233088    625142414   primary     0x07
+   2                  2048    566233087   primary     0x83
+   4                     1         2047   primary     0xEE
+
+
+Recovery/transformation command (? for help): w</pre>}}
+
+And then check out if the operation was successful or not by listing the devices.
+{{Note|I answered most safe questions to `N' because without that `/fdisk -l /dev/sdg' will list the MBR partion list just fine but listing the block devices with a `ls /dev' wouldn't list the partions and more annoying: the partions wouldn't be listed in DOS/BIOS.}}
+
+{{Note|I had to manually remove the EE00 (GPT protective) partition in the MBR list for that drive with fdisk, because fdisk listed that partition as being the third one. And I couldn't get the BIOS/DOS recognize the partition table with its presence. This is quite weird (as the previous output shows) because the MBR partition table was correctly recognized when the hybrid MBR was freshly created. I had to reload GPT partition table from a file and re-hybridize the MBR a second time after a few experiments.}}
+
+And finally install GRUB as usual. Everything should be fine at this point. See troubleshooting section for possible issues not listed on the previous Notes and comments.
+
 == Multiboot ==
 
 === Chainloading ===
