@@ -230,8 +230,92 @@ And finally install GRUB as usual. Everything should be fine at this point. See 
 
 == Multiboot ==
 
-=== Chainloading ===
-=== Windows dualboot ===
+There's a truly improved chainload mode compared to GRUB LEGACY: the new iso (or loop) chainload mechanism. Actually, one could still chainload iso images with GRUB LEGACY, and I did, but there were no way to pass kernel cmdline arguments. In either case, the iso image in question should have been built with that in mind like SysRescueCd or on a lesser extend Gentoo liveCD, otherwise booting will just fail badly in the physical media check/test. Gentoo liveCD is handy because it has a minimal shell which let mount the squashed image to right place and then hit ESC to continue the boot process. That's a handy way to install an OS with everything in RAM, especially for such ''light'' liveCD, without listening to a whining drive on each command.
+
+=== Chainloading ISO image ===
+
+To chainload an iso with custom or defaults kernel cmdline arguments, something like the following can be easily added to grub.cfg.
+
+{{GenericCmd|<pre>menuentry "SYSRESCUECD" {
+	loopback loop /sysrecuecd-x86-2.3.1.iso
+	linux  (loop)/isolinux/rescue64 nomodeset vga<nowiki>=</nowiki>791 docache setkmap<nowiki>=</nowiki>fr isoloop<nowiki>=</nowiki>/sysrecuecd-x86-2.3.1.iso
+	initrd (loop)/isolinux/initram.igz
+}</pre>}}
+
+For a permanent and automatic entry to grub.cfg, a custum file could be added to `/etc/grub.d'.
+
+{{File|/etc/grub.d/40_custom||<pre>#!/bin/sh
+exec tail -n +3 $0
+
+menuentry "GRUB4DOS" {
+	linux /grub4dos-0.4.4/grub.exe --config-file<nowiki>=</nowiki>/menu.lst
+}
+
+menuentry "SYSRESCUECD" {
+	loopback loop /sysrecuecd-x86-2.3.1.iso
+	linux  (loop)/isolinux/rescue64 nomodeset vg<nowiki>=</nowiki>791 docache setkmap<nowiki>=</nowiki>fr isoloop<nowiki>=</nowiki>/sysrecuecd-x86-2.3.1.iso
+	initrd (loop)/isolinux/initram.igz
+}
+
+menuentry "STG3-AMD64" {
+	set cmdline<nowiki>=</nowiki>"dokeymap looptype<nowiki>=</nowiki>squashfs loop<nowiki>=</nowiki>/image.squashfs cdroot"
+	loopback loop /stg3-amd64-<DATE>.iso
+	linux  (loop)/isolinux/gentoo $cmdline root<nowiki>=</nowiki>/dev/ram0 init<nowiki>=</nowiki>/linuxrc initrd<nowiki>=</nowiki>gentoo.igz
+	initrd (loop)/isolinux/gentoo.igz
+}</pre>}}
+
+=== Chainloading other bootloader ===
+
+Chainloading other bootloader is fairly easy if there's support in GRUB2 for that specific bootloader. Otherwise, one could use an ''man in the middle'' or another bootloader in other words to do the task if necessary.  In the latter case, one could use GRUB4DOS as it has functionalities similar to GRUB LEGACY. This required when loading another bootloader like TrueCrypt become problematic in a single multiboot disk, otherwise something as simple as the following is enough to boot another disk with whatever bootloader.
+
+{{GenericCmd|<pre>menuentry "WHATEVER" {
+     insmod part_msdos
+     insmod chainload
+     chainloader (hd1,1)+1
+}</pre>}}
+
+=== MSDOS/Windows ===
+
+If MSDOS/Windows is in another disk with its bootloader in the MBR, then one can boot with a simple menu entry as the previous example in Chainloading other bootloader section.
+
+Things could become more complicated if MSDOS/Windows is in another partition of the disk and the partition is encrypted with TrueCrypt for example, or simply if a hybrid MBR is involved.
+
+The simpliest way to dual boot MSDOS/Windows is using BIOS/MBR combination. Simply backup the whole MBR to be safe or simply the bootloader before installing MSDOS/Windows as that thing will overwrite the bootloader for sure. 
+And then simple menu entry could added to grub.cfg.
+
+{{GenericCmd|<pre>menuentry "Windows 7 BIOS/MBR" {
+     insmod part_msdos
+     insmod ntldr
+     ntldr (hd0,msdos1)/bootmgr
+}</pre>}}
+
+Or the following for MSDOS/Windows XP
+
+{{GenericCmd|<pre>menuentry "Windows XP BIOS/MBR" {
+     insmod part_msdos
+     insmod ntldr
+     ntldr (hd0,msdos1)/ntldr
+}</pre>}}
+
+An entry with GPT/hybrid MBR doesn't not to the list to the previous usual BIOS/MBR examples. Booting multiple MSDOS/Windows could be achieved with remapping and/hiding partion with partool.
+
+{{GenericCmd|<pre>menuentry "Windows 7 BIOS/MBR" {
+     insmod part_msdos
+     insmod chain
+     parttool hd1,msdos1 hidden+ boot-
+     parttool hd1,msdos2 hidden- boot+
+     chainloader (hd1,msdos2)+1
+}</pre>}}
+
+An UEFI dual boot could be achieved with the following, if, for example, the default bootloader was overwritten with GRUB2 or simply that bootmgr doesn't do the trick for different reasons.
+
+{{GenericCmd|<pre>menuentry "Windows 7 UEFI/GPT" {
+    insmod part_gpt
+    insmod search_fs_uuid
+    insmod chain
+    search --fs-uuid --no-floppy --set<nowiki>=</nowiki>root 28cf-35de
+    chainloader ($root)/EFI/MICROSOFT/BOOT/bootmgfw.efi
+}</pre>}}
 
 == Troubleshooting and Quirks ==
 
