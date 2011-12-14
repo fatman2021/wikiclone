@@ -3,15 +3,46 @@ At this point, Postfix should be running well and users through mailclients and 
 
 == Redundancy ==
 === Introduction to backup-mx ===
-For redundancy postfix offers the feature of ''backup mx''. Backup mx allows another mailhost to catch e-mail for a domain when the main mailserver is for whatever reason not responding. A backup mx server will try to deliver the mail to the original mailserver. This all sounds just perfect, however backup mx is dead. Spam killed it. Well almost. The problem with backup mx nowadays is, due to spam, mail can end up bouncing the wrong way and the backup mx server may thus end up on a spam block list. If a secondary mailserver is setup, it needs to know all of the users from the primary domain so that it can bounce ''unknown users''. A simple way to do this, is having the entire database synchronized between primary and secondary mailserver. Caveat being however the 'backupmx' flag in the domain table. This would need to be inverted on the secondary mailserver.
+For redundancy postfix offers the feature of ''backup mx''. Backup mx allows another mailhost to catch e-mail for a domain when the main mailserver is for whatever reason not responding. A backup mx server will try to deliver the mail to the original mailserver. This all sounds just perfect, however backup mx is dead. Spam killed it. The problem with backup mx nowadays is, due to spam, mail can end up bouncing the wrong way and the backup mx server may thus end up on a spam block list. This kind of mail is called [http://en.wikipedia.org/wiki/Backscatter_%28email%29 Backscatter mail]. If a secondary mailserver is setup, it needs to know all of the users from the primary domain so that it can bounce ''unknown users''. A simple way to do this, is having the entire database synchronized between primary and secondary mailserver. Caveat being however the 'backupmx' flag in the domain table. This would need to be inverted on the secondary mailserver.
 === Configuring backup-mx ===
 The database already knows about backup domains. If a domain ''has'' a backup mail server, the '''backupmx''' field is set to '''1''' in the '''domain''' table. Connecting postfix to the database requires a file with connection information.
-{{File|/etc/postfix/pgsql/relay_domains.cf|relay_domains.cf|<pre>
-# virtual_mailbox_domains.cf
+{{File|/etc/postfix/pgsql/relay_domains.cf|Setup relay domains|<pre>
+# relay_domains.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT description FROM domain WHERE domain='%s' AND backupmx='1' AND active='1';
 </pre>}}
-This then needs to be configured into postfix, in addition to the '''permit_mx_backup''' option which needs to be supplemented to the ''smtp_recipient_restrictions''
+This then needs to be configured into postfix.
+
+{{File|/etc/postfix/main.cf|Modify postfix for relay domains|<pre>
+# The relay_domains parameter restricts what destinations this system will
+# relay mail to.  See the smtpd_recipient_restrictions description in
+# postconf(5) for detailed information.
+relay_domains = pgsql:/etc/postfix/pgsql/relay_domains.cf
+</pre>}}
+
+To make proper use of ''relay_domains''
+{{File|/etc/postfix/pgsql/relay_recipient_maps.cf|Setup relay recipients|<pre>
+# relay_recipient_maps.cf
+user            = postfix
+password        = $password
+dbname          = postfix
+#hosts          = localhost
+query           = SELECT goto FROM alias WHERE address='%s' AND active='1';
+</pre>}}
+
+Also this needs to be configured into postfix.
+{{File|/etc/postfix/main.cf|Modify postfix for relay recipients|<pre>
+# REJECTING UNKNOWN RELAY USERS
+#
+# The relay_recipient_maps parameter specifies optional lookup tables
+# with all addresses in the domains that match $relay_domains.
+relay_recipient_maps = pgsql:/etc/postfix/pgsql/relay_recipient_maps.cf
+</pre>}}
+
+After restarting postfix, the mail server is now a less-open relay, relaying mail to only approved domains and approved users.
+
+{{Warning|Do not use ''permit_mx_backup''. [http://marc.info/?l&#61;postfix-users&m&#61;127202735107236&w&#61;2 It is dead]. Letting others relay the 'backup domains' through the mailserver, to the list of known users, is the proper way of doing it, but only if they are administers by the same user(s). Use even more caution when accepting entire domains, unless the other domain has a catch-all mailbox, [http://en.wikipedia.org/wiki/Backscatter_%28email%29 Backscatter mail] will be a problem and the mailserver will most likly be blacklisted.}}
+== Qoutas ==
