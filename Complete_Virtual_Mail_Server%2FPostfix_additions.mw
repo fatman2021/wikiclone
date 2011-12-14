@@ -45,7 +45,7 @@ relay_recipient_maps = pgsql:/etc/postfix/pgsql/relay_recipient_maps.cf
 After restarting postfix, the mail server is now a less-open relay, relaying mail to only approved domains and approved users.
 
 {{Warning|Do not use ''permit_mx_backup''. [http://marc.info/?l&#61;postfix-users&m&#61;127202735107236&w&#61;2 It is dead]. Letting others relay the 'backup domains' through the mailserver, to the list of known users, is the proper way of doing it, but only if they are administers by the same user(s). Use even more caution when accepting entire domains, unless the other domain has a catch-all mailbox, [http://en.wikipedia.org/wiki/Backscatter_%28email%29 Backscatter mail] will be a problem and the mailserver will most likly be blacklisted.}}
-== Qoutas ==
+== Qouta's ==
 === Introduction ===
 uotas are a tool to help a user monitor their mailbox. They are very easily abused and should not be relied on. That said, they can work well enough most of the time and give the user feedback on the status of his usage pattern. IMAP supports quota reporting and thus the mail-client can even report this the user. Thunderbird does this via an [http://addons.mozilla.org/en-US/thunderbird/addon/881 extension], roundcube shows this per default. 
 
@@ -87,3 +87,25 @@ No content!
 .
 </pre>}}
 {{Note|Generally, there is no need to manually broadcast an e-mail message to generate the maildirsize file, plenty of mail should be deliverd and thus create the file, including the Welcome mail postfixadmin creates. Nevertheless, postfixadmin does have a the ability to broadcast a message, that can be used for this purpose.}}
+
+== HELO Restrictions ==
+Hackers, spammers and everybody else can obtain information from the mailserver by using the HELO and EHLO commands. Spammers usually put fake information in the HELO greeting and thus restricting and rejecting connections from servers that do not properly identify themselves can only be good. Postfix offers the ''smtpd_helo_restrictions'' variable to tune how to respond to connections. Restrictions here have to be thought over carefully however. Locking down the server too tight may make it so messages are rejected because the other server is just poorly configured. Use with regression. A quick overview of the available options.
+
+''' ''smptd_helo_restrictions'' overview'''
+* reject_invalid_hostname	  REJECT if HELO greeting is not a DN or an IP
+* reject_non_fqdn_hostname  REJECT if HELO greeting is not a FQDN or an IP
+* reject_unknown_hostname	  REJECT if HELO host has no A or MX in DNS
+* permit_naked_ip_address	  PERMIT if HELO greeting is an IP
+
+
+The following table should give an idea how mail will get rejected from the various restrictions. An '''X''' mens the message will be rejected, the '''?''' means it depends on the proper DNS record setup for that domain and '''O''' means the message will be delivered normally.
+{| class="wikitable"
+|-
+!  !! bogus !! example !! example.com !! 192.0.23.58
+|-
+| reject_invalid_hostname || X || O || O || O
+|-
+| reject_non_fqdn_hostname || X|| X || O || O
+|-
+| reject_unknown_hostname || X || X || ? || X
+|}
