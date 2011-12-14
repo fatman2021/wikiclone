@@ -46,3 +46,44 @@ After restarting postfix, the mail server is now a less-open relay, relaying mai
 
 {{Warning|Do not use ''permit_mx_backup''. [http://marc.info/?l&#61;postfix-users&m&#61;127202735107236&w&#61;2 It is dead]. Letting others relay the 'backup domains' through the mailserver, to the list of known users, is the proper way of doing it, but only if they are administers by the same user(s). Use even more caution when accepting entire domains, unless the other domain has a catch-all mailbox, [http://en.wikipedia.org/wiki/Backscatter_%28email%29 Backscatter mail] will be a problem and the mailserver will most likly be blacklisted.}}
 == Qoutas ==
+=== Introduction ===
+uotas are a tool to help a user monitor their mailbox. They are very easily abused and should not be relied on. That said, they can work well enough most of the time and give the user feedback on the status of his usage pattern. IMAP supports quota reporting and thus the mail-client can even report this the user. Thunderbird does this via an [http://addons.mozilla.org/en-US/thunderbird/addon/881 extension], roundcube shows this per default. 
+
+=== Configuration ===
+he database supports mail quotas however postfix requires a patch to support these mailquotas. The ''vda'' USEFlag enables this patch for postfix and allows the use of quotas.
+
+First, the data needs to be obtained from the database.
+{{File|/etc/postfix/pgsql/virtual_mailbox_limit_maps.cf|Query the database for quotas|<pre>
+# virtual_alias_maps.cf
+user            = postfix
+password        = $password
+dbname          = postfix
+#hosts          = localhost
+query           = SELECT quota FROM mailbox WHERE local_part='%u' AND domain='%d' AND active='1';
+</pre>}}
+
+There are a few things that need to be configured in postfix, next to the database query.
+The ''Trash'' folder for example, should not be counted when automatically deleting Trash after a fixed amount of time. This can (and has) be done in courier-imap.
+{{File|/etc/postfix/main.cf|Setup postfix to use quotas|<pre>
+# Support for Postfix VDA quotas
+virtual_mailbox_limit_maps = pgsql:/etc/postfix/pgsql/virtual_mailbox_limit_maps.cf
+virtual_mailbox_limit_inbox = no
+virtual_mailbox_limit_override = yes
+virtual_maildir_extended = yes
+virtual_overquota_bounce = no
+# virtual_maildir_limit_message_maps = hash:/etc/postifx/limit_messages
+virtual_maildir_limit_message = "Sorry, the recipients mailbox is currently full. Please try again later."
+virtual_trash_count = no
+virtual_trash_name = ".Trash"
+virtual_maildir_filter = no
+</pre>}}
+{{Warning|According to the postgresql manual the maximum value of a bigint (the quota) would be ''9223372036854775807''. However only ''9223372036854774784'' can be successfully used. If for some reason however '''8 Exabytes''' is required as the quota, it is probably wiser to just turn it off by setting the quota to 0 bytes.}}
+
+=== Testing ===
+Roundcube displays diskusage per default and hovering over it displays detailed information. Thunderbird has an extension, [http://addons.mozilla.org/en-US/thunderbird/addon/881 Display quota]. For both and others to actually work a ''maildirsize'' file is required. This file will be created and updated whenever postfix delivers a message or when courier-imap makes chances. The file is located in each virtual users root mail dir, which would be {{Path|/var/vmail/example.com/testuser/maildirsize}} in the case of ''testuser'' on ''example.com''. Thus sending a message to ''testuser@example.com'' would create this file in the users maildir.
+{{Cmd|sendmail testuser@example.com|output=<pre>
+Subject: Testmail to create quota file.
+No content!
+.
+</pre>}}
+{{Note|Generally, there is no need to manually broadcast an e-mail message to generate the maildirsize file, plenty of mail should be deliverd and thus create the file, including the Welcome mail postfixadmin creates. Nevertheless, postfixadmin does have a the ability to broadcast a message, that can be used for this purpose.}}
