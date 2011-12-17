@@ -22,7 +22,7 @@ Gentoo's LTSP packages are stored in the [http://git.overlays.gentoo.org/gitweb/
 
 {{RootCmd|layman -a ltsp}}
 
-The LTSP server package needs a tftp and dhcp server (dhcp or dnsmasq). In this tutorial {{Package|net-ftp/tftp-hpa}} and {{Package|net-dns/dnsmasq}} are [[#DHCP and PXE-boot|used]]. It also requires a system logger which can accept client messages over tcp, for which {{Package|app-admain/syslog-ng}} is [[#System Logging|used]] in this tutorial. Don't forget to add a window manager, ltsp-client won't log in if no window manager is installed on the server. The USE flags for ltsp-server:
+The LTSP server package needs a tftp and dhcp server (dhcp or dnsmasq). In this tutorial {{Package|net-ftp/tftp-hpa}} and {{Package|net-dns/dnsmasq}} are [[#DHCP and PXE-boot|used]]. It also requires a system logger which can accept client messages over tcp, for which {{Package|app-admin/syslog-ng}} is [[#System Logging|used]] in this tutorial. Don't forget to add a window manager, ltsp-client won't log in if no window manager is installed on the server. The USE flags for ltsp-server:
 {{USEflag
 |dhcp
 |nbd+++Swap over NBD can be used, client boot over NBD is installed, but not working.
@@ -30,7 +30,9 @@ The LTSP server package needs a tftp and dhcp server (dhcp or dnsmasq). In this 
 |doc
 |examples
 }}
-{{Emerge|app-admin/syslog-ng|net-dns/dnsmasq|net-ftp/tftp-hpa|net-misc/ltsp-server}}
+{{Emerge|app-admin/syslog-ng|net-dns/dnsmasq|net-ftp/tftp-hpa}}
+<!-- Please do not use Emerge template, ltsp-server is not in the official Portage tree.-->
+{{RootCmd|emerge -av net-misc/ltsp-server}}
 
 === Kernel ===
 Besides the obvious drivers, the server kernel ought to have the following settings. If you're going to use NFS to serve the chroot environments, make sure to compile it in as well and reboot afterwards.
@@ -298,7 +300,8 @@ Option "XkbLayout" "fr"
 === Kicktoo ===
 Starting from ltsp-server-5.2.18, you can also use [https://github.com/r1k0/kicktoo Kicktoo] as a possible installer for ltsp-build-client (instead of the quickstart default). While only a 9999 version is available, versioned ebuilds will be available pending further stabilization upstream. To use this option, do the following:
 {{RootCmd|echo sys-apps/kicktoo >> /etc/portage/package.accept_keywords}}
-{{Emerge|kicktoo}}
+<!-- Please do not use Emerge template, kicktoo is not in the official Portage tree -->
+{{RootCmd|emerge -av kicktoo}}
 
 {{File|/etc/ltsp/ltsp-build-client.conf||<pre>
 ...
@@ -344,11 +347,13 @@ On Server:
 {{RootCmd|xrestop}} Top like statistics of X11 client's server side resource usage
 {{RootCmd|nmap -p 4713 <client ip>}} to check if client's Pulse Audio daemon is listing on port 4713
 
-=== Known Issues ===
-* If you get an emerge error for "=dev-lang/python-2.6* is not installed", with a "die "$(python_get_implementational_package) is not installed";", this means that some of your binary packages were installed against Python 2.6, Remove your binary packages to let them compile against your new python environment.
+== Troubleshooting ==
+{{User:Wimmuskee/Troubleshooting|title=can't branch from ${repo_uri}|reported=2011-12-12|reporter=Wimmuskee|bug=383751|problem=A bzr package fails in the unpack phase with a "${EBZR_FETCH_CMD} ${EBZR_OPTIONS} "${repo_uri}" "${branch_dir}" || die "${EBZR}: can't branch from ${repo_uri}"|solution=This has something to do with bzr 2.2 being incompatible with python 2.7 (and bzr 2.4 still unstable on x86). Use your install profile to add "dev-vcs/bzr" to the client chroot's package.keywords.}}
 
+{{User:Wimmuskee/Troubleshooting|title=python_get_implementational_package not installed|reported=2011-06-06|reporter=Wimmuskee|problem=An emerge error for "=dev-lang/python-2.6* is not installed", with a "die "$(python_get_implementational_package) is not installed";"|solution=This means that some of your binary packages were installed against Python 2.6, Remove your binary packages to let them compile against your new python environment.}}
 
-* Several programs will fight for the virtual terminals on the clients. Comment out getty in inittab:
+=== virtual terminals on clients ===
+Several programs will fight for the virtual terminals on the clients. Comment out getty in inittab:
 {{File|/opt/ltsp/x86/etc/inittab|commenting example|<pre>
 ...
 # TERMINALS
@@ -360,8 +365,8 @@ On Server:
 #c6:2345:respawn:/sbin/agetty 38400 tty6 linux
 ...</pre>}}
 
-
-* ltsp-build-client does not work witch all locale. quickstart actually requires 'C' locale. So if ltsp-build-client shouts with the following message:
+=== Locales ===
+ltsp-build-client does not work witch all locale. quickstart actually requires 'C' locale. So if ltsp-build-client shouts with the following message:
 {{RootCmd|ltsp-build-client ...
 |output=No fetcher for protocol: file}}
 unset your locale, remove the directory and restart:
