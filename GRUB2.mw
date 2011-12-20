@@ -36,7 +36,7 @@ or simply its boot loader with something like (here one can go as far as 446 byt
 {{RootCmd|dd if<nowiki>=</nowiki>/dev/sda of<nowiki>=</nowiki>/root/sda.mbr bs<nowiki>=</nowiki>440 count<nowiki>=</nowiki>1}}
 {{Note|If the bootloader in question is GRUB LEGACY or GRUB2 in a traditional BIOS/MBR setup, then one should back up the whole first track (63 sectors) to be safe. Note GRUB LEGACY stage1_5 is roughly 10KB and GRUB2 core.img is roughly 25KB (without additional modules) which are embedded in the gap (free space) before the first partition on the partition specified in the installation procedure.}}
 
-Booting in [U]EFI mode require [0x]EF00 (EFI System Partition) partition, whilst booting from BIOS/GPT mode require a [0x]EF00 (bios_boot) partition. And finally booting in BIOS/MBR does not require any additional partition, however, a gap (free space, a couple of sectors) should be left to embed core.img before the first partition if installing on a traditional `/dev/sd<char>' manner or before the partition if installing on a `/dev/sd<char><int>' manner. Here is an example of a GPT partitioned disk with BIOS boot [0xEF02] partition and an EFI [0xEF00] partition. the following is the output of the `p' command in gdisk main menu.
+Booting in [U]EFI mode require [0x]EF00 (EFI System Partition) partition, whilst booting from BIOS/GPT mode require a [0x]EF02 (bios_boot) partition. GRUB (either GRUB2 or a patched GRUB LEGACY) require ''as well'' an [0x]EE00 protective partition in the protective MBR if any to recognize a GPT partitioned disk (''and'' this protective partition should be listed first in the MBR in the case of a hybrid MBR). And finally booting in BIOS/MBR does not require any additional partition, however, a gap (free space, a couple of sectors) should be left to embed core.img before the first partition if installing on a traditional `/dev/sd<char>' manner or before the partition if installing on a `/dev/sd<char><int>' manner. Here is an example of a GPT partitioned disk with BIOS boot [0xEF02] partition and an EFI [0xEF00] partition. the following is the output of the `p' command in gdisk main menu.
 {{RootCmd|gdisk /dev/sdc|output=<pre>
 GPT fdisk (gdisk) version 0.8.1
 
@@ -87,7 +87,7 @@ Number  Start   End    Size    File system  Name                  Flags
 
 (parted)
 </pre>}}
-Creating partions in gdisk is pretty straight forward for somebody who used fdisk. Just type `n' in the main menu, then provide a beginning and end sector if need be and then type the partition type EF00 an EFI system partition for example. That's all.
+Creating partions in gdisk is pretty straight forward for somebody who used fdisk. Just type `n' in the main menu, then provide a beginning and end sector if need be and then type the partition type EF00 for an EFI system partition for example. That's all.
 
 === Generating grub.cfg configuration file ===
 
@@ -368,9 +368,17 @@ An UEFI dual boot could be achieved with the following, if, for example, the def
 
 == Troubleshooting and Quirks ==
 
-=== In Chroot ===
+=== Chroot installation ===
 
-If you have a separate /boot partition and plan to install grub2, be sure to mount only the root partition before chroot'ing, and not the boot partition as well. Mount /boot later, once inside chroot. If you mount the /boot partition before chrooting, grub-mkconfig will not detect /boot as a separate partition and will assume /boot and root are on the same partition.
+If you have a separate `/boot' partition and plan to install GRUB2, be sure to mount only the target root partition before chrooting, but not the `/boot' partition as well. Mount `/boot' once inside the chroot environment. This is required because grub-mkconfig will not detect `/boot' as a separate partition and will assume `/boot' and `root' [`/'] are on the same partition if `/boot' was mounted before chrooting.
+
+{{RootCmd|mount -t someFS /dev/sd<xy> /mount/point
+|cd /mount/point
+|mount --rbind /dev dev
+|mount --rbind /proc proc
+|chroot . /bin/bash
+|mount /dev/sd<uv> /boot
+|grub2-install --modules=ext2 --no-floppy /dev/sd<x>}}
 
 === Fancy theming and settings ===
 
@@ -457,7 +465,7 @@ However, blocklists are UNRELIABLE and their use is discouraged.
 this could mean that:
 :* 1st: A `/boot' partition is not mounted, simply run as root `mount /boot'.
 :* 2nd: If you're trying to install GRUB2 in traditional BIOS/GPT setup, this could mean more likely that there isn't any EF02 or bios_boot to embed core.img. A little partition of a few hundreds kilo bytes may be enough, although it's good to align it's partition to something like 2048 sectors to avoid performance penalty, so a 1MiB partition should do.
-:* If you're trying to install GRUB2 in a partition e.g. `/dev/sda5' in BIOS/MBR setup (who did try it to BIOS/GPT?), simply add `--force' cmdline switch to get going. You should be fine with either enough gap before the first sector of the partition or else use chattr command (as described above) to get going or else... destroy your partition boundary and possibly your LUKS or LVM2 header if any.
+:* If you're trying to install GRUB2 in a partition e.g. `/dev/sda5' in BIOS/MBR setup (who did try it to BIOS/GPT?), simply add `--force' cmdline switch to get going. You should be fine with either enough gap before the first sector of the first partition or else use chattr command (as described in BIOS/MBR installation) to get going or else... destroy your partition boundary and possibly your LUKS or LVM2 header if any.
 
 == References ==
 
