@@ -91,7 +91,7 @@ No content!
 == HELO Restrictions ==
 Hackers, spammers and everybody else can obtain information from the mailserver by using the HELO and EHLO commands. Spammers usually put fake information in the HELO greeting and thus restricting and rejecting connections from servers that do not properly identify themselves can only be good. Postfix offers the ''smtpd_helo_restrictions'' variable to tune how to respond to connections. Restrictions here have to be thought over carefully however. Locking down the server too tight may make it so messages are rejected because the other server is just poorly configured. Use with regression. A quick overview of the available options.
 
-''' ''smptd_helo_restrictions'' overview'''
+''' ''smtpd_helo_restrictions'' overview'''
 * reject_invalid_hostname	  REJECT if HELO greeting is not a DN or an IP
 * reject_non_fqdn_hostname  REJECT if HELO greeting is not a FQDN or an IP
 * reject_unknown_hostname	  REJECT if HELO host has no A or MX in DNS
@@ -109,3 +109,63 @@ The following table should give an idea how mail will get rejected from the vari
 |-
 | reject_unknown_hostname || X || X || ? || X
 |}
+{{Note|Notice that reject_unknown_hostname not only rejects fake FQDNs, but it also rejects IP addresses. By prepending the restriction list by ''permit_nakid_ip_address'' it will allow just IP addresses.}}
+
+On a properly configured network the following will be tight and should work.
+{{File|/etc/postfix/main.cf|HELO Restrictions|<pre>
+# HELO Restrictions
+smtpd_helo_restrictions = permit_sasl_authenticated, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname
+smtpd_helo_required = yes
+</pre>}}
+
+{{Warning|Internal servers '''or''' internal mail clients may have trouble sending messages as they do not have a valid hostname setup and so local hostnames need to be configured properly in the internal DNS servers and thus become valid hostnames. If internal servers or clients do not have proper hostnames, a safe restriction list would be ''smtpd_helo_restrictions &#61; permit_naked_ip_address, reject_invalid_hostname''. If tight control is required and setting up of proper internal hostnames is not possible, another option would be to permit mynetworks brining the restriction to ''smtpd_helo_restrictions &#61; permit_mynetworks, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname'' and then either extending ''mynetworks'' with the internal systems or internal network.}}
+
+== Deny local username farming ==
+Normally postfix, or general MTA's allow to verify whether a mailbox exists or not. This command may have been useful in the early days of mail, but is almost exclusively used by peole who maintain bulk mailing lists and search if accounts are still valid. This command can be disabled by postfix.
+{{File|/etc/postfix/main.cf|Disable verify|<pre>
+# Do not respond to the VRFY command
+disable_vrfy_command = yes
+</pre>}}
+
+After a restart of postfix, telnet to port 25 will no longer show '''250-VRFY'''.
+
+== SMTPD Banner ==
+Another oftenly abused feature is the SMTP header. Also some countries require senders to honor the NO UCE greeting message (No Unsolicited Commercial E-mail). Also it is wise not to tell any outsiders what MTA is being used or what version thereof. Postfix allows for changing the SMTP header quite easily. Find the ''smtpd_banner'' section in main.cf.
+{{File|/etc/postfix/main.cf|Change the SMTPD Banner|<pre>
+# SHOW SOFTWARE VERSION OR NOT
+smtpd_banner = $myhostname ESMTP NO UCE
+</pre>}}
+{{Note|''NO UCE'' is technically a comment, '''ESMTP''' needs to be the before any comments.}}
+
+== Message size ==
+For years the default message size amongst MTA's has been 10MiB. Google raised the bar with their gmail service to 20MiB per message. If bandwidth isn't an issue this can easily be accomplished with postfix.
+{{File|/etc/postfix/main.cf|Change allowed message size limit|<pre>
+# Increase maximum message size
+message_size_limit = 20971520
+</pre>}}
+
+== Postfix Performance ==
+=== Biff ===
+For compatibility reasons postfix's local mail notification is enabled by default. With many users this can be a performance drain and since there are no local users to use the biff command anyway this can safely be disabled.
+{{File|/etc/postfix/main.cf|Disable biff|<pre>
+# Disable biff notifications
+biff = no
+</pre>}}
+
+=== Processes ===
+The amount of concurrent processes of any of postfix's applications is limited to 50. The first bump in high load environments can be very quickly be the amount of active daemons. Smaller setups should not need to worry about this setting.
+{{File|/etc/postfix/main.cf|Increase postfix processes|<pre>
+# Increase number of allowed processes
+default_process_limit = 75
+</pre>}}
+
+{{Warning|Before increasing the amount of processes it needs to be carefully examined if the server can handle the additional load. The '''ps aux''' and '''top''' commands can be of great help here. The percentage of memory used by each process should be inspected. If for example the memory usage per postfix process nears 2% on a process limit of 50, increasing the limit to 100 would mean that double the memory would be required. Afterall, 2% *50process would be 100% of the available memory. If the server would also have other processes running consuming memory, the amount of memory used by postfix would have to be less. The same can be said about CPU usage. If CPU utilization is nearing 70% doing mostly mail delivery and postfix is the only service on the server, a faster CPU or clustered setup would need to be considered. If there are other services running on the server using larger amounts of CPU time, they could be relocated to other, less busy servers.}}
+
+=== DNS Lookup ===
+A common throughput limiter is the use of DNS lookups. These can be slow and can be an issue far before processes, CPU or memory are the issue. One lookup per message is required at the very least per message, a server MX record needs to be found. A local caching DNS server could help enormously here and packages such as {{Package|net-dns/dnsmasq}} or even a full {{Package|net-dns/bind}} setup should be used.
+
+=== Mail Storage ===
+Postfix maintains a number of queue directories in /var/spool/postfix. Various postfix applications pass messages around each other using these queues. Placing these directories on a separate disk, raid array or an SSD can significantly improve overall throughput. Also making sure that the partition in question is marked with the '''noatime''' option helps a lot on disk access. Postifx does not use access timestamps.
+
+=== Multiple mail servers ===
+If one server is not enough, multiple mail-servers can spread the load. Also having multiple mail-servers offers redundancy so it is something worth considering. spreading the load over several mail-servers can be done effectively using DNS round-robining. Two options are available here, either assign multiple A entries to the mail-server, or cleaner, have multiple MX entries which allow prioritization.
