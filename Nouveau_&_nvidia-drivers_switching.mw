@@ -1,0 +1,42 @@
+Switching between nVidias binary driver and the open source nouveau driver can be tricky, but definitely doable. This article will detail how to go about switching between them at different stages(i.e at boot, in a runlevel, etc.)
+
+== On Boot ==
+This method assumes the following:
+* Two kernels, one with the nouveau driver enabled and one with the nouveau driver disabled.
+* The nouveau-less kernel needs to have a ''-nvidia'' suffix(i.e CONFIG_LOCALVERSION=mykernel-nvidia).
+* The GRUB bootloader.
+
+{{File|/etc/local.d/nvidia.start||<pre>
+#!/bin/bash
+
+depend() {
+	need localmount
+	before xdm
+}
+
+if [[ $(uname -r) == *-nvidia ]] ; then
+	modprobe -q nvidia
+	if [[ $(eselect opengl show) != nvidia ]] ; then
+		eselect opengl set nvidia &>/dev/null
+	fi
+cat > /etc/X11/xorg.conf.d/01-nvidia.conf << EOF
+Section "Device"
+  Identifier   "Device0"
+  Driver       "nvidia"
+  Option       "NoLogo" "True"
+EndSection
+EOF
+else
+	modprobe -q nouveau
+	if [ -f /etc/X11/xorg.conf.d/01-nvidia.conf ] ; then
+		rm /etc/X11/xorg.conf.d/01-nvidia.conf
+	fi
+	if [[ $(eselect opengl show) != xorg-x11 ]] ; then
+		eselect opengl set xorg-x11 &>/dev/null
+	fi
+fi
+</pre>}}
+
+To stop udev from autoloading the novueau driver(if you built it as a module) or the nvidia driver, add them to etc/modprobe.d/blacklist.conf:
+{{RootCmd|echo "blacklist nvidia" >> /etc/modprobe.d/blacklist.conf}}
+{{RootCmd|echo "blacklist nouveau" >> /etc/modprobe.d/blacklist.conf}}
