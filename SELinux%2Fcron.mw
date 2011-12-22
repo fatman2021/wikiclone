@@ -83,3 +83,54 @@ For instance, to verify if we can call emerge:
 {{RootCmd|esearch -s system_cronjob_t -t portage_t -A|output=<pre>
 Found 1 semantic av rules:
   allow system_cronjob_t portage_t : process transition;</pre>}}
+
+If the domain does not have the necessary privileges, you need to update the policy. More information on maintaining the SELinux policy can be found in the Gentoo Hardened SELinux Handbook.
+
+An example policy file to allow executing dmesg:
+
+{{RootCmd|cat fixcron.te|output=<pre>
+policy_module(fixcron, 1.0)
+
+require {
+  type system_cronjob_t;
+}
+
+dmesg_domtrans(system_cronjob_t)
+</pre>}}
+
+In order to find out which specific calls are necessary, it can come in handy to use the privileges assigned to the sysadm_t domain. Take a look at this sysadm.te file. If you search for "dmesg" you will notice the following in the file: 
+
+<pre>
+128 	')
+129 	
+130 	optional_policy(`
+131 	        dmesg_domtrans(sysadm_t)
+132 	')
+133 	
+134 	optional_policy(`
+</pre>
+
+It is this call - dmesg_domtrans - that we are interested in (and which you can notice in the sample policy mentioned above. It is possible that you notice a _run or _exec instead. Try this one first, but most of the time you'll need a _domtrans method.
+
+For more information or help with managing your policies, do not hesitate to drop by on #gentoo-hardened in irc.freenode.net. 
+
+=== User (including root) cronjobs ===
+
+{{Important|Part of this is for vixie-cron users with USE="ubac" set, but even if this is not the case it is still pertinent (cfr. the default_contexts issue). }}
+
+When working with end user crontabs (those triggered / managed through the crontab command), you must take care that you do this as the SELinux user which is associated with the file (this is a result of the SELinux User Based Access Control, aka UBAC). In other words, if you want to edit the root users' crontab file, you need to be the root SELinux user (and not a staff user that su/sudo'ed into root).
+
+If this was not done correctly, you will get the following error: 
+
+<pre>
+cron[20642]: (root) ENTRYPOINT FAILED (crontabs/root)
+</pre>
+
+Verify that the file's user and SELinux user match:
+
+{{RootCmd|ls -Z /var/spool/cron/crontabs/root|output=<pre>
+staff_u:object_r:user_cron_spool_t /var/spool/cron/crontabs/root
+</pre>}}
+{{RootCmd:semanage login -l | grep root:output=<pre>
+root              root
+</pre>}}
