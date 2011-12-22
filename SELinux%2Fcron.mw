@@ -1,0 +1,85 @@
+== Structure ==
+
+=== Domains ===
+
+The cron daemon itself (like vixie-cron) runs in the crond_t domain. Depending on the cron daemon used, this daemon either immediately executes the jobs (hence its ability to transition to various other domains) or does this through an intermediate domain (system_cronjob_t for system cronjobs and cronjob_t for user cronjobs).
+
+The crontab_t and admin_crontab_t domains are used by the users (and administrators) for maintaining their crontab files. These files are read in by the cron daemon. 
+
+=== File types/labels ===
+
+The following table lists the file type/labels defined in the cron module (part of the base policy).
+
+{| class="wikitable"
+|-
+! Type !! Function !! Description
+|-
+| cronjob_t !! Domain !! Domain for end user cronjobs
+|-
+| system_cronjob_t !! Domain !! Domain for system cronjobs
+|-
+| crond_t !! Domain !! Domain for the cron daemon
+|-
+| admin_crontab_t !! Domain !! Domain for administrator-started crontab commands
+|-
+| crontab_t !! Domain !! Domain for user-started crontab commands
+|-
+| crond_exec_t !! Entrypoint !! Entrypoint for the cron daemon binaries
+|-
+| crontab_exec_t !! Entrypoint !! Entrypoint for the crontab commands
+|-
+| cron_spool_t !! Configuration !! Spool files (where the user crontab files are in)
+|-
+| user_cron_spool_t !! Configuration !! Spool files (for the user crontab files)
+|-
+| system_cron_spool_t !! Configuration !! Spool files (where the system crontab files are in)
+|-
+| cron_var_lib_t !! !! Label for cron's /var/lib items
+|-
+| cron_var_run_t !! !! Label for cron's /var/run items
+|-
+| cron_log_t !! !! Label for cron's logfiles (/var/log/cron)
+|-
+| crond_tmp_t !! !! Label for the cron daemon's temporary files
+|-
+| crond_var_run_t !! !! Label for the cron daemon's /var/run items
+|-
+| system_cronjob_lock_t !! !! Label for the system cronjobs' lock files
+|-
+| system_cronjob_tmp_t !! !! Label for the system cronjobs' temporary files
+|-
+| admin_crontab_tmp_t !! !! Label for temporary files created by a system administrators' crontab command
+|-
+| crontab_tmp_t !! !! Label for temporary files created by a users' crontab command
+|}
+
+=== Booleans ===
+
+The cron domain supports the following SELinux booleans, which can be set / unset using the standard setsebool statements.
+
+{| class="wikitable"
+|-
+! Boolean !! Default !! Description
+|-
+| cron_can_relabel || false || Allow jobs running in the system_cronjob_t domain to relabel files and directories. When set, these jobs can also call the setfiles and restorecon commands.
+|-
+| fcron_crond || false || Needed to set more privileges for the cron domains in case fcron is used as a cron daemon. These privileges are not necessary for other cron daemons and as such are "behind" this boolean. 
+|}
+
+== Using cron SELinux module ==
+
+=== System administration ===
+
+If you want to perform system administrative tasks using cronjobs, you will need to take special care that the domain in which the job runs has sufficient privileges.
+
+First, make sure that your cronjobs run in the system_cronjob_t domains. This means that the cronjobs must be defined as either
+* scripts in the /etc/cron.hourly, /etc/cron.daily, ... directories
+* crontab entries in the /etc/cron.d directory
+* crontab entries in the /etc/crontab file
+
+Next, verify that the commands you want to run (and thus their target domain in which they will run) are allowed for the system_cronjob_t domain. 
+
+For instance, to verify if we can call emerge:
+{{RootCmd|esearch -s system_cronjob_t -t portage_t -A|output=<pre>
+Found 1 semantic av rules:
+  allow system_cronjob_t portage_t : process transition;</pre>}}
