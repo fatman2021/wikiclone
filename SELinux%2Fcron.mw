@@ -116,7 +116,7 @@ For more information or help with managing your policies, do not hesitate to dro
 
 === User (including root) cronjobs ===
 
-{{Important|Part of this is for vixie-cron users with USE="ubac" set, but even if this is not the case it is still pertinent (cfr. the default_contexts issue). }}
+{{Important|Part of this is for users which have the ubac USE flag set, but it is pertinent for others as well}}
 
 When working with end user crontabs (those triggered / managed through the crontab command), you must take care that you do this as the SELinux user which is associated with the file (this is a result of the SELinux User Based Access Control, aka UBAC). In other words, if you want to edit the root users' crontab file, you need to be the root SELinux user (and not a staff user that su/sudo'ed into root).
 
@@ -131,6 +131,26 @@ Verify that the file's user and SELinux user match:
 {{RootCmd|ls -Z /var/spool/cron/crontabs/root|output=<pre>
 staff_u:object_r:user_cron_spool_t /var/spool/cron/crontabs/root
 </pre>}}
-{{RootCmd:semanage login -l | grep root:output=<pre>
+{{RootCmd|semanage login -l <nowiki>|</nowiki> grep root|output=<pre>
 root              root
 </pre>}}
+
+In the above case, the root Unix account (cfr filename of the crontab file) is mapped to the root SELinux user (cfr second "root" in the semanage login -l output). However, the SELinux user of the crontab file is staff_u instead of root, which is why the failure occurred.
+
+To fix this, use chcon: 
+
+{{RootCmd|chcon -u root /var/spool/cron/crontabs/root}}
+
+Another problem that you might see is immediately at startup: 
+
+<pre>
+cron[26653]: (system_u) ENTRYPOINT FAILED (/etc/crontab)
+</pre>
+
+In this case, even if the user of the file is correct, it is most likely due to the /etc/selinux/*/contexts/default_context file containing an incorrect definition. Look at the cron-related line and verify that each mentioned context is valid. For instance: 
+
+{{RootCmd|seinfo -rsystem_r -x <nowiki>|</nowiki> grep cronjob|output=<pre>
+  system_cronjob_t
+</pre>}}
+
+In the above case, cronjob_t is not valid, but system_cronjob_t is.
