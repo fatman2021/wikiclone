@@ -17,7 +17,7 @@ The '''portage''' module provides the following domains:
 | gcc_config_t || gcc-config || Domain for the gcc-config wrapper
 |}
 
-=== File Types/Labels ===
+=== File types/labels ===
 
 The following table lists the file type/labels defined in the '''portage''' module:
 
@@ -45,3 +45,65 @@ The following table lists the file type/labels defined in the '''portage''' modu
 |-
 | portage_tmp_t, portage_tmpfs_t || Type used by Portage for temporary files 
 |}
+
+=== Other types ===
+
+Besides the files and domains, the following types are also defined in the '''portage''' module:
+
+{| class="wikitable"
+|-
+! Type !! Description
+|-
+| portage_devpts_t || Type used for the terminal output device/location 
+|}
+
+== Using the portage module ==
+
+=== File locations ===
+
+The policy offered only contains the right file context rules for the default locations. If you deviate from these locations, you'll need to update the contexts accordingly.
+
+The following table provides an overview of the Portage settings (variables in make.conf) that are commonly changed by end users, and the file context that it should have. 
+
+{| class="wikitable"
+|-
+! Variable in make.conf !! Default location !! File context(s)
+|-
+| ${PORTDIR} || /usr/portage || system_u:object_r:portage_ebuild_t
+|-
+| ${DISTDIR}/svn-src, ${DISTDIR}/git-src, ${DISTDIR}/cvs-src || /usr/portage/distfiles/svn-src, /usr/portage/distfiles/git-src, /usr/portage/distfiles/cvs-src || system_u:object_r:portage_srcrepo_t
+|-
+| ${PKGDIR} |& /usr/portage/packages || system_u:object_r:portage_ebuild_t
+|-
+| ${PORT_LOGDIR} || /var/log/portage || system_u:object_r:portage_log_t
+|-
+| ${PORTAGE_TMPDIR} || /var/tmp/portage || system_u:object_r:portage_tmp_t 
+|}
+
+If you use different locations, use the following commands to update the file contexts accordingly: 
+
+Code Listing 2.1: Updating file contexts
+( Example for a different PORTDIR location, say /var/repo/portage )
+~# semanage -a -t portage_ebuild_t /var/repo/portage
+~# restorecon -R /var/repo/portage
+
+Don't forget that Portage uses subdirectories with different labels (think distfiles or the repositories for the live ebuilds) so take care when relabelling locations!
+
+If you are using different mounts, you might need to use the rootcontext= mount option to set the initial context. If the file system does not suppor SELinux contexts (like NFS), you can use the context= mount option to force the context of all files on the mounted location. 
+
+=== SELinux booleans ===
+
+The Portage module within Gentoo defines three booleans, called gentoo_try_dontaudit, gentoo_portage_use_nfs and gentoo_wait_requests.
+
+When gentoo_try_dontaudit is enabled, the policy will hide the AVC denials of which the Gentoo developers believe they are harmless (cosmetic). If this boolean is enabled and you are experiencing permission problems, it is wise to first disable the boolean and see if you now get any denials that could explain the problem.
+
+When gentoo_portage_use_nfs is enabled, then the Portage-related domains will be able to manage the nfs_t and as such, allow for the Portage tree and other locations to be NFS-mounted without correcting their label (which is still supported when using the context= mount option).
+
+When gentoo_wait_requests is enabled, then policy rules that are introduced to get things working, but which are temporary until the upstream project enhances its application (and a bug report is opened for it), are active. Disabling this boolean is only recommended if you are running the system with the proper patches and is more used for development traceability.
+
+To switch booleans, use setsebool or togglesebool.
+
+Code Listing 2.2: Enabling the gentoo_try_dontaudit boolean
+
+( With the -P flag, the boolean state is persisted across reboots)
+~# setsebool -P gentoo_try_dontaudit on
