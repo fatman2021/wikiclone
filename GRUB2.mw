@@ -411,11 +411,20 @@ Booting from a Logical Volume is very easy and may threw the need of an initramf
 
 === Booting from RAID Array ===
 
-The documentation on this subjet, alng with booting from encrypted devices, is close to null. As I do not boot from a RAID array, anyone who managed to boot from a complex RAID array is welcomed to complete this section.
+The documentation on this subject, along with booting from encrypted physical volumes, is close to null. As I do not boot from a RAID array, anyone who managed to boot from a complex RAID array is welcomed to complete this section.
 
-{{Note|Booting from RAID is relevant for BIOS [boot] only. EFI users shall roll out their custom initramfs or use an initramfs package available out there. Dependeing on your setup, you may use a BIOS/MBR or BIOS/GPT combination. Here is an example to a BIOS/GPT setup with `/boot' and `root' [`/'] on RAID-1 [http://sinodun.com/2010/07/installing-grub2-on-gnulinux-software-raid/] and Xen on RAID-5.}}
+{{Note|Booting from RAID is only relevant for BIOS [boot]. EFI users shall roll out their custom initramfs or use an initramfs package available out there. Depending on your setup, you may use a BIOS/MBR or BIOS/GPT combination. Here is an example to a BIOS/GPT setup with `/boot' and `root' [`/'] on RAID-1 [http://sinodun.com/2010/07/installing-grub2-on-gnulinux-software-raid/] and Xen on RAID-5.}}
 
-{{Note|Do not forget to run `grub2-mkdevicemap' after creating your array(s) and re-ordering manually the generated file might be necessary to get your first array as `(hd0)' and so forth. And that... with fixing the [/dev/]mdN UUID which may be wrong: just compare the UUID obtained with `grub-probe -d --target<nowiki>=</nowiki>fs_uuid /dev/mdN' and `mdadm -D /dev/mdN' to be sure that your array, or boot array, has the right UUID. If not, manually fix it.}}
+{{Note|Do not forget to run `grub2-mkdevicemap' after creating your array(s) and re-ordering manually the generated file might be necessary to get your first array as `(md0)' instead of `(hd0)' and so forth. And that... with fixing the `(md<N>)' UUID which may be wrong: just compare the UUID obtained with `grub-probe -d --target<nowiki>=</nowiki>fs_uuid /dev/md<N>' and `mdadm -D /dev/md<N>' to be sure that your array, or boot array, has the right UUID. If not, manually fix it.}}
+
+{{RootCmd|for i in 1 3 4<pre>
+do UUID<nowiki>=</nowiki>$(mdadm -D /dev/md$i | grep UUID | awk '{ print $3 }')
+echo -n "(md$i)    /dev/disk/by-id/md-uuid-$UUID"  >> /boot/grub2/device.map
+unset UUID; done</pre>}}
+
+And then re-generate GRUB2 configuration file. Checkout out the generated cfg file to see if everything is fine at this point.
+
+{{Note|It seems you should again correct the <uuid> value of the grub.cfg file because it should be wrong again. sigh. You should checkout the `search ...' line for that and correct the uuid with what you have in `/boot/grub2/device.map' and in the right format with that: some in the line of `12345678-1234-1234-1234-123456789abc' instead of the `12345678:12345678:12345678:12345678' format.}}
 
 Booting from a RAID array is very similar to booting from a LVM Logical Volume aside from RAID specific terminology and syntax of raid partitioned volume.
 
