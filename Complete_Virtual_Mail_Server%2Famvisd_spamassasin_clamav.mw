@@ -18,22 +18,91 @@ Spam-assasin and ClamAV are the tools to block spam and virusses, however amavis
 Amavis should have been installed already, if not, emerge it. This should pull in spam-assasin and clamav as its dependancies.
 {{Emerge|amavisd-new}}
 
-=== Configuration ===
+=== Basic Configuration ===
 Amavisd offers an enormous amount of options and going over all them will take some time. The configuration file /etc/amavisd.conf however is well documented and divided into clear sections. Each section will be examined as needed. Only options that will be changed will be mentioned to cut down the text for readability.
 {{Note|The configuration file is actually perl code and proper precautions should be taken when editing this file.}}
 
 For this example amavisd will be running on host foo but this could be any other host as well, amavisd does not require to run on the same host as postfix. Also the domain used is only used to identify the server itself with, not the domains amavisd will be scanning.
-{{Note|With amavis being quite complex, troubleshooting can be difficult enough as it is. By un-commenting all/each of the following settings certain components can be disabled.
-<pre>
-# @bypass_virus_checks_maps = (1);  # controls running of anti-virus code
-# @bypass_spam_checks_maps  = (1);  # controls running of anti-spam code
-# $bypass_decode_parts = 1;         # controls running of decoders&dearchivers
-</pre>
-Also the log_level can be increased to find issues.
-<pre>
-$log_level = 0;              # verbosity 0..5, -d
+{{Note|With amavis being quite complex, troubleshooting can be difficult enough as it is.
+
+The first step, is to disable all actual checks and to enable logging. Also some default values should be setup.
+
+{{File|/etc/amavisd.conf|Disable anti-spam, enable logging|<pre>
+@bypass_virus_checks_maps = (1);  # controls running of anti-virus code
+@bypass_spam_checks_maps  = (1);  # controls running of anti-spam code
+$bypass_decode_parts = 1;         # controls running of decoders&dearchivers
+
+$mydomain = 'example.com';
+$myhostname = '7of9.schinagl.nl';
+
+$log_level = 5;              # verbosity 0..5, -d
 </pre>}}
+
+{{Note|''virusalert@example.com'' and ''spam.police@example'' can be renamed to ''undef'' if not wanting to receive any information on breaches. If not, these e-mail addresses should exist.}}
+
+Normally restarting postfix should restart aswell, for now, only amavisd should be started to see if there are any initial problems.
+{{RootCmd|/etc/init.d/amavisd start}}
+
+=== Linking amavisd to Postfix ===
+With amavisd working in bare skeletal mode, it should theoretically just pass mail through. Perfect for testing the postfix -> amavisd -> postfix binding.
+
+First, a second postfix transport, where amavis will inject its mail, is added. A lot of options are defaulted to empty, since either they have been checked already, or interfere otherwise.
+{{File|/etc/postfix/master.cf|Filter mail through amavisd|<pre>
+localhost:10025 inet n  -       n       -       2       smtpd
+  -o disable_dns_lookup=yes
+  -o content_filter=
+  -o myhostname=foo.example.com
+  -o local_recipient_maps=
+  -o relay_recipient_maps=
+  -o smtpd_restriction_classes=
+  -o smtpd_client_restrictions=
+  -o smtpd_helo_restrictions=
+  -o smtpd_sender_restrictions=
+  -o smtpd_recipient_restrictions=permit_mynetworks,reject
+  -o mynetworks=127.0.0.0/8
+  -o strict_rfc821_envelopes=yes
+  -o smtpd_error_sleep_time=0
+  -o smtpd_soft_error_limit=1001
+  -o smtpd_hard_error_limit=1000
+  -o smtpd_client_connection_count_limit=0
+  -o smtpd_client_connection_rate_limit=0
+  -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks
+  -o smtpd_authorized_xforward_hosts=127.0.0.0/8
+</pre>}}
+With this transport in place, it should only listen on localhost and only accept mail from localhost. This should be extended if amavis is run elsewhere, but keep in mind anything is accepted.
+{{Note|''maxproc' is set to '''2''' above. This can be increased if more listening daemons are requried. However this number needs to match amavis's ''$max_servers''.}}
+
+Next another transport is added for, which could be considers 'being' amavis in a sense.
+
+{{File|/etc/postfix/master.cf|amavis transport|<pre>
+amavis    unix  -       -       n       -       2       lmtp
+  -o disable_dns_lookups=yes
+  -o lmtp_send_xforward_command=yes
+  -o lmtp_data_done_timeout=1200
+</pre>}}
+
+After the transport for amavis has been added, smtp should be told to route all mail through amavis. For this two option need to be added to smtpd and change the maxproc to match amavis's.
+{{File|/etc/postfix/master.cf|relay to amavis|<pre>
+smtp       inet  n       -       n       -       2       smtpd
+  -o content_filter=amavis:[127.0.0.1]:10024
+  -o receive_override_options=no_address_mappings
+smtps     inet  n       -       n       -       2       smtpd
+  -o smtpd_tls_wrappermode=yes
+  -o content_filter=amavis:[127.0.0.1]:10024
+  -o receive_override_options=no_address_mappings
+</pre>}}
+
+Restarting both amavisd and postfix then should pass all mail through amavisd.
+{{RootCmd|/etc/init.d/amavisd restart|/etc/init.d/postfix restart}}
+
+=== Testing ===
+Sending a message to ''testuser@example.com'' remotely and locally should work fine. After the message has arrived, the headers should be checked.
+{{Note|When doing this test, either use webmail or a remote client using a different mailserver or mail through port 25 or 465. Do not test using mail submission on port 587 as that bypasses amavisd.
+
+
+
+=== Other ===
+
 {{File|/etc/amavisd.conf|diff of gentoo default config and changes|<pre>
 
 </pre>}}
-{{Note|''virusalert@example.com'' and ''spam.police@example'' can be renamed to ''undef'' if not wanting to receive any information on breaches. If not, these e-mail addresses should exist.}}
