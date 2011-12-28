@@ -199,6 +199,7 @@ Amavisd should connect to the socketed clamd and thus clamav needs to be enabled
 After restarting clamd Virusses should be able to detected and blocked.
 {{RootCmd|/etc/init.d/clamd restart}}
 
+=== Testing ===
 To test whether the virus filter works, an [http://www.eicar.org/86-0-Intended-use.html anti-malware testfile] exists, sending an e-mail using this string should trigger the virus scanner.
 {{Code|EICAR-STANDARD-ANTIVIRuS-TEST-FILE|<pre>
 X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
@@ -226,6 +227,120 @@ The default configuration suffices for standard use.
 {{Note|If users don't e-mail via the submission port, the ''trusted_networks'' variable should be setup properly to bypass spam filtering from known users.''}}
 
 === Updating ===
-A key feature of Spam Assassin is its ability to self-update. Updates are handled via a so-called ''update channel''. Besides spam assassin's 
+A key feature of Spam Assassin is its ability to self-update. Updates are handled via a so-called ''[http://updates.spamassasin.org update channel]''. Besides spam assassin's own channel, there is [http://saupdates.openprotect.com saupdates] by [http://saupdates.openprotect.com openprotect.com] which collects the recommended rules from [http://www.rulesemporium.com/ SARE - SpamAssassin Rules Emporium] and condenses them into an update.
 
-Unlike clamav, there is no 'freshassassin' and a cronjob is required to do updates.
+Spam Assassin comes with the '''sa-update''' tool so updates can be fully automated. Spam Assassin updates can be done by using the ''--nogpg'' flag to ignore gpg keys, but should really only be done as a last resort. Adding the spamassassin GPG key is a simple 2 step process.
+
+{{RootCmd|wget "http://spamassassin.apache.org/updates/GPG.KEY"|sa-update --import GPG.KEY|rm GPG.KEY}}
+{{Warning|Due to possible bug [http://bugs.gentoo.org/show_bug.cgi?id&#61;396307 &#35;396307] it is required to first create a directory for the keyring and set proper permissions prior to importing the keys.<pre>
+mkdir -p /etc/spamassassin/sa-update/keys; chmod 700 /etc/spamassassin/sa-update/keys
+</pre>}}
+
+After adding the spamassassin update channel, it needs to be updated. After running this command, check for any errors.
+{{RootCmd|sa-update -D}}
+
+Adding the openprotect channel happens similarly.
+{{RootCmd|wget "http://saupdates.openprotect.com/pub.gpg"|sa-update --import pub.gpg}}
+
+Also this channel needs to be updated. Any errors should be spotted here.
+{{RootCmd|sa-update -D --allowplugins --gpgkey D1C035168C1EBC08464946DA258CDB3ABDE9DC10 --channel saupdates.openprotect.com}}
+
+Once these updates have completed they need to be compiled for use with Spam Assassin. Also any errors should be spotted here.
+{{RootCmd|sa-compile}}
+
+Unlike clamav, there is no 'freshassassin' and a cronjob is required to do updates. To keep Spam Assassin up to date, a cronjob should be created for the tas.
+{{File|/etc/cron.daily/sa-updates|Update Spam Assassin filter rules|<pre>
+#!/bin/sh
+sa-update --allowplugins --gpgkey D1C035168C1EBC08464946DA258CDB3ABDE9DC10  --channel saupdates.openprotect.com --channel updates.spamassassin.org
+sa-compile
+</pre>}}
+Making the cronjob executable ensures it runs regularly.
+{{RootCmd|chmod +x /etc/cron.daily/sa-updates}}
+
+{{Warning|The used GPG Key here may of course change, updating and importing should fix that. For the sa-updates gpgkey Refer to [http://saupdates.openprotect.com/ OpenProtect].}}
+
+=== Linking amavisd to Spam Assassin ===
+Actually, Spam Assassin does not need to be linked to amavisd, it is an integral part of amavisd. Enabling the spamfilter in amavisd does spam filtering.
+
+{{File|/etc/amavisd.conf|Enable Spam Assassin|<pre>
+# @bypass_spam_checks_maps  = (1);  # controls running of anti-spam code
+</pre>}}
+
+And amavisd needs to be restarted.
+{{RootCmd|/etc/init.d/amavisd restart}}
+
+=== Testing ===
+Testing is done again via a client connecting to port 25 that does not have its own spamfilter. For content [http://spamassassin.apache.org/gtube/ GTUBE] can be used. On that site there is also a suitable mail message in RFC-822 format.
+{{Code|Sample spam body|<pre>
+XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X
+</pre>}}
+
+Checking in the testusers inbox, or junkbox more likly, the message can be found and its header examined.
+{{Code|Spam Header|<pre>
+Received: from localhost (localhost [127.0.0.1])
+    by foo.example.com (Postfix) with ESMTP id B7EDA22F62
+    for <testuser@example.com>; Wed, 28 Dec 2011 16:02:46 +0100 (CET)
+X-Quarantine-ID: <BukBLFBE3OWo>
+X-Virus-Scanned: amavisd-new at example.com
+X-Spam-Flag: YES
+X-Spam-Score: 1000.907
+X-Spam-Level: ****************************************************************
+X-Spam-Status: Yes, score=1000.907 required=6.2 tests=[ALL_TRUSTED=-1,
+    FH_FROMEML_NOTLD=0.18, GTUBE=1000, MISSING_HEADERS=1.207,
+    MISSING_MID=0.14, NO_DNS_FOR_FROM=0.379, TVD_SPACE_RATIO=0.001]
+    autolearn=no
+</pre>}}
+
+== Finetuning Amavisd ==
+Amavis has a few more settings that can be changed to do some fine-tuning.
+
+=== Recipient delimiter ===
+When using postfix with the ''recipient_delimiter'' amavisd can be told to make use of this feature.
+
+{{File|/etc/amavisd.conf|recipient_delimiters for amavis|<pre>
+# Delimiter must match the equivalent (final) MTA delimiter setting.
+$recipient_delimiter = '+';		# (default is undef, i.e. disabled)
+</pre>}}
+
+=== Disperse quarantine ===
+It is possible to disperse the quarantine over several sub-directories. 
+
+For this directories need to be created first.
+{{RootCmd|<pre>mkdir /var/amavis/quarantine/virus;
+mkdir /var/amavis/quarantine/spam;
+mkdir /var/amavis/quarantine/banned;
+mkdir /var/amavis/quarantine/badh;
+chown -R amavis:amavis /var/amavis/quarantine/*;
+chmod -R gu+rwX /var/amavis/quarantine/*;
+chmod -R o-rwx /var/amavis/quarantine/*
+</pre>}}
+
+{{File|/etc/amavisd.conf|Disperse quarantine|<pre>
+$quarantine_subdir_levels = 1;  # add level of subdirs to disperse quarantine
+</pre>}}
+
+Also, setting a spam cutoff level helps in reducing stored spam. The cutoff level makes it that no spam is stored above a certain spam-score.
+{{File|/etc/amavisd.conf|set a cutoff level for spam|<pre>
+$sa_quarantine_cutoff_level = 25; # spam level beyond which quarantine is off
+</pre>}}
+{{Note|'''25''' is the default. This value, aswell as the other levels can and should be tuned to organizational needs.}}
+
+== Cleanup ==
+With Spam Assassin and ClamAV working as expected, debugging information can be reduced to the normal minimal.
+{{File|/etc/amavisd.conf|Disable debugging in amavsd|<pre>
+# Section III - Logging
+# true (e.g. 1) => syslog;  false (e.g. 0) => logging to file
+$DO_SYSLOG = 1;                   # (defaults to 0)
+
+#NOTE: levels are not strictly observed and are somewhat arbitrary
+$log_level = 0;		   # (defaults to 0), -d
+
+# Turn on SpamAssassin debugging (output to STDERR, use with 'amavisd debug')
+#$sa_debug = '1,all';  # defaults to false
+</pre>}}
+
+{{File|/etc/clamd.conf|Disable debugging in clamav|<pre>
+# Enable debug messages in libclamav.
+# Default: no
+#Debug yes
+</pre>}}
