@@ -1,0 +1,54 @@
+'''The fail2ban service scans log files for patterns of specific repeated attempts (for instance, unsuccessful SSH authentication attempts or high volume GET/POST requests on a web server) and, when detected, automatically creates a firewall or TCP wrappers drop or deny rule to ensure the service availability is not jeopardized.'''
+
+Although the service supports many services out-of-the-box, it is very versatile in its configuration and can easily be enhanced.
+
+== Features ==
+
+=== Jailing ===
+
+The primary purpose of '''fail2ban''' is to ''jail'' services. When a service, such as SSHd, is jailed, then fail2ban will continuously look in the log(s) of that service for possible repeated attempts. The moment that a given number (<code>maxretry</code>) of attempts is detected within a particular time window (<code>findtime</code>) then a blocking rule (such as through '''iptables''') is automatically set for a given time period (<code>bantime</code>).
+
+The settings of these jails is done through <code>/etc/fail2ban/jail.conf</code>. By default, fail2ban already provides a nice <code>jail.conf</code> file, but all jails are by default disabled so that the service, when started by the administrator, wouldn't accidentally filter out valid requests.
+
+{{File|/etc/fail2ban/jail.conf|Example code for SSH jail|<pre>
+[DEFAULT]
+ignoreip = 127.0.0.1,192.168.100.24 # Management network
+bantime = 86400 # 1 day (in seconds)
+findtime = 300 # 5 minutes (in seconds)
+maxretry = 3 # default repeat count
+
+# Jail entry for SSH, using iptables for firewall
+[ssh-iptables]
+enabled = true  # Note that it is by default disabled
+filter = sshd
+action = iptables[name=SSH, port=ssh, protocol=tcp]
+logpath = /var/log/auth.log
+maxretry = 5 # Override the default of 3</pre>}}
+
+=== Filter expressions ===
+
+Inside <code>/etc/fail2ban/filter.d</code> various filtering definitions can be created. Generally, these files contain regular expressions that match attempts. When a regular expression is matched on a file, then the counter for that jail and the offending host is increased.
+
+=== Actions ===
+
+Inside <code>/etc/fail2ban/action.d</code> various action definitions can be created. These files contain commands to execute to ban and unban a given host. By default, rules exist for iptables, tcpwrappers, shorewall and more.
+
+=== Log scanning ===
+
+The fail2ban service supports both file polling as well as gamin support; when {{Package|dev-libs/libgamin}} is installed and the user did not change the <code>backend</code> directive, then gamin will be used, otherwise polling is done. This can of course be configured in <code>jail.conf</code>.
+
+== Using fail2ban ==
+
+=== Installation ===
+
+Installing {{Package|net-analyzer/fail2ban}} is as simple as:
+{{Emerge|net-analyzer/fail2ban}}
+
+At the time of writing, no USE flags are to be set (the [[SELinux]] USE flag is not selectable and is for use by SELinux-enabled systems). If you want to use gamin, install {{Package|dev-libs/libgamin}} too.
+{{Emerge|dev-libs/libgamin}}
+
+=== Configuration ===
+
+To configure fail2ban, go to <code>/etc/fail2ban</code>.
+
+Start with <code>jail.conf</code> as that contains which rules you want to use (and which services to control). If necessary, you can create your own filters or actions.
