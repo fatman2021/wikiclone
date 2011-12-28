@@ -52,3 +52,142 @@ At the time of writing, no USE flags are to be set (the [[SELinux]] USE flag is 
 To configure fail2ban, go to <code>/etc/fail2ban</code>.
 
 Start with <code>jail.conf</code> as that contains which rules you want to use (and which services to control). If necessary, you can create your own filters or actions.
+
+When you are finished, start the fail2ban service. You probably also want to add it to the default runlevel.
+
+{{RootCmd|rc-service fail2ban start
+|rc-update add fail2ban default}}
+
+=== Interacting ===
+
+As part of the fail2ban service, there is also a '''fail2ban-client''' available. With this application you can query the fail2ban service.
+
+For instance, to see the running jails:
+{{RootCmd|fail2ban-client status|output=<pre>
+Status
+|- Number of jail:    1
+`- Jail list:         ssh-iptables</pre>}}
+
+You can obtain specific information about each jail, such as the list of currently banned addresses, executed filters, etc.
+{{RootCmd|fail2ban-client status ssh-iptables|output=<pre>
+Status for the jail: ssh-iptables
+|- filter
+|  |- File list:	/var/log/auth.log 
+|  |- Currently failed:	1
+|  `- Total failed:	12
+`- action
+   |- Currently banned:	1
+   |  `- IP list:	192.168.100.50 
+   `- Total banned:	2</pre>}}
+
+=== Troubleshooting ===
+
+When you think the filters are not working properly, you can use '''fail2ban-regex''' to try them out. You pass it the log file to check and the filter to run, and it will give back what it found.
+
+{{RootCmd|fail2ban-regex /var/log/auth.log /etc/fail2ban/filter.d/sshd.conf|output=<pre>
+Running tests
+=============
+
+Use regex file : /etc/fail2ban/filter.d/sshd.conf
+Use log file   : /var/log/auth.log
+
+
+Results
+=======
+
+Failregex
+|- Regular expressions:
+|  [1] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*(?:error: PAM: )?Authentication failure for .* from <HOST>\s*$
+|  [2] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*(?:error: PAM: )?User not known to the underlying authentication module for .* from <HOST>\s*$
+|  [3] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*Failed (?:password|publickey) for .* from <HOST>(?: port \d*)?(?: ssh\d*)?$
+|  [4] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*ROOT LOGIN REFUSED.* FROM <HOST>\s*$
+|  [5] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*[iI](?:llegal|nvalid) user .* from <HOST>\s*$
+|  [6] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*User \S+ from <HOST> not allowed because not listed in AllowUsers$
+|  [7] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*authentication failure; logname=\S* uid=\S* euid=\S* tty=\S* ruser=\S* rhost=<HOST>(?:\s+user=.*)?\s*$
+|  [8] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*refused connect from \S+ \(<HOST>\)\s*$
+|  [9] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*reverse mapping checking getaddrinfo for .* \[<HOST>\] .* POSSIBLE BREAK-IN ATTEMPT\!\s*
+|  [10] ^\s*(?:\S+ )?(?:@vserver_\S+ )?(?:(?:\[\d+\])?:\s+[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?|[\[\(]?sshd(?:\(\S+\))?[\]\)]?:?(?:\[\d+\])?:)?\s*User \S+ from <HOST> not allowed because none of user's groups are listed in AllowGroups$
+|
+`- Number of matches:
+   [1] 30 match(es)
+   [2] 0 match(es)
+   [3] 0 match(es)
+   [4] 0 match(es)
+   [5] 0 match(es)
+   [6] 0 match(es)
+   [7] 0 match(es)
+   [8] 0 match(es)
+   [9] 0 match(es)
+   [10] 0 match(es)
+
+Ignoreregex
+|- Regular expressions:
+|
+`- Number of matches:
+
+Summary
+=======
+
+Addresses found:
+[1]
+    192.168.100.50 (Wed Dec 28 12:46:56 2011)
+    192.168.100.50 (Wed Dec 28 12:47:00 2011)
+    192.168.100.50 (Wed Dec 28 12:47:03 2011)
+    192.168.100.50 (Wed Dec 28 12:47:15 2011)
+    192.168.100.50 (Wed Dec 28 12:47:18 2011)
+    192.168.100.50 (Wed Dec 28 12:47:21 2011)
+    192.168.100.50 (Wed Dec 28 14:23:08 2011)
+    192.168.100.50 (Wed Dec 28 14:23:12 2011)
+    192.168.100.50 (Wed Dec 28 14:23:23 2011)
+    192.168.100.50 (Wed Dec 28 14:23:28 2011)
+    192.168.100.50 (Wed Dec 28 14:23:31 2011)
+    192.168.100.50 (Wed Dec 28 14:23:35 2011)
+    192.168.100.50 (Wed Dec 28 15:15:09 2011)
+    192.168.100.50 (Wed Dec 28 15:15:12 2011)
+    192.168.100.50 (Wed Dec 28 15:15:14 2011)
+    192.168.100.50 (Wed Dec 28 15:15:17 2011)
+    192.168.100.50 (Wed Dec 28 15:15:20 2011)
+    192.168.100.50 (Wed Dec 28 15:15:23 2011)
+    192.168.100.50 (Wed Dec 28 15:21:29 2011)
+    192.168.100.50 (Wed Dec 28 15:21:32 2011)
+    192.168.100.50 (Wed Dec 28 15:21:34 2011)
+    192.168.100.50 (Wed Dec 28 15:21:38 2011)
+    192.168.100.50 (Wed Dec 28 15:21:41 2011)
+    192.168.100.50 (Wed Dec 28 15:21:43 2011)
+    192.168.100.50 (Wed Dec 28 17:36:00 2011)
+    192.168.100.50 (Wed Dec 28 17:36:03 2011)
+    192.168.100.50 (Wed Dec 28 17:36:05 2011)
+    192.168.100.50 (Wed Dec 28 17:36:10 2011)
+    192.168.100.50 (Wed Dec 28 17:36:13 2011)
+    192.168.100.50 (Wed Dec 28 17:36:16 2011)
+[2]
+[3]
+[4]
+[5]
+[6]
+[7]
+[8]
+[9]
+[10]
+
+Date template hits:
+2120 hit(s): MONTH Day Hour:Minute:Second
+0 hit(s): WEEKDAY MONTH Day Hour:Minute:Second Year
+0 hit(s): WEEKDAY MONTH Day Hour:Minute:Second
+0 hit(s): Year/Month/Day Hour:Minute:Second
+0 hit(s): Day/Month/Year Hour:Minute:Second
+0 hit(s): Day/MONTH/Year:Hour:Minute:Second
+0 hit(s): Month/Day/Year:Hour:Minute:Second
+0 hit(s): Year-Month-Day Hour:Minute:Second
+0 hit(s): Day-MONTH-Year Hour:Minute:Second[.Millisecond]
+0 hit(s): Day-Month-Year Hour:Minute:Second
+0 hit(s): TAI64N
+0 hit(s): Epoch
+0 hit(s): ISO 8601
+0 hit(s): Hour:Minute:Second
+0 hit(s): <Month/Day/Year@Hour:Minute:Second>
+
+Success, the total number of match is 30
+
+However, look at the above section 'Running tests' which could contain important
+information.</pre>}}
