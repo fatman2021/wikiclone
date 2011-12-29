@@ -39,10 +39,15 @@ Often the manufaturer offers a CD-Rom image to download as a boot medium. The fi
 {{Note|cdrecord is provided by two packages (you only need to install one of them): {{Package|app-cdr/cdrtools}} and {{Package|app-cdr/cdrkit}}}}
 Now you can choose in your BIOS to boot from CD and follow the instructions on your manufacturers website.
 
-== FreeDOS/SystemRescueCD == <!--T:10-->
-The SystemRescueCD comes with a version of FreeDOS, we can replace the original image and create a bootable memory stick which contains the needed programs to flash our BIOS.
+== FreeDOS Environment == 
+You can use FreeDOS to run the DOS-based BIOS utility from your manufacturer.
 
-=== Installation === <!--T:11-->
+Download FreeDOS and tools:
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - download the fdboot.img file
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - download the file sys-freedos-linux.zip
+* The DOS-Flash program and new BIOS from your manufacturers website
+
+=== Create Custom FreeDOS Image ===
 First we need to install and download the required software and enable the loopback device in our kernel:
 {{Kernel|enable loopback device|<pre>
 Device Drivers  --->
@@ -50,28 +55,11 @@ Device Drivers  --->
         <M>   Loopback device support</pre>}}
 If the module isn't loaded yet:
 {{RootCmd|modprobe loop}}
+
 Install required software:
 {{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
-Download SystemRescueCD and FreeDOS:
-* [http://www.sysresccd.org/Download SystemRescueCD] - download the normal ISO image
-* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - download the fdboot.img file
-* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - download the file sys-freedos-linux.zip
-* The DOS-Flash program and new BIOS from your manufacturers website
 
-=== Create Bootable Memory Stick === <!--T:12-->
-We use the default method to create the SystemRescueCD boot medium, the script usb_inst.sh will guide through the installation.
-{{Warning|This will delete any data on the memory stick}}
-Create the folder in /mnt:
-{{RootCmd|mkdir /mnt/SysRescueCD}}
-Mount the cd image:
-{{RootCmd|mount -o loop systemrescuecd-x86-VERSION.iso /mnt/SysRescueCD}}
-Start the installation script:
-{{RootCmd|/mnt/SysRescueCD/usb_inst.sh}}
-Unmount the cd image:
-{{RootCmd|umount /mnt/SysRescueCD}}
-=== Create Custom FreeDOS Image ===
-The default FreeDOS image on the SystemRescueCD is too small to hold any additional files, so we create our own image.
-Create an image file of ~20MB using dd(the name needs to be freedos.img to replace the one on the SystemRescueCD):
+Create an image file of ~20MB using dd (the name needs to be freedos.img if you will be replacing the one on the SystemRescueCD):
 {{RootCmd|<nowiki>dd if=/dev/zero of=freedos.img bs=1024 count=20480</nowiki>}}
 Write a file system to the image:
 {{RootCmd|mkfs.msdos freedos.img}}
@@ -94,7 +82,25 @@ Unmount both images:
 {{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
 {{Note|DOS can only display names up to a length of 8 characters, you probably want to rename some of the files}}
 
-=== Replace the FreeDOS image === <!--T:13-->
+=== Using SystemRescueCD to boot FreeDOS === <!--T:10-->
+The SystemRescueCD comes with a version of FreeDOS, we can replace the original image and create a bootable memory stick which contains the needed programs to flash our BIOS.
+
+==== Download SystemRescueCD and prepare LiveUSB ====
+* [http://www.sysresccd.org/Download SystemRescueCD] - download the normal ISO image
+
+Create Bootable Memory Stick <!--T:12-->
+We use the default method to create the SystemRescueCD boot medium, the script usb_inst.sh will guide through the installation.
+{{Warning|This will delete any data on the memory stick}}
+Create the folder in /mnt:
+{{RootCmd|mkdir /mnt/SysRescueCD}}
+Mount the cd image:
+{{RootCmd|mount -o loop systemrescuecd-x86-VERSION.iso /mnt/SysRescueCD}}
+Start the installation script:
+{{RootCmd|/mnt/SysRescueCD/usb_inst.sh}}
+Unmount the cd image:
+{{RootCmd|umount /mnt/SysRescueCD}}
+
+==== Replace the FreeDOS image ==== <!--T:13-->
 We are going to replace the original FreeDOS image on the SystemRescueCD memory stick.<br>
 Mount the SystemRescueCD memory stick (/dev/sdX1 needs to be replaced by the device name of your memory stick):
 {{RootCmd|mount /dev/sdX1 /mnt/SysRescueCD}}
@@ -103,8 +109,22 @@ Replace the freedos.img file:
 Unmount the SystemRescueCD memory stick:
 {{RootCmd|umount /mnt/SysRescueCD}}
 
+=== Booting the FreeDOS image from GRUB directly ===
+If you would like to boot FreeDOS without any external media, you can use the "memdisk" tool from syslinux to allow grub (or another bootloader) to boot your FreeDOS image directly.
+{{Emerge|sys-boot/syslinux}}
+Mount your /boot partition (if needed):
+{{RootCmd|mount /boot}}
+Copy the memdisk binary, and your newly built FreeDOS image to /boot:
+{{RootCmd|cp /usr/share/syslinux/memdisk /boot}}
+{{RootCmd|cp freedos.img /boot}}
+Edit /boot/grub/grub.conf and add an entry for FreeDOS:
+{{File|/boot/grub/grub.conf|Example grub.conf entry|<pre>
+title FreeDOS (BIOS update)
+kernel /boot/memdisk floppy
+initrd /boot/freedisk.img</pre>}}
+
 === BIOS Update === <!--T:14-->
-Restart and choose to boot from the USB memory stick. In the GRUB command line type:
+Restart and choose to boot from the USB memory stick OR your new grub entry. If using SystemRescueCD, in the GRUB command line type:
 {{Code||freedos}}
 This should boot you into our new FreeDOS image and you are greeted by the DOS prompt:
 {{Code||<nowiki>C:\</nowiki>}}
