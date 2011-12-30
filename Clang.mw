@@ -28,7 +28,19 @@ If you have {{Package|app-portage/flaggie}} installed, the ''/etc/portage/packag
 
 The ''link-time optimization'' feature defers optimizing the resulting executables to linking phase. This can result in better optimization of packages but is unsupported in Gentoo yet, and many packages simply fail to build.
 
-When using LTO, clang compiles units into LLVM byte-code rather than machine code. In order to support linking such object files, the [[gold]] linker must be installed and set as the default linker. If that's done, you can create a new environment override profile for LTO-enabled clang:
+When using LTO, clang compiles units into LLVM byte-code rather than machine code. In order to support linking such object files, the [[gold]] linker must be installed and set as the default linker, as it does support plugins.
+
+Similarly, ''ar'' needs plugin support as well. Sadly, binutils ar doesn't support passing '--plugin'' option before the actual command. Thus, we need to create a wrapper for it:
+
+{{File|/usr/local/bin/clang-ar|ar wrapper for LLVM plugin|<pre>
+#!/bin/sh
+firstarg=${1}
+shift
+
+exec /usr/bin/ar "${firstarg}" --plugin /usr/lib/llvm/LLVMgold.so "${@}"
+</pre>}}
+
+If that's done, you can create a new environment override profile for LTO-enabled clang:
 
 {{File|/etc/portage/env/clang-lto|Environment override named ''clang-lto''|<pre>
 CC='clang'
@@ -36,6 +48,7 @@ CXX='clang++'
 CFLAGS="${CFLAGS} -O4"
 CXXFLAGS="${CXXFLAGS} -O4"
 LDFLAGS="${LDFLAGS} -Wl,-plugin,/usr/lib/llvm/LLVMgold.so"
+AR='/usr/local/bin/clang-ar'
 RANLIB=':'
 </pre>}}
 
