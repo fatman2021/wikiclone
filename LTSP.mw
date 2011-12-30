@@ -26,7 +26,7 @@ The LTSP server package needs a tftp and dhcp server (dhcp or dnsmasq). In this 
 {{USEflag
 |dhcp
 |nbd+++Swap over NBD can be used, client boot over NBD is installed, but not working.
-|nfs+yes++Client boot over NFS options are enabled.
+|nfs+yes+yes+Client boot over NFS options are enabled.
 |doc
 |examples
 }}
@@ -83,6 +83,39 @@ only_from = 192.168.0.1/24
 |rc-update add nfs default
 |rc-update add xinetd default}}
 
+=== System Logging ===
+System logging is performed by {{Package|app-admin/sysklogd}}. Log files are not stored locally however, but sent to the server specified by SYSLOG_HOST in ''lts.conf''.
+While executing, the ltsp-client-setup script adds the syslog-ng configuration to perform this. To allow the server to process these incoming log messages,
+some changes have to be made in that configuration as well. In the syslog-ng setting below, messages are logged to a file named after each client's
+fully qualified domain name.
+
+{{File|/etc/syslog-ng/syslog-ng.conf||<pre>
+source net { udp(); };
+destination remote { file("/var/log/remote/$FULLHOST"); };
+log { source(net); destination(remote); };
+</pre>}}
+
+{{RootCmd|/etc/init.d/syslog-ng restart}}
+
+=== Sound ===
+As you might have seen in the list of emerged dependencies for ltsp, both for the client and the server, [http://pulseaudio.org/wiki/AboutPulseAudio PulseAudio] was among them. PulseAudio allows for playing audio applications on the server, while hearing it through the client's soundcard. The application running on the server sends its audio output to the pulse server instead of the server's soundcard. The pulse client on the ltsp client receives this output and lets alsa process it to the client's soundcard. In addition to {{Package|pulseaudio}}, its alsa-plugin needs to be installed on both client and server with the ''pulseaudio'' use flag enabled.
+
+{{Emerge|media-plugins/alsa-plugins}}
+
+The kernel alsa-driver is used, so ''alsa-utils'' doesn't need to be installed. In order for alsa to route the incoming audio data to pulse, the following needs to be added on the server. 
+
+{{File|/etc/asound.conf||<pre>
+pcm.!default {
+        type pulse
+}
+
+ctl.!default {
+        type pulse
+}
+</pre>}}
+
+Also, because the server's soundcard is not used, hardware detection can be turned off in /etc/pulse/default.pa. The RTP sender module does need to be loaded for obvious reasons.
+
 
 == Client Install ==
 The ltsp-server package amongst others ships a command called '''ltsp-build-client'''. This command is responsible for building the entire chroot environment. And while ltsp-build-client and available plugins setup the environment, [http://dev.gentoo.org/~agaffney/quickstart.php Quickstart] actually builds it. If you're the daring type, checkout the [[#Kicktoo|Kicktoo]] alternative.
@@ -121,7 +154,7 @@ File systems  --->
 === Building the Client ===
 By default, the packaged quickstart profile in /etc/ltsp/profiles/quickstart.profile is used with no debug options. Another profile can be selected with command line options. The kernel config you just made can be used in the build process by adding the server vars to ltsp-build-client.conf (See in [[#Configuration|Configuration section]] above).
 
-{{RootCmd|<nowiki>ltsp-build-client --quickstart-profile=/etc/ltsp/profiles/custom-quickstart.profile --quickstart-debug --quickstart-verbose</nowiki>}}
+{{RootCmd|<nowiki>ltsp-build-client --installer-profile=/etc/ltsp/profiles/custom-quickstart.profile --installer-debug --installer-verbose</nowiki>}}
 
 After invoking the ltsp-build-client command, the environment is preparing. For each architecture the first build takes up the most time because binary packages are created from source in the first run. These binary packages are stored in /usr/portage/packages through a bind mount on your server. Any consequent builds use these packages to speed up the process.
 
@@ -132,14 +165,13 @@ Some things still need to be done after building the environment. First up is th
 
 Your pxelinux configuration has to be updated to reflect the changes in the setup. See the [[#DHCP and PXE-boot|PXE boot section]] for more info.
 
+For a user to be able to login over ssh from the thin client to the server, the client needs the server ssh-keys. Although executed when building the client, these can be updated to the clients chroot with the following command:
+{{RootCmd|ltsp-update-sshkeys}}
 
-== Client Configuration ==
-While some properties of the client's environment are more or less statically set in the chroot environment, others can be changed at boot time. 
-The lts.conf file allows properties to be set for all clients or for each workstation specifically. Explaining the syntax of the file goes
-beyond the scope of this tutorial, but it is explained on the [http://sourceforge.net/apps/mediawiki/ltsp/index.php?title=Ltsp_LtsConf LTSP wiki] and in the lts.conf man page. The latter is available after emerging the '''ltsp-docs''' package.
+=== Client Configuration ===
+While some properties of the client's environment are more or less statically set in the chroot environment, others can be changed at boot time.  The {{Highlight|lts.conf}} file allows properties to be set for all clients or for each workstation specifically. Explaining the syntax of the file goes beyond the scope of this tutorial, but it is explained on the [http://sourceforge.net/apps/mediawiki/ltsp/index.php?title=Ltsp_LtsConf LTSP wiki] and in the lts.conf man page. The latter is available after emerging the {{Highlight|ltsp-docs}} package.
 
-The lts.conf file is downloaded at client boot time from a preconfigured location in the tftproot, namely /ltsp/x86/lts.conf. Create your lts.conf
-there and change your architecture if applicable.
+The lts.conf file is downloaded at client boot time from a preconfigured location in the tftproot, namely /ltsp/x86/lts.conf. Create your lts.conf there and change your architecture if applicable.
 
 {{File|/var/lib/tftpboot/ltsp/x86/lts.conf||<pre>
 [default]
@@ -150,20 +182,6 @@ there and change your architecture if applicable.
 The script that invokes the download is /etc/init.d/ltsp-client-setup. Together with /etc/init.d/ltsp-client it is responsible for settings
 like the swap configuration, sound daemon, and date among others. While ''ltsp-client-setup'' performs the environment settings, ''ltsp-client'' starts the sound
 daemon and the ldm login process. Some of these settings will now be discussed in detail.
-
-=== System Logging ===
-System logging is performed by {{Package|app-admin/sysklogd}}. Log files are not stored locally however, but sent to the server specified by SYSLOG_HOST in ''lts.conf''.
-While executing, the ltsp-client-setup script adds the syslog-ng configuration to perform this. To allow the server to process these incoming log messages,
-some changes have to be made in that configuration as well. In the syslog-ng setting below, messages are logged to a file named after each client's
-fully qualified domain name.
-
-{{File|/etc/syslog-ng/syslog-ng.conf||<pre>
-source net { udp(); };
-destination remote { file("/var/log/remote/$FULLHOST"); };
-log { source(net); destination(remote); };
-</pre>}}
-
-{{RootCmd|/etc/init.d/syslog-ng restart}}
 
 === LDM ===
 If all is well, LDM will be started by ''ltsp-client'' and you can proceed to log in with a user on the server. If not, you might want to check if the LDM Info Daemon is disabled in /etc/xinitd.d/ldminfod. When the X server cannot start it might help to add your own xorg.conf file. As many different xorg.conf files can exist for many different clients in the same chroot, make sure to name them properly.
@@ -176,32 +194,10 @@ If all is well, LDM will be started by ''ltsp-client'' and you can proceed to lo
   LIKE=acer-aspire-one
 </pre>}}
 
-For a user to be able to login over ssh from the thin client to the server, the client needs the server ssh-keys. Although executed when building the client, these can be updated to the clients chroot with the following command:
-{{RootCmd|ltsp-update-sshkeys}}
-
 If you want another window manager, install it on the server and put the following in the LTSP configuration file (replace Fluxbox with the window manager of your choice).
 {{File|/var/lib/tftpboot/ltsp/x86/lts.conf||<pre>
 LDM_SESSION = /usr/bin/fluxbox
 </pre>}}
-
-=== Sound ===
-As you might have seen in the list of emerged dependencies for ltsp, both for the client and the server, [http://pulseaudio.org/wiki/AboutPulseAudio PulseAudio] was among them. PulseAudio allows for playing audio applications on the server, while hearing it through the client's soundcard. The application running on the server sends its audio output to the pulse server instead of the server's soundcard. The pulse client on the ltsp client receives this output and lets alsa process it to the client's soundcard. In addition to {{Package|pulseaudio}}, its alsa-plugin needs to be installed on both client and server with the ''pulseaudio'' use flag enabled.
-
-{{Emerge|media-plugins/alsa-plugins}}
-
-The kernel alsa-driver is used, so ''alsa-utils'' doesn't need to be installed. In order for alsa to route the incoming audio data to pulse, the following needs to be added on the server. 
-
-{{File|/etc/asound.conf||<pre>
-pcm.!default {
-        type pulse
-}
-
-ctl.!default {
-        type pulse
-}
-</pre>}}
-
-Also, because the server's soundcard is not used, hardware detection can be turned off in /etc/pulse/default.pa. The RTP sender module does need to be loaded for obvious reasons.
 
 
 == Tips & Tricks ==
