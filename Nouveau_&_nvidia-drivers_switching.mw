@@ -2,10 +2,31 @@ Switching between nVidias binary driver and the open source nouveau driver can b
 
 == On Boot ==
 This method assumes the following:
-* Two kernels, one with the nouveau driver enabled and one with the nouveau driver disabled.
+* Two kernels, one with the nouveau driver enabled and one with the nouveau driver disabled(or built as a module).
 * The nouveau-less kernel needs to have a ''-nvidia'' suffix(i.e CONFIG_LOCALVERSION=mykernel-nvidia).
 * The GRUB bootloader.
 
+We'll assume you already have a nouveau kernel and want to build the one that will use the nvidia driver. Begin with appending the ''-nvidia'' suffix to the kernel name:
+{{Kernel||<pre>
+General setup  --->
+	(-mykernel-nvidia) Local version - append to kernel release
+</pre>}}
+Now make sure the nouveau driver is disabled or built as a module:
+{{Kernel||<pre>
+Device Drivers  --->
+	[*] Staging drivers  --->
+		<M> Nouveau (nVidia) cards
+</pre>}}
+Now recompile and install the kernel. Make sure you update GRUB to take the new kernel into account. Note that kernels with the same version but with different names are considered unique. So if you want to emerge an out-of-tree kernel module to be used with the nouveau kernel you'll first need to copy over the nouveau kernels config file to /usr/src/linux/.config.
+
+Set the '''''VIDEO_CARDS''''' variable in /etc/make.conf to "nvidia nouveau" and update your system:
+{{RootCmd|emerge --newuse --deep @world}}
+ 
+Blacklist the '''nvidia''' and '''nouveau''' modules as we don't want udev to try and autoload them.
+{{RootCmd|echo "blacklist nvidia" >> /etc/modprobe/nvidia-n-nouveau.conf}}
+{{RootCmd|echo "blacklist nouveau" >> /etc/modprobe/nvidia-n-nouveau.conf}}
+
+And finally use the init script bellow to switch graphics driver depending on what kernel you booted with:
 {{File|/etc/local.d/nvidia.start||<pre>
 #!/bin/bash
 
@@ -36,7 +57,5 @@ else
 	fi
 fi
 </pre>}}
-
-To stop udev from autoloading the novueau driver(if you built it as a module) or the nvidia driver, add them to etc/modprobe.d/blacklist.conf:
-{{RootCmd|echo "blacklist nvidia" >> /etc/modprobe.d/blacklist.conf}}
-{{RootCmd|echo "blacklist nouveau" >> /etc/modprobe.d/blacklist.conf}}
+Copy it to /etc/local.d/nvidia.start and set the executable bit:
+{{RootCmd|chmod +x /etc/local.d/nvidia.start}}
