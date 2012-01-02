@@ -1,16 +1,16 @@
-PulseAudio or PA for short is a sound server, a program that fixes a shortcoming of ALSA (also present in the obsolete OSSv3) where each physical device can be controlled by only one program at a time. Of course most people do not experience this shortcoming beause by default systems with ALSA will provide a software mixer known as dmix that allows for multiple programs to share a device. Unfortunately dmix has its share of problems and overall there`s more to be desired from ALSA like
-*networking support
-*per-application volume controls
-*configuration being more user friendly, for sake of argument the current state of ALSA
-**''asound.conf'' uses Lisp
-**''alsamixer'' has a history of misleading control labels
-*better cross-platform support
-*less/no interrupts generated together with large audio buffer, improving battery life
+PulseAudio or PA for short is a sound server that provides a number of features on top of the low-level audio interface (ALSA) on Linux, such as:
 
-PulseAudio can be thought as higher quality replacement for dmix although it tries to mend the other mentioned shortcomings as well.
+* Networking support
+* Per-application volume controls
+* Better cross-platform support
+* Dynamic latency adjustment, which can be used to save power
+
 ==Setup==
+
 ===PA USE flags===
+
 Currently PulseAudio has quite a few USE flags but some of them are more important than others hence only portion of the available USE flags are being explained here.
+
 {{USEflag
 |package=media-sound/pulseaudio
 |alsa+yes+yes+PA is the top part of an audio stack hence PA itself needs support for some form of audio output, ALSA being the most common for non-professional systems.
@@ -24,22 +24,27 @@ Currently PulseAudio has quite a few USE flags but some of them are more importa
 }}
 
 ===Relevant USE flags for other ebuilds===
+
 {{USEflag
-|alsa+++May be disabled for programs that have some other audio output enabled but leaving it enabled will not hurt.
 |pulseaudio++yes+Please enable this if you want to use PA on your system.
 }}
+
 ===PA installation===
+
 The recommend way is to set pulseaudio USE flag for desired ebuilds and then run
 {{emerge|params=--ask --deep --newuse --update --verbose
 |@world
 }}
+
 But if need be PA can be manually installed with
 {{emerge|params=
 |media-sound/pulseaudio
 }}
 
 ===Making ALSA-only applications use PA===
+
 For applications with PA support, no additional setup is required but for ALSA-only applications to be able to benefit from PA, it is highly recommended that {{Package|media-plugins/alsa-plugins}} is installed with pulseaudio USE flag (should be the case but it does not hurt to check) and ''/etc/asound.conf'' is edited to route them back to PA so that ALSA-only applications, too, can have improved mixing quality and per-application sound controls among other benefits. If you do this, it's important that udev is being used for hardware detection, else PA itself will be unable to access sound devices without custom configuration.<br />
+
 {{file|/etc/asound.conf|Change this file to make PA the default for ALSA applications|<pre>
 pcm.!default {
         type pulse
@@ -48,44 +53,48 @@ ctl.!default {
         type pulse
 }
 </pre>}}
+
 ===Fast user switching===
-For fast user switching to work with PA where each session has its own pulseaudio process, ConsoleKit is used to know which session is active and therefore most likely to be the desired one to be granted exclusive control over device files in ''/dev/snd/''. To make this possible extended attributes are required and because /dev is usually devfs, which is a form of tmpfs, xattr support for tmpfs is a must.
+
+For fast user switching to work with PA where each session has its own PulseAudio process, ConsoleKit is used to know which session is active and therefore most likely to be the desired one to be granted exclusive control over device files in ''/dev/snd/''. To make this possible extended attributes are required and because /dev is usually devfs, which is a form of tmpfs, xattr support for tmpfs is a must.
+
 {{Kernel|Enabling extended attributes for tmpfs|<pre>
 File systems  --->
    Pseudo filesystems  --->
       [*] Virtual memory file system support (former shm fs)
       [*]   Tmpfs POSIX Access Control List
 </pre>}}
+
 {{Warning|For ConsoleKit managed permissions to be respected '''no one may be part of the ''audio'' group''' (not even even the user pulse). In fact, for users to be able to output sound vai PA they do not have to be part of any specific group.}}
+
 {{Note|For obvious reasons ConsoleKit has to be running for this to work which is usually the case but, if it is not started by default, please enable it. In case of OpenRC, this can be accomplished using
 {{RootCmd|rc-update add consolekit default}}
 }}
+
 ==Usage==
+
 A handy cross-desktop graphical tool is available for setting various aspects of PA. Install it with
+
 {{emerge|params=
 |media-sound/pavucontrol
 }}
+
 KDE users can to some extent use Phonon`s configuration but it is not a full replacement for pavucontrol.
+
 ==Configuring other applications==
-Usually PA is used by default if it is available but some programs require to be explicitly told to use PA. If you know such program and it is not mentioned here, please add it!
-===MPlayer/MPlayer2===
-Edit ''~/.mplayer/config'' to permanently change the used audio output (ao) driver for the current user (system wide changes can be done in either ''/etc/mplayer/config'' or ''/etc/mplayer2/config'').
-{{file|~/.mplayer/config|Change ao value to set the audio output driver used by MPlayer/MPlayer2|<pre>
-ao=pulse
-</pre>}}
+
+Some applications need to be configured to output to PulseAudio by default. A detailed list of these can be found on the PulseAudio wiki's [http://pulseaudio.org/wiki/PerfectSetup PerfectSetup page].
 
 ==Known problems and limitations==
+
 ===No guarantees on actual latencies===
 Currently PA provides whatever latency at that moment is possible be it some milliseconds to hundreds of milliseconds without regard to what applications ask for.
 
 ===In case of buffer under-run latencies are never decreased===
 Currently, if a buffer under-run occurs, PA buffers for longer increasing latency, but it then never tries to buffer for less until restart.
-===Re-sampling using up a lot of CPU time===
-Re-sampling can require quite a lot of computational power, PA defaults are rather conservative but in certain cases can still take a significant toll, in such cases edit ''/etc/pulse/daemon.conf'' and consider changing '''resample-method''' to something less CPU intensive, '''default-sample-format''' and '''default-sample-rate''' can also affect CPU utilization with higher bit-depth and larger difference in sample-rate generally needing more resources (e.g. re-sampling 44 kHz to 48 kHz is faster than re-sampling either to 192 kHz). Since re-sampling is done per each channel per input, channel configuration and number of applications can affect performance as well.
 
-{{Note|
-Generally floating-point operations are faster which is why speex-float-3 is the default re-sampler but overall the fastest (and quality most preserving) way to output data is to not need any re-sampling in the first place which, together with the fact that sound is usually stored in integer format, means that outputting in signed makes sense because in ideal circumstances it will avoid need for re-sampling.
-}}
+===Re-sampling using up a lot of CPU time===
+Re-sampling can require quite a lot of computational power, PA defaults are rather conservative but in certain cases can still take a significant toll, in such cases edit ''/etc/pulse/daemon.conf'' and consider changing '''resample-method''' to something less CPU intensive, '''default-sample-format''' and '''default-sample-rate''' can also affect CPU utilization with higher bit-depth and larger difference in sample-rate generally needing more resources (e.g. re-sampling 44.1 kHz to 48 kHz is faster than re-sampling either to 192 kHz). Since re-sampling is done per each channel per input, channel configuration and number of applications can affect performance as well.
 
 {{Note|
 Using a version of PA with Orc support can noticeably decrease CPU usage, too.
