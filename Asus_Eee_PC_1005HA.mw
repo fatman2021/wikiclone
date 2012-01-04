@@ -1,0 +1,263 @@
+The Asus Eee PC 1005HA is a laptop manufactured by Asus in 2009. It features an Intel Atom N280 with 1GB of RAM (upgradable to 2GB), a 160GB hard disk, and a Mobile Intel 945ME Express with 250MB of VRAM.
+
+This article supplements the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml Gentoo Linux x86 Handbook] with specific information regarding the Eee PC 1005HA.
+
+Kernel configuration is based on the {{Package|sys-kernel/gentoo-sources}} version 3.0.6.
+
+=== Choosing the right install medium ===
+
+TODO: LiveUSB HOWTO
+
+The ath9k module that ships with the gentoo-minimal disk image has not been compiled with PCI support, which means wireless networking is not available during install. As a Gentoo install is dependent on a network connection, either install over ethernet (atl1c driver is supported), use another distro to install (e.g. [http://www.sysresccd.org/ systemrescuecd]), or recompile the ath9k module for a custom LiveUSB.
+
+=== Partitioning ===
+
+TODO: Asus Boot Booster
+
+== Hardware ==
+
+=== CPU ===
+The CPU is an Intel Atom N280.
+{{Kernel|Processor support|<pre>
+Processor type and features --->
+    [*] Symmetric multi-processing support
+    Processor Family (Intel Atom) --->
+    ...
+    (2) Maximum number of CPUs
+    [*] SMT (Hyperthreading) scheduler support
+    ...
+    [*] Machine Check / overheating reporting
+    [*]   Intel MCE features
+    ...
+    <*> /dev/cpu/microcode - microcode support
+    [*]   Intel microcode patch loading support
+</pre>}}
+To update the processor microcode, install {{Package|sys-apps/microcode-ctl}}.
+{{emerge|sys-apps/microcode-ctl}}
+The microcode patch will be lost at each reboot, but the init script can reload it.
+{{RootCmd|/etc/init.d/microcode_ctl start|rc-update add microcode_ctl boot}}
+In this example, the microcode is updated from version 0x212 to 0x218.
+{{RootCmd|dmesg <nowiki>|</nowiki> grep microcode|output=<pre>
+[    0.250287] microcode: CPU0 sig=0x106c2, pf=0x4, revision=0x212
+[    0.250302] microcode: CPU1 sig=0x106c2, pf=0x4, revision=0x212
+[    0.250433] microcode: Microcode Update Driver: v2.00 <tigran@aivazian.fsnet.co.uk>, Peter Oruba
+[   11.330007] microcode: CPU0 updated to revision 0x218, date = 2009-04-10
+[   11.335961] microcode: CPU1 updated to revision 0x218, date = 2009-04-10
+</pre>}}
+
+=== Graphics ===
+The GPU is a Mobile Intel 945ME Express.
+{{Kernel|Graphics support|<pre>
+Processor type and features --->
+    -*- MTRR (Memory Type Range Register) support
+
+Device Drivers --->
+    [*] Graphics support --->
+        <*> /dev/agpgart (AGP Support) --->
+            <*> Intel 440LX/BX/GX, I8xx and E7x05 chipset support
+        ...
+        <*> Direct Rendering Manager (XFree86 4.1.0 and higher DRI support) --->
+            <*> Intel 8xx/9xx/G3x/G4x/HD Graphics
+            [*]   Enable modesetting on intel by default
+</pre>}}
+{{RootCmd|gpasswd -a username video}}
+{{File|/etc/X11/xorg.conf||<pre>
+Section "Device"
+    Identifier "Intel"
+    Driver "intel"
+EndSection
+</pre>}}
+See also: http://www.gentoo.org/doc/en/dri-howto.xml
+
+=== Ethernet ===
+The Ethernet card is an Atheros AR8132.
+{{Kernel|Gigabit Ethernet|<pre>
+Device Drivers --->
+    [*] Network device support --->
+	[*] Ethernet (1000Mbit) --->
+            [M] Atheros L1C Gigabit Ethernet Support
+</pre>}}
+
+=== Wireless ===
+The wireless card is an Atheros AR9285 (PCI-Express).
+{{Kernel|Wireless support|<pre>
+[*] Networking Support --->
+    -*- Wireless --->
+	<*> cfg80211 - wireless configuration API
+        ...
+        <*> Generic IEEE 802.11 Networking Stack (mac80211)
+
+Device Drivers --->
+    [*] Network device support --->
+        [*] Wireless LAN --->
+	    [M] Atheros Wireless Cards --->
+                [M] Atheros 802.11n wireless cards support
+                    [*] Atheros ath9k PCI/PCIe bus support
+</pre>}}
+
+=== Sound ===
+The sound card is an Realtek ALC269 (Intel ICH7 Family).
+{{Kernel|Sound card support|<pre>
+Device Drivers --->
+    <M> Sound Card Support --->
+        <M> Advanced Linux Sound Architecture --->
+            [*] PCI Sound Devices --->
+		[M] Intel HD Audio --->
+                    [*] Build Realtek HD-audio codec support
+</pre>}}
+
+{{emerge|media-sound/alsa-utils}}
+{{RootCmd|/etc/init.d/alsasound start|rc-update add alsasound default}}
+{{RootCmd|gpasswd -a username audio}}
+{{RootCmd|aplay /usr/share/sounds/alsa/Front_Center.wav}}
+See also: http://www.gentoo.org/doc/en/alsa-guide.xml
+
+=== Webcam ===
+{{Kernel|Webcam support|<pre>
+Device Drivers --->
+    [M] Multimedia Support --->
+        [M] Video For Linux
+	...
+        [*] Video Capture Adapters --->
+            [*] Autoselect pertinent encoders/decoders and other helper chips
+	    ...
+            [*] V4L USB Devices --->
+                <M> USB Video Class (UVC)
+                [*]   UVC input events device support
+</pre>}}
+{{RootCmd|mplayer tv://}}
+
+=== ACPI, LEDs and hotkeys ===
+{{Kernel||<pre>
+Device Drivers --->
+    [*] X86 Platform Specific Device Drivers --->
+        <M> Eee PC Hotkey Driver
+</pre>}}
+
+See also: {{Package|app-laptop/laptop-mode-tools}} and {{Package|sys-power/cpufrequtils}}
+
+=== Bluetooth ===
+
+TODO
+
+=== Touchpad ===
+Enable two-finger scrolling in X:
+{{File|/etc/X11/xorg.conf.d/10-synaptics||<pre>
+Section "InputClass"
+	Identifier "Touchpad"
+        Driver "synaptics"
+        MatchIsTouchpad "on"
+	Option "VertTwoFingerScroll" "true"
+        Option "EmulateTwoFingerMinZ" "40"
+        Option "EmulateTwoFingerMinW" "5"
+EndSection
+</pre>}}
+
+=== Keyboard ===
+Configuration for the keyboard in X (adjust as required):
+{{File|/etc/X11/xorg.conf.d/30-keyboard||<pre>
+Section "InputClass"
+        Identifier "Keyboard"
+	Driver "evdev"
+        Option "XkbLayout" "us"
+        Option "XkbModel" "asus_laptop"
+	Option "XkbRules" "xorg"
+        Option "XkbVariant" ",qwerty"
+        MatchIsKeyboard "on"
+EndSection
+</pre>}}
+
+=== Additional Information ===
+{{RootCmd|lspci|output=<pre>
+00:00.0 Host bridge: Intel Corporation Mobile 945GME Express Memory Controller Hub (rev 03)
+00:02.0 VGA compatible controller: Intel Corporation Mobile 945GME Express Integrated Graphics Controller (rev 03)
+00:02.1 Display controller: Intel Corporation Mobile 945GM/GMS/GME, 943/940GML Express Integrated Graphics Controller (rev 03)
+00:1b.0 Audio device: Intel Corporation 82801G (ICH7 Family) High Definition Audio Controller (rev 02)
+00:1c.0 PCI bridge: Intel Corporation 82801G (ICH7 Family) PCI Express Port 1 (rev 02)
+00:1c.1 PCI bridge: Intel Corporation 82801G (ICH7 Family) PCI Express Port 2 (rev 02)
+00:1c.3 PCI bridge: Intel Corporation 82801G (ICH7 Family) PCI Express Port 4 (rev 02)
+00:1d.0 USB Controller: Intel Corporation 82801G (ICH7 Family) USB UHCI Controller #1 (rev 02)
+00:1d.1 USB Controller: Intel Corporation 82801G (ICH7 Family) USB UHCI Controller #2 (rev 02)
+00:1d.2 USB Controller: Intel Corporation 82801G (ICH7 Family) USB UHCI Controller #3 (rev 02)
+00:1d.3 USB Controller: Intel Corporation 82801G (ICH7 Family) USB UHCI Controller #4 (rev 02)
+00:1d.7 USB Controller: Intel Corporation 82801G (ICH7 Family) USB2 EHCI Controller (rev 02)
+00:1e.0 PCI bridge: Intel Corporation 82801 Mobile PCI Bridge (rev e2)
+00:1f.0 ISA bridge: Intel Corporation 82801GBM (ICH7-M) LPC Interface Bridge (rev 02)
+00:1f.1 IDE interface: Intel Corporation 82801G (ICH7 Family) IDE Controller (rev 02)
+00:1f.2 SATA controller: Intel Corporation 82801GBM/GHM (ICH7 Family) SATA AHCI Controller (rev 02)
+01:00.0 Ethernet controller: Attansic Technology Corp. Atheros AR8132 / L1c Gigabit Ethernet Adapter (rev c0)
+02:00.0 Network controller: Atheros Communications Inc. AR9285 Wireless Network Adapter (PCI-Express) (rev 01)
+</pre>}}
+
+{{RootCmd|lsusb|output=<pre>
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 003 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 004 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 005 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 001 Device 002: ID 13d3:5071 IMC Networks 
+Bus 001 Device 003: ID 058f:6335 Alcor Micro Corp. SD/MMC Card Reader
+Bus 005 Device 002: ID 0b05:b700 ASUSTek Computer, Inc. Broadcom Bluetooth 2.1
+</pre>}}
+
+{{File|/proc/cpuinfo||<pre>
+processor       : 0
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 28
+model name      : Intel(R) Atom(TM) CPU N280   @ 1.66GHz
+stepping        : 2
+cpu MHz         : 1667.000
+cache size      : 512 KB
+physical id     : 0
+siblings        : 2
+core id         : 0
+cpu cores       : 1
+apicid          : 0
+initial apicid  : 0
+fdiv_bug        : no
+hlt_bug         : no
+f00f_bug        : no
+coma_bug        : no
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 10
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl est tm2 ssse3 xtpr pdcm movbe lahf_lm dts
+bogomips        : 3333.41
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 32 bits physical, 32 bits virtual
+power management:
+
+processor       : 1
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 28
+model name      : Intel(R) Atom(TM) CPU N280   @ 1.66GHz
+stepping        : 2
+cpu MHz         : 1667.000
+cache size      : 512 KB
+physical id     : 0
+siblings        : 2
+core id         : 0
+cpu cores       : 1
+apicid          : 1
+initial apicid  : 1
+fdiv_bug        : no
+hlt_bug         : no
+f00f_bug        : no
+coma_bug        : no
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 10
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe nx constant_tsc arch_perfmon pebs bts aperfmperf pni dtes64 monitor ds_cpl est tm2 ssse3 xtpr pdcm movbe lahf_lm dts
+bogomips        : 3332.82
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 32 bits physical, 32 bits virtual
+power management:
+</pre>}}
+
+[[Category:Hardware]]
