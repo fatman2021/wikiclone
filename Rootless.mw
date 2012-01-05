@@ -19,13 +19,6 @@ The steps are:
 * install stage3 archive
 * install paludis
 * edit paludis/distributions/gentoo/e.conf
-* add bin/library paths to the environment
-* create ~/root/bin/cave, a cave wrapper to contain a few environment variables
-* edit ~/.paludis-prefix/specpath.conf
-* edit ~/root/etc/paludis/*
-* create paludis folders in ~/root/
-* cave resolve system -/ n ...
-
  diff --git a/paludis/distributions/gentoo/e.conf b/paludis/distributions/gentoo/e.conf
  index 215977a..ac115b7 100644
  --- a/paludis/distributions/gentoo/e.conf
@@ -36,3 +29,39 @@ The steps are:
   default_distdir = distfiles
   default_eapi_when_unknown = 0
   default_eapi_when_unspecified = 0
+* create ~/root/bin/cave, a cave wrapper to contain a few environment variables
+
+ #!/usr/bin/env python
+ # Example paludis wrapper, to run from the paludis source
+ # Simplify if using system paludis
+ 
+ import sys, os
+ 
+ libdirs=[]
+ for cwd, dirs, files in os.walk("."):
+         for file in files:
+                 if file.endswith(".so") and cwd not in libdirs:
+                         libdirs.append(cwd)
+ 
+ os.environ["LD_LIBRARY_PATH"] = ":".join(libdirs)
+ 
+ from subprocess import Popen
+ 
+ os.environ["PALUDIS_NO_GLOBAL_HOOKS"] = "1"
+ #os.environ["PALUDIS_DO_NOTHING_SANDBOXY"] = "1"
+ os.environ["PALUDIS_DISTRIBUTIONS_DIR"] = "paludis/distributions"
+ os.environ["PALUDIS_NO_CHOWN"] = "1"
+ 
+ def main():
+         x = Popen(["./src/clients/cave/.libs/cave", "--environment", "paludis:test"] + sys.argv[1:])
+         return x.wait()
+ 
+ if __name__ == '__main__':
+         main()
+
+
+* add bin/library paths to the environment
+* edit ~/.paludis-prefix/specpath.conf
+* edit ~/root/etc/paludis/*
+* create paludis folders in ~/root/
+* cave resolve system -/ n ...
