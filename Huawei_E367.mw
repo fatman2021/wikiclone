@@ -1,0 +1,82 @@
+== Overview ==
+This guide is for Huawei Mobile Broadband E367 HSPA+ USB Rotator. This method should also work for many other huawei 3G adapters. 
+
+The modem shows up a different output in lsusb after running usb_modeswitch.
+
+Before running usb_modeswitch :
+{{RootCmd|lsusb|output=Bus 001 Device 005: ID 12d1:1446 Huawei Technologies Co., Ltd. E1552/E1800 (HSPA modem)}}
+After running usb_modeswitch :
+{{RootCmd|lsusb|output=Bus 002 Device 003: ID 12d1:1506 Huawei Technologies Co., Ltd. E398 LTE/UMTS/GSM Modem/Networkcard}}
+
+== Kernel ==
+You need usbserial built to your kernel or as a module.
+{{RootCmd|modprobe usbserial}}
+
+== Setup usb_modeswitch ==
+=== Install ===
+{{Emerge|sys-apps/usb_modeswitch}}
+
+=== Configure ===
+Add the following to the bottom of the config file.
+{{File|/etc/usb_modeswitch.conf||<pre>
+# Huawei E367
+DefaultVendor= 0x12d1
+DefaultProduct=0x1446
+
+TargetVendor=  0x12d1
+TargetProductList="1001,1406,140b,140c,1412,141b,14ac,1506"
+
+CheckSuccess=20
+
+MessageEndpoint= 0x01
+MessageContent="55534243123456780000000000000011062000000100000000000000000000"
+</pre>}}
+
+=== Run ===
+{{RootCmd|usb_modeswitch -c /etc/usb_modeswitch.conf|output=
+Looking for default devices ...
+   found matching product ID
+   adding device
+ Found device in default mode, class or configuration (1)
+Accessing device 002 on bus 002 ...
+Getting the current device configuration ...
+ OK, got current device configuration (1)
+Using first interface: 0x00
+Using endpoints 0x01 (out) and 0x81 (in)
+Inquiring device details; driver will be detached ...
+Looking for active driver ...
+ No driver found. Either detached before or never attached
+
+SCSI inquiry data (for identification)
+-------------------------
+  Vendor String: HUAWEI  
+   Model String: Mass Storage    
+Revision String: 2.31
+-------------------------
+
+USB description data (for identification)
+-------------------------
+Manufacturer: Huawei Technologies
+     Product: HUAWEI Mobile
+  Serial No.: not provided
+-------------------------
+Setting up communication with interface 0
+Using endpoint 0x01 for message sending ...
+Trying to send message 1 to endpoint 0x01 ...
+ OK, message successfully sent
+Resetting response endpoint 0x81
+Resetting message endpoint 0x01
+ Device is gone, skipping any further commands
+
+Checking for mode switch (max. 20 times, once per second) ...
+ (For a better success check provide target IDs or class)
+ Original device vanished after switching
+
+Mode switch most likely succeeded. Bye.
+}}
+
+== Connecting ==
+Now you should have three device nodes :
+{{RootCmd|ls /dev/ttyUSB*|output=/dev/ttyUSB0  /dev/ttyUSB1  /dev/ttyUSB2}}
+
+The modem should be /dev/ttyUSB2. You can now connect to internet using wvdial or NetworkManager.
