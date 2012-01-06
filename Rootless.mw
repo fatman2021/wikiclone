@@ -34,26 +34,43 @@ The steps are:
   * configure repositories (buildroot, location), and paths
  * use minimal use flags at start
 * create ~/root/paludis/cave wrapper for ~/root/paludis/src/clients/cave/.libs/cave
- TODO
+ #!/usr/bin/env python
+ # Wrapper to run cave from its source dir 
+ import sys, os, subprocess
+ 
+ # Add folder containing libs to library path
+ libdirs=[]
+ for cwd, dirs, files in os.walk("."):
+   for file in files:
+     if file.endswith(".so") and cwd not in libdirs:
+       libdirs.append(cwd)
+ os.environ["LD_LIBRARY_PATH"] = ":".join(libdirs)
+ 
+ os.environ["PALUDIS_NO_GLOBAL_HOOKS"] = "1"
+ #os.environ["PALUDIS_DO_NOTHING_SANDBOXY"] = "1"
+ os.environ["PALUDIS_DISTRIBUTIONS_DIR"] = "paludis/distributions"
+ os.environ["PALUDIS_NO_CHOWN"] = "1"
+ 
+ if __name__ == '__main__':
+   sys._exit(subprocess.Popen(["./src/clients/cave/.libs/cave", "--environment", "paludis:test"] + sys.argv[1:]).wait())
+
 * ./cave resolve paludis -/ n
 * create ~/root/bin/cave, a cave wrapper to the properly installed paludis
  #!/usr/bin/env python
  # Cave wrapper
- import sys, os
+ import sys, os, subprocess
  
  os.environ["PALUDIS_NO_GLOBAL_HOOKS"] = "1"
  #os.environ["PALUDIS_DO_NOTHING_SANDBOXY"] = "1"
  os.environ["PALUDIS_DISTRIBUTIONS_DIR"] = os.path.expanduser("~/root/etc/paludis/distributions")
  os.environ["PALUDIS_NO_CHOWN"] = "1"
- 
- from subprocess import Popen
- 
+  
  def main():
-   x = Popen([os.path.expanduser("~/root/usr/bin/cave"), "--environment", "paludis:test"] + sys.argv[1:])
-   return x.wait()
  
  if __name__ == '__main__':
-   main()
+   sys._exit(subprocess.Popen([os.path.expanduser("~/root/usr/bin/cave"), "--environment", "paludis:test"] + sys.argv[1:]).wait())
 
 * add bin/library paths to the environment
+* add PATH=$ROOT/root/bin:$PATH to paludis bashrc
+* create an wrapper for install to avoid chgrp failures
 * cave resolve system -/ n ...
