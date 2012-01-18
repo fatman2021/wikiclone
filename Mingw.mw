@@ -1,0 +1,275 @@
+Mingw (or Mingw32) is a way to cross-compile Windows 32-bit binaries on Linux or any other OS. It can also be used natively on Windows to avoid using Visual Studio, etc.
+
+== Mingw32 Toolchain ==
+Start with emerging the <code>crossdev</code> tool:
+
+<pre># emerge crossdev</pre>
+
+Now with this tool, emerge the mingw32 toolchain:
+
+<pre># crossdev -t i686-pc-mingw32</pre>
+
+You may try adding <code>--ex-insight</code> and/or <code>--ex-gcc</code>. These have not been known to build. <code>--ex-gdb</code> will give you GDB and likely will work, but it is not very useful on Linux because MingW GCC by default makes PE's (EXE files), not ELF files, and gdb has no idea how to run an EXE file on Linux. A remote debugger (with a Windows target machine) is a possibility but a long shot.
+
+Notes about the toolchain:
+* GCJ sources will not compile due to missing makespec files that do not get installed (copying from Mingw from Windows does not work either)
+* OpenMP is forcefully disabled in the ebuild for the time being even if you enable it in your USE flags
+
+=== Uninstallation ===
+
+<pre># crossdev -C i686-pc-mingw32</pre>
+
+If files are left over (such as libraries and things you have added), you will be prompted to remove the <code>/usr/i686-pc-mingw32</code> directory recursively.
+
+== Using Portage ==
+Some things work. Most things do not. Try with <code>USE="-*"</code> after a failed build, then selectively add USE flags you need. If that does not work, then you probably cannot use Portage to install the package desired for use with Mingw.
+
+Using Portage, you may run into problems such as the following:
+
+* Application wants GDBM (see below)
+* Application wants to link with ALSA/OSS/Mesa/other library only useful to X or Linux
+
+Emerging <code>sys-libs/zlib</code>:
+
+<pre># i686-pc-mingw32-emerge sys-libs/zlib</pre>
+
+=== GDBM ===
+These are "Standard GNU database libraries" according to Portage. Many libraries and applications depend on this. Successfully compiled before, but the current version in Portage does not compile. A patch is very much needed.
+
+{{File|build.log excerpt|<pre>
+i686-pc-mingw32-gcc -c -I. -I. -march=k8 -msse3 -O2 -pipe gdbmfetch.c  -DDLL_EXPORT -DPIC -o .libs/gdbmfetch.lo                                                                                                     
+gdbmopen.c: In function 'gdbm_open':                                                                      
+gdbmopen.c:171: error: storage size of 'flock' isn't known                                                
+gdbmopen.c:171: error: 'F_RDLCK' undeclared (first use in this function)                                  
+gdbmopen.c:171: error: (Each undeclared identifier is reported only once                                  
+gdbmopen.c:171: error: for each function it appears in.)                                                  
+gdbmopen.c:171: error: 'F_SETLK' undeclared (first use in this function)                                  
+gdbmopen.c:177: error: storage size of 'flock' isn't known                                                
+gdbmopen.c:177: error: 'F_WRLCK' undeclared (first use in this function)
+</pre>}}
+
+To get around this problem for the moment, try building with <code>USE="-*"</code>.
+
+<!-- Commenting these until there is some information.
+
+== Testing ==
+=== C ===
+=== C++ ===
+=== Fortran ===
+=== Java ===
+=== OpenGL ===
+=== Threading ===
+=== Win32 API ===-->
+
+<!--== Libraries ==
+=== FreeType ===
+=== jpeglib ===
+=== libpng ===
+=== PortAudio ===
+=== Qt ===
+==== SDL_image ====
+==== SDL_ttf ====
+=== tifflib ===
+-->
+
+== SDL Example ==
+Emerge SDL:
+
+<pre># i686-pc-mingw32-emerge media-libs/libsdl</pre>
+
+Try compiling this source code (save to <code>test.c</code>).
+
+{{File|test.c|<pre>
+#include <SDL/SDL.h>
+#include <windows.h>
+
+void cool_wrapper(SDL_Surface **s, int flags) {
+  *s = SDL_SetVideoMode(640, 480, 32, flags);
+  return;
+}
+
+int main(int argc, char *argv[]) {
+  int flags;
+  SDL_Surface *s;
+
+  SDL_Init(SDL_INIT_VIDEO);
+
+  flags = SDL_OPENGL;            /* Enable OpenGL */
+  flags |= SDL_GL_DOUBLEBUFFER;  /* Enable double-buffering */
+  flags |= SDL_HWPALETTE;        /* Enable storing palettes in hardware */
+  flags |= SDL_RESIZABLE;        /* Enable window resizing */         
+  
+  cool_wrapper(&s, flags);
+  Sleep(5000);
+
+  SDL_FreeSurface(s);
+
+  SDL_Quit();
+
+  return 0;
+}
+</pre>}}
+
+Use the following command to build:
+
+<pre>$ i686-pc-mingw32-gcc -o test.exe test.c `/usr/i686-pc-mingw32/usr/bin/sdl-config --libs`</pre>
+
+Test with Wine (requires SDL.dll to be somewhere in Wine's <code>%PATH%</code>, which includes the same directory as the EXE):
+
+<pre>
+$ cp /usr/i686-pc-mingw32/usr/bin/SDL.dll .
+$ wine test.exe
+</pre>
+
+If you get a window named SDL_app, then it worked. The window will automatically exit after about 5 seconds (the Windows <code>Sleep()</code> function halts execution for 5000 milliseconds).
+
+== Porting POSIX Threads to Windows ==
+Windows thread functions seem to work fine with Mingw. The following example code will compile without error:
+
+{{File|win32_threads.c|<pre>
+#include <windows.h>                                        
+#include <stdio.h>                                          
+#include <stdlib.h>                                         
+
+#define NUM_THREADS 5
+
+DWORD print_hello(LPVOID lpdwThreadParam);
+
+int main(int argc, char *argv[]) {
+  int i;
+  DWORD dw_thread_id;
+
+  for (i = 0; i < NUM_THREADS; i++) {
+    if (CreateThread(NULL,                                 /* Default security level */
+                     0,                                    /* Default stack size */
+                     (LPTHREAD_START_ROUTINE)&print_hello, /* Routine to execute */
+                     (LPVOID)&i,                           /* Thread paramater */
+                     0,                                    /* Run immediately */
+                     &dw_thread_id                         /* Thread ID */
+                     ) != NULL) {
+      printf("In main: Creating thread %d\n", i);
+      Sleep(1000);
+    }
+    else {
+      printf("Error: Failed to create the %d\n", i);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  exit(EXIT_SUCCESS);
+}
+
+/* Thread routine */
+DWORD print_hello(LPVOID lpdwThreadParam) {
+  printf("Thread #%d responding\n", *(int*)lpdwThreadParam);
+  return 0;
+}
+</pre>}}
+
+Compile with:
+
+<pre>$ i686-pc-mingw32-gcc -o win32_threads.exe win32_threads.c</pre>
+
+(The call to <code>Sleep()</code> will make the thread creation a little more closer to POSIX, more in order, and there will not be duplicate runs.)
+
+However, many applications rely upon POSIX threads and do not have code for Windows thread functionality. The [http://sourceware.org/pthreads-win32/ POSIX Threads for Win32] project provides a library for using POSIX thread-like features on Windows (rather than relying upon Cygwin). It basically wraps POSIX thread functions to Win32 threading functions (<code>pthread_create()</code>-><code>CreateThread()</code> for example). Be aware that not [http://msdn.microsoft.com/en-us/library/ms684847%28VS.85%29.aspx everything] is implemented on either end (however do note that Chrome uses this library for threading on Windows). Regardless, many ported applications to Windows end up using POSIX Threads for Win32 because of convenience. With this library you can get the best of both worlds as Windows thread functions work fine as show above.
+
+To get Pthreads for Win32:
+# Go to the [ftp://sourceware.org/pub/pthreads-win32/dll-latest/include/ Sourceware FTP] and download the header files to your includes directory for Mingw (for me this is <code>/usr/i686-pc-mingw32/usr/include</code>).
+# Go to the [ftp://sourceware.org/pub/pthreads-win32/dll-latest/lib/ Sourceware FTP] and download only the .a files to your lib directory for Mingw (for me this is <code>/usr/i686-pc-mingw32/usr/lib</code>).'
+# At the same directory, get the DLL files (only '''pthreadGC2.dll''' and '''pthreadGCE2.dll'''; others are for Visual Studio) and place them in the bin directory of your Mingw root (for me this is <code>/usr/i686-pc-mingw32/usr/bin</code>).
+
+Example POSIX threads code:
+{{File|win32_posix_threads.c|<pre>
+#include <pthread.h>                                         
+#include <stdio.h>                                           
+#include <stdlib.h>                                          
+
+#define NUM_THREADS 5
+
+void *print_hello(void *thread_id) {
+  long tid;                         
+  tid = (long)thread_id;            
+  printf("Thread #%ld responding.\n", tid);
+  pthread_exit(NULL);                      
+  return NULL;                             
+}                                          
+
+int main(int argc, char *argv[]) {
+  pthread_t threads[NUM_THREADS];
+  pthread_attr_t attr;
+  int rc, status;
+  long i;
+
+  for (i = 0; i < NUM_THREADS; i++) {
+    printf("In main: creating thread %ld\n", i);
+    rc = pthread_create(&threads[i], NULL, print_hello, (void *)i);
+    if (rc) {
+      printf("Error: return code from pthread_create() is %d\n", rc);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  pthread_attr_destroy(&attr);
+  for (i = 0; i < NUM_THREADS; i++) {
+    rc = pthread_join(threads[i], (void **)&status);
+    if (rc) {
+      printf("Error: return code from pthread_join() is %d\n", rc);
+      exit(EXIT_FAILURE);
+    }
+    printf("Completed join with thread %d, status = %d\n", i, status);
+  }
+  pthread_exit(NULL);
+
+  exit(EXIT_SUCCESS);
+}
+</pre>}}
+
+Compile with:
+<pre>$ i686-pc-mingw32-gcc -o posix_threads.exe -mthreads posix_threads.c -lpthreadGC2</pre>
+
+{{Note|It is VERY important that <code>-lpthreadGC2</code> or <code>-lpthreadGCE2</code> is at the END of the command.}}
+
+With <code>i686-pc-mingw32-objdump -p posix_threads.exe</code> we can see that we need '''pthreadGC2.dll'''. If you linked with -lpthreadGCE2 (exception handling POSIX threads), you will need '''mingwm10.dll''', '''pthreadGCE2.dll''', and possibly '''libgcc_s_sjlj-1.dll''' (last one only if you do not compile with CFLAG <code>-static-libgcc</code> with <code>g++</code>).
+
+Copy the DLL file(s) required to the directory and test with Wine. For example:
+<pre>
+$ cp /usr/i686-pc-mingw32/usr/bin/pthreadGC2.dll .
+$ wine posix_threads.exe
+</pre>
+
+If all goes well, you should see output similar to the following:
+<pre>
+In main: creating thread 0                                                                                         
+In main: creating thread 1                                                                                         
+Thread #0 responding.                                                                                              
+In main: creating thread 2                                                                                         
+Thread #1 responding.                                                                                              
+In main: creating thread 3                                                                                         
+Thread #2 responding.                                                                                              
+In main: creating thread 4                                                                                         
+Thread #3 responding.                                                                                              
+Thread #4 responding.                                                                                              
+Completed join with thread 0, status = 0                                                                           
+Completed join with thread 1, status = 0                                                                           
+Completed join with thread 2, status = 0                                                                           
+Completed join with thread 3, status = 0                                                                           
+Completed join with thread 4, status = 0   
+</pre>
+
+{{Note|You will probably always want to include <code>-mthreads</code> in your CFLAGS for any code that relies on thread-safe exception handling. From the manpage:
+
+* <code>-mthreads</code> - Support thread-safe exception handling on Mingw32. Code that relies on thread-safe exception handling must compile and link all code with the -mthreads option. When compiling, -mthreads defines:
+* <code>-D_MT</code>; when linking, it links in a special thread helper library
+* <code>-lmingwthrd</code> which cleans up per thread exception handling data.}}
+
+== Wine and %PATH% ==
+Like Windows, Wine supports environment variables. You may specify the path of your DLLs (for example, the Mingw bin directory) in the registry at <code>HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment</code> (for me this value would be <code>Z:\usr\i686-pc-mingw32\usr\bin</code>). I recommend against this as you might forget to distribute DLLs with your application binaries.
+
+== No need for -lm ==
+If you <code>#include <math.h></code> and make use of any of its functions, there is no need to link with the standard C math library using the <code>-lm</code> switch with gcc or g++.
+
+== DirectX ==
+DirectX 9 headers and libs are included. Link with <code>-ldx9</code>. For the math functions (such as <code>MatrixMult</code>, unlike Windows, you need to dynamically link with <code>-ld3dx9d</code> and then include <code>d3dx9d.dll</code> (where you get this file SHOULD be from Microsoft's SDK). This is the same for DirectX 8.
+
+There is no support for DirectX 10 or 11 yet. Minimal support for Direct2D has been implemented via a patch (search the official mailing list of MinGW).
