@@ -1,0 +1,67 @@
+== ~/.asoundrc ==
+This file can be optionally used so that on a per-user basis, ALSA defaults can be overridden. You might have special hardware, or card 0 and device 0 (the defaults) are not going to work for you.
+
+One of the simplest changes is card and device. This is the case for me with an HDMI coming from an Nvidia card connected to an onboard Realtek ALC88* audio device.
+
+{{File|~/.asoundrc||<pre>
+defaults.pcm.!card 1
+defaults.pcm.!device 7
+</pre>}}
+
+You can find out what devices and cards you have with:
+
+{{GenericCmd|aplay -L}}
+
+== Sound mixing inconsistent ==
+Sometimes one app essentially takes over all sound devices. This might even be for performance reasons.
+
+Force the use of dmix instead of direct audio output (which is what most things use by default, such as Flash (which really means your browser) and Wine).
+
+If your device is card 1 and device 7 (which is the case for Nvidia HDMI for me):
+{{File|~/.asoundrc||<pre>
+pcm.dmixed {
+        type asym
+        playback.pcm {
+                type dmix
+                ipc_key 5678293
+                ipc_perm 0660
+                ipc_gid audio
+
+                slave {
+                        channels 2 # make 6 or 5.1 channel
+                        pcm {
+                                format S16_LE # S32_LE
+                                rate 48000 # can also be 44100
+                                type hw
+                                card 1 # your card
+                                device 7 # your device
+                                subdevice 0 #important?
+                        }
+
+                        period_size 1024
+                        buffer_size 8192
+                }
+
+                bindings {
+                        0 0
+                        1 1
+# Uncomment below if using 6 channel
+#                       2 2
+#                       3 3
+#                       4 4
+#                       5 5
+                }
+        }
+        capture.pcm "hw:0"
+}
+
+pcm.!default {
+        type plug
+        slave.pcm "dmixed"
+}
+</pre>}}
+
+Use of ~/.asoundrc is immediate and as long as you are not forcing the use of specific devices in any applications, they either will require a restart or will begin working immediately. One of the best tests is to run Chrome, go to YouTube, open a terminal, run mplayer with an audio or video file and see that you do not get an error about audio (such an error might be 'Device or resource busy').
+
+== Tips ==
+Try one of the many configuration options in [http://dl.dropbox.com/u/18371907/asoundrc PaulBredbury's asoundrc file].
