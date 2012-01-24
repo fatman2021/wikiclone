@@ -37,11 +37,60 @@ DirData="/var/lib/awstats"
 </pre>}}
 
 Any other changes to the configuration file are optional, but interesting to look into.
+{{Note|When using the graphapplet plugin, the java applet may not display, see {{Bug|400589}} for more information.}}
+
+=== Logging ===
+awstats needs to process the apache logfile to build its database. Once confirmed that it is working manually it can be automated.
+==== Manually ====
+First, awstats should be run from the console, to spot any initial errors.
+{{Cmd|awstats.pl -config=stats.example.com -update -showdropped}}
+
+This should list any issues and missing domain names from the config.
+==== Cron ====
+If everything is working perfectly, it can then be added to cron.hourly.
+{{File|/etc/cron.hourly/awstats|AWstats cronjob|<pre>
+#!/bin/sh
+awstats.pl -config=stats.example.com -update > /dev/null 2>&1
+</pre>}}
+Remember to make the script executeable if needed.
+
+==== Logrotate ====
+Awstats will process the log file every hour, but when logrotate rotates apache's log, some entries may be missing. This is easily solved however.
+{{File|/etc/logrotate.d/apache2|Diff of pre-init script|<pre>
+# Apache2 logrotate snipet for Gentoo Linux
+# Contributes by Chuck Short
+#
+/var/log/apache2/*log {
+  missingok
+  notifempty
+  sharedscripts
++  prerotate
++  /etc/cron.hourly/awstats > /dev/null 2>&1
++  endscript
+  postrotate
+  /etc/init.d/apache2 reload > /dev/null 2>&1 || true
+  endscript
+}
+</pre>}}
 
 === Apache ===
+For awstats to be used from apache, the webhost needs to properly setup. In the alias section, the following needs to be added.
+{{File|/etc/apache2/vhosts.d/stats.example.com|Aliases for awstats|<pre>
+        Alias /awstats/classes "/usr/share/awstats/wwwroot/classes"
+        Alias /awstats/css "/usr/share/awstats/wwwroot/css"
+        Alias /awstats/icon "/usr/share/awstats/wwwroot/icon"
+        ScriptAlias /awstats/ "/usr/share/awstats/wwwroot/cgi-bin/"
+        ScriptAlias /awstats "/usr/share/awstats/wwwroot/cgi-bin/awstats.pl"
+</pre>
 
+Finally, awstats needs the correct permissions to be accessable.
+{{File|/etc/apache2/vhosts.d/stats.example.com|Aliases for awstats|<pre>
+<Directory "/usr/share/awstats/wwwroot">
+        AllowOverride None
+        Options None
+        Order allow,deny
+        Allow from all
+</Directory>
+</pre>}}
 
-=== Logrotate ===
-
-
-AWStats is normally used as an analyzer of web server logs, mostly Apache.
+After a restart of apache, awstats should be available via ''http://stats.example.com/awstats/awstats.pl?config=stats.example.com''. If no config option is passed to awstats, it uses the current hostname, which means in this case could have been omitted.
