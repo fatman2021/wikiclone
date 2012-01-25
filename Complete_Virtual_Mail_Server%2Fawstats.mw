@@ -99,8 +99,126 @@ After a restart of apache, awstats should be available via ''http://stats.exampl
 AWStats is known for being an apache log parser. However it can also be used to parse mail logs.
 === Configuration ===
 After copying ''awstats.stats.example.com.conf'' to ''awstats.mail.example.com.conf'' quite a few changes are required to turn awstats into a mail log parser.
-{{File|/etc/awstats.mail.example.com.conf|Log mail.log instead of access.log|<pre>
+{{File|/etc/awstats.mail.example.com.conf|Log mail.log instead of access.log (diff -u, only additions and deletions)|<pre>
+-LogFile="/var/log/apache2/access_log"
++LogFile="perl /usr/bin/awstats_maillogconvert.pl standard < /var/log/mail.log |"
 
+-LogType=W
++LogType=M
+
+-LogFormat=1
++LogFormat="%time2 %email %email_r %host %host_r %method %url %code %bytesd"
+
+-SiteDomain="localhost"
++SiteDomain="example.com"
+
+
+-HostAliases="localhost 127.0.0.1 REGEX[myserver\.com$]"
++HostAliases="localhost 127.0.0.1 REGEX[example\.(net|org)$]"
+
+-DirData="."
++DirData="/var/lib/awstats"
+
+-LevelForBrowsersDetection=2         # 0 disables Browsers detection.
++LevelForBrowsersDetection=0        # 0 disables Browsers detection.
+                                     # 2 reduces AWStats speed by 2%
+                                     # allphones reduces AWStats speed by 5%
+-LevelForOSDetection=2               # 0 disables OS detection.
++LevelForOSDetection=0               # 0 disables OS detection.
+                                     # 2 reduces AWStats speed by 3%
+-LevelForRefererAnalyze=2            # 0 disables Origin detection.
++LevelForRefererAnalyze=0            # 0 disables Origin detection.
+                                     # 2 reduces AWStats speed by 14%
+-LevelForRobotsDetection=2           # 0 disables Robots detection.
++LevelForRobotsDetection=0           # 0 disables Robots detection.
+                                     # 2 reduces AWStats speed by 2.5%
+-LevelForSearchEnginesDetection=2    # 0 disables Search engines detection.
++LevelForSearchEnginesDetection=0    # 0 disables Search engines detection.
+                                     # 2 reduces AWStats speed by 9%
+-LevelForKeywordsDetection=2         # 0 disables Keyphrases/Keywords detection.
++LevelForKeywordsDetection=0         # 0 disables Keyphrases/Keywords detection.
+                                     # 2 reduces AWStats speed by 1%
+-LevelForFileTypesDetection=2        # 0 disables File types detection.
++LevelForFileTypesDetection=0        # 0 disables File types detection.
+                                     # 2 reduces AWStats speed by 1%
+ LevelForWormsDetection=0            # 0 disables Worms detection.
+                                     # 2 reduces AWStats speed by 15%
+
+-ShowRobotsStats=HBL
++ShowRobotsStats=0
+
+-ShowEMailSenders=0
++ShowEMailSenders=HBML
+
+-ShowEMailReceivers=0
++ShowEMailReceivers=HBML
+
+-ShowSessionsStats=1
++ShowSessionsStats=0
+
+-ShowPagesStats=PBEX
++ShowPagesStats=0
+
+-ShowFileTypesStats=HB
++ShowFileTypesStats=0
+
+-ShowFileSizesStats=0
++ShowFileSizesStats=1
+
+-ShowDownloadsStats=HB
++ShowDownloadsStats=0
+
+-ShowOSStats=1
++ShowOSStats=0
+
+-ShowBrowsersStats=1
++ShowBrowsersStats=0
+
+-ShowOriginStats=PH
++ShowOriginStats=0
+
+-ShowKeyphrasesStats=1
++ShowKeyphrasesStats=0
+
+-ShowKeywordsStats=1
++ShowKeywordsStats=0
+
+-ShowMiscStats=a
++ShowMiscStats=0
+
+-ShowHTTPErrorsStats=1
++ShowHTTPErrorsStats=0
+
+-ShowSMTPErrorsStats=0
++ShowSMTPErrorsStats=1
+</pre>}}
+
+With those changes in place, a manual run should work without any issues.
+{{Cmd|awstats run from the CLI|<pre>
+awstats.pl -config=mail.example.com -showcorrupted -showdropped
+</pre>}}
+
+=== Logging ===
+To scan the mail log every hour, the existing awstats script in cron.hourly can be appended with the following.
+{{File|/etc/cron.hourly/awstats|Add parsing of the mail log|<pre>
+awstats.pl -config=mail.example.com -update > /dev/null 2>&1
+</pre>}}
+
+Also syslog is getting rotated and thus awstats needs to parse the mail log file before the mail log is being rotated.
+{{File|/etc/logrotate.d/syslog-ng|Modify mail log entry in syslog|<pre>
+# Mail system
+/var/log/mail.log /var/log/mail.info /var/log/mail.err /var/log/mail.warn {
+    sharedscripts
+    missingok
+    prerotate
+        /etc/cron.hourly/awstats
+    endscript
+    postrotate
+        /etc/init.d/syslog-ng reload > /dev/null 2>&1 || true
+    endscript
+}
 </pre>}}
 
 {{Note|The ''/var/log/mail.log'' file does not have to be on the same server. AWStats will have to have access to it. This could be via nfs, or having syslog do remote logging.}}
+
+If logging of apache files is not desired, or webmail resides on a different server, the webserver log parsing can be removed from cron jobs.
