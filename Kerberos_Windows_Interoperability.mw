@@ -1,0 +1,211 @@
+== Introduction ==
+Kerberos allows single sign on to allow Windows and Linux interoperability.  The basic goal is to get systems attached to an AD domain to be able to access servers using pass through authentication of some sort.
+
+For example, start up a browser and point it at an Apache webserver.  The web server allows access to the browser user because they have been authenticated in the background via Kerberos.
+
+The setup here is designed to use Samba to manage the Kerberos keytab side of things for servers like Squid, Apache and sshd
+
+Before you start this you must ensure that the clock on your system agrees with the Windows DC that holds the "PDC Emulator" FSMO role (realistically any of them will do not just that one). You must also make sure that DNS is set up correctly.  If you can resolve the name of the AD domain, then that is a good start.
+
+== Kerberos (MIT) ==
+On Gentoo USE = kerberos should pull in app-crypt/mit-krb5.  Configuration for a simple setup (set your realm):  
+
+{{File|/etc/krb5.conf|Main Kerberos config file|<pre>
+[libdefaults]
+   default_realm = EXAMPLE.CO.UK
+   kdc_timesync = 1
+   ccache_type = 4
+   forwardable = true
+   proxiable = true
+   fcc-mit-ticketflags = true
+   default_keytab_name = FILE:/etc/krb5.keytab
+</pre>}}
+
+You may want to create a realm to domain mapping section [realms].  This is especially useful for Apache when the system may have a different external domain to its internal one.
+
+Do not create the file /etc/krb5.keytab - Samba will give an error if it can't create the keytab file.
+
+The following command will grab a Kerberos ticket for the currently logged in user.  <user> can actually be any valid Kerberized user account, if omitted then the current Unix username is used.  If the default realm is already specified in krb5.conf then it can be also be omitted.
+ $kinit <user>@EXAMPLE.CO.UK
+
+If the realm is already set and the ticket is for a username that matches the Unix user then simply run kinit and enter a password.
+
+=== Keytab permissions ===
+It is not always possible to use supplementary groups with some daemons eg Squid.  The following will add additional ACLs to the file to allow the processes to read the keytab. This assumes that you have ACL support on the system.  If not then you will need some other method of allowing the daemons to access the single keytab.  Failing that you will have to create separate keytabs for each application and get them set up manually - web search for that.
+ 
+<pre>
+#setfacl -m u:squid:r /etc/krb5.keytab
+#setfacl -m u:apache:r /etc/krb5.keytab
+
+getfacl /etc/krb5.keytab
+ file: etc/krb5.keytab
+ owner: root
+ group: root 
+user::rwx
+user:squid:r--
+user:apache:r--
+group::r--
+mask::r--
+other::---
+</pre>
+
+== Samba ==
+* Set Samba to allow access via both secrets (winbind and local passwd) and Kerberos. 
+
+{{File|/etc/samba/smb.conf|Samba config|<pre>
+[global]
+   realm = EXAMPLE.CO.UK
+   kerberos method = secrets and keytab
+   winbind refresh tickets = yes
+</pre>}}
+
+* Tell winbind to setup a ticket cache for a logged in user. /etc/security/pam_winbind.conf:
+ [global]
+    krb5_auth = yes
+    krb5_ccache_type = FILE
+
+* Join the domain and creates the Kerberos keytab
+ #net ads join -U <admin user>
+
+== Apache ==
+* emerge www-apache/mod_auth_kerb
+* Add -D AUTH_KERB to /etc/conf.d/apache2
+
+* /etc/apache2/modules.d/11_mod_auth_kerb.conf:
+
+ <IfDefine AUTH_KERB>
+ LoadModule auth_kerb_module modules/mod_auth_kerb.so
+ 
+ #LogLevel Debug
+ 
+ <Location "/">
+        AuthType Kerberos
+        AuthName "Kerberos Login"
+        Krb5Keytab /etc/krb5.keytab
+        KrbAuthRealms EXAMPLE.CO.UK
+        KrbMethodNegotiate On
+        KrbMethodK5Passwd Off       
+        Require valid-user
+ </Location>
+ </IfDefine>
+
+Set KrbMethodK5Passwd on to get prompted for authentication.  Only use this with https
+
+* Use Samba to set the service principle(s) for Apache (HTTP):
+
+ #net ads keytab add HTTP -U <a_domain_admin>
+ #net ads keytab add HTTP/<another SPN>@EXAMPLE.CO.UK -U <a_domain_admin>
+ #net ads keytab list
+Note the format in the second command.  This will get non default Service Principle Names into the keytab, eg for externally facing vhosts.  Remember to set the [realms] section in krb5.conf if you need an external domain to map to an internal realm (or AD domain as MS call them!) The second command also seems to need the SPN added to AD using setspn.exe:
+ c:\>setspn.exe -A HTTP/<another SPN> <computer account>
+
+Test it with this index.php in the web server's htdocs somewhere (assuming you have PHP installed and configured):
+
+ <?php
+  echo "You have logged in as <b>" . $_SERVER['REMOTE_USER'] . "</b>;";
+ ?>
+
+Errors like this in errors_log means that the keytab can't be read - check the permissions on it for the apache user:
+ gss_acquire_cred() failed: Unspecified GSS failure.  Minor code may provide more information (, Permission denied)
+
+== SSHD ==
+Use Samba to get the service principle for SSHD (host):
+  #net ads keytab add host -U <a_domain_admin>
+
+* /etc/ssh/sshd_conf
+ KerberosAuthentication yes                   
+ KerberosOrLocalPasswd yes                          
+ KerberosTicketCleanup yes                     
+ GSSAPIAuthentication yes 
+ GSSAPICleanupCredentials yes
+ UsePAM no
+
+If you turn off PAM you wont be able to get pam to make a home directory for a new user. So another method will be needed to do this.
+
+== Squid ==
+Squid also seems to use "HTTP" as its service name.
+ 
+* /etc/squid/squid.conf
+ auth_param negotiate program /usr/libexec/squid/squid_kerb_auth -d
+ auth_param negotiate children 10
+ auth_param negotiate keep_alive on 
+ 
+ acl AUTHENTICATED proxy_auth REQUIRED
+ http_access allow AUTHENTICATED
+ http_access deny all
+
+* /etc/conf.d/squid
+ SQUID_KEYTAB="/etc/krb5.keytab"
+
+== NFS ==
+=== Windows Server ===
+Add the file services role to Windows 2008(R2) and include services for NFS.  To add NFS support on a folder, right click it and set it up on the NFS tab.  NFS shares do not seem to appear in the Server Manager under Share and Storage Management.  The Services for Network File System MMC snap in is a bit random as well.
+
+=== Linux ===
+WIP: [[User:Gerdesj|Gerdesj]] 19:39, 28 January 2012 (UTC)
+== Client apps ==
+=== setspn.exe ===
+Check Service Principle Names:
+ c:\>setspn.exe -l <account_name>
+
+=== net ads keytab ===
+Check a Samba maintained keytab like this:
+ #net ads keytab list
+
+=== ktutil and klist ===
+Check keytabs like this:
+
+ # ktutil
+ ktutil:  ?
+ ktutil:  rkt /etc/krb5.keytab
+ ktutil:  l
+ slot KVNO Principal
+ ---- ---- ---------------------------------------------------------------------
+   1    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
+   2    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
+   3    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
+   4    5                  HTTP/host@EXAMPLE.CO.UK
+   5    5                  HTTP/host@EXAMPLE.CO.UK
+   6    5                  HTTP/host@EXAMPLE.CO.UK
+   7    5     host/host.example.co.uk@EXAMPLE.CO.UK
+   8    5     host/host.example.co.uk@EXAMPLE.CO.UK
+   9    5     host/host.example.co.uk@EXAMPLE.CO.UK
+  10    5                  host/host@EXAMPLE.CO.UK
+  11    5                  host/host@EXAMPLE.CO.UK
+  12    5                  host/host@EXAMPLE.CO.UK
+ ktutil:  quit
+
+or 
+ #klist -ke /etc/krb5.keytab
+
+=== Firefox ===
+* about:config
+* Type "negotiate" into the filter
+* Set network.negotiate-auth.trusted-uris to example.co.uk 
+* Additional domains (eg short names) can be added separated by commas: eg example.co.uk,host1,host2.  
+* (On Linux only) at a user shell prompt type "kinit" and enter your AD password to authenticate and get a ticket from the KDC (This is not needed if you set up /etc/security/pam_winbind.conf)
+
+=== Chrome(ium) ===
+Start Chrome with --auth-server-whitelist="*.example.co.uk" --auth-negotiate-delegate-whitelist="*.example.co.uk" 
+Not needed on Windows
+
+See http://www.chromium.org/developers/design-documents/http-authentication and http://www.chromium.org/administrators/policy-list-3
+
+=== IE ===
+Does single signon out of the box. IE 7+. Don't use <=6!
+
+=== ssh ===
+For the SSH client on Linux - /etc/ssh/ssh_conf:
+
+ host *.example.co.uk
+   GSSAPIAuthentication yes
+
+=== PuTTY ===
+* Get hold of a development snapshot until it is in the core release.
+* Connection -> Data, select Use system username (your name)
+* Connection -> SSH -> Auth -> GSSAPI, make sure Attempt GSSAPI authentication is selected
+
+== References ==
+http://acksyn.org/diary/?p=475
+
+[[Category:Software]]
