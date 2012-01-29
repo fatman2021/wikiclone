@@ -26,92 +26,93 @@ You may want to create a realm to domain mapping section [realms].  This is espe
 Do not create the file /etc/krb5.keytab - Samba will give an error if it can't create the keytab file.
 
 The following command will grab a Kerberos ticket for the currently logged in user.  <user> can actually be any valid Kerberized user account, if omitted then the current Unix username is used.  If the default realm is already specified in krb5.conf then it can be also be omitted.
- $kinit <user>@EXAMPLE.CO.UK
+{{cmd|kinit <user>@EXAMPLE.CO.UK}}
 
 If the realm is already set and the ticket is for a username that matches the Unix user then simply run kinit and enter a password.
 
 === Keytab permissions ===
 It is not always possible to use supplementary groups with some daemons eg Squid.  The following will add additional ACLs to the file to allow the processes to read the keytab. This assumes that you have ACL support on the system.  If not then you will need some other method of allowing the daemons to access the single keytab.  Failing that you will have to create separate keytabs for each application and get them set up manually - web search for that.
- 
-<pre>
-#setfacl -m u:squid:r /etc/krb5.keytab
-#setfacl -m u:apache:r /etc/krb5.keytab
-
-getfacl /etc/krb5.keytab
- file: etc/krb5.keytab
- owner: root
- group: root 
+{{RootCmd|setfacl -m u:squid:r /etc/krb5.keytab}}
+{{RootCmd|setfacl -m u:apache:r /etc/krb5.keytab}}
+{{RootCmd|getfacl /etc/krb5.keytab|output=<pre>
+file: etc/krb5.keytab
+owner: root
+group: root 
 user::rwx
 user:squid:r--
 user:apache:r--
 group::r--
 mask::r--
 other::---
-</pre>
+</pre>}}
 
 == Samba ==
 Make sure you have a reasonably recent Samba release installed (eg 3.5 or 3.6+)
 * Set Samba to allow access via both secrets (winbind and local passwd) and Kerberos. There are many more options that you might want to configure when joining an AD domain but here we only consider Kerberos related ones.
 
-{{File|/etc/samba/smb.conf|Samba config|<pre>
+{{File|/etc/samba/smb.conf|Part of Samba config|<pre>
 [global]
    realm = EXAMPLE.CO.UK
    kerberos method = secrets and keytab
    winbind refresh tickets = yes
 </pre>}}
 
-* Tell winbind to setup a ticket cache for a logged in user. /etc/security/pam_winbind.conf:
- [global]
-    krb5_auth = yes
-    krb5_ccache_type = FILE
+* Tell winbind to setup a ticket cache for a logged in user. 
+{{File|/etc/security/pam_winbind.conf|Part of winbind's PAM config|<pre>
+[global]
+   krb5_auth = yes
+   krb5_ccache_type = FILE
+</pre>}}
 
 * Join the domain and creates the Kerberos keytab
- #net ads join -U <admin user>
+{{RootCmd|net ads join -U <admin user>}}
 
 == Apache ==
 * emerge www-apache/mod_auth_kerb
 * Add -D AUTH_KERB to /etc/conf.d/apache2
 
-* /etc/apache2/modules.d/11_mod_auth_kerb.conf:
+* Edit the module config or add it into your vhost configuration
+{{File|/etc/apache2/modules.d/11_mod_auth_kerb.conf|Example Apache Kerberos config|<pre>
+<IfDefine AUTH_KERB>
+LoadModule auth_kerb_module modules/mod_auth_kerb.so
 
- <IfDefine AUTH_KERB>
- LoadModule auth_kerb_module modules/mod_auth_kerb.so
- 
- #LogLevel Debug
- 
- <Location "/">
-        AuthType Kerberos
-        AuthName "Kerberos Login"
-        Krb5Keytab /etc/krb5.keytab
-        KrbAuthRealms EXAMPLE.CO.UK
-        KrbMethodNegotiate On
-        KrbMethodK5Passwd Off       
-        Require valid-user
- </Location>
- </IfDefine>
+#LogLevel Debug
 
-Set KrbMethodK5Passwd on to get prompted for authentication.  Only use this with https
+<Location "/">
+       AuthType Kerberos
+       AuthName "Kerberos Login"
+       Krb5Keytab /etc/krb5.keytab
+       KrbAuthRealms EXAMPLE.CO.UK
+       KrbMethodNegotiate On
+       KrbMethodK5Passwd Off       
+       Require valid-user
+</Location>
+</IfDefine>
+</pre>}}
+
+Set KrbMethodK5Passwd on to get prompted for authentication.  I suggest you only use this over SSL/TLS (https) for obvious reasons.
 
 * Use Samba to set the service principle(s) for Apache (HTTP):
-
- #net ads keytab add HTTP -U <a_domain_admin>
- #net ads keytab add HTTP/<another_SPN>@EXAMPLE.CO.UK -U <a_domain_admin>
- #net ads keytab list
+{{RootCmd|net ads keytab add HTTP -U <a_domain_admin>}}
+{{RootCmd|net ads keytab add HTTP/<another_SPN>@EXAMPLE.CO.UK -U <a_domain_admin>}}
+{{RootCmd|net ads keytab list}}
 Note the format in the second command.  This will get non default Service Principle Names into the keytab, eg for externally facing vhosts.  Remember to set the [realms] section in krb5.conf if you need an external domain to map to an internal realm (or AD domain as MS call them!) The second command also seems to need the SPN added to AD using setspn.exe (on a Windows machine with Domain Admin rights and probably an elevated command prompt on server 2008+):
  c:\>setspn.exe -A HTTP/<another SPN> <computer account>
 
 Test it with this index.php in the web server's htdocs somewhere (assuming you have PHP installed and configured):
 
- <?php
-  echo "You have logged in as <b>" . $_SERVER['REMOTE_USER'] . "</b>;";
- ?>
+<pre>
+<?php
+ echo "You have logged in as <b>" . $_SERVER['REMOTE_USER'] . "</b>;";
+?>
+</pre>
 
 Errors like this in errors_log means that the keytab can't be read - check the permissions on it for the apache user:
  gss_acquire_cred() failed: Unspecified GSS failure.  Minor code may provide more information (, Permission denied)
 
 == SSHD ==
 Use Samba to get the service principle for SSHD - "host".  Just to spell it out in case of confusion: use the word host in your command. It is not part of an example, only change the bits between < and >.
-  #net ads keytab add host -U <a_domain_admin>
+{{RootCmd|net ads keytab add host -U <a_domain_admin>}}
 
 {{File|/etc/ssh/sshd_conf|Part of sshd's configuration file|<pre>
 KerberosAuthentication yes                   
@@ -137,15 +138,16 @@ http_access allow AUTHENTICATED
 http_access deny all
 </pre>}}
 
-* /etc/conf.d/squid
- SQUID_KEYTAB="/etc/krb5.keytab"
+{{File|/etc/conf.d/squid|Part of Squid RC config file|<pre>
+SQUID_KEYTAB="/etc/krb5.keytab"
+</pre>}}
 
 == NFS ==
+WIP: [[User:Gerdesj|Gerdesj]] 19:39, 28 January 2012 (UTC)
 === Windows Server ===
 Add the file services role to Windows 2008(R2) and include services for NFS.  To add NFS support on a folder, right click it and set it up on the NFS tab.  NFS shares do not seem to appear in the Server Manager under Share and Storage Management.  The Services for Network File System MMC snap in is a bit random as well.
 
 === Linux ===
-WIP: [[User:Gerdesj|Gerdesj]] 19:39, 28 January 2012 (UTC)
 == Client apps ==
 === setspn.exe ===
 Check Service Principle Names:
@@ -153,33 +155,33 @@ Check Service Principle Names:
 
 === net ads keytab ===
 Check a Samba maintained keytab like this:
- #net ads keytab list
+{{RootCmd|net ads keytab list}}
 
 === ktutil and klist ===
 Check keytabs like this:
 
- # ktutil
- ktutil:  ?
- ktutil:  rkt /etc/krb5.keytab
- ktutil:  l
- slot KVNO Principal
- ---- ---- ---------------------------------------------------------------------
-   1    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
-   2    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
-   3    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
-   4    5                  HTTP/host@EXAMPLE.CO.UK
-   5    5                  HTTP/host@EXAMPLE.CO.UK
-   6    5                  HTTP/host@EXAMPLE.CO.UK
-   7    5     host/host.example.co.uk@EXAMPLE.CO.UK
-   8    5     host/host.example.co.uk@EXAMPLE.CO.UK
-   9    5     host/host.example.co.uk@EXAMPLE.CO.UK
-  10    5                  host/host@EXAMPLE.CO.UK
-  11    5                  host/host@EXAMPLE.CO.UK
-  12    5                  host/host@EXAMPLE.CO.UK
- ktutil:  quit
-
+{{RootCmd|ktutil|Output=<pre>
+ktutil:  ?
+ktutil:  rkt /etc/krb5.keytab
+ktutil:  l
+slot KVNO Principal
+---- ---- ---------------------------------------------------------------------
+  1    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
+  2    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
+  3    5     HTTP/host.example.co.uk@EXAMPLE.CO.UK
+  4    5                  HTTP/host@EXAMPLE.CO.UK
+  5    5                  HTTP/host@EXAMPLE.CO.UK
+  6    5                  HTTP/host@EXAMPLE.CO.UK
+  7    5     host/host.example.co.uk@EXAMPLE.CO.UK
+  8    5     host/host.example.co.uk@EXAMPLE.CO.UK
+  9    5     host/host.example.co.uk@EXAMPLE.CO.UK
+ 10    5                  host/host@EXAMPLE.CO.UK
+ 11    5                  host/host@EXAMPLE.CO.UK
+ 12    5                  host/host@EXAMPLE.CO.UK
+ktutil:  quit
+</pre>}}
 or 
- #klist -ke /etc/krb5.keytab
+{{RootCmd|klist -ke /etc/krb5.keytab}}
 
 === Firefox ===
 * about:config
@@ -197,15 +199,15 @@ See http://www.chromium.org/developers/design-documents/http-authentication and 
 Does single signon out of the box. IE 7+. Don't use <=6!
 
 === ssh ===
-For the SSH client on Linux - /etc/ssh/ssh_conf:
-
- host *.example.co.uk
-   GSSAPIAuthentication yes
+For the SSH client on Linux: 
+{{File|/etc/ssh/ssh_conf|sshd config snippet|<pre>
+host *.example.co.uk
+  GSSAPIAuthentication yes
+</pre>
 
 === PuTTY ===
 * Get hold of a development snapshot until it is in the core release.
 * Connection -> Data, select Use system username (your name)
 * Connection -> SSH -> Auth -> GSSAPI, make sure Attempt GSSAPI authentication is selected
-
 
 [[Category:Software]]
