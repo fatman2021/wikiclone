@@ -654,4 +654,20 @@ Xreset script.
 su -l -c 'mpd --kill; pulseaudio -k' $USER
 </pre>}}
 
+== Bypassing policykit ==
+As of early 2012, consolekit fails to serve its purpose of identifying which users are physically preset. It can only track one local user, which is the one using the first seat. The other users are identified as "inactive", which causes policykit to deny them access to local resources. Put simply, only the first seat can perform actions such as mounting a USB memory device through udisks (which is the interface desktop environments use).
+
+Implementing a good security policy governing local users is difficult. While it may be hoped that systemd will at some point provide a better solution, it is currently best to assume that all local users are trusted.
+
+Sadly, major desktops now depend on policykit and will force its installation. As a workaround, we can enable access to local devices to inactive users. Create a new policy file:
+{{File|/etc/polkit-1/localauthority/50-local.d/mseat.pkla|policykit workaround|<pre>
+[allow operations]
+Identity=unix-group:plugdev
+Action=org.freedesktop.udisks.*;org.blueman.*
+ResultAny=yes
+ResultActive=yes
+ResultInactive=yes
+</pre>}}
+This will allow those inactive users that are in the plugdev group to perform actions in the udisks and blueman categories. Available actions can be listed using the "pkaction" tool.
+
 [[Category:Desktop]]
