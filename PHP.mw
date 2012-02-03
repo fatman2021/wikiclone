@@ -1,0 +1,40 @@
+== Installation ==
+
+The [http://www.gentoo.org/proj/en/php/php-installing.xml installation guide] of PHP on Gentoo written by the PHP herd covers how to install PHP on your Gentoo system.
+
+== Running multiple versions of PHP ==
+
+One of the great advantages of using Gentoo for PHP development is the version slotting. It is very simple to swap between multiple versions of PHP as well as run multiple versions simultaneously. This is all done with the eselect command provided by the {{Package|app-admin/eselect-php}} package which should get pulled in automatically with your installation. This allows you to run, for example, PHP 5.3 for your '''cli''' SAPI but PHP 5.4 on your web server. It also allows you to quickly test your application on different versions of PHP.
+
+To list the available versions for the '''cli''' SAPI use: {{RootCmd|eselect php list cli}}
+ [1]   php5.3
+ [2]   php5.4 *
+ [3]   php5.5
+
+The version marked with the * is the current active version, and to check the other SAPIs simply replace '''cli''' with '''fpm''','''cgi''','''apache2'''.
+
+To swap versions use: {{RootCmd|eselect php set cli 1}}
+
+Where "1" corresponds to the number in the output of "show".
+
+You are now running PHP 5.3 on command line. {{RootCmd|php -v}}
+ PHP 5.3.9-pl0-gentoo (cli) (built: Jan 30 2012 13:21:46) 
+  
+Now, lets say you want to run two php-fpm servers, with two different versions, for two different websites. There is a nifty feature in the php-fpm init script which will do this for you. Symlink the global php-fpm script to all the versions you would like to run simultaneously. So if I wanted to run both PHP 5.3 and PHP 5.4 I would do this. {{RootCmd|ln -s /etc/init.d/php-fpm /etc/init.d/php-fpm-php5.3}} {{RootCmd|ln -s /etc/init.d/php-fpm /etc/init.d/php-fpm-php5.4}}
+
+Now, I will need to stop any running instances on the global PHP as we don't want the global and slotted version fighting for the same port. {{RootCmd|/etc/init.d/php-fpm stop}}
+{{Note|Don't try to use the global php-fpm script at the same time as slotted init scripts}}
+
+Also, because php-fpm binds itself to a port we need our two versions to use two separate ports so let's update the 5.4 config.
+
+{{File|/etc/php/fpm-php5.4/php-fpm.conf||
+<pre>listen = 127.0.0.1:9001</pre>}}
+
+I can now use my new slotted init scripts to launch the different versions. {{RootCmd|/etc/init.d/php-fpm-php5.3 start}} {{RootCmd|/etc/init.d/php-fpm-php5.4 start}}
+
+From here you just need to adjust the port setting in your web server configuration (apache, nginx, lighttpd etc.) to use the port of the version you are interested in for each of your server's virtual hosts.
+
+== Further reading ==
+* [http://www.php.net/ PHP Homepage]
+* [http://www.gentoo.org/proj/en/php/php-installing.xml PHP Install guide]
+* [http://www.gentoo.org/proj/en/php/php-upgrading.xml PHP Upgrade guide (and useful information on slotting)]
