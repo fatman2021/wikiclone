@@ -1,0 +1,97 @@
+ZoneMinder is a system to provide monitoring, logging and a browser based interface to security cameras.  As of this writing, there is no ebuild (there used to be one.)  It can support multiple V4L and network connected devices with a clear uncluttered interface in any browser.
+
+{{Warning|It can be tricky to get working to your satisfaction. This is a blow by blow summary of an install from source on my system, you will probably need to get more sources of information}}
+
+= Get the source =
+{{RootCmd|cd /usr/src
+|wget http://www2.zoneminder.com/downloads/ZoneMinder-1.25.0.tar.gz
+|tar xzvf ZoneMinder-1.25.0.tar.gz
+}}
+
+= MySQL =
+* Create a database
+{{Cmd|mysql -p|output=<pre>
+mysql> create database zm;
+mysql> exit;
+</pre>
+}}
+
+* Import the database schema and base data
+{{Cmd|mysql -p zm < /usr/src/Zoneminder-<version>/db/zm_create.sql}}
+
+* Create a MySQL user for ZM to use.  If you change the user and/or password from the defaults here, then make sure you set those in the source configure phase.
+{{Cmd|mysql -p|output=<pre>
+mysql> use zm;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> grant select,insert,update,delete on zm.* to 'zmuser'@localhost identified by 'zmpass';Query OK, 0 rows affected (0.00 sec)
+
+mysql> flush privileges;
+Query OK, 0 rows affected (0.00 sec)
+</pre>
+}}
+
+= Dependencies =
+This is the Perl module checking from configure.  You'll have to add any missing ones yourself.
+<pre>
+checking for perl... perl
+checking for perl version greater than or equal to 5.6.0... ok
+checking for perl module Sys::Syslog... ok
+checking for perl module DBI... ok
+checking for perl module DBD::mysql... ok
+checking for perl module Getopt::Long... ok
+checking for perl module Time::HiRes... ok
+checking for perl module Date::Manip... ok
+checking for perl module LWP::UserAgent... ok
+checking for perl module ExtUtils::MakeMaker... ok
+checking for perl module Module::Load... ok
+checking for perl module Device::SerialPort... ok
+checking for perl module Net::FTP... ok
+checking for perl module Net::SFTP::Foreign... no
+configure: WARNING: Net::SFTP::Foreign is required for automatic event uploading using sftp
+checking for perl module Expect... ok
+checking for perl module Archive::Tar... ok
+checking for perl module Archive::Zip... ok
+checking for perl module Net::SMTP... ok
+checking for perl module MIME::Lite... ok
+checking for perl module MIME::Entity... ok
+checking for perl module X10::ActiveHome... no
+configure: WARNING: X10::ActiveHome is required for X.10 support
+</pre>
+
+{{Note|dev-perl/net-sftp has quite a few deps and does not seem to include Net::SFTP::Foreign}}
+{{Note|There are no X10 modules in Portage}}
+
+= Configure =
+{{Cmd|<nowiki>./configure --with-webdir=/var/www/localhost/htdocs/zm --with-cgidir=/var/www/localhost/cgi-bin CPPFLAGS=-D__STDC_CONSTANT_MACROS --use-mmap=no
+</nowiki>}}
+
+{{Note|<nowiki>--prefix=/usr/local by default - probably best to leave as is to avoid conflicting with Portage controlled stuff</nowiki>}}
+{{Note|<nowiki>No Sys::Mmap in Portage hence --use-mmap=no</nowiki>}}
+{{Note|<nowiki>CPPFLAGS needed to compile ffmpeg modules</nowiki>}}
+
+= Apache =
+* Enable PHP short tags if you get the following errors in Apache's error log and in the browser output
+<pre>
+PHP Parse error:  syntax error, unexpected $end in /var/www/localhost/htdocs/zm/includes/functions.php on line 2437
+</pre>
+* Set date.timezone in php.ini if the output is full of timezone errors to eg "Europe\London"
+
+{{RootCmd|eselect php list apache2|output=<pre>
+  [1]   php5.3 *
+  [2]   php5.4
+</pre>
+}}
+{{File|/etc/php/apache2-php5.3/php.ini|Snippet from php.ini for Apache|<pre>
+short_open_tag = On
+date.timezone = "Europe/London"
+</pre>
+}}
+
+=Other=
+Shared memory:
+ sysctl kernel.shmmax=536870912
+
+[[Category:Software]]
