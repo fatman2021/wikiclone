@@ -1,0 +1,101 @@
+Simple mail server by using postfix MTA, dovecot IMAP + SASL and SquirrelMail webmail. This guide is for getting basic mail server working in small amount of time. You can always add more features later.
+
+== postfix MTA ==
+
+Remove ssmtp. (Blocks postfix)<br />
+emerge -C ssmtp<br />
+
+Install postfix. Enable use flags : dovecot-sasl ipv6 pam ssl hardened?
+{{Emerge|mail-mta/postfix}}
+
+Configure postfix :
+{{File|/etc/postfix/main.cf||<pre>
+myhostname = example.com
+mydomain = example.com
+myorigin = example.com
+inet_interfaces = all
+mynetworks_style = host
+mydestination = $myhostname, localhost, $mydomain, mail.$mydomain, www.$mydomain
+home_mailbox = .maildir/
+
+# sasl
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+</pre>}}
+
+
+Edit aliases. Redirect root mails, add line "root: user"<br />
+nano /etc/mail/aliases<br />
+
+generate aliases<br />
+newaliases<br />
+
+redirect root mails to user. Add line : "user@localhost"<br />
+nano /root/.forward<br />
+
+check for errors<br />
+postfix check<br />
+
+start postfix<br />
+/etc/init.d/postfix start<br />
+
+Check /var/log/mail.log for any errors.<br />
+cat /var/log/mail.log<br />
+
+
+
+== dovecot IMAP, POP & SASL ==
+
+install dovecot. enable use flags : bzip2 ipv6 maildir pam ssl zlib
+{{Emerge|net-mail/dovecot}}
+
+Configure dovecot :
+{{File|/etc/dovecot/dovecot.conf||<pre>
+# sasl
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    # Assuming the default Postfix user and group
+    user = postfix
+    group = postfix
+  }
+}
+</pre>}}
+
+Start dovecot<br />
+/etc/init.d/dovecot start<br />
+
+
+
+== SquirrelMail webmail ==
+
+Change dir to webserver root<br />
+cd /var/www/htdocs<br />
+
+Unpack squirrelmail<br />
+tar xjf squirrelmail-webmail-1.4.22.tar.bz2<br />
+
+configure squirrelmail<br />
+cd squirrelmail-webmail-1.4.22/config<br />
+cp config_default.php config.php<br />
+nano config.php<br />
+
+edit following :<br />
+$data_dir = '/home/user/.squirrelmail/data/';<br />
+$attachment_dir = '/home/user/.squirrelmail/attach/';<br />
+$domain = 'example.com';<br />
+
+
+Create data dirs and set permissions<br />
+mkdir -p /home/user/.squirrelmail/data/<br />
+mkdir -p /home/user/.squirrelmail/attach/<br />
+<br />
+chown -R user:lighttpd /home/user/.squirrelmail/<br />
+chmod -R 770 /home/user/.squirrelmail/<br />
+
+Test config.<br />
+Open url on web browser : http://example.com/squirrelmail-webmail-1.4.22/src/configtest.php<br />
+
+Everything sould be working now :)
