@@ -44,8 +44,9 @@ But if need be PA can be manually installed with
 }}
 
 ===Making ALSA-only applications use PA===
-
-For applications with PA support, no additional setup is required but for ALSA-only applications to be able to benefit from PA, it is highly recommended that {{Package|media-plugins/alsa-plugins}} is installed with pulseaudio USE flag (should be the case but it does not hurt to check) and ''/etc/asound.conf'' is edited to route them back to PA so that ALSA-only applications, too, can have improved mixing quality and per-application sound controls among other benefits. If you do this, it's important that udev is being used for hardware detection, else PA itself will be unable to access sound devices without custom configuration.<br />
+{{Warning|Starting with {{Package|media-plugins/alsa-plugins-1.0.25-r1}} having it installed with the '''pulseaudio''' USE flag is enough, rest of the section has been left for now because no version with the fix has not yet been stabilized. If you previous had followed this article, upon upgrade to a fixed version (there should also be an einfo reminder), please remove the ''asound.conf'' file.}}
+For applications with PA support, no additional setup is required but for ALSA-only applications to be able to benefit from PA, it is highly recommended that {{Package|media-plugins/alsa-plugins}} is installed with '''pulseaudio''' USE flag (should be the case but it does not hurt to check) and ''/etc/asound.conf'' is edited to route them back to PA so that ALSA-only applications, too, can have improved mixing quality and per-application sound controls among other benefits.
+{{Warning|It's highly important that udev is being used for hardware detection, else PA itself will be unable to access sound devices without custom configuration!}}
 
 {{file|/etc/asound.conf|Change this file to make PA the default for ALSA applications|<pre>
 pcm.!default {
@@ -55,15 +56,6 @@ ctl.!default {
         type pulse
 }
 </pre>}}
-{{Note|The pulseaudio ebuild installs ALSA hooks that should route ALSA applications via PA when and only when PA is running '''but''' for unknown reason these hooks get ignored so if unsure please use the ''asound.conf'' shown above.}}
-
-In case that you are using ALSA as a PulseAudio sink (output), you should make sure to have set a specific device to be used. Else, PulseAudio will use ALSA device "default" as sink which is now routed back to PulseAudio, forming a loop. To avoid this, add the parameter ''device=hw:0,0'' (you can find the correct IDs by running ''aplay -l''). In the following example, we use two soundcards, of which card 0, device 0 is used as a sink (audio output, e.g. speakers) and card 1, device 0 as a source (audio input, e.g. microphone). PulseAudio will still be able to access other cards than these but it needs these settings to avoid looping the ''default'' device in this setup.
-
-{{file|/etc/pulse/default.pa|Using a specific ALSA device as PulseAudio sink/source|<pre>
-load-module module-alsa-sink device=hw:0,0
-load-module module-alsa-source device=hw:1,0
-</pre>}}
-{{Note|If you forget to specify this when using the ALSA sink/source modules, you may not notice any problems until you restart PulseAudio (e.g. by logging out and back in or rebooting). You will be left with (obviously) no audio and a slowed down desktop environment and hanging applications until you resolve the loop, restart alsasound and kill all running pulseaudio processes.}}
 
 ===Fast user switching===
 
@@ -112,6 +104,18 @@ Re-sampling can require quite a lot of computational power, PA defaults are rath
 {{Note|
 Using a version of PA with Orc support can noticeably decrease CPU usage, too.
 }}
+
+== Things that really should not be here ==
+=== Using PA without udev ===
+{{Warning|Using PA without udev is highly '''not''' recommended. It should be noted that this not only breaks auto-detection but hot-plugging as whole needless making your life harder as well as disabling use of ConsoleKit essentially voiding the article. Please, if you have the possibility to use udev, just use it.}}
+
+In case that you are using ALSA as a PulseAudio sink (output) and routing ALSA apps to PA but not using udev, you must make sure to have set a specific device to be used. Else, PulseAudio will use ALSA device "default" as sink which is routed back to PulseAudio, forming a loop. To avoid this, add the parameter ''device=hw:0,0'' (you can find the correct IDs by running ''aplay -l''). In the following example, we use two soundcards, of which card 0, device 0 is used as a sink (audio output, e.g. speakers) and card 1, device 0 as a source (audio input, e.g. microphone). PulseAudio will still be able to access other cards than these but it needs these settings to avoid looping the ''default'' device in this setup.
+
+{{file|/etc/pulse/default.pa|Using a specific ALSA device as PulseAudio sink/source|<pre>
+load-module module-alsa-sink device=hw:0,0
+load-module module-alsa-source device=hw:1,0
+</pre>}}
+{{Note|If you forget to specify this when using the ALSA sink/source modules, you may not notice any problems until you restart PulseAudio (e.g. by logging out and back in or rebooting). You will be left with (obviously) no audio and a slowed down desktop environment and hanging applications until you resolve the loop, restart alsasound and kill all running pulseaudio processes.}}
 
 ==Links==
 * [http://pulseaudio.org/wiki/AboutPulseAudio PulseAudio Homepage]
