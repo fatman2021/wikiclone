@@ -43,23 +43,66 @@ Output (may be different)
 Ovirt manual is suggesting installing openJDK. My server has sun-jdk already set so I will point you to [http://www.gentoo.org/doc/en/java.xml Gentoo Java guide] for setting java environment. '''Make sure you are setting jdk version 1.6!!!'''
 
 == Install Java application server – JBoss ==
-This step describes installing upstream server binaries.
-* Download binaries archive 
-{{Cmd|wget http://sourceforge.net/projects/jboss/files/JBoss/JBoss-5.1.0.GA/jboss-5.1.0.GA-jdk6.zip/download -O jboss-5.1.0.GA-jdk6.zip}}
-* Unzip the archive
-{{RootCmd|unzip jboss-5.1.0.GA-jdk6.zip}}
-* Move the directory to a suitable location. JBoss folder should be owned by the unprivileged user, so you'll be able to deploy build products into JBoss.
-{{RootCmd
-|mv jboss-5.1.0.GA /usr/local/.
-|chown -R ''devuser'':''devusergroup'' /usr/local/jboss-5.1.0.GA
-}}
-* Test that JBoss is working by	starting the server ('''-b 0.0.0.0''' option makes server bind to all IP addresses)
-{{RootCmd|/usr/local/jboss-5.1.0.GA/bin/run.sh -b 0.0.0.0}}
+oVirt runs on JBoss application server, here is a quick guide to set up jboss for our needs. The plan is to have JBoss under /opt, make a jboss user and set the installation dir as the user's home dir (I did this because I wanted to have everything on a single place for portability and because it makes things easier with permissions etc). Then we 'll put ovirt inside this directory and set it up.
+
+* First go to /opt as root
+{{Cmd|cd /opt}}
+
+* Download latest JBoss version 7
+{{Cmd|wget http://download.jboss.org/jbossas/7.1/jboss-as-7.1.0.CR1b/jboss-as-7.1.0.CR1b.tar.gz}}
+
+* Untar the archive
+{{RootCmd|tar xvzf jboss-as-7.1.0.CR1b.tar.gz}}
+
+* Create the jboss user {{Note|For compatibility with Fedora we use uid/gid 36, on gentoo this one is used for the "games" user/group so make sure you change uid/gids inside /etc/passwd and /etc/group and reset permissions on /usr/games, without it we'll have some trouble setting up NFS storage domains later. Also the -Z option is there in case you are on the SELinux profile, if not ignore it}}
+{{RootCmd|useradd -d /opt/jboss-as-7.1.0.CR1b -u 36 -g 36 -r jboss -Z user_u}}
+
+* Now set permissions for jboss's home dir
+{{RootCmd|chown -R ''jboss'':''jboss'' /opt/jboss-as-7.1.0.CR1b}}
+
+* Test that JBoss is working by	starting the server as jboss user ('''-b 0.0.0.0''' option makes server bind to all IP addresses)
+{{RootCmd|su jboss|}}{{cmd|cd ~|bin/standalone.sh -b 0.0.0.0}}
+* Now open a browser to your server's hostname (let's assume it's "engine-dev") and check out htp://engine-dev:8080 you should see JBoss's welcome screen.
+
 === Troubleshooting JBoss ===
 If you're being attacked by exceptions, follow this list:
 * Verify jboss folder owner and permissions.
 * For external connections, make sure your firewall allows incoming traffic on 8080 port.
-* If your machine has and selinux policy installed, make sure it will not block JBoss.
+* If your machine has and selinux policy installed, make sure it will not block JBoss. Here is a very dirty and insecure jboss.te just to temporarily pass these denials (you'll also need selinux-java)
+{{Code|jboss.te|<pre>module jboss 1.0;
+
+require {
+        type user_tmp_t;
+        type user_home_dir_t;
+        type bin_t;
+        type usr_t;
+        type port_t;
+        type node_t;
+        type sysfs_t;
+        type newrole_t;
+        type java_t;
+        class tcp_socket { name_bind listen accept node_bind };
+        class fd use;
+        class capability dac_override;
+        class file{ read write getattr open create unlink };
+        class dir { getattr read write open search add_name create remove_name };
+}
+
+#============= java_t ==============
+allow java_t newrole_t:fd use;
+allow java_t bin_t:file { getattr read open };
+allow java_t self:capability dac_override;
+allow java_t sysfs_t:dir { read search open };
+allow java_t user_tmp_t:dir { read getattr open search write add_name create remove_name };
+allow java_t user_home_dir_t:dir search;
+allow java_t user_tmp_t:file { create read write open unlink };
+allow java_t usr_t:dir { write add_name create remove_name };
+allow java_t usr_t:file { create open write };
+allow java_t port_t:tcp_socket name_bind;
+allow java_t self:tcp_socket { listen accept };
+allow java_t node_t:tcp_socket node_bind;
+</pre>}}
+
 * Used TCP ports: 8080/8443/8083/1090/4457
 ** These ports may be used by other applications. Either close other application or change JBoss configuration (/usr/local/jboss-5.1.0.GA/server/default/deploy/jbossweb.sar/server.xml)
 ** Since JBoss binds to the hostname, your hostname should be resolvable, or you may add it to /etc/hosts for local resolution.
