@@ -87,6 +87,35 @@ load-module module-alsa-source device=hw:1,0
 </pre>}}
 {{Note|If you forget to specify this when using the ALSA sink/source modules, you may not notice any problems until you restart PulseAudio (e.g. by logging out and back in or rebooting). You will be left with (obviously) no audio and a slowed down desktop environment and hanging applications until you resolve the loop, restart alsasound and kill all running pulseaudio processes.}}
 
+=== Headless server ===
+These instructions are for setting up a headless pulse audio server. Meaning a server which has no display on it but does have speakers. This provides the ability to use the remote server's speakers for audio output.
+
+You will get warned in a dozen places for doing this, but it is the proper method.
+==== Server ====
+First configure use flags and emerge the package. The system-wide use flag is masked, so we have to unmask it.
+{{RootCmd|mkdir -p /etc/portage/profile|echo "-system-wide" >> /etc/portage/profile/use.mask|echo "media-sound/pulseaudio system-wide" >> /etc/portage/package.use}}
+{{Emerge|media-sound/pulseaudio}}
+
+Add the following 2 lines somewhere in the system.pa file
+{{File|/etc/pulse/system.pa||<pre>
+load-module module-native-protocol-tcp auth-ip-acl=1.2.3.0/24
+load-module module-alsa-sink
+</pre>}}
+''Replace 1.2.3.0/24 with the network mask that you want to be able to access the server.''
+{{Note|If you have multiple ALSA devices, you will need to specify the device to use by adding <u>device</u> or <u>device_id</u> to the module-alsa-sink module}}
+
+Tell the init script that we really do want to do this, and then start it up.
+{{RootCmd|<nowiki>echo "PULSEAUDIO_SHOULD_NOT_GO_SYSTEMWIDE=1" &gt;&gt; /etc/conf.d/pulseaudio</nowiki>|rc-update add pulseaudio default|rc-service pulseaudio start}}
+
+==== Client ====
+{{Cmd|<nowiki>pacmd load-module module-tunnel-sink server=1.2.3.4</nowiki>}}
+''<u>server</u> (1.2.3.4) is the IP of the server.''
+
+For a more permanent solution you can add the following to your default.pa file
+{{File|/etc/pulse/default.pa||<nowiki>load-module module-tunnel-sink server=1.2.3.4</nowiki>}}
+
+Now in the pulse audio volume control you should see the remote server listed under <u>Output Devices</u>. Under playback you should have a button next to the ''Mute audio'' button that when clicked will let you switch that audio stream to whichever output you want.
+
 ==Usage==
 
 A handy cross-desktop graphical tool is available for setting various aspects of PA. Install it with
