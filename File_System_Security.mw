@@ -1,0 +1,66 @@
+Good security is like an onion, it has many layers. The file system is just another layer in the proverbial onion. While there are numerous file systems in existence, this guide tries to remain agnostic and focus more on the hierarchy itself rather then an individual implementation.
+
+== Partitioning ==
+Partitioning is a key part of implementing security at the file system level.<br />
+* It limits the impact of disk failure
+* It simplifies the process of creating backups
+* It allows administrators to add restrictions such as quotas and read-only permissions more effectively 
+
+==== File System Hierarchy ====
+To better understand how to divide the file system across partitions and apply various restrictions, we need to understand a little about the function of the file system hierarchy and its major directories.
+Systems based on GNU/Linux or FreeBSD, like Gentoo, borrow from the traditional Unix file system hierarchy. This hierarchy was designed in a time when many physical disks where needed to span the whole system. In modern times with larger storage mediums being common place, average users need not worry about partitioning and file system hierarchy too much. But on a server we need to have a finer grained control over the system and manipulate it to our will.
+
+Some of the more common directories include:<br />
+'''/'''        Pronounced as "root", this is the top level of the hierarchy. All other file systems are mounted somewhere below this one.<br />
+'''/root'''    Is the home directory of the root user. Typically email from daemons such as cron will be sent here.<br />
+'''/boot'''    Typically holds bootloader and its configuration, as well as kernel binaries.<br />
+'''/etc'''     On modern systems like GNU/Linux and FreeBSD this holds system wide configuration information.<br />
+'''/bin'''     System binaries are located here. Tools like grep, ls, and tar.<br />
+'''/sbin'''    Essential system binaries are located here; for example things to mount and create file systems. As well as the initialization daemon. Superuser privileged is required to use them. <br />
+'''/lib'''     System libraries are located here. On most 64bit systems /lib is usually just a symlink and separate '''/lib32''' and '''/lib64''' directories will exist.<br />
+'''/dev'''     Special device files are located here. This is one of the most important directories as its contents are how Unix-like systems interface with hardware from all but the lowest level, the drivers themselves. <br />
+'''/home'''    This directory is where the typical home directory for system users go. It usually isn't a good idea to put network shares for user home directories here. <br />
+'''/opt'''     Is a place for non-default software. A good generalization is that, if the software didn't come from Portage or another Gentoo maintained source, it should probably go here.<br />
+'''/tmp'''     This is scrap space that is used per-session and is typically overwritten on a reboot.<br />
+'''/var'''     This directory has been described as "multi-purpose" which is very accurate. It contains items ranging from system logs to PID files to spoolers, it even has its own temporary space.<br />
+'''/var/tmp''' As you might have guessed, this is the temporary space within /var. It deserves its own listing because Portage uses this as an area to unpack and build distfiles.<br />
+'''/usr'''     This is often referred to as "a secondary hierarchy" because more then often it mirrors the root directory in its layout, only it is where user applications are stored rather then system applications.<br />
+'''/proc'''    A virtual file system that allows users with privilege to monitor and modify kernel settings and configurations at run time.<br />
+
+Further reading:<br />
+[http://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/dirstructure.html FreeBSD Directory Structure]<br />
+[http://www.tldp.org/LDP/Linux-Filesystem-Hierarchy/html/ Linux Filesystem Hierarchy]<br />
+
+So what has this to do with partitioning you ask? As was explained previously, the hierarchy was designed to involve multiple disks, partitions being logical disks, we can place some of these directories on their own file system and their own partition.<br />
+Its worth noting that: /etc, /bin, /sbin, /dev, and /lib '''MUST''' reside on the same partition as /<br />
+
+==== Sizing ====
+It is rather difficult to judge what size a partition should be. It takes a bit of experience but after thinking about the machine's intended purpose, one can usually get a pretty good idea of sizing needs. For example a computer used on a typical client machine would benefit from a large /home directory, while on a server /home should be considerably smaller.
+
+==== Mount permissions ====
+On Unix-like systems mount points are typically defined in /etc/fstab. <br />
+{{File|/etc/fstab||<pre>
+# <fs>                  <mountpoint>                   <type>          <opts>                            <dump/pass>
+/dev/sda1               /boot                           ext4            noauto,nouser,noatime                   1 2
+/dev/sda3               /                               ext4            noatime,nouser                          0 1
+/dev/sda2               none                            swap            sw                                      0 0
+/dev/sda5               /usr                            ext4            nodev,nouser,noatime                    0 3
+/dev/sda6               /opt                            ext4            nodev,nouser,noatime                    0 3
+/dev/sda7               /var                            ext4            nodev,nouser,noexec                     0 3
+/dev/sda8               /tmp                            ext4            nodev,nouser,noatime,noexec             0 3
+/dev/sda9               /var/tmp                        ext4            nodev,nouser,noatime                    0 3
+/dev/sda10              /usr/portage/distfiles          ext4            nodev,nouser,noatime                    0 3
+/dev/sda11              /usr/portage/packages           ext4            nodev,nouser,noatime,noexec             0 3
+/dev/sda12              /home                           ext4            nodev,nouser,noatime,noexec             0 3
+
+/dev/sdb1               /srv/home                       ext4            nodev,nouser,noatime,noexec             0 3
+/dev/sdb2               /srv/share                      ext4            nodev,nouser,noatime,noexec             0 3
+
+# network shares
+distfile:/usr/portage/distfiles /usr/portage/distfiles          nfs             noauto,user                     0 0
+package:/usr/portage/packages   /usr/portage/packages           nfs             noauto,user                     0 0
+
+
+</pre>}}
+<br />
+TODO: creating partitions, effective use and creation of quotas, /etc/fstab permissions and fscking, file system encryption
