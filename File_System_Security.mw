@@ -37,30 +37,48 @@ Its worth noting that: /etc, /bin, /sbin, /dev, and /lib '''MUST''' reside on th
 ==== Sizing ====
 It is rather difficult to judge what size a partition should be. It takes a bit of experience but after thinking about the machine's intended purpose, one can usually get a pretty good idea of sizing needs. For example a computer used on a typical client machine would benefit from a large /home directory, while on a server /home should be considerably smaller.
 
-==== Mount permissions ====
+==== Mount options ====
 On Unix-like systems mount points are typically defined in /etc/fstab. <br />
 {{File|/etc/fstab||<pre>
-# <fs>                  <mountpoint>                   <type>          <opts>                            <dump/pass>
-/dev/sda1               /boot                           ext4            noauto,nouser,noatime                   1 2
-/dev/sda3               /                               ext4            noatime,nouser                          0 1
-/dev/sda2               none                            swap            sw                                      0 0
-/dev/sda5               /usr                            ext4            nodev,nouser,noatime                    0 3
-/dev/sda6               /opt                            ext4            nodev,nouser,noatime                    0 3
-/dev/sda7               /var                            ext4            nodev,nouser,noexec                     0 3
-/dev/sda8               /tmp                            ext4            nodev,nouser,noatime,noexec             0 3
-/dev/sda9               /var/tmp                        ext4            nodev,nouser,noatime                    0 3
-/dev/sda10              /usr/portage/distfiles          ext4            nodev,nouser,noatime                    0 3
-/dev/sda11              /usr/portage/packages           ext4            nodev,nouser,noatime,noexec             0 3
-/dev/sda12              /home                           ext4            nodev,nouser,noatime,noexec             0 3
+# <fs>                  <mountpoint>                   <type>          <opts>                                  <dump/pass>
+/dev/sda1               /boot                           ext4            noauto,nouser,noatime,ro                   1 2
+/dev/sda3               /                               ext4            noatime,nouser,ro                          0 1
+/dev/sda2               none                            swap            sw                                         0 0
+/dev/sda5               /usr                            ext4            nodev,nouser,noatime,ro                    0 3
+/dev/sda6               /opt                            ext4            nodev,nouser,noatime,ro                    0 3
+/dev/sda7               /var                            ext4            nodev,nouser,noexec                        0 3
+/dev/sda8               /tmp                            ext4            nodev,nouser,noatime,noexec                0 3
+/dev/sda9               /var/tmp                        ext4            nodev,nouser,noatime                       0 3
+/dev/sda10              /usr/portage/distfiles          ext4            nodev,nouser,noatime                       0 3
+/dev/sda11              /usr/portage/packages           ext4            nodev,nouser,noatime,noexec                0 3
+/dev/sda12              /home                           ext4            nodev,nouser,noatime,noexec                0 3
 
-/dev/sdb1               /srv/home                       ext4            nodev,nouser,noatime,noexec             0 3
-/dev/sdb2               /srv/share                      ext4            nodev,nouser,noatime,noexec             0 3
-
-# network shares
-distfile:/usr/portage/distfiles /usr/portage/distfiles          nfs             noauto,user                     0 0
-package:/usr/portage/packages   /usr/portage/packages           nfs             noauto,user                     0 0
-
-
+/dev/sdb1               /srv/home                       ext4            nodev,nouser,noatime,noexec                0 3
+/dev/sdb2               /srv/share                      ext4            nodev,nouser,noatime,noexec                0 3
 </pre>}}
 <br />
-TODO: creating partitions, effective use and creation of quotas, /etc/fstab permissions and fscking, file system encryption
+This is an example of a recently created fstab on a home server, in the fourth column, mount options are listed.<br />
+The options we are currently focused on include:
+* ro/rw
+* suid/nosuid
+* dev/nodev
+* exec/noexec
+* user(s)/nouser
+* auto/noauto
+* defaults
+
+Certain file systems like /usr and /boot have been mounted with ro or read-only permission (in contrast to rw, read-write). This makes adding software or running updates slightly more painful by requiring an extra couple reboots. But the occasional difficulty means that accidentally deleted files arn't really deleted and malicious software has a harder time living through a reboot. There are also certain files that need to be written to, for example /etc/resolv.conf. For these files you can move them to a separate directory with write access and then place a symlink in their place.<br />
+
+Mounting a file system with nosuid can also add more grief to an administrator's life. But this disables the suid and sgui bits so that sudo and su -c to not execute commands, a user must first login as the user with permission to execute or modify a file either directly or through su. This makes it more difficult for privilege escalation attacks to be successful. <br />
+
+Using nodev disables special device files on that file system. The kind commonly found under /dev. Really you don't want these kinds of files anywhere but /dev, they can let an attacker break out of a chroot jail and bypass other restrictions.<br />
+
+Noexec is a tricky option to enable. It disables executable permissions, and is great to place on directories like /tmp. However, extracting compressed files, for example distfiles, requires executable permissions. This is why, at least on Gentoo systems, /var/tmp should be placed on its own partition. Disabling executable permissions on /var is usually a good idea but without /var/tmp on a separate partition software installation under Gentoo would be hampered.<br />
+
+Nouser requires that root mount the file system. Specifying user means that any user can mount the system but it implies; noexec, nosuid, and nodev unless explicitly overridden. Some systems offer the users option which is similar to user but there is a corresponding users group which a user must first be a member of to mount the file system.<br />
+
+In the example above, noauto is passed to the /boot partition. Noauto means that the file system is not automatically mounted at boot time, conversely auto explicitly mounts file systems at boot time. It is desirable to mount /boot as noauto so that should something ever happen, for example a power outage, your boot partition is not uncleanly unmounted. So that when you go to boot, the kernel image is safe and any recovery tools such as a statically compiled busybox can be used to repair any damage.<br />
+
+Defaults will typically replace all of the following permissions with one word; rw, suid, dev, exec, auto, nouser, async <br />
+
+TODO: creating partitions, effective use and creation of quotas, fscking, file system encryption
