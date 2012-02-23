@@ -1,32 +1,23 @@
-'''Gentoo Hardened is a Gentoo project that offers multiple additional security services on top of the all-known Gentoo Linux installation. Although each of them can be selected separately, Gentoo Hardened enables several risk-mitigating options in the toolchain, supports PaX, grSecurity, SELinux, TPE and more'''
+Gentoo Hardened is a Gentoo project that offers multiple additional security services on top of the all-known Gentoo Linux installation. Although each of them can be selected separately, Gentoo Hardened enables several risk-mitigating options in the toolchain, supports PaX, grSecurity, SELinux, TPE and more.
 
 Whether you are running an Internet-facing server or a flexible workstation, when you are dealing with multiple threats you will want to harden your system further than just automatically applying the latest security patches. ''Hardening'' a system means that you take additional countermeasures against attacks and other risks and is usually a combined set of activities you perform against the system.
 
 Within Gentoo Hardened, several projects are active that help you further harden your Gentoo system through
-* enabling specific options in the toolchain (compiler, linker ...) such as forcing position-independent executables (PIE), stack smashing protection and compile-time buffer checks
-* enabling PaX extensions in the Linux kernel, which offer additional protection measures like address space layout randomization and non-executable memory
-* enabling grSecurity extensions in the Linux kernel, including additional chroot restrictions, additional auditing, process restrictions, etc.
-* enabling [[Hardened Gentoo/SELinux|SELinux]] extensions in the Linux kernel, which offers a Mandatory Access Control system enhancing the standard Linux permission restrictions
+* Enabling specific options in the toolchain (compiler, linker ...) such as forcing position-independent executables (PIE), stack smashing protection and compile-time buffer checks.
+* Enabling PaX extensions in the Linux kernel, which offer additional protection measures like address space layout randomization and non-executable memory.
+* Enabling grSecurity extensions in the Linux kernel, including additional chroot restrictions, additional auditing, process restrictions, etc..
+* Enabling [[Hardened Gentoo/SELinux|SELinux]] extensions in the Linux kernel, which offers a Mandatory Access Control system enhancing the standard Linux permission restrictions.
 
 Of course, this includes the necessary userspace utilities to manage these extensions.
-<br />
-<br />
 
-===Step-By-Step Method For Switching to Hardened Profile===
-
-'''1.'''  Select a hardened profile, so that ''package management'' will be done in a hardened way.
-
-{{RootCmd|eselect profile list}}
+== Switching to a Hardened Profile ==
+Select a hardened profile, so that ''package management'' will be done in a hardened way.
+{{RootCmd|eselect profile set list}}
 {{RootCmd|eselect profile set [number of hardened profile]}}
-
-
-'''2.'''  By choosing the hardened profile (Step 1), certain package management settings (masks, USE flags, etc) become default for your system.  This applies to many packages, including the toolchain.  The "toolchain" is used for building/compiling your programs, and includes: the GNU Compiler Collection (GCC), binutils (required tools for building), and the GNU C library (glibc).  By re-emerging the toolchain, these new default settings will apply to the toolchain, which will allow all future ''package compiling'' to be  done in a hardened way.
-
-{{RootCmd|emerge --oneshot binutils gcc virtual/libc}}
-
-
-'''3.'''  The above command rebuilt GCC, which can now be used to compile hardened software.  Make sure that the hardened option is selected for GCC.
-
+{{RootCmd|source /etc/profile}}
+By choosing the hardened profile, certain package management settings (masks, USE flags, etc) become default for your system.  This applies to many packages, including the toolchain.  The toolchain is used for building/compiling your programs, and includes: the GNU Compiler Collection (GCC), binutils (linker, etc.), and the GNU C library (glibc).  By re-emerging the toolchain, these new default settings will apply to the toolchain, which will allow all future ''package compiling'' to be  done in a hardened way.
+{{emerge|params=--oneshot|binutils gcc virtual/libc}}
+The above command rebuilt GCC, which can now be used to compile hardened software.  Make sure that the hardened option is selected for GCC.
 {{RootCmd|gcc-config -l
 |output=<pre>[1] i686-pc-linux-gnu-4.5.3 *
 [2] i686-pc-linux-gnu-4.5.3-hardenednopie
@@ -34,39 +25,27 @@ Of course, this includes the necessary userspace utilities to manage these exten
 [4] i686-pc-linux-gnu-4.5.3-hardenednossp
 [5] i686-pc-linux-gnu-4.5.3-vanilla
 </pre>}}
-
-In the example output above, the hardened GCC profile is the one without a suffix. If you want to disable PIE or SSP, choose the relavent '''hardenedno'''('''pie'''|'''ssp''') or both, '''hardenednopiessp'''. The '''vanilla''' profile is of course the one with hardening disabled.
-
-If the hardened version isn't chosen select it.  For example:
-{{RootCmd|gcc-config x86_64-pc-linux-gnu-4.4.4}}
+In the example output above, the hardened GCC profile is the one without a suffix. If you want to disable PIE or SSP, choose the relavent '''hardenedno'''('''pie'''|'''ssp''') or both, '''hardenednopiessp'''. The '''vanilla''' profile is of course the one with hardening disabled. Finally source your new profile settings:
 {{RootCmd|source /etc/profile}}
 
+If you use the "prelink" package, remove it, since it isn't compatible with the hardened profile:
+{{emerge|params=--depclean|prelink}}
 
-'''4.'''  If you use the "prelink" package, then remove it since it isn't compatible with the hardened profile
-{{RootCmd|emerge -C prelink}}
+Now you can reinstall all packages with your new hardened toolchain:
+{{emerge|params=--emptytree --verbose|world}}
 
-
-'''5'''.  Now you can reinstall all packages, so that they will be impacted by the effects of both Step 1 and Step 2, and so that they won't be prelink'ed.  The new packages will [http://www.gentoo.org/proj/en/hardened/pax-quickstart.xml#doc_chap5 be built with PIE/SSP].
-
-{{RootCmd|emerge -e --keep-going system}}
-{{RootCmd|emerge -e --keep-going world}}
-
-
-'''6.'''  Install hardened kernel sources, so that the kernel will *manage your running system* in a hardened way (especially using PaX).
-
-{{RootCmd|emerge hardened-sources}}
+Install hardened kernel sources, so that the kernel will *manage your running system* in a hardened way (especially using PaX):
+{{emerge|hardened-sources}}
 
 Now configure/compile the sources and add the new kernel to your boot manager (ie., GRUB).
-   See http://www.rockfloat.com/howto/gentoo-hardened.html#kernel
-   See http://www.gentoo.org/proj/en/hardened/grsecurity.xml
-   See http://www.gentoo.org/proj/en/hardened/pax-quickstart.xml
 
-
-'''7.'''  Other options/steps?
-
+== Tips & Tricks ==
+=== Hardened Gentoo/Grsecurity chroot ===
+If you want to chroot to a copied environment where the CONFIG_GRKERNSEC_CHROOT is enabled you must use the cd grub and change the root(cd) kernel(cd) initrd(cd) setting to from (cd) to (hdx,y).
 <br />
+Now you can install the grub environment.
 
-=== Per Package ===
+=== Per Package Hardening Settings ===
 {{Warning|This method is not supported by Gentoo.}}
 Changing the GCC profile to deal with specific packages can be a pain. A way to avoid this is to set per-package C(XX)FLAGS using [[:/etc/portage/env|package.env]]. Create the file /etc/portage/env/nossp and add to that:
 {{File|/etc/portage/env/nossp|Disable SSP|<pre>
@@ -85,16 +64,11 @@ Finally add the package you want to disable either PIE or SSP for to /etc/portag
 sys-libs/zlib nopie
 </pre>}}
 
-== Tips & Tricks ==
-
-=== [[Hardened Gentoo/Grsecurity|Grsecurity]] chroot ===
-
-If you want to chroot to a copied environment where the CONFIG_GRKERNSEC_CHROOT is enabled you must use the cd grub and change the root(cd) kernel(cd) initrd(cd) setting to from (cd) to (hdx,y).
-<br />
-Now you can install the grub environment.
-
 == Links ==
 * [http://www.gentoo.org/proj/en/hardened/ Gentoo Hardened Project]
 * [http://www.gentoo.org/proj/en/hardened/selinux/ Gentoo Hardened SELinux Project]
+* http://www.rockfloat.com/howto/gentoo-hardened.html#kernel
+* http://www.gentoo.org/proj/en/hardened/grsecurity.xml
+* http://www.gentoo.org/proj/en/hardened/pax-quickstart.xml
 
 [[Category:Core system]]
