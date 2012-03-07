@@ -64,6 +64,7 @@ Copy it to /etc/local.d/nvidia.start and set the executable bit:
 == Switching using a single kernel and {{Package|sys-apps/hprofile}} ==
 
 This is how I switch between two profiles with hprofile using a single kernel: `/etc/init.d/hprofile' has to be modified adding a few lines for vga switching. Warning: hprofile shall be added in boot runlevel.
+Just be sure to built kernel modules about everything--,at least nouveau,ttm,drm and optionaly(?) ac,button,video,i2c-algo-bit,--to avoid useless hassles.  
 
 {{GenericCmd|<pre>--- /etc/init.d/hprofile	2011-07-26 15:26:56.000000000 +0000
 +++ /etc/init.d/hprofile	2012-03-03 17:42:34.686258567 +0000
@@ -72,7 +73,7 @@ This is how I switch between two profiles with hprofile using a single kernel: `
  
  start() {
 +	vgap=$(/usr/sbin/hpdet vga)
- 	powerp=$(/usr/sbin/hpdet disk)
+ 	powerp=$(/usr/sbin/hpdet power)
  	ebegin "Selecting hardware profile vga.$vgap and power.$powerp"
 +	/usr/sbin/hprofile vga 
  	/usr/sbin/hprofile power
@@ -81,7 +82,7 @@ This is how I switch between two profiles with hprofile using a single kernel: `
  
  stop() {
 +	vgap=$(/usr/sbin/hprofile -c vga)
- 	powerp=$(/usr/sbin/hprofile -c disk)
+ 	powerp=$(/usr/sbin/hprofile -c power)
  	ebegin "Stopping hardware profile vga.$vgap and power.$powerp"
 +	/usr/sbin/hprofile -s vga
  	/usr/sbin/hprofile -s power
@@ -108,11 +109,11 @@ exit 0</pre>}}
 
 {{File|/etc/hprofile/profiles/vga/stop [or /etc/hprofile/profiles/vga/post-stop]||<pre>
 #!/bin/sh
-[ "${1}" == "intel" || "${1}" == "radeon" ] && \
+[ "${1}" == "intel" ] || [ "${1}" == "radeon" ] && \
     echo ON > /sys/kernel/debug/vgaswitcheroo/switch
 echo "Finished Stopping profile ${1} and moving back xorg.conf"</pre>}}
 
-{{Note|If a specific kernel module is loaded with an initramfs or modules init services, the appropriate profile will be selected.}}
+{{Note|If a specific kernel module is loaded with an initramfs or modules init services, the appropriate profile will be selected with the following script.}}
 {{File|/etc/hprofile/profiles/vga/ptest||<pre>
 if [  ! -e /sys/kernel/debug/vgaswitcheroo/switch ]; then
     [ -z "$(lsmod | grep -i radeon)" ] && modprobe radeon && sleep 3
