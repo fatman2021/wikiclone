@@ -2,8 +2,6 @@
 |{{InfoBox wikipedia|SLiM|header=true}}
 }}
 
-{{Important|This page is currently (09.03.2012) being created. If you want to edit it, please wait a few days until it gets final shape.}}
-
 SLiM (Simple Login Manager) is a desktop-independent graphical login manager for X11. Being fast and having only a few dependencies, it is a popular choice amongst users of lightweight window managers. 
 
 = Installation =
@@ -42,7 +40,7 @@ In following sections there are described several methods of setting one session
 
 
 == Setting a global default session ==
-You can set a default session for all users of the computer, by setting the '''XSESSION''' variable. To do this, create and edit file '''/etc/env.d/90xsession'''
+You can set a default session for all users of the computer, by setting the ''XSESSION'' variable. To do this, create and edit file '''/etc/env.d/90xsession'''
 {{File|/etc/env.d/90xsession||<pre>
 XSESSION="awesome"
 </pre>}}
@@ -79,10 +77,12 @@ You will only need to make sure the file is executable:
 
 The default session triggered by '''/usr/share/slim/Xsession''' is '''/etc/X11/Sessions/Xsession''', which subsequently calls '''~/.xsession'''. Both '''Xsesssion''' files do some good and useful things (like reading '''~/.Xresources''' file and feeding xrdb with it), but they do not explicitly start any window manager. This way you can start some programs before the window manager itself, or start WM with a customized command.
 
-To start your sessions this way, make sure you have no global default session set (or set XSESSION="Xsession" like described above). Then edit your '''~/.xsession''' file, putting your WM launcher at the end.
+To start your sessions this way, make sure you have no global default session set (or set ''XSESSION="Xsession"'' like described above). Then edit your '''~/.xsession''' file, putting your WM launcher at the end.
 
 The file may look e.g. like this:
 {{File|~/.xsession||<pre>
+#!/bin/sh
+
 # Run urxvt daemon
 urxvtd -q -o -f
 # Set xserver parameters
@@ -96,8 +96,67 @@ exec /usr/bin/awesome
 
 
 === Per-user default session without using any default session files ===
+If you do not like '''any''' defaults from '''/usr/share/slim/Xsession''' and '''/etc/X11/Sessions/Xsession''', you can let your users set everything by themselves. It is generally not a good idea, but sometimes you may need it.
+{{Warning|You must be sure that '''every''' user will know what he is expected to do and that he/she will have enough knowledge to create ~/.xinitrc by himself. For example, when configuring SLiM in this way, neither .Xresources nor .Xkbmap files are read by default and no errorfiles are created.}}
+
+
+Start by editing '''/etc/slim.conf''' in the following way
+{{File|/etc/slim.conf||<pre>
+#login_cmd            exec /bin/bash -login /usr/share/slim/Xsession %session
+login_cmd           exec /bin/bash -login ~/.xinitrc %session
+...
+#sessiondir           /etc/X11/Sessions
+sessions            awesome,i3
+</pre>}}
+In the ''sessions'' line you may put the names of window manager you are planning to use.
+
+Then create and edit '''~/.xinitrc''' file, which may look as below:
+{{File|~/.xsession||<pre>
+#!/bin/sh
+#
+# Custom xinitrc file for Gentoo
+
+DEFAULT_SESSION="awesome"
+
+# Redirect errors to a file in user's home directory if we can
+for errfile in "$HOME/.wm-errors" "${TMPDIR-/tmp}/wm-$USER" "/tmp/wm-$USER"
+do
+    if ( cp /dev/null "$errfile" 2> /dev/null )
+    then
+        chmod 600 "$errfile"
+        exec > "$errfile" 2>&1
+        break
+    fi
+done
+
+# Define Xresources
+userresources=$HOME/.Xresources
+
+# Merge what is available
+if [ -f "$userresources" ]; then
+    xrdb -merge "$userresources"
+fi
+
+# Run urxvt daemon
+urxvtd -q -o -f
+# Set xserver parameters
+xset s 0
+xset dpms 0 0 1800
+
+# Start WM
+case $1 in 
+awesome|i3)
+        exec $1
+        ;;
+*)
+        exec $DEFAULT_SESSION
+        ;;
+esac
+</pre>}}
+
 
 == More tweaks ==
+=== Theme selection ===
 Theme selection is done by changing the following line:
 {{File|/etc/slim.conf||<pre>
 current-theme    slim-gentoo-simple
@@ -106,6 +165,7 @@ You can easily find what themes are available on your system:
 {{Cmd|ls /usr/share/slim/themes/}}
 
 
+=== NumLock state on login ===
 The NumLock key can be turned on or off by default:
 {{File|/etc/slim.conf||<pre>
 numlock    on
