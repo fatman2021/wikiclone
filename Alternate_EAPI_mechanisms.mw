@@ -1,6 +1,6 @@
 This is a working page for collecting the different proposals how the EAPI should be specified in future. See also the [http://archives.gentoo.org/gentoo-dev/msg_288fa260bf4c9242a33380fd4bfce0f8.xml previous discussion].
 
-== Parse the EAPI assignment statement ==
+= Parse the EAPI assignment statement =
 
 This first proposal would require that the syntax of the EAPI assignment statement in ebuilds matches a well defined regular expression. A scan of the Portage tree shows that the statement only occurs in the following variations (using EAPI 4 as example):
 : EAPI=4
@@ -18,18 +18,18 @@ Note: The first and the third point are already fulfilled by all ebuilds in the 
 
 The package manager would determine the EAPI by parsing the assignment with above regular expression. A sanity check would be added. [https://bugs.gentoo.org/show_bug.cgi?id=402167 Citing Zac Medico:] "The fact that we can compare the probed EAPI to the actual EAPI variable after the ebuild is sourced seems like a perfect sanity check. We could easily detect inconsistencies and flag such ebuilds as invalid, providing a reliable feedback mechanism to ebuild developers."
 
-=== Upgrade path ===
+== Upgrade path ==
 * For a transition period, new ebuilds must still be parseable by old package managers. Changes of global scope behaviour must account for this.
 
-=== Pros ===
+== Pros ==
 * No modifications to the tree required.
 * Uniform style of assignment throughout all EAPIs.
 
-=== Cons ===
+== Cons ==
 * Cannot be used in other languages than bash (unless they allow for multiline comments).
 * Gets complex and can subtly fail when dealing w/ double assigns in the ebuild- has to choose the last it sees to match what any eclasses/later code would see while sourcing the ebuild.
 
-== EAPI in header comment ==
+= EAPI in header comment =
 
 A different approach would be to specify the EAPI in a specially formatted comment in the first line of the ebuild's header. The syntax could be one of the following:
 * The word "ebuild", followed by whitespace, followed by the EAPI, followed by end-of-line or whitespace. Corresponding regexp:
@@ -37,70 +37,70 @@ A different approach would be to specify the EAPI in a specially formatted comme
 * The word "EAPI", followed by an equals sign ("="), followed by the EAPI, followed by end-of-line or whitespace. Corresponding regexp:
 *: <nowiki>\<EAPI=([A-Za-z0-9._+-]*)($|[ \t])</nowiki>
 
-=== Upgrade path ===
+== Upgrade path ==
 * The usual EAPI assignment statement in the ebuild would be still required for a transition period. A sanity check similar to the one [[#Parse the EAPI assignment statement|mentioned above]] would be added.
 * Alternatively, the EAPI variable could be made read-only immediately, if a statement like one of the following was added to ebuilds:
 *: <nowiki>: ${EAPI=5}</nowiki>
 *: <nowiki>[[ ${EAPI} ]] || { EAPI=-1; return; }</nowiki>
 
-=== Pros ===
+== Pros ==
 * Clean and well-defined solution when the transition is finished.
 * Allows for changes of global scope behaviour,
 * Can be used not only for bash, but also for other languages.
 * New atom syntax can be deployed.
 
-=== Cons ===
+== Cons ==
 * Duplicate EAPI specification (header comment and bash assignment) in ebuilds during a transition period.
 * Current-day PMs can invalidly process this and assume they know the EAPI- under current rules, lack of an EAPI assignment means EAPI=0. After the transition period of duplicate assignments is over, this will break any older PMs that try processing ebuilds using just an EAPI header comment.
 * It may be counter intuitive to developers if the comment isn't appropriately formated, that messing with the EAPI line can break things.
 * Backwards incompatible modifications to version specification cannot be deployed via this.
 
-== EAPI in header comment and one-time change of file extension ==
+= EAPI in header comment and one-time change of file extension =
 
 [[#EAPI in header comment|As before]], but combined with a one time change of the file extension, like .ebuild → .eb. (Note: It was pointed out that "eb" should be avoided because of its [[wikt:ёб|meaning in Russian]].)
 
 The EAPI variable could be made read-only in bash before sourcing the ebuild.
 
-=== Pros ===
+== Pros ==
 * Allows for changes of global scope behaviour,
 * Can be used not only for bash, but also for other languages.
 * The transition period is effectively close ended, rather than open ended as the [[#EAPI_in_header_comment|previous form]] is.
 * New atom syntax can be deployed.
 
-=== Cons ===
+== Cons ==
 * Two different file extensions for ebuilds.  After a lengthy transition period, the old .ebuild extension could be phased out reducing it to just one.
 * Per the same as [[#EAPI_in_header_comment|previous form]], it may be counter intuitive to a developer that modifying a comment (if not appropriately structured) can break things.
 
-== EAPI specified by a function ==
+= EAPI specified by a function =
 
 For new eapis (5 and up) the syntax used is
  <nowiki>eapi 5 || die</nowiki>
 
 For existing EAPIs, we leave it as is, or require them to convert over after a couple of years if we truly care.
 
-=== Pros ===
+== Pros ==
 * Uses standard bash syntax.
 * For PMs that support the eapi function, the manager can exit out quietly w/out issue if they don't support that EAPI.
 * If the PM does support that EAPI (the common path), no extra work was expended since it's checked during metadata regeneration (which already requires sourcing the ebuild).
 * Current-day package managers will properly skip over this when they see it- there is no required transition period, nor potential for older PMs to see it and invalidly think they know the EAPI.
 * New atom syntax can be deployed.
 
-=== Cons ===
+== Cons ==
 * While current-day package managers will properly handle this and mask the ebuild, it does induce ugly warnings.  Not required, but it would be advisable to deploy the eapi function before eapi5 to minimize people seeing those warnings.
 * Backwards incompatible modifications to raw version specification cannot be deployed via this.
 * If a developer uses latest-bash version syntax prior to the eapi invocation, the syntax complaints can be visible to users.  Addressable via enabling 'set -e' till the ''eapi'' function has been called (although this solution requires discussion/commentary from the community at large).
 
-== Glep55/EAPI in filename ==
+= Glep55/EAPI in filename =
 
 The relevant specification is [http://www.gentoo.org/proj/en/glep/glep-0055.html glep55].  For the sake of accuracy, this is included since it is a technically viable alternative.
 
-=== Pros ===
+== Pros ==
 * Subjectively, a collection of people view EAPI in the filename as correct.
 * While an audit is required to verify past portage behaviour for manifest validation, this should be deployable for users immediately.
 * New atom syntax can be deployed.
 * New versioning specifications can be deployed; for example, having '-r1' be allowed to be '-r1.0'.
 
-=== Cons ===
+== Cons ==
 * Breaks current-day repoman manifest support.  Fixable, but there is a flag day there.  Audit required to verify this (specifically introducing new files into $PN directory) doesn't break older versions of portage doing verification.
 * ''ebuild'' is a well known extension.
 * Was already [http://www.gentoo.org/proj/en/council/meeting-logs/20100823-summary.txt rejected by a previous council].
