@@ -93,7 +93,7 @@ For future versions of PMs, prior to EAPI5, they should deploy the eapi function
 * Bash shopt settings, new bash version requirements, etc, can be deployed w/out a transition period as long as that functionality is used *after* the eapi function invocation.
 
 === Cons ===
-* While current-day package managers will properly handle this and mask the ebuild, it does induce ugly warnings.  Not required, but it would be advisable to deploy the eapi function before eapi5 to minimize people seeing those warnings.
+* While current-day package managers will properly handle this and mask the ebuild, it does induce [[#Appendix|ugly warnings]].  Not required, but it would be advisable to deploy the eapi function before eapi5 to minimize people seeing those warnings.
 * Backwards incompatible modifications to raw version specification cannot be deployed via this.
 * If a developer uses latest-bash version syntax prior to the eapi invocation, the syntax complaints can be visible to users.  Addressable via enabling 'set -e' till the ''eapi'' function has been called (although this solution requires discussion/commentary from the community at large).
 * File/libmagic would have to look for the bash invocation '^ *eapi [^\n ]( *|| *die *$)' to flag this as an ebuild.  Not the simplest check.
@@ -129,3 +129,39 @@ For PM versions that have not yet been updated with this support, they will no l
 * File/libmagic would have to look for metadata vars other to identify this as an ebuild.  Doable, but it would make the patterns sensitive to our variable naming and has the potential for bugs due to it relying on regex'ing bash source.
 * While paludis has supported for this a long while, it's worth noting that exherbo actually has only one version- exheres-0, which they've modified rather than cutting new versions (akin to the pre-EAPI days for portage where new functionality was deployed unversioned).  Real world usage and implications of this is likely limited (paludis/exherbo devs should expand this section as appropriate).
 * May lead to unwieldy filenames for EAPIs that aren't entirely numeric, like kdelibs-4.7.4-r12.ebuild-kdebuild-1 or paludis-0.72.2.ebuild-paludis-1.
+
+
+== Appendix ==
+Example Portage session, demonstrating the behaviour of present-day Portage (2.1.10.49) with a new ebuild of the "[[#EAPI specified by a function]]" type.
+
+foo-1.ebuild is a regular EAPI 4 ebuild, foo-2.ebuild is a ebuild in a hypothetical EAPI 5. Note that Portage correctly masks foo-2. However, it outputs noisy error messages.
+<pre>
+$ emerge -av foo
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies  /usr/portage/local/ulm/app-misc/foo/foo-2.ebuild: line 5: eapi: command not found
+ * ERROR: app-misc/foo-2 failed (depend phase):
+ *   (no error message)
+ * 
+ * Call stack:
+ *      ebuild.sh, line 521:  Called source '/usr/portage/local/ulm/app-misc/foo/foo-2.ebuild'
+ *   foo-2.ebuild, line   5:  Called die
+ * The specific snippet of code:
+ *   eapi 5 || die
+ * 
+ * If you need support, post the output of 'emerge --info =app-misc/foo-2',
+ * the complete build log and the output of 'emerge -pqv =app-misc/foo-2'.
+ * This ebuild is from a repository named 'ulm'
+ * S: '/var/tmp/portage/app-misc/foo-2/work/foo-2'
+. ... done!
+[ebuild  N     ] app-misc/foo-1::ulm  0 kB
+
+Total: 1 package (1 new), Size of downloads: 0 kB
+
+Would you like to merge these packages? [Yes/No] n
+
+Quitting.
+
+$ 
+</pre>
