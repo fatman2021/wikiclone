@@ -1,0 +1,85 @@
+The aim of this page is to document how to replace udev in Linux with mdev, thus allowing a separate /usr partition, without an initramfs. The auther uses Gentoo Linux with Icewm as the WM. The instructions here should be applicable to other distros, assuming you can make the necessary changes.
+==Will mdev work on my system?==
+I run a simple Gentoo install, using ICEWM, and no "desktop environment". An xorg.conf is not required on my system. Note that a "desktop environment" is not required to run Abiword, Firefox, Gimp, Gnumeric, etc. However, "Koffice apps" like Kmail seem to pull in most of KDE as a dependancy. In general, if you use KDE or lvm2, you may have problems, and may not be able to get by with mdev. One beta tester reports getting close with lvm2, but it's not there yet. 
+
+There is one more sanity check that Gentoo users can run to check for udev dependancy. I don't think this can be duplicated in other distros.
+
+===Sanity check===
+To ''/etc/portage/package.mask'', add the line
+<pre>sys-fs/udev</pre>
+Execute the two commands:
+<pre>USE="-udev" emerge -pv system
+USE="-udev" emerge -pv world</pre>
+If the only errors you get are for not being able to re-install udev as required by virtual/dev-manager, you can proceed to the next stage. Otherwise, remove the <tt>sys-fs/udev</tt> line from ''/etc/portage/package.mask'' and forget about mdev.
+==Software requiring extra steps==
+===GNOME 2===
+GNOME version 2 has been made to work under mdev.
+# Rebuild xorg-server without udev support
+#* In Gentoo, build with '''emerge xorg-server'''
+#* If you're running a different distro, use your package manager.
+# Configure the keyboard and mouse explicitly in ''/etc/X11/xorg.conf'' (or wherever else you keep your ''xorg.conf'').
+#* Edit the two '''InputDevice''' sections to look like this. The critical lines are noted.
+<pre>    Section "InputDevice"
+            Identifier  "Keyboard0"
+            Driver      "evdev"                       # Critical
+            Option      "Device" "/dev/input/event3"  # Also critical
+    EndSection
+
+    Section "InputDevice"
+            Identifier  "Mouse0"
+            Driver      "evdev"                       # Critical
+            Option      "Protocol" "auto"
+            Option      "Device" "/dev/input/event4"  # Also critical
+            Option      "ZAxisMapping" "4 5 6 7"
+    EndSection</pre>
+===ATI/AMD binary blobs===
+Some ATI/AMD Radeon cards require binary blobs. The Gentoo radeon-ucode ebuild pulls down all the binary blobs available at [http://people.freedesktop.org/~ag5f/radeon_ucode/ http://people.freedesktop.org/~ag5f/radeon_ucode/] to support many different models.
+
+If I leave the binary blobs in the library directory, the kernel needs udev to figure out which one of the many binary blobs to load. If I remove all the other binary blobs, leaving only the correct one in the library directory, it loads automatically.
+==Warning / Disclaimer==
+''Proceed only if the above stages don't reveal any udev dependencies.'' Furthermore:
+* This is a beta.
+* Use a spare test machine or a VM.
+* If you don't follow the instructions correctly, the result may be an unbootable Linux.
+* Even if you do follow the instructions correctly, the result may be an unbootable Linux.
+==Replacing udev with mdev==
+===Setting up your kernel for devtmpfs===
+Set up your kernel to support and automount a devtmpfs filesystem at ''/dev''. If you prefer to edit ''.config'' directly, set <tt>CONFIG_DEVTMPFS=y</tt> and <tt>CONFIG_DEVTMPFS_MOUNT=y</tt>.
+
+If you prefer '''make menuconfig''', the route is as shown below. Note that the "Automount devtmpfs..." option won't appear until you enable the "Maintain a devtmpfs..." option.
+<pre>make menuconfig
+  Device Drivers --->
+    Generic Driver Options --->
+      [*] Maintain a devtmpfs filesystem to mount at /dev
+      [*] Automount devtmpfs at /dev, after the kernel mounted the rootfs</pre>
+
+Once you've made the changes, rebuild the kernel. Do '''NOT''' reboot yet.
+===Emerging busybox===
+For our circumstance, you will need the <tt>mdev</tt> USE flag set for busybox. The <tt>static</tt> USE flag is probably also a good idea. In the ''/etc/portage/package.use'' file, add the line
+<pre>sys-apps/busybox static mdev</pre>
+Now, you may run '''emerge sys-apps/busybox'''.
+If you're using a distro other than Gentoo, or building Busybox manually, do whatever necessary in your situation to enable the mdev option.
+===Creating /sbin/linuxrc===
+You will need ''/sbin/linuxrc'' to contain at least
+<pre>#!/bin/busybox ash
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+exec /sbin/init</pre>
+
+This should be enough for most users. If you have an unusual setup, you may need to place additional steps in your ''/sbin/linuxrc''. Remember to run '''chmod 744 /sbin/linuxrc''' to make the file executable.
+===Configure the bootloader===
+Append <tt>init=/sbin/linuxrc</tt> to your kernel command line. If you use lilo, remember to re-run lilo to implement the changes. If you use a different bootloader, apply any necessary equivalent steps.
+===Replace the udev service===
+Remove udev from the services list, replacing it with mdev:
+<pre>rc-update del udev sysinit
+rc-update add mdev sysinit</pre>
+===Reboot===
+Reboot to your new kernel. You should now be running without using udev.
+===Cleanup===
+Remove udev from your system by running '''emerge --unmerve sys-fs/udev'''.
+In the ''/etc/portage/package.mask'', append the line sys-fs/udev''. Create ''/etc/portage/package.mask'' if it doesn't already exist.
+
+You should now have a completely udev-free machine.
+
+==Notes==
+This set of instructions was originally written by Walt Dnes and hosted at [http://www.waltdnes.org/mdev/ http://www.waltdnes.org/mdev/]. It was imported to the Gentoo wiki with some editing by [[User:Short Circuit|Michael Mol]] per discussion on the gentoo-user mailing list.
