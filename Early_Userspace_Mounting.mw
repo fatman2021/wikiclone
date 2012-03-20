@@ -1,105 +1,38 @@
-Because of [https://bugs.gentoo.org/show_bug.cgi?id=364235 bug #364235], I wanted to learn how to build a minimal initramfs to
-check the /usr filesystem, and pre-mount /usr.
-But for several reasons, I do not want to use any external tool like sys-kernel/dracut.
+Because of [https://bugs.gentoo.org/show_bug.cgi?id=364235 various changes in sys-fs/udev ], the need for a minimal initramfs that checks the /usr filesystem and pre-mounts /usr arose. This article will detail how build this initramfs.
 
-So I learned how to build an initramfs manually, using :
-* busybox
-* an initramfs list
-* the gen_init_cpio utility, provided by the kernel itself
+In this article we'll be working with the following:
+* {{Package|sys-apps/busybox}}
+* An initramfs content list
+* The gen_init_cpio and gen_initramfs_list.sh utilities, provided by the kernel itself.
 
 The initramfs also contains the required libraries and binaries to run an ext4 fsck.
 Most of the code to run the fsck is coming from the /etc/init.d/fsck script.<br />
 If you are using any other filesystem than ext4, you will need to add the required binaries/libraries into the initramfs list.
 
 Basically, the init script is doing following actions :
-# mounts readonly the root partition on /mnt/root.
-# symlinks the fstab from the root partition to the initramfs environment.
-# checks the filesystem of our /usr device using the embedded /sbin/fsck binary.
-# mounts /usr, then move the /usr tree to /mnt/root/usr using the --move mount parameter.
-# switchs to real root and executes init
+# Mounts the root partition on /mnt/root as readonly.
+# Symlinks the fstab from the root partition to the initramfs environment.
+# Checks the filesystem of our /usr device using the embedded /sbin/fsck binary.
+# Mounts /usr, then move the /usr tree to /mnt/root/usr using the --move mount parameter.
+# Switchs to real root and executes init.
 
-My partition setup is really basic : 3 hard drives with several partitions. No lvm nor RAID.
-This means that if you need lvm or RAID to mount something, you will have to add some stuff into the initramfs.
-
+The article also assumes we are working in ''/usr/src/initramfs/'', so for the sake of ease, begin with creating this directory.
 
 == Requirements ==
-We will use busybox.
-{{Cmd|emerge -pv busybox
-|output=[ebuild   R    ] sys-apps/busybox-1.19.3-r1  USE="pam -ipv6 -make-symlinks -mdev -savedconfig (-selinux) -static"}}
+The most important package here is {{Package|sys-apps/busybox}} as it provides utilities sutiable for a initramfs. It's also critical that you emerge it with USE '''static''' enabled:
+{{Emerge|params=--ask --verbose|sys-apps/busybox}}
+{{Note| Enabling USE '''static''' will disable pam support, regardless if its enabled or not.}}
 
-And gentoo-sources.
-{{Cmd|emerge -pv gentoo-sources
-|output=[ebuild   R   ~] sys-kernel/gentoo-sources-3.0.20  USE="-build -deblob -symlink"}}
-
-The kernel must already be built to have the '''''gen_init_cpio''''' utility.
-{{Cmd|ls -l /usr/src/linux/usr/gen_init_cpio
-|output=-rwxr-xr-x 1 root root 16792 Feb  9 18:09 /usr/src/linux/usr/gen_init_cpio}}
-
-
-== Configuration ==
-In /etc/fstab, we must set the sixth field for the /usr entry to 0.
-
-This will prevent the openrc fsck init script to try to check the filesystem for the already mounted /usr. See also man fstab.
-
-{{File|/etc/fstab|Set the sixth field for the /usr entry in fstab to 0|
-/dev/sdb3   /usr    ext4   noatime  0 '''0'''
+You will also need the kernel sources, in this article we'll use {{Package|sys-kernel/gentoo-sources-3.0.20}}. The kernel sources provides the '''''gen_init_cpio''''' and '''gen_initramfs_list.sh''' utilitiies. Thes '''''gen_init_cpio''''' utility does not come prepackaged and needs need to built:
+{{RootCmd|cd /usr/src/linux/usr/
+|make gen_init_cpio|output=
+cc     gen_init_cpio.c   -o gen_init_cpio
 }}
+Make sure that these two are executable:
+{{RootCmd|chmod +x /usr/src/linux/usr/gen_init_cpio /usr/src/linux/scripts/gen_initramfs_list.sh}}
 
-
-== Files and scripts ==
-The following files are installed into '''/usr/src/initramfs'''. This path is important, because it is hardcoded into the '''''initramfs_list''''' file.
-
-{{Cmd|cd /usr/src/initramfs/
-|ls -l
-|output=-rwxr-xr-x 1 root root  974 Nov  9 12:07 gen_init_cpio.sh<br />
--rw-r--r-- 1 root root 1794 Mar 13 09:54 initramfs_list<br />
--rw-r--r-- 1 root root 3200 Mar 12 15:43 script_init.sh
-}}
-
-{{Code|gen_init_cpio.sh|<pre>
-#!/bin/sh
-
-gen_cpio=${KBUILD_OUTPUT:=/usr/src/linux}"/usr/gen_init_cpio"
-
-if [ ! -x $gen_cpio ]; then
-    # thanks to linux-info.eclass
-    echo "Could not find a usable gen_init_cpio executable at :"
-    echo "      $gen_cpio"
-    echo "Please ensure that ${KBUILD_OUTPUT} points to a built set of Linux sources."
-    echo "If you are using KBUILD_OUTPUT, please set this environment var so that"
-    echo "it points to the necessary object directory so that it might find the executable."
-    exit 1
-fi
-
-config_list="$1"
-
-if [ -z $config_list ]; then
-    echo "error : missing parameter"
-    exit 1
-fi
-
-if [ ! -f $config_list ]; then
-    echo "error : cannot locate initramfs configuration list : $config_list"
-    exit 1
-fi
-
-archive="$config_list.cpio"
-outdir="image"
-
-mkdir -p $outdir
-
-eval "$gen_cpio $config_list > $outdir/$archive"
-gzip $outdir/$archive
-
-echo "$outdir/$archive.gz created"
-echo "Now you must copy it to /boot and setup your bootloader accordingly."
-</pre>}}
-
-{{Code|initramfs_list|<pre>
-#####################
-# originally generated by /usr/src/linux-2.6.39-gentoo-r3/scripts/gen_initramfs_list.sh
-#
-
+Next up is the ''initramfs_list'' file which will tell '''''gen_initramfs_list.sh''''' how to construct the initramfs:
+{{File|/usr/src/initramfs/initramfs_list||<pre>
 # directory structure
 dir /proc       755 0 0
 dir /usr        755 0 0
@@ -113,12 +46,6 @@ dir /mnt/root   755 0 0
 dir /etc        755 0 0
 dir /root       700 0 0
 dir /dev        755 0 0
-
-# libraries required by /bin/busybox
-file    /lib/libm.so.6          /lib/libm.so.6          755 0 0
-file    /lib/libpam_misc.so.0   /lib/libpam_misc.so.0   755 0 0
-file    /lib/libpam.so.0        /lib/libpam.so.0        755 0 0
-file    /lib/libdl.so.2         /lib/libdl.so.2         755 0 0
 
 # busybox
 file /bin/busybox /bin/busybox 755 0 0
@@ -137,20 +64,12 @@ file    /sbin/fsck              /sbin/fsck                          755 0 0
 file    /sbin/fsck.ext4         /sbin/fsck.ext4                     755 0 0
 
 # our init script
-file    /init                   /usr/src/initramfs/script_init.sh   755 0 0
-
-## uvesafb v86d - http://dev.gentoo.org/~spock/projects/uvesafb/
-## coming from /usr/share/v86d/initramfs
-## if you plan to use v86d for uvesafb, uncomment the following lines.
-# nod   /dev/console    0600        0 0 c 5 1
-# nod   /dev/tty1       0600        0 0 c 4 1
-# nod   /dev/zero       0600        0 0 c 1 5
-# nod   /dev/mem        0600        0 0 c 1 1
-# file  /sbin/v86d      /sbin/v86d  0755 0 0
-
+file    /init                   /usr/src/initramfs/init             755 0 0
 </pre>}}
+Copy and save the contents of the above to /usr/src/initramfs/initramfs_list.
 
-{{Code|script_init.sh|<pre>
+Last up is the actual ''./init'' file which will execute the initramfs:
+{{File|init||<pre>
 #!/bin/busybox sh
 
 rescue_shell() {
@@ -225,17 +144,11 @@ check_filesystem() {
 mount -t proc none /proc
 mount -t sysfs none /sys
 
-# only do this if you've built devtmpfs support into your kernel
-mount -t devtmpfs none /dev
-
 # disable kernel messages from popping onto the screen
 echo 0 > /proc/sys/kernel/printk
 
 # clear the screen
 clear
-
-
-# ====================== start doing stuff
 
 # mounting rootfs on /mnt/root
 uuidlabel_root || rescue_shell "Error with uuidlabel_root"
@@ -260,9 +173,6 @@ done
 
 echo "All done. Switching to real root."
 
-# ====================== end doing stuff
-
-
 # clean up. The init process will remount proc sys and dev later
 umount /proc
 umount /sys
@@ -270,34 +180,29 @@ umount /dev
 
 # switch to the real root and execute init
 exec switch_root /mnt/root /sbin/init
-
 </pre>}}
+Copy and save the contents of the above to /usr/src/initramfs/init.
 
-== Creating the initramfs ==
-The '''''gen_init_cpio.sh''''' file is a simple shell script. It takes one parameter, which define the name of the initramfs list that we want to build the initramfs archive from.
-<br />When running it, the gziped initramfs archive is generated into the '''image''' child directory.
+== Generating the Initramfs ==
+Change to the top kernel source directory:
+{{RootCmd|cd /usr/src/linux}}
+From here we run the '''''gen_initramfs_list.sh''''' script with the ''-o'' argument pointing to where we want the initramfs image to be placed followed by the path to out ''initramfs_list'' file:
+{{RootCmd|scripts/gen_initramfs_list.sh -o /boot/initrd.cpio.gz /usr/src/initramfs/initramfs_list}}
 
-{{RootCmd|cd /usr/src/initramfs/
-| ./gen_init_cpio.sh initramfs_list
-|output=image/initramfs_list.cpio.gz created<br />
-Now you must copy it to /boot and setup your bootloader accordingly.
-}}
-{{RootCmd| ls -l image/
-|output=-rw-r--r-- 1 root root 1700722 Mar 13 11:12 initramfs_list.cpio.gz
+== System Preparation ==
+In /etc/fstab, we must set the sixth field for the /usr entry to 0, this will prevent the OpenRC fsck init script to try to check the filesystem for the already mounted /usr:
+{{File|/etc/fstab|Set the sixth field for the /usr entry in fstab to 0|
+ /dev/sdb3   /usr    ext4   noatime  0 '''0'''
 }}
 
-== Setting up the bootloader ==
-First we must copy the generated initramfs to /boot.
-{{RootCmd|cp image/initramfs_list.cpio.gz /boot/initramfs.cpio.gz
-}}
-Then we can add the initrd line in grub.conf.
-{{Code|grub.conf|
+== Configuring GRUB ==
+Add the initrd line to grub.conf:
+{{File|grub.conf||<pre>
 title Gentoo 3.0.20<br />
 root (hd0,0)<br />
 kernel /boot/kernel-3.0.20-gentoo [... kernel parameters ...]<br />
-initrd /boot/initramfs.cpio.gz
-}}
-
+initrd /boot/initrd.cpio.gz
+</pre>}}
 
 == Result ==
 When booting, the output looks like this :
@@ -313,9 +218,8 @@ INIT: version 2.88 booting
     OpenRC 0.9.8.4 is starting up Gentoo Linux (i686)
 
 Press I to enter interactive boot mode
-
 [...]
-      </pre>}}
+</pre>}}
 
 == External links ==
 * http://jootamam.net/howto-initramfs-image.htm
