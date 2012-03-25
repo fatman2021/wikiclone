@@ -1,0 +1,85 @@
+PHPVirtualbox is a web-based administration utility for Virtualbox
+
+== Installation ==
+Currently, app-emulation/phpvirtualbox has no stable version, so you need to add it to your package.accept_keywords file.
+
+{{Emerge|app-emulation/phpvirtualbox}}
+
+== Configuration ==
+PHPVirtualbox does not need a virtualbox installation to be present on the same box where PHPVirtualbox is installed. PHPVirtuabox can connect to other machines where your virtual machines are installed.
+PHPVirtualbox requires a web-server to be present on your box, so we will demonstrate an Apache configuration using SSL certificate to encrypt your communication with the server.
+
+=== Verify VirtualBox Installation ===
+Virtualbox '''must''' be compiled with the vboxwebsrv use flag on the host where your virtual machines are located.
+{{USEflag
+|package=app-emulation/virtualbox
+|vboxwebsrv ++yes
+}}
+=== Create SSL Certificate ===
+First, we create our shiny new SSL certificate
+* Create our '''secret''' private key
+openssl genrsa -des3 -out virtualbox-server.key 4096
+* Create our new Certificate Singing Request (CSR)
+openssl req -new -key virtualbox-server.key -out virtualbox-key.csr
+* Sign the CSR using our private key
+openssl x509 -req -days 365 -in virtualbox-server.csr -signkey virtualbox-server.key -out virtualbox-server.crt
+* Place certificate and private key somewhere safe
+{{RootCmd|cp virtualbox-server.{key,crt} /etc/apache2/ssl-data/.}}
+
+=== Configure Apache Virtual Host ===
+Assuming you already have a working Apache installation, you need to create a new virtualhost for your phpvirtualbox installation. This entry should look like this:
+{{File|/etc/apache2/vhost.d/99-virtualbox.conf|PHPVirtualBox vhost configuation|<pre>
+<VirtualHost *:443>
+        ServerName phpvirtualbox.mydomain.example # Change this to your domain name
+        DocumentRoot /usr/share/webapps/phpvirtualbox/4.1.7/htdocs/
+        SSLEngine On
+        SSLOptions  StrictRequire
+        SSLProtocol all -SSLv2
+        SSLCertificateFile /etc/apache2/ssl-data/virtualbox-server.crt
+        SSLCertificateKeyFile /etc/apache2/ssl-data/virtualbox-server.key
+        <Directory />
+                AllowOverride All
+        </Directory>
+        <Location />
+                Options Indexes FollowSymLinks
+                Order deny,allow
+                SSLRequireSSL
+        </Location>
+        ErrorLog /var/log/apache2/virtualbox_error.log
+</VirtualHost>
+</pre>}}
+
+The previous configuration is just an example, your installation/configuration may be a lot different.
+
+=== Configure PHPVirtualbox Installation ===
+The key file for your phpvirtualbox installation is the '''config.php''' file deriving from '''config.php-example''' file
+{{RootCmd|cd /usr/share/webapps/phpvirtualbox/4.1.7/htdocs}}
+{{RootCmd|cp config.php-example config.php}}
+
+Edit this file and change the following variables
+{{File|/usr/share/webapps/phpvirtualbox/4.1.7/htdocs/config.php|PHPVirtualBox configuation|<pre>
+var $username = 'john'; # user who owns the virtual machines on the remote (or local) server
+var $password = 'mysecretpass';  #password for that user
+
+/* SOAP URL of vboxwebsrv (not phpVirtualBox's URL) */
+var $location = 'http://192.168.1.205:18083/'; # Where are the virtual machines? This can either be 'localhost' or the IP or the remote server where your virtual machines are installed
+</pre>}}
+
+== Verification ==
+* Start the vboxwebsrv init service on the host where your virtual machines are located (in our case on 192.168.1.205)
+{{RootCmd|/etc/init.d/vboxwebsrv start}}
+
+* Restart Apache on the host where your phpvirtualbox was installed
+{{RootCmd|/etc/init.d/apache2 restart}}
+
+* Connect to phpvirtualbox installation
+Open your browser and connect to your phpvirtualbox by typing:
+<pre>https://virtualbox.mydomain.example</pre>
+* You should be able to login using the default credentials
+<pre>
+user: admin
+pass: pass
+</pre>
+
+== See Also ==
+[http://code.google.com/p/phpvirtualbox/w/list PHPVirtualbox wiki]
