@@ -173,6 +173,46 @@ The optional modules included as of {{package|sys-kernel/dracut-016}} are listed
 #* Modules with pre-requisite packages ''cannot'' be included, even explicitly, if the required software is missing from the dracut build host.
 #* <code>dmsquash-live</code> (and, by extension, <code>livenet</code>) cannot be installed in host-only mode, as that would be silly.
 
+=== Customizing the Image ===
+Besides defining the list of modules to include, you can also customize the final initramfs in a few other ways. The <code>install_items</code> option in the configuration file lets you specify an arbitrary number of arbitrary items to add to your image. Other options add specific elements to the image, as described below:
+
+==== Kernel Modules ====
+
+By default, the <code>kernel-modules</code> driver scans the list of available kernel modules, and installs the set of modules needed to boot a system and bring up the rootfs. This includes the hardware bus drivers (SCSI, ATA, USB, etc), keyboard drivers, block device drivers, and file system drivers. (In host-only mode, only the file systems used by the build host are included.) You can update the list of installed modules via the command-line or configuration file. When specifying a kernel module name, do not include the <code>.ko</code> extension.
+
+{{File|/etc/dracut.conf||<pre>
+# Equivalent to --drivers="module module module"
+drivers+="module module module"
+
+# Equivalent to --add-drivers
+add_drivers+="module"
+
+# Equivalent to --omit-drivers="module"
+omit_drivers+="module"
+
+# Equivalent to --filesystems="fs fs fs"
+filesystems+="fs fs fs"
+
+# Equivalent to --kmoddir="/lib/modules/fixed"
+drivers_dir="/lib/modules/fixed"
+
+# Equivalent to  --fwdir=":/lib/fw/alt:/lib/fw/alt2"
+fw_dir+=":/lib/fw/alt:/lib/fw/alt2"
+}}
+
+* In host-only mode, the running hosts filesystems are always installed, regardless of the <code>filesystems</code> parameter.
+
+==== Filesystems And Mount Points ====
+
+The default image will arrange for your rootfs and your {{path|/usr}} partition (if different) to be mounted at boot time. The build process will obtain the device and file system information it needs from   {{path|/proc/self/mountinfo}}. This may not be what you want, or you may need to have other partitions mounted as well. You can alter the behavior of the initramfs with the <code>fstab-sys</code> module, and the following options:
+
+* Create a file called {{path|/etc/fstab.sys}}, which will be copied to the initramfs and mounted.
+* Specify <code>use_fstab="yes"</code> (or <code>--use-fstab</code>), which will use your system's {{path|/etc/fstab}} instead of {{path|/proc/self/mountinfo}}
+* Specify <code>add_fstab+="''filename''"</code> or <code>--add_fstab ''filename''</code>, which will add the contents of ''filename'' to the initramfs's {{path|/etc/fstab}}.
+* Specify <code>--mount "''fstab mount spec''"</code>, which adds individual entries into your initramfs's {{path|/etc/fstab}}.
+
+(Note that <code>add_fstab</code> does not automatically trigger <code>fstab-sys</code> to be included in the image; this may be a bug, as <code>use_fstab</code> does include the module but does not actually supply an {{path|/etc/fstab}}.)
+
 == Booting The initramfs ==
 
 Once you have the image built, the final step is to include the image in the boot loader. To do this, simply add a line in your grub.conf:
