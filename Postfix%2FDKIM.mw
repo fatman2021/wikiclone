@@ -2,6 +2,36 @@ This guide will show you how to configure Postfix to use DKIM and DomainKeys
 
 == Notes ==
 DomainKeys has been obsoleted by DKIM. However I have decided to show you how to use it should you wish too.
+Alternatively you can use mail-filter/opendkim instead of mail-filter/dkim-milter
+
+== OpenDKIM ==
+
+{{Emerge|mail-filter/opendkim}}
+{{RootCmd|emerge --config mail-filter/opendkim}}
+
+Set selector name to "mydkim" (without the quotes),select "[2] 1024 bits" for your key. Your key will be created now. Copy it now and we will paste it into your Bind file later.
+
+Edit the following file. Defaults are fine except for the following.
+
+Edit the following and note the port in the socket configuration
+{{File|/etc/opendkim/opendkim.conf||<pre>
+   Mode                    s
+   Selector                mydkim
+   KeyFile                 /etc/opendkim/mydkim.private
+</pre>}}
+
+Now edit your bind configuration.
+
+{{File|/var/bind/domain.tld.hosts||<pre>
+   mydkim._domainkey.domain.tld. IN TXT "v=DKIM1; g=*; k=rsa; p=yourkeyhere;"
+</pre>}}
+
+Now edit your postfix configuration. The following is two separate lines. Your port may be different
+
+{{File|/etc/postfix/main.cf||<pre>
+   smtpd_milters     = inet:localhost:8891
+   non_smtpd_milters = inet:localhost:8891
+</pre>}}
 
 The maximum size for all txt records in a DNS cannot exceed 512 bytes. This means that you cannot use 1024 bit for both DKIM and DomainKeys. If you need to use both DKIM and DomainKeys you will have to choose one 1024 bit and the other one 512 bit so that it can fit in the 512 bytes.
 
