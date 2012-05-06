@@ -44,3 +44,58 @@ Some of the most notably differences are:
 * if the host is using the openrc system for bootstrapping, such configuration items will "automagically" be omitted (i.e. filesystem mounts from fstab).
 
 The last point is important to keep lxc based installation as much as simple and the same as for normal installations (no exceptions).
+
+====Full Virtualization (not lxc)====
+Full virtualization solutions are also known as paravirtualization solutions (if software components have been introduced, usually for the purposes of efficiency).  This type of solution, unlike lxc and other container-based solutions, usually allow you to run any operating system, since the emulation platform actually gets right down to emulating the hardware in question.  Whilst this may be useful for the purposes of security and server consolidation, it is hugely inefficient compared to container based solutions.  The most popular solutions in this area right now are probably VMWare, KVM and Xen.
+
+===Limitations of lxc===
+With lxc, you can efficiently manage resource allocation in real time.  In addition, you should be able to run different Linux distributions on the same host kernel in different containers (though there may be teething issues with startup and shutdown 'run control' (rc) scripts, and these may need to be modified slightly to make some guests work.  That said, maintainers of tools such as openrc are increasingly implementing lxc detection to ensure correct behaviour when their code runs within containers.)
+
+Unlike full virtualization solutions, lxc will not let you run other operating systems (such as proprietary operating systems, or other types of unix). 
+
+However, in theory there is no reason why you can't install a full or paravirtualization solution on the same kernel as your lxc host system and run both full/paravirtualised guests in addition to lxc guests at the same time.
+
+Should you elect to do this, there is a powerful abstracted virtualization management API under development, known as [http://www.libvirt.org/ libvirt], that you may wish to check out.
+
+In short:
+* One kernel
+* One operating system
+* Many instances
+... but can co-exist with other virtualization solutions if required.
+
+====MAJOR Temporary Problems with LXC - READ THIS====
+As documented [https://wiki.ubuntu.com/UserNamespace over here], basically containers are not functional as security containers at present, in that if you have root on a container you have root on the whole box.
+*''root'' in a container has all capabilities
+**Workaround:
+***Do not treat root privileges in the container any more lightly than on the host itself.
+*legacy ''UID/GID'' comparisons in many parts of the kernel code are dumb and will not respect containers
+**Workaround:
+***Do not mount parts of external filesystems within a container, except ''ro'' (read only).
+***Do not re-use UIDs/GIDs between the container and the host
+
+Containers are still useful for isolating applications, including their networking interfaces, and applying resource limits and accounting to those applications.  As the above issues are resolved, they will also become functional security containers.
+
+If you are designing a virtualisation solution for the long term and want a timeframe, then with appropriate disclaimers, judging from various comments and experience, an extremely rough timeframe might be 'circa end of 2012'.  But no guarantees.
+
+See also [http://lwn.net/Articles/486306/ CAP_SYS_ADMIN: the new root].
+
+===lxc Components===
+
+lxc uses two new / lesser known kernel features known as 'control groups' and 'POSIX file capabilities'.  It also includes 'template scripts' to setup different guest environments.
+
+====Control Groups====
+Control Groups are a multi-hierarchy, multi-subsystem resource management / control framework for the Linux kernel.
+
+In simpler language, what this means is that unlike the old ''chroot'' tool which was limited to the file subsystem, control groups let you define a 'group' encompassing one or more processes (eg: sshd, Apache) and then specify a variety of resource control and accounting options for that control group against multiple subsystems, such as:
+* filesystem access
+* general device access
+* memory resources
+* network device resources
+* CPU bandwidth
+* block device IO bandwidth
+* various other aspects of a control group's view of the system
+
+The user-space access to these new kernel features is a kernel-provided filesystem, known as 'cgroup'.  It is typically mounted at /cgroup and provides files similar to /proc and /sys representing the running environment and various kernel configuration options.
+
+====POSIX File Capabilities====
+POSIX file capabilities are a way to allocate privileges to a process that allow for more specific security controls than the traditional 'root' vs. 'user' privilege separation on unix family operating systems.
