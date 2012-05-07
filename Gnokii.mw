@@ -1,0 +1,113 @@
+modem/fax driver for the mobile phones
+
+== Setup ==
+{{USEflag
+|package=app-mobilephone/gnokii
+|X++Adds support for X11
+|ical++Enable support for dev-libs/libical
+|irda++ Enables infrared support
+|mysql++Enable MySQL database backend
+|nls++Adds Native Language Support (using gettext - GNU locale utilities)
+|postgres++Enable PostgreSQL database backend
+|sms++Enable SMS support (build smsd)
+|usb++Adds USB support to applications that have optional USB support (e.g. cups)
+|bluetooth++Enables Bluetooth Support
+|debug++Enable extra debug codepaths, like asserts and extra output. If you want to get meaningful backtraces see http://www.gentoo.org/proj/en/qa/backtraces.xml
+}}
+
+== Install gnokii ==
+
+Install gnokii with the ''sms usb'' use flags enabled.
+
+=== Configuration ===
+Login with root user.
+
+Edit the /etc/gnokiirc file:
+{{File|/etc/gnokiirc:||<pre>
+[global]
+port = /dev/ttyUSB0
+model = AT
+initlength = default
+connection = serial
+use_locking = yes
+serial_baudrate = 19200
+smsc_timeout = 10
+
+[gnokiid]
+bindir = /usr/sbin/
+
+[connect_script]
+TELEPHONE = 12345678
+
+[disconnect_script]
+
+[logging]
+debug = on
+
+rlpdebug = off
+xdebug = off
+</pre>}}
+
+Setup save the password for PIN login
+{{File|/etc/sms-pin:||<pre>
+ABORT BUSY
+ABORT ERROR
+ABORT 'NO CARRIER'
+REPORT CONNECT
+TIMEOUT 10
+# Set your pin here
+"" "AT+CPIN=0000</pre>}}
+
+=== Set PIN to work with gnokii ===
+/usr/sbin/chat is part of 
+net-dialup/ppp
+{{RootCmd|/usr/sbin/chat -V -f /etc/sms-pin >> /dev/ttyUSB0 < /dev/ttyUSB0}}
+
+An other way is just using gnokii:
+{{Cmd|gnokii  --entersecuritycode PIN}}
+
+Show the PIN status:
+{{Cmd|gnokii --getsecuritycodestatus | grep PIN}}
+
+=== Sending SMS ===
+
+{{Cmd|echo "test" | gnokii --sendsms +land_and_telephonenumber}}
+
+=== Write calendar notes ===
+{{File|gnokii-import.sh:||<pre>
+#!/bin/bash
+#########################################################
+# gnokii ical import script to fix buggy write mode     #
+# don't forget to use "irattach irda0 -s" if using ira  #
+#########################################################
+read -p "Please give path and file name: " file
+
+declare -i a
+a=$(grep -ir "SUMMARY:" $file | wc -l) # count the entries
+
+
+for i in `seq 1 $a`;do
+echo $i
+gnokii --writecalendarnote $file $i
+sleep 1 # wait a second before the next entry is written
+done
+</pre>}}
+
+{{File|cal.ical:||<pre>
+BEGIN:VCALENDAR
+VERSION:1.0
+BEGIN:VEVENT
+CATEGORIES:MISCELLANEOUS
+SUMMARY:09:00-18:00h New calendar entry
+DTSTART:20080415T210000
+DTEND:20080415T210000
+DALARM:20080414T210000
+END:VEVENT
+END:VCALENDAR
+</pre>}}
+
+{{Cmd|gnokii-import.sh}}
+{{Cmd|cal.ica}}
+
+[[Category:gnokii]]
+[[Category:Software]]
