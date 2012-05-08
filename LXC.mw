@@ -148,3 +148,107 @@ Device Drivers  --->
        -*- Unix98 PTY support
        [*]   Support multiple instances of devpts
 </pre>}}
+
+{{kernel|namespaces|<pre>
+ General Setup 
+-> Namespaces support 
+CONFIG_NAMESPACES / "Namespaces" ('General Setup -> Namespaces support')
+CONFIG_UTS_NS / "Utsname namespace" ('General Setup -> Namespaces Support / UTS namespace')
+CONFIG_IPC_NS / "Ipc namespace" ('General Setup -> Namespaces Support / IPC namesapce')
+CONFIG_USER_NS / "User namespace" ('General Setup -> Namespaces Support / User namespace (EXPERIMENTAL)')
+CONFIG_PID_NS / "Pid namespace" ('General Setup -> Namespaces Support / PID Namespaces')
+CONFIG_NET_NS / "Network namespace" ('General Setup -> Namespaces Support -> Network namespace')
+  Device Drivers 
+-> Character devices 
+-> Unix98 PTY support -> ...
+CONFIG_DEVPTS_MULTIPLE_INSTANCES / "Multiple /dev/pts instances" ('Device Drivers -> Character devices -> Unix98 PTY support -> Support multiple instances of devpts')
+</pre>}}
+
+{{kernel|control groups|<pre>
+#  -> General Setup -> Control Group support -> ...
+CONFIG_CGROUPS / "Cgroup" ('General Setup -> Control Group support')
+CONFIG_CGROUP_DEVICE / "Cgroup device" ('General Setup -> Control Group support -> Device controller for cgroups') 
+CONFIG_CPUSETS / "Cgroup cpuset"
+</pre>}}
+
+=====Freezer Support=====
+Freezer support allows you to 'freeze' and 'thaw' a running guest, something like 'suspend' under VMWare products.  It appears to be under heavy development as of October 2010 (LXC list) but is apparently mostly functional.  Please add additional notes on this page if you explore further.
+<pre>
+CONFIG_CGROUP_FREEZER / "Freeze/thaw support" ('General Setup -> Control Group support -> Freezer cgroup subsystem')
+</pre>
+
+=====Scheduling Options=====
+Scheduling allows you to specify how much hardware access (CPU bandwidth, block device bandwidth, etc.) control groups have.
+<pre>
+CONFIG_CGROUP_SCHED / "Cgroup sched" ('General Setup -> Control Group support -> Group CPU scheduler')
+FAIR_GROUP_SCHED / "Group scheduling for SCHED_OTHER" ('General Setup -> Control Group support -> Group CPU scheduler -> Group scheduling for SCHED_OTHER')
+CONFIG_BLK_CGROUP / "Block IO controller" ('General Setup -> Control Group support -> Block IO controller')
+CONFIG_CFQ_GROUP_IOSCHED / "CFQ Group Scheduling support" ('Enable the block layer -> IO Schedulers -> CFQ I/O scheduler -> CFQ Group Scheduling support')
+</pre>
+
+=====Resource Counters (Memory/Swap Accounting)=====
+Resource counters are an 'accounting' feature - they allow you to measure resource utilisation in your guest.  They are also an apparent prerequisite for limiting memory and swap utilisation.
+<pre>
+CONFIG_RESOURCE_COUNTERS / "Resource counters" ('General Setup -> Control Group support -> Resource counters')
+</pre>
+
+For memory resources...
+<pre>
+CONFIG_CGROUP_MEM_RES_CTLR / "Cgroup memory controller" ('General Setup -> Control Group support -> Resource counters -> Memory Resource Controller for Control Groups')
+</pre>
+
+If you want to also count swap utilisation, also select...
+<pre>
+CONFIG_CGROUP_MEM_RES_CTLR_SWAP / "Memory Resource Controller Swap Extension(EXPERIMENTAL)" ('General Setup -> Control Group support -> Resource counters -> Memory Resource Controller for Control Groups -> Memory Resource Controller Swap Extension')
+</pre>
+
+=====CPU Accounting=====
+This allows you to measure the CPU utilisation of your control groups.
+<pre>
+CONFIG_CGROUP_CPUACCT / "Cgroup cpu account" ('General Setup -> Control Group support -> Simple CPU accounting cgroup subsystem')
+</pre>
+
+=====Networking Options=====
+Ethernet bridging, veth, macvlan and vlan (802.1q) support are optional, but you probably want these.
+<pre>
+CONFIG_BRIDGE / "802.1d Ethernet Bridging" ('Networking support -> Networking options -> 802.1d Ethernet Bridging')
+CONFIG_VETH / "Veth pair device"
+CONFIG_MACVLAN / "Macvlan"
+CONFIG_VLAN_8021Q / "Vlan"
+</pre>
+
+====Reconfig Gentoo kernel====
+You can use the '''lxc-checkconfig''' tool to list kernel options that you need to enable in order to make your existing kernel configuration lxc compatible(tested on 3.2.1-gentoo-r2).
+Process would be something like...
+
+<pre> root# cd /usr/src/linux</pre>
+<pre> root# lxc-checkconfig </pre>
+{{note|note missing kernel options in output, or leave it open and switch to a new terminal}}
+<pre> root# make menuconfig </pre>
+{{ note | search for each CONFIG_SOMETHING using '/SOMETHING', enable them one by one, quit & save.  (most are in general, except for multiple unix98 pty's, in device drivers, and POSIX file capabilities, in security options (but apparently invisible in 3.2.1-gentoo-r2))}}
+<pre> root#  make && make modules_install </pre>
+
+Then copy your kernel to your boot partition, reconfigure your boot loader, and reboot.
+
+===lxc userspace utilities===
+Because lxc is currently very new, it is probably worth making sure that you have the absolute latest version.  Therefore, before we begin, you should ensure that your portage tree is up to date with the following command.
+<pre>root# emerge --sync</pre>
+
+Next, figure out which version of lxc is available with:
+
+<pre>
+root# emerge -pv lxc
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies... done!
+[ebuild  N   ~] app-emulation/lxc-0.8.0-rc1-r1  USE="-examples -vanilla" 0 kB
+
+Total: 1 package (1 new), Size of downloads: 0 kB
+
+</pre>
+
+Now go ahead and install with...
+<pre>root# emerge -av lxc</pre>
+
+When the installation has completed, you will probably see a number of kernel features listed that are not enabled.  Don't worry about this for now, we'll set up an appropriate kernel shortly.
