@@ -1,0 +1,452 @@
+Gentoo/FreeBSD is FreeBSD-based Gentoo system.
+
+== Introduction ==
+Please see [[#Links]] if you want details for Gentoo/FreeBSD.
+
+== Installing howto ==
+=== Caution ===
+Since this guide has only minimum information, the knowledge of both Gentoo/Linux and FreeBSD may be needed. 
+[http://www.gentoo.org/doc/en/handbook/ Gentoo/Linux Handbook] and [http://www.freebsd.org/handbook/ FreeBSD Handbook] are your friends. 
+
+=== Preparation ===
+The installation media of FreeBSD 9.0 to which the LiveCD function was added are used for installation.
+Please get the more suitable one of [http://ftp.freebsd.org/pub/FreeBSD/releases/i386/i386/ISO-IMAGES/9.0/ i386] or [http://ftp.freebsd.org/pub/FreeBSD/releases/amd64/amd64/ISO-IMAGES/9.0/ amd64].
+Please do write to a CD or memory stick if necessary. 
+
+Boot the PC using the installation CD.
+Wait a moment while watching the boot process.
+Please choose Live CD, if a Welcome screen is displayed. 
+Then login prompt, enter root.
+
+==== Network setting ====
+First, create a directory /tmp/bsdinstall_etc to rewrite the resolv.conf. 
+{{RootCmd|mkdir -p /tmp/bsdinstall_etc}}
+
+Identify your network devices. This example is em0. 
+{{RootCmd|ifconfig|output=
+<pre>em0: flags=8843&lt;UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST&gt; metric 0 mtu 1500
+        options=209b&lt;RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,VLAN_HWCSUM,WOL_MAGIC&gt;
+        ether 00:00:00:00:00:00
+        nd6 options=29&lt;PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL&gt;
+        media: Ethernet autoselect (1000baseT &lt;full-duplex&gt;)
+        status: active
+lo0: flags=8049&lt;UP,LOOPBACK,RUNNING,MULTICAST&gt; metric 0 mtu 16384
+        options=3&lt;RXCSUM,TXCSUM&gt;
+        inet6 ::1 prefixlen 128
+        inet6 fe80::1%lo0 prefixlen 64 scopeid 0x3
+        inet 127.0.0.1 netmask 0xff000000
+        nd6 options=21&lt;PERFORMNUD,AUTO_LINKLOCAL&gt;</pre>}}
+
+Set the default gateway and IP address. 
+
+If you not use DHCP (IP address is an example)
+{{RootCmd|ifconfig em0 192.168.0.100
+|route add default 192.168.0.1
+|echo "nameserver 8.8.8.8" > /etc/resolv.conf (example used a Google Public DNS)}}
+
+If you use DHCP
+{{RootCmd|dhclient em0}}
+
+==== Optional: want to install via ssh ====
+So far we could not use ssh. If you want to install via ssh from this step. 
+
+{{RootCmd| mdconfig -a -t malloc -s 5M -u 9
+| newfs /dev/md9
+| mkdir -p /tmp/etc
+| mount /dev/md9 /tmp/etc
+| cp -a /etc/* /tmp/etc/}}
+{{RootCmd| umount /tmp/etc
+| mount /dev/md9 /etc
+| passwd
+| echo "PermitRootLogin yes" &gt;&gt; /etc/ssh/sshd_config
+| /etc/rc.d/sshd onestart}}
+
+Please connect with any ssh client. The username is root.
+
+==== Setting the Partition ====
+The installation target device of serial ATA and IDE are /dev/ada*.
+SCSI and USB drive are /dev/da*.
+Please identify the HDD using ls /dev/ada* or dmesg | grep ada.
+In this case, the device is ada0. 
+
+{{RootCmd|<nowiki>dmesg | grep ada</nowiki>|output=
+<pre>ada0 at ata0 bus 0 scbus0 target 0 lun 0
+ada0: &lt;QEMU HARDDISK 0.15.0&gt; ATA-7 device
+ada0: 16.700MB/s transfers (WDMA2, PIO 8192bytes)
+ada0: 12288MB (25165824 512 byte sectors: 16H 63S/T 16383C)
+ada0: Previously was known as ad0</pre>}}
+
+Next, set the partition.
+This example is simple only two partitions.
+If necessary, you can split /, /usr, /var, /tmp, and /home.
+Please set using gpart.
+
+{|
+! Partition
+! Filesystem
+! Size
+! Description
+|-
+|/dev/ada0p1
+|none
+|just a bit
+|Reserved for bootloader
+|-
+|/dev/ada0p2
+|UFS2 + SU
+|entire disk - swap space
+|Root partition
+|-
+|/dev/ada0p3
+|swap
+|Rest of the disk
+|Swap partition
+|}
+{{RootCmd| gpart create -s GPT ada0
+| gpart add -b 34 -s 128 -t freebsd-boot ada0
+| gpart add -s 10G -t freebsd-ufs -l root ada0
+| gpart add -t freebsd-swap -l swap ada0}}
+
+Please run gpart show in order to verify the partition could be set. 
+
+{{RootCmd|gpart show|output=
+<pre>
+=&gt;      34  25165757  ada0  GPT  (12G)
+        34       128     1  freebsd-boot  (64k)
+       162  20971520     2  freebsd-ufs  (10G)
+  20971682   4194109     3  freebsd-swap  (2G)</pre>}}
+
+==== Creating and mounting a file system ====
+You can select the UFS and ZFS in FreeBSD.
+However, this guide is not intended ZFS.
+Please do not forget newfs -L option to label. 
+
+{{RootCmd|newfs -L gfbsdroot -U /dev/ada0p2}}
+And mount it. 
+{{RootCmd|mount /dev/ufs/gfbsdroot /mnt
+|swapon /dev/gpt/swap}}
+
+==== Downloading the Stage3 Tarball and Portage snapshot ====
+Now, Gentoo/FreeBSD 9.0 stage3 is available.
+
+{{RootCmd|cd /mnt
+|fetch http://dev.gentoo.org/~aballier/fbsd9.0/x86/stage3-i686-freebsd-9.0.tar.bz2 (for x86-fbsd users)
+|fetch http://dev.gentoo.org/~aballier/fbsd9.0/amd64/stage3-amd64-freebsd-9.0.tar.bz2 (for amd64-fbsd users)
+|fetch http://distfiles.gentoo.org/snapshots/portage-latest.tar.bz2}}
+
+==== Unpacking stage3 and Portage snapshot ====
+{{RootCmd|cd /mnt
+| sh
+| export LANG="en_US.UTF-8"
+| tar xjpf stage3-*.tar.bz2
+| tar xjf portage-latest.tar.bz2 -C /mnt/usr}}
+
+==== Entering the new Environment ====
+{{RootCmd|mount -t devfs devfs /mnt/dev
+|cp /etc/resolv.conf /mnt/etc/
+|chroot /mnt /bin/bash}}
+
+=== Settings and install more in chroot environment ===
+==== The first settings and time zone settings ====
+etc-update and time zone settings. Of course, you can modify /etc/make.conf. 
+
+{{RootCmd|etc-update && source /etc/profile
+|cp /usr/share/zoneinfo/GMT /etc/localtime (please select your time zone)
+|emerge nano
+|nano -w /etc/make.conf (if necessary)
+|prompt=(chroot) root #}}
+
+==== Installing a kernel source ====
+Unlike Gentoo/Linux, freebsd-source package is the only sources.
+
+{{RootCmd|<nowiki>USE=symlink emerge freebsd-sources</nowiki>
+|prompt=(chroot) root #}}
+
+==== Compiling and installing kernel ====
+Now let's compile the kernel.
+Copy the GENERIC in conf, you can change it by changing the kernel configuration.
+For more information [http://www.freebsd.org/doc/handbook/kernelconfig.html FreeBSD Handbook] please see.
+
+{{RootCmd|emerge flex
+|<nowiki>ACCEPT_KEYWORDS="~x86-fbsd" emerge '&lt;gcc-config-1.7'</nowiki>
+|cd /usr/src/sys/i386/conf (case of x86-fbsd)
+|cd /usr/src/sys/amd64/conf (case of amd64-fbsd)
+|cp GENERIC.hints /boot/device.hints
+|prompt=(chroot) root #}}
+{{RootCmd|config GENERIC
+|cd ../compile/GENERIC
+|make cleandepend &amp;&amp; make depend &amp;&amp; make -j3 &amp;&amp; make install
+|prompt=(chroot) root #}}
+
+==== Installing the boot loader ====
+Let's install a boot loader to boot the Gentoo/FreeBSD.
+Boot loader configuration is done after exiting the chroot.
+
+{{RootCmd|emerge sys-freebsd/boot0
+|prompt=(chroot) root #}}
+
+==== System setting ====
+Familiar setting. 
+Please refer to [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&amp;chap=8 Gentoo Linux Handbook] if you need more information.
+
+{{RootCmd|nano -w /etc/fstab|output=
+<pre># Device	Mountpoint	FStype	Options	Dump	Pass#
+/dev/ufs/gfbsdroot	/		ufs	rw	1	1
+/dev/gpt/swap	none		swap	sw	0	0
+</pre>
+|prompt=(chroot) root #}}
+
+Setting the host name
+{{RootCmd|nano -w /etc/conf.d/hostname|output=
+<pre># (Set the hostname variable to your host name)
+hostname="daemon"
+</pre>
+|prompt=(chroot) root #}}
+
+Editing network setting
+{{RootCmd|nano -w /etc/conf.d/net|output=
+<pre># (Set the dns_domain variable to your domain name)
+dns_domain_lo="homenetwork"
+
+# Manually setting)
+config_em0="192.168.0.100 netmask 255.255.255.0"
+routes_em0="default via 192.168.0.1"
+
+# Using DHCP)
+config_em0="dhcp"
+</pre>
+|prompt=(chroot) root #}}
+
+Adding net.em0 to the default runlevel
+{{RootCmd|cd /etc/init.d
+|ln -s net.lo0 net.em0
+|rc-update add net.em0 default
+|prompt=(chroot) root #}}
+
+Setting the root password
+
+{{RootCmd|passwd
+|prompt=(chroot) root #}}
+
+You can also be configured to run at startup <i>sshd</i>.
+
+{{RootCmd|ACCEPT_KEYWORDS="~x86-fbsd" emerge openssh
+|rc-update add sshd default
+|prompt=(chroot) root #}}
+
+==== Installing the required packages ====
+If dhcpcd is required if you use DHCP.
+{{RootCmd|<nowiki>ACCEPT_KEYWORDS="~x86-fbsd" emerge dhcpcd</nowiki>
+|prompt=(chroot) root #}}
+
+==== Exit from chroot environment ====
+Work done in the chroot environment.
+exit from chroot environment.
+
+{{RootCmd|exit
+|prompt=(chroot) root #}}
+
+=== Writes boot loader and Cleaning up ===
+Do you want to reboot now ? Just a minute. We forgot to setting the boot loader.
+{{RootCmd|gpart bootcode -b /mnt/boot/pmbr ada0
+|gpart bootcode -p /mnt/boot/gptboot -i 1 ada0}}
+
+Unmount the partition.
+
+{{RootCmd|cd /
+|umount /mnt/dev
+|umount /mnt}}
+
+Don't have a problem? Now we restart.
+Don't forget to remove the Installation CD of FreeBSD.
+
+{{RootCmd|shutdown -r now}}
+
+== Major Upgrade howto ==
+This guide will show you how to upgrade Gentoo/FreeBSD 9.0 from 8.x version.
+=== Preparation ===
+==== Updating the @system ====
+The update to eliminate the problems caused by outdated versions of installed packages.
+{{RootCmd|emerge -uDN system}}
+
+==== Change profile ====
+To emerge related to FreeBSD 9.0 is necessary to change the profile.
+{{RootCmd|cd /etc
+rm make.profile}}
+
+x86-fbsd users)
+{{RootCmd|ln -s ../usr/portage/profiles/default/bsd/fbsd/x86/9.0 make.profile}}
+amd64-fbsd users)
+{{RootCmd|ln -s ../usr/portage/profiles/default/bsd/fbsd/amd64/9.0 make.profile}}
+
+==== Kernel update ====
+First of all, you need to update your kernel.
+It is because the package of a userland may use the new function of a kernel. 
+
+Please be sure to update a kernel first !
+
+{{RootCmd|<nowiki>USE=symlink emerge freebsd-sources flex</nowiki>
+|<nowiki>ACCEPT_KEYWORDS="~x86-fbsd" emerge '&lt;gcc-config-1.7'</nowiki>
+|cd /usr/src/sys/i386/conf (case of x86-fbsd)
+|cd /usr/src/sys/amd64/conf (case of amd64-fbsd)
+|cp GENERIC.hints /boot/device.hints}}
+{{RootCmd|config GENERIC
+|cd ../compile/GENERIC
+|make cleandepend &amp;&amp; make depend &amp;&amp; make -j3 &amp;&amp; make install}}
+
+Don't have a problem? Now we restart.
+
+{{RootCmd|shutdown -r now}}
+
+After rebooting your machine, please check if the kernel is new. 
+
+{{RootCmd|uname -a|output=
+<pre>FreeBSD daemon 9.0-Gentoo FreeBSD Gentoo 9.0 #0: Fri Jan 20 00:01:04 JST 2012
+     root@daemon:/usr/src/sys-9.0-r0/amd64/compile/GENERIC  amd64
+</pre>}}
+
+==== Backup of the library ====
+Please backup your 8.x library.
+When a problem occurs, will help solve the problem. 
+
+{{RootCmd|mkdir -p /var/tmp/8-bkp/usr
+|cp -a /lib64 /var/tmp/8-bkp/
+|cp -a /libexec /var/tmp/8-bkp/
+|cp -a /usr/lib64 /var/tmp/8-bkp/usr/
+}}
+
+=== Updating userland ===
+The first emerge the core library. 
+
+{{RootCmd|emerge -1 freebsd-mk-defs
+|<nowiki>LD_LIBRARY_PATH="/var/tmp/8-bkp/libexec:/var/tmp/8-bkp/lib64:/var/tmp/8-bkp/usr/lib64"</nowiki> emerge -C dev-libs/libedit
+|<nowiki>LD_LIBRARY_PATH="/var/tmp/8-bkp/libexec:/var/tmp/8-bkp/lib64:/var/tmp/8-bkp/usr/lib64"</nowiki> emerge -1 --nodeps freebsd-lib}}
+
+Some changes to the file name of the library.
+Create a symbolic link to the previous file name.
+After all packages are recreated, you'll be able to remove the symbolic link.
+
+{{RootCmd|rm /lib64/libutil.so.8 /lib64/libedit.so.0
+|ln -s libutil.so.9 /lib64/libutil.so.8
+|ln -s libedit.so.7 /lib64/libedit.so.0}}
+
+Update the userland of FreeBSD.
+
+{{RootCmd|emerge -a1 boot0 freebsd-bin freebsd-contrib freebsd-lib freebsd-libexec freebsd-mk-defs freebsd-pam-modules freebsd-sbin freebsd-share freebsd-ubin freebsd-usbin}}
+
+Change CHOST, and emerge binutils gcc. (FYI, [http://www.gentoo.org/doc/en/change-chost.xml Changing the CHOST variable])
+
+x86-fbsd users)
+{{RootCmd|<nowiki>gsed -i 's:CHOST=.*:CHOST="i686-gentoo-freebsd9.0":g' /etc/make.conf</nowiki>}}
+amd64-fbsd users)
+{{RootCmd|<nowiki>gsed -i 's:CHOST=.*:CHOST="x86_64-gentoo-freebsd9.0":g' /etc/make.conf</nowiki>}}
+
+{{emerge|params=-1
+|sys-devel/binutils
+|sys-devel/gcc}}
+
+{{RootCmd|gcc-config -l|output=
+<pre> [1] x86_64-gentoo-freebsd8.2-4.3.4
+ [2] x86_64-gentoo-freebsd8.2-4.4.5
+ [3] x86_64-gentoo-freebsd9.0-4.5.3 *
+</pre>}}
+
+remove 8.x stuff.
+
+{{RootCmd|emerge -C '&lt;gcc-4.5'}}
+
+{{RootCmd|gcc-config -c|output=
+x86_64-gentoo-freebsd9.0-4.5.3}}
+
+also check binutils
+
+{{RootCmd|binutils-config -l|output=
+<pre> [1] x86_64-gentoo-freebsd9.0-2.20.1 *
+</pre>}}
+
+{{RootCmd|binutils-config -c|output=
+x86_64-gentoo-freebsd9.0-2.20.1}}
+
+remove FreeBSD 8.x env data.
+
+{{RootCmd|cd /etc/env.d/
+|grep gentoo-freebsd8. *|output=
+<pre>
+05gcc-x86_64-gentoo-freebsd8.2:MANPATH="/usr/share/gcc-data/x86_64-gentoo-freebsd8.2/4.5.3/man"
+05gcc-x86_64-gentoo-freebsd8.2:INFOPATH="/usr/share/gcc-data/x86_64-gentoo-freebsd8.2/4.5.3/info"
+05gcc-x86_64-gentoo-freebsd8.2:LDPATH="/usr/lib/gcc/x86_64-gentoo-freebsd8.2/4.5.3:/usr/lib/gcc/x86_64-gentoo-freebsd8.2/4.4.5:/usr/lib/gcc/x86_64-gentoo-freebsd8.2/4.3.4"
+05gcc-x86_64-gentoo-freebsd8.2:PATH="/usr/x86_64-gentoo-freebsd8.2/gcc-bin/4.5.3"
+05gcc-x86_64-gentoo-freebsd8.2:ROOTPATH="/usr/x86_64-gentoo-freebsd8.2/gcc-bin/4.5.3"
+</pre>}}
+
+target file name is 05gcc-x86_64-gentoo-freebsd8.2 in this case.
+
+{{RootCmd|rm 05gcc-x86_64-gentoo-freebsd8.2
+|env-update &amp;&amp; source /etc/profile
+|emerge -av1 libtool
+|/usr/share/gcc-data/x86_64-gentoo-freebsd9.0/4.5.3/fix_libtool_files.sh 4.5.3 --oldarch x86_64-gentoo-freebsd8.2
+}}
+
+Some packages need emerge first.
+
+{{RootCmd|emerge -1 libiconv
+|ln -s libiconv.so.2 /lib64/libiconv.so.7}}
+
+Recreate all packages.
+
+{{RootCmd|emerge -ae world}}
+
+Failure to compile the package if any, 'emerge --resume --skipfirst' is your friend.
+Also, please bug report the problem if you like.
+
+=== Cleaning ===
+Let's remove the backup files when you have finished all the steps.
+{{RootCmd|chflags -R noschg /var/tmp/8-bkp/*
+|rm -rf /var/tmp/8-bkp
+|rm /lib64/libutil.so.8 /lib64/libedit.so.0 /lib64/libiconv.so.7}}
+
+== Troubleshooting ==
+=== amd64-fbsd ===
+==== can not boot a kernel panic always occurs ====
+Details, see {{Bug|408019}}
+
+workaround is to use gcc 4.3 to compile the kernel.
+
+==== amd64 kernel + x86 stage environment, tar will not work successfully. ====
+Details, see {{Bug|413865}}
+
+Error messages:
+<pre>
+tar: getvfsbyname failed: No such file or directory
+tar: Error exit delayed from previous errors.
+</pre>
+
+workaround fix
+{{RootCmd|<nowiki>emerge =libarchive-3.0.3</nowiki>}}
+
+=== common ===
+==== Emerge fails net-misc/openssh ====
+Details, see {{Bug|391011}}
+
+workaround fix for openssh
+{{RootCmd|<nowiki>EXTRA_ECONF='--disable-utmp --disable-wtmp --disable-wtmpx' ACCEPT_KEYWORDS=~x86-fbsd emerge '>net-misc/openssh-6.0'</nowiki>}}
+
+==== Emerge fails app-misc/screen ====
+Details, see {{Bug|393039|409819}}.
+
+Please use app-misc/tmux instead of app-misc/screen.
+
+==== lex: not found ====
+{{emerge|sys-devel/flex}}
+
+==== cc: not found ====
+Details, see {{Bug|412319}}
+
+{{RootCmd|<nowiki>ACCEPT_KEYWORDS="~x86-fbsd" emerge '&lt;gcc-config-1.7'</nowiki>}}
+
+==== freebsd-cddl-9.0 has some issues. ====
+Details, see {{Bug|414479|414879|415129}}.
+
+== Links ==
+*[http://www.gentoo.org/proj/en/gentoo-alt/bsd/fbsd/ Gentoo/FreeBSD Project page]
+*[http://www.gentoo.org/doc/en/gentoo-freebsd.xml A short guide to Gentoo/FreeBSD]
