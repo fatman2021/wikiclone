@@ -1,0 +1,112 @@
+<big>'''OVERVIEW'''</big>
+
+[http://www.2600hz.org BlueBox]
+is a web based php configuration and management GUI for 
+[http://www.freeswitch.org/ FreeSWITCH] and 
+[http://www.asterisk.org Asterisk]
+switching libraries. It supports multi-tenancy, skinning, and is completely open-source. It can be used with database and file replication to scale up to thousands of registered devices and simultaneous phone calls. It can operate in the cloud or on the premise. 
+It originally developed from 
+[http://www.freepbx.org/freepbx-v3 FreePBXv3].
+
+<big>'''PREREQUISITE'''</big>
+
+Please first install [http://wiki.freeswitch.org/wiki/Installation:Gentoo FreeSWITCH]
+
+Then install a web server such as 
+[http://en.gentoo-wiki.com/wiki/Apache2 Apache2],
+[http://www.gentoo.org/proj/en/php/php-installing.xml dev-lang/php],
+a database backend such as 
+[http://www.gentoo.org/doc/en/mysql-howto.xml mysql], 
+[http://www.gentoo.org/doc/en/postgres-howto.xml pgsql], or 
+[http://www.sqlite.org/ dev-db/sqlite]
+
+I installed:
+* www-servers/apache 
+* dev-lang/php 
+* dev-db/mysql
+
+<big>'''SETUP MySQL'''</big><br />
+   mysql -u root -p<br />
+   mysql> CREATE USER 'bluebox'@'localhost' IDENTIFIED BY 'bluebox';<br />
+   mysql> GRANT ALL PRIVILEGES ON bluebox.* TO 'bluebox'@'localhost';<br />
+   mysql> FLUSH PRIVILEGES;<br />
+   mysql> SELECT user,host,password FROM mysql.user;<br />
+   mysql> SHOW GRANTS FOR bluebox@localhost;<br />
+   mysql> \q<br />
+
+If you make a mistake and need to start over:<br />
+   mysql -u root -p<br />
+   mysql> REVOKE ALL PRIVILEGES, GRANT OPTION ON bluebox.* FROM 'bluebox'@'localhost';<br />
+   mysql> DROP DATABASE bluebox;<br />
+   mysql> \q<br />
+
+<big>'''INSTALLING BLUEBOX'''</big><br />
+Adapted from http://www.powerpbx.org/content/centos-freeswitch-bluebox-v1
+
+Install bluebox git source into top level root of web server:<br />
+   cd /var/www/localhost/htdocs<br />
+   git clone git://source.2600hz.org/bluebox.git<br />
+   chown -R freeswitch:freeswitch /var/www/localhost/htdocs/bluebox<br />
+   cd /var/www/localhost/htdocs/bluebox<br />
+   ./preinstall.sh<br />
+
+<b>NOTE:</b> When the install asks you for the web user name change default (apache) to "freeswitch" (without quotes).  Everything else can remain at default (Just repeatedly press ENTER when it asks)
+
+Increase the memory_limit for php<br />
+   sed -i 's/memory_limit = 32M/memory_limit = 128M/g' /etc/php/apache2-php5.3/php.ini<br />
+
+Restart apache<br />
+   /etc/init.d/apache2 restart<br />
+
+Browse to "http://your.web.server/bluebox/"<br />
+and run the installer. I went with the defaults but changed the password and email address 
+for the administrator. I also unchecked the option for installing sample data.
+
+I got a WARNING about conflicting files:<br />
+Conflicting Files<br />
+
+    /opt/freeswitch/conf/directory/default.xml<br />
+    /opt/freeswitch/conf/autoload_configs/conference.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/ivr.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/acl.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/xml_cdr.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/callcenter.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/distributor.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/directory.conf.xml<br />
+    /opt/freeswitch/conf/autoload_configs/cdr_csv.conf.xml<br />
+    /opt/freeswitch/conf/sip_profiles/external.xml<br />
+    /opt/freeswitch/conf/sip_profiles/internal-ipv6.xml<br />
+    /opt/freeswitch/conf/sip_profiles/internal.xml<br />
+
+    Conflicting configuration files will be permanently erased if you continue!<br />
+I just continued.<br />
+
+After configuring bluebox, my default configuration was<br />
+   cat /var/www/localhost/htdocs/bluebox/config/database.php<br />
+   'type'     => 'mysql',<br />
+   'user'     => 'bluebox',<br />
+   'pass'     => 'bluebox',<br />
+   'host'     => '127.0.0.1',<br />
+   'port'     => '3306',<br />
+   'socket'   => FALSE,<br />
+   'database' => 'bluebox'<br />
+
+You probably will want to change the password for user bluebox.<br />
+
+Next edit /var/www/localhost/htdocs/bluebox/bluebox/config/config.php<br />
+and disable the installer:<br />
+   config['installer_enabled'] = FALSE;<br />
+
+
+<big>'''CONFIGURING FreeSWITH with BLUEBOX'''</big><br />
+Browse to "http://your.web.server/bluebox/"<br />
+
+INSTALL additional modules:<br />
+System->Package Manager<br />
+A few modules have pre-requisite modules so if you get an error, install the pre-requisite.<br />
+A few pairs of modules conflict, e.g.:
+* "Freeswitch" and "Asterisk"
+* "Endpoint Manager" and "Provisioner"
+* "Media File" and "Media Manager"
+I chose "Freeswitch", "Endpoint Manager" and "Media File"<br />
+I installed every module except those for a call center.<br />
