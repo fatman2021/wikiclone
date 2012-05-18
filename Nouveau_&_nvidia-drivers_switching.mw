@@ -25,10 +25,37 @@ Set the '''''VIDEO_CARDS''''' variable in /etc/make.conf to "nvidia nouveau" and
  
 Blacklist the '''nvidia''' and '''nouveau''' modules as we don't want udev to try and autoload them.
 {{RootCmd|echo -e "blacklist nouveau\nblacklist nvidia" >> /etc/modprobe/nvidia-n-nouveau.conf}}
-And finally use the [{{fullurl:Nouveau & Nvidia Switching/nvidia.start|action=raw}} init script bellow] to switch graphics driver depending on what kernel you booted with:
-{{File|/etc/local.d/nvidia.start||
-{{:Nouveau & Nvidia Switching/nvidia.start}}
-}}
+And finally use the init script bellow to switch graphics driver depending on what kernel you booted with:
+{{File|/etc/local.d/nvidia.start||<pre>
+#!/bin/bash
+
+depend() {
+	need localmount
+	before xdm
+}
+
+if [[ $(uname -r) == *-nvidia ]] ; then
+	modprobe -q nvidia
+	if [[ $(eselect opengl show) != nvidia ]] ; then
+		eselect opengl set nvidia &>/dev/null
+	fi
+cat > /etc/X11/xorg.conf.d/01-nvidia.conf << EOF
+Section "Device"
+  Identifier   "Device0"
+  Driver       "nvidia"
+  Option       "NoLogo" "True"
+EndSection
+EOF
+else
+	modprobe -q nouveau
+	if [ -f /etc/X11/xorg.conf.d/01-nvidia.conf ] ; then
+		rm /etc/X11/xorg.conf.d/01-nvidia.conf
+	fi
+	if [[ $(eselect opengl show) != xorg-x11 ]] ; then
+		eselect opengl set xorg-x11 &>/dev/null
+	fi
+fi
+</pre>}}
 Copy it to /etc/local.d/nvidia.start and set the executable bit:
 {{RootCmd|chmod +x /etc/local.d/nvidia.start}}
 
