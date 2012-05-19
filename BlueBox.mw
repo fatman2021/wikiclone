@@ -41,6 +41,45 @@ Also, portage seems to install the freeswitch configuration directory twice:
 A "diff" for each file/folder in /etc/freeswitch/* and /etc/freeswitch/freeswitch/*<br />
 shows no differences. Is this a mistake?
 
+DOUBLE CHECK FS PERMISSIONS:
+        chown -R root:freeswitch "/etc/freeswitch"<br />
+        chmod -R u=rwX,g=rX,o=   "/etc/freeswitch"<br />
+        #
+        # prefix<br />
+        chown -R root:freeswitch "/opt/freeswitch"<br />
+        chmod -R u=rwX,g=rX,o=   "/opt/freeswitch" <br />
+        # allow read access for things like building external modules<br />
+        chmod -R u=rwx,g=rx,o=rx "/opt/freeswitch/"{lib*,bin,include}<br />
+        chmod    u=rwx,g=rx,o=rx "/opt/freeswitch" <br />
+        #
+        # directories owned by the fs user<br />
+        for x in db run log cores storage recordings; do<br />
+                chown -R freeswitch:freeswitch "/opt/freeswitch/${x}"<br />
+        done<br />
+
+ALSO, the /etc/init.d/freeswitch script tries to change the pid file from the default for FS<br />
+"/opt/freeswitch/run/freeswitch.pid" to "/var/run/freeswitch.pid"<br />
+FS insists on writing its pid to /opt/freeswitch/run/freeswitch.pid<br />
+but the Gentoo init script looks for the pid in /var/run/freeswitch.pid<br />
+So my solution is to change the init script:<br />
+ start() {
+        local OPTS
+
+        [ -n "${FREESWITCH_USER}" ] && \
+                OPTS="${OPTS} -u ${FREESWITCH_USER}"
+
+        [ -n "${FREESWITCH_GROUP}" ] && \
+                OPTS="${OPTS} -g ${FREESWITCH_GROUP}"
+
+        [ -n "${FREESWITCH_OPTS}" ] && \
+                OPTS="${OPTS} ${FREESWITCH_OPTS}"
+
+        ebegin "Starting Freeswitch"
+        start-stop-daemon --start --quiet --exec ${FREESWITCH_BIN} \
+                --pidfile /opt/freeswitch/run/freeswitch.pid -- -nc ${OPTS}
+        eend $?
+ }
+
 Then install: 
 === WEB SERVER ===
 INSTALL a web server such as www-servers/apache (see the [http://en.gentoo-wiki.com/wiki/Apache2 Gentoo Wiki])
@@ -144,6 +183,52 @@ You probably will want to change the password for user bluebox.<br />
 Next edit /var/www/localhost/htdocs/bluebox/bluebox/config/config.php<br />
 and disable the installer:<br />
  config['installer_enabled'] = FALSE;
+
+== STARTING FreeSWTICH ==
+There appears to be no man installation for freeswitch<br />
+So use --help to get freeswitch command line options:<br />
+
+ /opt/freeswitch/bin/freeswitch --help
+ these are the optional arguments you can pass to freeswitch
+        -nf                    -- no forking
+        -u [user]              -- specify user to switch to
+        -g [group]             -- specify group to switch to
+        -help                  -- this message
+        -version               -- print the version and exit
+        -waste                 -- allow memory waste
+        -core                  -- dump cores
+        -rp                    -- enable high(realtime) priority settings
+        -lp                    -- enable low priority settings
+        -np                    -- enable normal priority settings (system defaults)
+        -vg                    -- run under valgrind
+        -nosql                 -- disable internal sql scoreboard
+        -heavy-timer           -- Heavy Timer, possibly more accurate but at a cost
+        -nonat                 -- disable auto nat detection
+        -nonatmap              -- disable auto nat port mapping
+        -nocal                 -- disable clock calibration
+        -nort                  -- disable clock clock_realtime
+        -stop                  -- stop freeswitch
+        -nc                    -- do not output to a console and background
+        -ncwait                -- do not output to a console and background but wait until the system is ready before exiting (implies -nc)
+        -c                     -- output to a console and stay in the foreground
+        -conf [confdir]        -- specify an alternate config dir
+        -log [logdir]          -- specify an alternate log dir
+        -run [rundir]          -- specify an alternate run dir
+        -db [dbdir]            -- specify an alternate db dir
+        -mod [moddir]          -- specify an alternate mod dir
+        -htdocs [htdocsdir]    -- specify an alternate htdocs dir
+        -scripts [scriptsdir]  -- specify an alternate scripts dir
+
+I get an error when starting FS:
+ /opt/freeswitch/bin/freeswitch -c -rp -u freeswitch
+ Error: stacksize -1 is too large: run ulimit -s 240 from your shell before starting the application.
+ auto-adjusting stack size for optimal performance...
+ Cannot open pid file /opt/freeswitch/run/freeswitch.pid.
+
+
+apps etc # ulimit -s 240
+apps etc # 
+
 
 
 == CONFIGURING FS WITH BLUEBOX ==
