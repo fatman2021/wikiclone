@@ -97,8 +97,7 @@ POSIX file capabilities are a way to allocate privileges to a process that allow
 
 
 ==Host Setup==
-To get an lxc-capable host system working you will need the following components:
-* Kernel with the appropriate LXC related options enabled
+To get an lxc-capable host system working you will need the following steps.
 
 ===Kernel with the appropriate LXC options enabled===
 If you are unfamiliar with recompiling kernels, see the copious documentation available on that subject in addition to the notes below.
@@ -252,6 +251,23 @@ Recent kernels introduced /sys/fs/cgroup as default location.
 
 The [[OpenRC|openrc]] has already mounts 'cgroup' filesystem during bootstrap, therefore, there is no need for users to mount it manually.
 
+You can check it using:
+<pre>
+# mount | grep cgroup
+
+cgroup_root on /sys/fs/cgroup type tmpfs (rw,nosuid,nodev,noexec,relatime,size=10240k,mode=755)
+openrc on /sys/fs/cgroup/openrc type cgroup (rw,nosuid,nodev,noexec,relatime,release_agent=/lib/rc/sh/cgroup-release agent.sh,name=openrc)
+cpuset on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+cpu on /sys/fs/cgroup/cpu type cgroup (rw,nosuid,nodev,noexec,relatime,cpu)
+cpuacct on /sys/fs/cgroup/cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct)
+memory on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
+devices on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)
+freezer on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)
+blkio on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
+perf_event on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,perf_event)
+
+</pre>
+
 ==Networking: Ethernet bridge==
 You probably want to set up an ethernet bridge.  Note that this requires the CONFIG_BRIDGE symbol to be enabled in your kernel.
 
@@ -280,7 +296,8 @@ First, we need to add the bridge device to the /etc/conf.d/net file. As an examp
 {{File|/etc/conf.d/net||<pre>
 #host
 config_eth0=("192.168.0.3 netmask 255.255.255.0")
-route_eth0=("default via 192.168.0.1")
+route_eth0=("default via 192.168.0.1") #gateway
+
 # bridge (some guest)
 config_br0=("dhcp")
 brctl_br0="setfd 0
@@ -306,7 +323,7 @@ Allow ip forwarding in your {{Path|/etc/sysctl.conf}} or with the following comm
 
 Add the iptables rules to grand masqueraded access to the internet. For
 example (substitute 'eth0' with your external facing physical interface):
-{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source ''your eth0 ip address''}}
+{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source ''your_eth0_ipaddr''}}
 
 This is equivalent to:
 <pre>
@@ -349,12 +366,7 @@ Template scripts live in ''/usr/lib(lib64)/lxc/templates/'' but should be execut
 The rootfs of linux container is stored in ''/etc/lxc/guestname/''
 
 Configuration files (the '''-f ''configuration-file''''' option) are usually used to specify the network configuration for the guest.  For example:
-<pre>
-lxc.network.type=macvlan
-lxc.network.link=eth0
-lxc.network.flags=up
-</pre>
-... or ...
+
 <pre>
 lxc.network.type=veth
 lxc.network.link=br0
@@ -388,6 +400,10 @@ The template scripts included in ''app-emulation/lxc-0.8.0-rc1-r1'' are:
 :Usage is as follows...
 :{{RootCmd|lxc-create -t ubuntu -n ''guest-name''-f ''network-configuration-file''}}
 :It takes a very long time to create a ubuntu guest, please be patient.
+
+The following commands enable the template guest to be started via init scripts.
+{{RootCmd|cp /etc/lxc/'''guest-name'''/config /etc/lxc/'''guest-name'''.conf}}
+{{RootCmd|ln -s /etc/init.d/lxc /etc/init.d/lxc.'''guest-name'''}}
 
 ===Gentoo===
 
