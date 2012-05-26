@@ -276,6 +276,68 @@ Don't forget to remove the Installation CD of FreeBSD.
 
 {{RootCmd|shutdown -r now}}
 
+== Howto run G/FBSD in vanilla FreeBSD's jail ==
+Details of jail, please see the [http://www.freebsd.org/handbook/jails.html FreeBSD Handbook].
+
+=== Preparing directory ===
+
+{{RootCmd|mkdir -p /usr/jail/gfbsd
+|cd /usr/jail/gfbsd}}
+
+=== Downloading and Unpacking the Stage3 Tarball and Portage snapshot ===
+
+{{RootCmd|fetch http://dev.gentoo.org/~aballier/fbsd9.0/x86/stage3-i686-freebsd-9.0.tar.bz2 (for x86-fbsd users)
+|fetch http://dev.gentoo.org/~aballier/fbsd9.0/amd64/stage3-amd64-freebsd-9.0.tar.bz2 (for amd64-fbsd users)
+|fetch http://distfiles.gentoo.org/snapshots/portage-latest.tar.bz2
+|tar xjpf stage3-*.tar.bz2
+|tar xjf portage-latest.tar.bz2 -C /usr/jail/gfbsd/usr}}
+
+=== Setting ===
+
+Configure jail to start with FreeBSD.
+{{File|/etc/rc.conf|Example for start automatically jail|
+<pre>
+jail_enable="YES"
+jail_list="gfbsd"
+
+jail_gfbsd_rootdir="/usr/jail/gfbsd"
+jail_gfbsd_hostname="gfbsd.example.org"
+jail_gfbsd_ip="192.168.0.10"
+jail_gfbsd_devfs_enable="YES"
+
+# You will also need to add the following line if you need network access.
+# em0, please specify your network devices.
+ifconfig_em0_alias0="inet 192.168.0.10 netmask 255.255.255.0"
+</pre>}}
+
+Setting to operate Gentoo/FreeBSD in jail.
+{{RootCmd|<nowiki>echo 'rc_sys="jail"' >> /usr/jail/gfbsd/etc/rc.conf</nowiki>
+|<nowiki>echo 'hostname="gfbsd"' > /usr/jail/gfbsd/etc/conf.d/hostname</nowiki>
+|<nowiki>echo 'syslogd_args="-ss"' >> /usr/jail/gfbsd/etc/conf.d/syslogd</nowiki>}}
+
+{{RootCmd|chroot /usr/jail/gfbsd /bin/bash}}
+{{RootCmd|rc-update add vixie-cron default
+|exit
+|prompt=(chroot) root #}}
+
+=== run jail ===
+Let's run jail.
+
+{{Note|em0, please specify your network devices.}}
+
+{{RootCmd|ifconfig em0 192.168.0.10 alias (please run if you need network access)
+|/etc/rc.d/jail start}}
+
+Verify that worked.
+{{RootCmd|jls|output=
+<pre>
+   JID  IP Address      Hostname                      Path
+     1  192.168.0.10    gfbsd                         /usr/jail/gfbsd
+</pre>}}
+
+To enter the jail environment will use the jexec command.
+{{RootCmd|jexec 1 /bin/bash}}
+
 == Major Upgrade howto ==
 This guide will show you how to upgrade Gentoo/FreeBSD 9.0 from 8.x version.
 === Preparation ===
