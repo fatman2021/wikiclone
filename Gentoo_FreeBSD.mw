@@ -18,6 +18,18 @@ Wait a moment while watching the boot process.
 Please choose Live CD, if a Welcome screen is displayed. 
 Then login prompt, enter root.
 
+{{Note|If you have 4KB/sector HDD (aka AFT Drive)
+
+Please select "2. [Esc]ape to loader prompt" at boot time if you have a 4KB/sector HDD.
+
+Set the device name of your HDD with 4KB sectors in the boot loader. ada1 and ada2... to increase if you have more than one.
+
+<pre>
+<nowiki>set kern.cam.ada.0.quirks="1"</nowiki>
+boot
+</pre>
+}}
+
 ==== Network setting ====
 First, create a directory /tmp/bsdinstall_etc to rewrite the resolv.conf. 
 {{RootCmd|mkdir -p /tmp/bsdinstall_etc}}
@@ -147,21 +159,34 @@ And mount it.
 |swapon /dev/gpt/swap}}
 
 ===== If you want to use the ZFS file system (experimental) =====
+Load the kernel module in order to enable ZFS.
+{{RootCmd|kldload zfs}}
 
-{{RootCmd|zfs
-|zpool create zsys /dev/gpt/zfs-system
-|<nowiki>zfs set mountpoint=none zsys</nowiki>
-|zfs create zsys/root
-|<nowiki>zfs set mountpoint=/mnt zsys/root</nowiki>}}
-{{RootCmd|zfs mount -a
+Prepare the RAM disk to write /boot/zfs/zpool.cache.
+{{RootCmd|mdconfig -a -t malloc -s 5M -u 8
+|newfs /dev/md8
+|mount /dev/md8 /boot/zfs}}
+
+Please use gnop if you have 4KB/sector HDD. You can get the best performance.
+{{RootCmd|gnop create -S 4096 /dev/gpt/zfs-system}}
+
+Creates a new storage pool. if you are using gnop, please specify /dev/gpt/zfs-system.nop instead of /dev/gpt/zfs-system.
+
+{{RootCmd|zpool create zsys /dev/gpt/zfs-system
+|<nowiki>zfs set mountpoint=none zsys</nowiki>}}
+
+Creates a new ZFS file system.
+{{RootCmd|zfs create zsys/root
+|<nowiki>zfs set mountpoint=/mnt zsys/root</nowiki>
+|zfs mount -a
 |zfs create zsys/root/usr
-|zfs create zsys/root/var
-|zfs create zsys/root/tmp
-|zfs create zsys/home}}
-{{RootCmd|zfs create -V 8gb zsys/swap
+|zfs create zsys/root/var}}
+{{RootCmd|zfs create zsys/root/tmp
+|zfs create zsys/home
+|zfs create -V 8gb zsys/swap
 |<nowiki>zfs set org.freebsd:swap=on zsys/swap</nowiki>
-|<nowiki>zfs set checksum=off zsys/swap</nowiki>
-|mkdir /mnt/home
+|<nowiki>zfs set checksum=off zsys/swap</nowiki>}}
+{{RootCmd|mkdir /mnt/home
 |mount -t zfs zsys/home /mnt/home}}
 
 
@@ -175,8 +200,7 @@ Now, Gentoo/FreeBSD 9.0 stage3 is available.
 
 ==== Unpacking stage3 and Portage snapshot ====
 {{RootCmd|cd /mnt
-| sh
-| export LANG="en_US.UTF-8"
+| <nowiki>export LANG="en_US.UTF-8"</nowiki>
 | tar xjpf stage3-*.tar.bz2 -C /mnt
 | tar xjf portage-latest.tar.bz2 -C /mnt/usr}}
 
@@ -249,6 +273,8 @@ If you select UFS2
 If you select ZFS
 {{RootCmd|nano -w /etc/fstab|output=
 <pre># Device	Mountpoint	FStype	Options	Dump	Pass#
+#/dev/ad0s1a	/		ufs	rw	1	1
+#/dev/ad0s1b	none		swap	sw	0	0
 zsys/root	/		zfs	rw	0	0
 </pre>
 |prompt=(chroot) root #}}
@@ -300,7 +326,6 @@ If you select ZFS file system, the following additional work is required.
 |<nowiki>echo 'vfs.root.mountfrom="zfs:zsys/root"' >> /boot/loader.conf</nowiki>
 |prompt=(chroot) root #}}
 
-
 ==== Installing the required packages ====
 If dhcpcd is required if you use DHCP.
 {{RootCmd|emerge dhcpcd
@@ -315,6 +340,7 @@ exit from chroot environment.
 
 === Writes boot loader and Cleaning up ===
 Do you want to reboot now ? Just a minute. We forgot to setting the boot loader.
+
 If you select UFS2
 {{RootCmd|gpart bootcode -b /mnt/boot/pmbr ada0
 |gpart bootcode -p /mnt/boot/gptboot -i 1 ada0}}
@@ -326,13 +352,12 @@ If you select ZFS
 ==== Special settings for ZFS ====
 If you select ZFS file system, the following additional work is required.
 
-{{RootCmd|cd /
+{{RootCmd|umount /mnt/dev
+|cd /
 |<nowiki>zpool set bootfs=zsys/root zsys</nowiki>
-|mdconfig -a -t malloc -s 5M -u 8
-|newfs /dev/md8
-|mount /dev/md8 /boot/zfs}}
-{{RootCmd|zpool export zsys
-|zpool import zsys
+|zpool export zsys
+|gnop destroy /dev/gpt/zfs-system.nop (please run if you are using gnop)}}
+{{RootCmd|zpool import zsys
 |mkdir /mnt/boot/zfs
 |cp /boot/zfs/zpool.cache /mnt/boot/zfs/
 |zfs unmount -a}}
