@@ -76,7 +76,7 @@ ada0: 16.700MB/s transfers (WDMA2, PIO 8192bytes)
 ada0: 12288MB (25165824 512 byte sectors: 16H 63S/T 16383C)
 ada0: Previously was known as ad0</pre>}}
 
-Next, set the partition.
+===== If you want to use the UFS2 file system =====
 This example is simple only two partitions.
 If necessary, you can split /, /usr, /var, /tmp, and /home.
 Please set using gpart.
@@ -130,15 +130,40 @@ Results when you create a partition with option -a 4k.
   25165784         7        - free -  (3.5k)
 </pre>}}
 
+===== If you want to use the ZFS file system (experimental) =====
+{{RootCmd|gpart create -s GPT ada0
+|gpart add -s 64k -t freebsd-boot ada0
+|gpart add -t freebsd-zfs -l zfs-system ada0}}
+
 ==== Creating and mounting a file system ====
-You can select the UFS and ZFS in FreeBSD.
-However, this guide is not intended ZFS.
+
+===== If you want to use the UFS2 file system =====
+
 Please do not forget newfs -L option to label. 
 
 {{RootCmd|newfs -L gfbsdroot -U /dev/ada0p2}}
 And mount it. 
 {{RootCmd|mount /dev/ufs/gfbsdroot /mnt
 |swapon /dev/gpt/swap}}
+
+===== If you want to use the ZFS file system (experimental) =====
+
+{{RootCmd|zfs
+|zpool create zsys /dev/gpt/zfs-system
+|<nowiki>zfs set mountpoint=none zsys</nowiki>
+|zfs create zsys/root
+|<nowiki>zfs set mountpoint=/mnt zsys/root</nowiki>}}
+{{RootCmd|zfs mount -a
+|zfs create zsys/root/usr
+|zfs create zsys/root/var
+|zfs create zsys/root/tmp
+|zfs create zsys/home}}
+{{RootCmd|zfs create -V 8gb zsys/swap
+|<nowiki>zfs set org.freebsd:swap=on zsys/swap</nowiki>
+|<nowiki>zfs set checksum=off zsys/swap</nowiki>
+|mkdir /mnt/home
+|mount -t zfs zsys/home /mnt/home}}
+
 
 ==== Downloading the Stage3 Tarball and Portage snapshot ====
 Now, Gentoo/FreeBSD 9.0 stage3 is available.
@@ -152,7 +177,7 @@ Now, Gentoo/FreeBSD 9.0 stage3 is available.
 {{RootCmd|cd /mnt
 | sh
 | export LANG="en_US.UTF-8"
-| tar xjpf stage3-*.tar.bz2
+| tar xjpf stage3-*.tar.bz2 -C /mnt
 | tar xjf portage-latest.tar.bz2 -C /mnt/usr}}
 
 ==== Entering the new Environment ====
@@ -162,12 +187,22 @@ Now, Gentoo/FreeBSD 9.0 stage3 is available.
 
 === Settings and install more in chroot environment ===
 ==== The first settings and time zone settings ====
-etc-update and time zone settings. Of course, you can modify /etc/make.conf. 
+env-update and time zone settings. Of course, you can modify /etc/make.conf. 
 
 {{RootCmd|env-update && source /etc/profile
 |cp /usr/share/zoneinfo/GMT /etc/localtime (please select your time zone)
 |emerge nano
 |nano -w /etc/make.conf (if necessary)
+|prompt=(chroot) root #}}
+
+==== Special settings for ZFS ====
+If you select ZFS file system, the following additional work is required.
+
+{{RootCmd|emerge gentoolkit
+|euse -E zfs
+|emerge sys-devel/flex
+|emerge sys-freebsd/freebsd-cddl
+|emerge sys-freebsd/freebsd-lib sys-freebsd/freebsd-ubin sys-freebsd/boot0
 |prompt=(chroot) root #}}
 
 ==== Installing a kernel source ====
@@ -203,10 +238,18 @@ Boot loader configuration is done after exiting the chroot.
 Familiar setting. 
 Please refer to [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&amp;chap=8 Gentoo Linux Handbook] if you need more information.
 
+If you select UFS2
 {{RootCmd|nano -w /etc/fstab|output=
 <pre># Device	Mountpoint	FStype	Options	Dump	Pass#
 /dev/ufs/gfbsdroot	/		ufs	rw	1	1
 /dev/gpt/swap	none		swap	sw	0	0
+</pre>
+|prompt=(chroot) root #}}
+
+If you select ZFS
+{{RootCmd|nano -w /etc/fstab|output=
+<pre># Device	Mountpoint	FStype	Options	Dump	Pass#
+zsys/root	/		zfs	rw	0	0
 </pre>
 |prompt=(chroot) root #}}
 
@@ -244,9 +287,19 @@ Setting the root password
 
 You can also be configured to run at startup <i>sshd</i>.
 
-{{RootCmd|<nowiki>ACCEPT_KEYWORDS="~x86-fbsd" emerge net-misc/openssh</nowiki>
+{{RootCmd|emerge net-misc/openssh
 |rc-update add sshd default
 |prompt=(chroot) root #}}
+
+===== Special settings for ZFS =====
+If you select ZFS file system, the following additional work is required.
+
+{{RootCmd|rc-update add zfs boot
+|rc-update add zvol default
+|<nowiki>echo 'zfs_load="YES"' >> /boot/loader.conf</nowiki>
+|<nowiki>echo 'vfs.root.mountfrom="zfs:zsys/root"' >> /boot/loader.conf</nowiki>
+|prompt=(chroot) root #}}
+
 
 ==== Installing the required packages ====
 If dhcpcd is required if you use DHCP.
@@ -262,14 +315,35 @@ exit from chroot environment.
 
 === Writes boot loader and Cleaning up ===
 Do you want to reboot now ? Just a minute. We forgot to setting the boot loader.
+If you select UFS2
 {{RootCmd|gpart bootcode -b /mnt/boot/pmbr ada0
 |gpart bootcode -p /mnt/boot/gptboot -i 1 ada0}}
 
-Unmount the partition.
+If you select ZFS
+{{RootCmd|gpart bootcode -b /mnt/boot/pmbr ada0
+|gpart bootcode -p /mnt/boot/gptzfsboot -i 1 ada0}}
+
+==== Special settings for ZFS ====
+If you select ZFS file system, the following additional work is required.
 
 {{RootCmd|cd /
-|umount /mnt/dev
-|umount /mnt}}
+|<nowiki>zpool set bootfs=zsys/root zsys</nowiki>
+|mdconfig -a -t malloc -s 5M -u 8
+|newfs /dev/md8
+|mount /dev/md8 /boot/zfs}}
+{{RootCmd|zpool export zsys
+|zpool import zsys
+|mkdir /mnt/boot/zfs
+|cp /boot/zfs/zpool.cache /mnt/boot/zfs/
+|zfs unmount -a}}
+{{RootCmd|<nowiki>zfs set mountpoint=none zsys</nowiki>
+|<nowiki>zfs set mountpoint=/usr zsys/root/usr</nowiki>
+|<nowiki>zfs set mountpoint=/var zsys/root/var</nowiki>
+|<nowiki>zfs set mountpoint=/tmp zsys/root/tmp</nowiki>
+|<nowiki>zfs set mountpoint=/home zsys/home</nowiki>}}
+{{RootCmd|<nowiki>zfs set mountpoint=legacy zsys/root</nowiki>}}
+
+==== reboot! ====
 
 Don't have a problem? Now we restart.
 Don't forget to remove the Installation CD of FreeBSD.
