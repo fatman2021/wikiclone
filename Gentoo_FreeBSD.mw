@@ -414,15 +414,25 @@ To enter the jail environment will use the jexec command.
 
 == Major Upgrade howto ==
 This guide will show you how to upgrade Gentoo/FreeBSD 9.0 from 8.x version.
+
+{{Note|Tested using stage3-i686-freebsd-8.0.tar.bz2, with 20120531 portage snapshot}}
+
 === Preparation ===
 ==== Updating the @system ====
 The update to eliminate the problems caused by outdated versions of installed packages.
-{{RootCmd|emerge -uDN system}}
+
+{{Note|<nowiki>FEATURES="preserve-libs" is set by default. Add FEATURES="preserve-libs" to make.conf, please skip if you do not have special settings.</nowiki>}}
+
+{{RootCmd|emerge portage
+|<nowiki>gsed -i '/LDFLAGS=/d' /etc/make.conf</nowiki>
+|<nowiki>echo 'FEATURES="preserve-libs ${FEATURES}"' >> /etc/make.conf</nowiki>
+|emerge findutils freebsd-ubin cvs
+|emerge -uDN system}}
 
 ==== Change profile ====
 To emerge related to FreeBSD 9.0 is necessary to change the profile.
 {{RootCmd|cd /etc
-rm make.profile}}
+|rm make.profile}}
 
 x86-fbsd users)
 {{RootCmd|ln -s ../usr/portage/profiles/default/bsd/fbsd/x86/9.0 make.profile}}
@@ -436,7 +446,6 @@ It is because the package of a userland may use the new function of a kernel.
 Please be sure to update a kernel first !
 
 {{RootCmd|<nowiki>USE=symlink emerge freebsd-sources flex</nowiki>
-|<nowiki>emerge '&gt;=sys-devel/gcc-config-1.7.1'</nowiki>
 |cd /usr/src/sys/i386/conf (case of x86-fbsd)
 |cd /usr/src/sys/amd64/conf (case of amd64-fbsd)
 |cp GENERIC.hints /boot/device.hints}}
@@ -455,30 +464,14 @@ After rebooting your machine, please check if the kernel is new.
      root@daemon:/usr/src/sys-9.0-r0/amd64/compile/GENERIC  amd64
 </pre>}}
 
-==== Backup of the library ====
-Please backup your 8.x library.
-When a problem occurs, will help solve the problem. 
-
-{{RootCmd|mkdir -p /var/tmp/8-bkp/usr
-|cp -a /lib64 /var/tmp/8-bkp/
-|cp -a /libexec /var/tmp/8-bkp/
-|cp -a /usr/lib64 /var/tmp/8-bkp/usr/
-}}
-
 === Updating userland ===
 The first emerge the core library. 
 
 {{RootCmd|emerge -1 freebsd-mk-defs
-|<nowiki>LD_LIBRARY_PATH="/var/tmp/8-bkp/libexec:/var/tmp/8-bkp/lib64:/var/tmp/8-bkp/usr/lib64"</nowiki> emerge -C dev-libs/libedit
-|<nowiki>LD_LIBRARY_PATH="/var/tmp/8-bkp/libexec:/var/tmp/8-bkp/lib64:/var/tmp/8-bkp/usr/lib64"</nowiki> emerge -1 --nodeps freebsd-lib}}
-
-Some changes to the file name of the library.
-Create a symbolic link to the previous file name.
-After all packages are recreated, you'll be able to remove the symbolic link.
-
-{{RootCmd|rm /lib64/libutil.so.8 /lib64/libedit.so.0
-|ln -s libutil.so.9 /lib64/libutil.so.8
-|ln -s libedit.so.7 /lib64/libedit.so.0}}
+|cd /usr/portage/sys-freebsd/freebsd-lib
+|wget http://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/sys-freebsd/freebsd-lib/freebsd-lib-9.0-r1.ebuild
+|ebuild freebsd-lib-9.0-r1.ebuild digest
+|<nowiki>emerge -1 --nodeps =freebsd-lib-9.0-r1</nowiki>}}
 
 Update the userland of FreeBSD.
 
@@ -496,51 +489,52 @@ amd64-fbsd users)
 |sys-devel/gcc}}
 
 {{RootCmd|gcc-config -l|output=
-<pre> [1] x86_64-gentoo-freebsd8.2-4.3.4
- [2] x86_64-gentoo-freebsd8.2-4.4.5
- [3] x86_64-gentoo-freebsd9.0-4.5.3 *
+<pre> * broken config file: /etc/env.d/gcc/i686-gentoo-freebsd8.0-4.4.3
+ [1] i686-gentoo-freebsd8.0-4.4.3 *
+ [2] i686-gentoo-freebsd9.0-4.6.3
 </pre>}}
 
 remove 8.x stuff.
 
-{{RootCmd|emerge -C '&lt;gcc-4.5'}}
+{{RootCmd|emerge -C '&lt;gcc-4.6'}}
 
 {{RootCmd|gcc-config -c|output=
-x86_64-gentoo-freebsd9.0-4.5.3}}
+i686-gentoo-freebsd9.0-4.6.3}}
 
 also check binutils
 
 {{RootCmd|binutils-config -l|output=
-<pre> [1] x86_64-gentoo-freebsd9.0-2.20.1 *
+<pre> [1] i686-gentoo-freebsd9.0-2.20.1 *
 </pre>}}
 
 {{RootCmd|binutils-config -c|output=
-x86_64-gentoo-freebsd9.0-2.20.1}}
+i686-gentoo-freebsd9.0-2.20.1}}
 
 remove FreeBSD 8.x env data.
 
 {{RootCmd|cd /etc/env.d/
 |grep gentoo-freebsd8. *|output=
 <pre>
-05gcc-x86_64-gentoo-freebsd8.2:MANPATH="/usr/share/gcc-data/x86_64-gentoo-freebsd8.2/4.5.3/man"
-05gcc-x86_64-gentoo-freebsd8.2:INFOPATH="/usr/share/gcc-data/x86_64-gentoo-freebsd8.2/4.5.3/info"
-05gcc-x86_64-gentoo-freebsd8.2:LDPATH="/usr/lib/gcc/x86_64-gentoo-freebsd8.2/4.5.3:/usr/lib/gcc/x86_64-gentoo-freebsd8.2/4.4.5:/usr/lib/gcc/x86_64-gentoo-freebsd8.2/4.3.4"
-05gcc-x86_64-gentoo-freebsd8.2:PATH="/usr/x86_64-gentoo-freebsd8.2/gcc-bin/4.5.3"
-05gcc-x86_64-gentoo-freebsd8.2:ROOTPATH="/usr/x86_64-gentoo-freebsd8.2/gcc-bin/4.5.3"
+04gcc-i686-gentoo-freebsd8.0:PATH="/usr/i686-gentoo-freebsd8.0/gcc-bin/4.4.3"
+04gcc-i686-gentoo-freebsd8.0:ROOTPATH="/usr/i686-gentoo-freebsd8.0/gcc-bin/4.4.3"
+04gcc-i686-gentoo-freebsd8.0:MANPATH="/usr/share/gcc-data/i686-gentoo-freebsd8.0/4.4.3/man"
+04gcc-i686-gentoo-freebsd8.0:INFOPATH="/usr/share/gcc-data/i686-gentoo-freebsd8.0/4.4.3/info"
+04gcc-i686-gentoo-freebsd8.0:LDPATH="/usr/lib/gcc/i686-gentoo-freebsd8.0/4.6.3
+04gcc-i686-gentoo-freebsd8.0:/usr/lib/gcc/i686-gentoo-freebsd8.0/4.4.3"
+05gcc-i486-gentoo-freebsd8.0:MANPATH="/usr/share/gcc-data/i486-gentoo-freebsd8.0/4.4.3/man"
+05gcc-i486-gentoo-freebsd8.0:INFOPATH="/usr/share/gcc-data/i486-gentoo-freebsd8.0/4.4.3/info"
+05gcc-i486-gentoo-freebsd8.0:LDPATH="/usr/lib/gcc/i486-gentoo-freebsd8.0/4.4.3"
+05gcc-i486-gentoo-freebsd8.0:PATH="/usr/i486-gentoo-freebsd8.0/gcc-bin/4.4.3"
+05gcc-i486-gentoo-freebsd8.0:ROOTPATH="/usr/i486-gentoo-freebsd8.0/gcc-bin/4.4.3"
 </pre>}}
 
-target file name is 05gcc-x86_64-gentoo-freebsd8.2 in this case.
+target file name is 04gcc-i686-gentoo-freebsd8.0, 05gcc-i486-gentoo-freebsd8.0 in this case.
 
-{{RootCmd|rm 05gcc-x86_64-gentoo-freebsd8.2
+{{RootCmd|rm 04gcc-i686-gentoo-freebsd8.0 05gcc-i486-gentoo-freebsd8.0
 |env-update &amp;&amp; source /etc/profile
 |emerge -av1 libtool
-|/usr/share/gcc-data/x86_64-gentoo-freebsd9.0/4.5.3/fix_libtool_files.sh 4.5.3 --oldarch x86_64-gentoo-freebsd8.2
+|/usr/share/gcc-data/i686-gentoo-freebsd9.0/4.6.3/fix_libtool_files.sh 4.6.3 --oldarch i686-gentoo-freebsd8.0
 }}
-
-Some packages need emerge first.
-
-{{RootCmd|emerge -1 libiconv
-|ln -s libiconv.so.2 /lib64/libiconv.so.7}}
 
 Recreate all packages.
 
@@ -549,11 +543,11 @@ Recreate all packages.
 Failure to compile the package if any, 'emerge --resume --skipfirst' is your friend.
 Also, please bug report the problem if you like.
 
+{{Note|If emerge fails to compile sys-freebsd/boot0, please see [[#Troubleshooting]].}}
+
 === Cleaning ===
 Let's remove the backup files when you have finished all the steps.
-{{RootCmd|chflags -R noschg /var/tmp/8-bkp/*
-|rm -rf /var/tmp/8-bkp
-|rm /lib64/libutil.so.8 /lib64/libedit.so.0 /lib64/libiconv.so.7}}
+{{RootCmd|emerge @preserved-rebuild}}
 
 == Troubleshooting ==
 === amd64-fbsd ===
