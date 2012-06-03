@@ -20,7 +20,7 @@ Some of the more common directories include:<br />
 '''/lib'''     System libraries are located here. On most 64bit systems /lib is usually just a symlink and separate '''/lib32''' and '''/lib64''' directories will exist.<br />
 '''/dev'''     Special device files are located here. This is one of the most important directories as its contents are how Unix-like systems interface with hardware from all but the lowest level, the drivers themselves. <br />
 '''/home'''    This directory is where the typical home directory for system users go. It usually isn't a good idea to put network shares for user home directories here. <br />
-'''/opt'''     Is a place for non-default software. A good generalization is that, if the software didn't come from Portage or another Gentoo maintained source, it should probably go here.<br />
+'''/opt'''     Is a place for non-default software. A good generalization is that, if the software didn't come from Portage or another Gentoo maintained source, it should probably go here. Also troublesome software that doesn't cleanly follow the Unix File Hierarchy should go here to avoid disturbing the rest of the file system.<br />
 '''/tmp'''     This is scrap space that is used per-session and is typically overwritten on a reboot.<br />
 '''/var'''     This directory has been described as "multi-purpose" which is very accurate. It contains items ranging from system logs to PID files to spoolers, it even has its own temporary space.<br />
 '''/var/tmp''' As you might have guessed, this is the temporary space within /var. It deserves its own listing because Portage uses this as an area to unpack and build distfiles.<br />
@@ -136,5 +136,35 @@ Device Drivers --->
         <*>   Mirror target
         <*> Zero target
 </pre>}}
-Next our disks need to be partitioned, assume I have four disks: sda, sdb, sdc, and sdd. Use your favorite partitioning tool to format the drives and create empty partition tables on them.
-TODO: creating partitions, effective use and creation of quotas, file system encryption, discuss cgroups and freebsd jails lightly, RAID
+Next our disks need to be partitioned, assume we have four disks: sda, sdb, sdc, and sdd. Use your favorite partitioning tool to format the drives and create empty partition tables on them. Then allocate all the space in to a single partition.
+Finally we actually create the RAID:
+{{RootCmd|<pre>mdadm --create /dev/md0 --level=6 --raid-devices=4 /dev/sda1 /dev/sdb1 /dev/sdc1 /dev/sdd1</pre>}}
+You should now have a new device file, /dev/md0 which can be manipulated just like any other disk device file, however md0 represents the RAID that was just created.
+<br />
+We aren't quite done yet. The mdadm tool uses a configuration file located at /etc/mdadm.conf and while this is an optional step, editing this configuration file it is a recommended step.
+Instead of manually filling out this file, lets be lazy and run a couple commands instead:
+{{RootCmd|echo "DEVICE /dev/sda1 /dev/sdb1 /dev/sdc1 /dev/sdd1 > /etc/mdadm.conf
+|mdadm --detail --scan >> /etc/mdadm.conf}}
+This configuration file serves two purposes, first it helps to document the RAID which is very important when it comes time to replace a disk. And second it helps the kernel activate the RAID during boot instead of a user doing it manually.
+You are also encouraged to explore the monitor feature of mdadm, this sends mail warnings to administrators as issues with the RAID are encountered. 
+=== Maintaining a software RAID===
+There are a few commands and kernel data structures with which administrators dealing with a software RAID should be familiar.<br />
+To get details about the RAID run:
+{{RootCmd|cat /proc/mdstat}}
+Here you will also see the progress of a RAID recovery or sync.<br />
+Occasionally, you will need to do a check for bad blocks on the RAID, reallocate the data stored on them, and then sync the RAID. To do this run:
+{{RootCmd|echo check >> /sys/block/md0/md/sync_action}}
+To cleanly halt a RAID sync:
+{{RootCmd|echo idle >> /sys/block/md0/md/sync_action}}
+For troubleshooting and configuration purposes, there is an option to simulate a disk failure:
+{{RootCmd|mdadm /dev/md0 -f /dev/sda1}}
+====Replacing failed disks====
+In our simulation, the disk at /dev/sda1 failed. To fix it, all we have to do is remove it from the RAID logically and readd it to the RAID. When real hardware fails in reality the process is similar, except the additional step of replacing the failed hardware.
+<br />
+First logically remove the drive from the RAID:
+{{RootCmd|mdadm /dev/md0 -r /dev/sda1}}
+At this point, in a real failure situation we would need to swap the failed disk. Depending on the hardware configuration we might have to power the system down all the way to accomplish this.<br />
+'''Note:''' If you are following this example, you should have created disks with a single partition on them. When a disk fails and this method was used, simply repeating the formatting process on any disk will allow it to be added to the RAID without issue. If RAW disks were used instead of partitions, then a replacement disk must be exactly the same model as the other disks in the RAID.
+
+<br />
+TODO: effective use and creation of quotas, file system encryption, RAID
