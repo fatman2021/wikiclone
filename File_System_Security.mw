@@ -66,19 +66,19 @@ The options we are currently focused on include:
 * auto/noauto
 * defaults
 
-Certain file systems like /usr and /boot have been mounted with ro or read-only permission (in contrast to rw, read-write). This makes adding software or running updates slightly more painful by requiring an extra couple reboots. But the occasional difficulty means that accidentally deleted files arn't really deleted and malicious software has a harder time living through a reboot. There are also certain files that need to be written to, for example /etc/resolv.conf. For these files you can move them to a separate directory with write access and then place a symlink in their place.<br />
+Certain file systems like /usr and /boot have been mounted with '''ro''' or read-only permission (in contrast to '''rw''', read-write). This makes adding software or running updates slightly more painful by requiring an extra couple reboots. But the occasional difficulty means that accidentally deleted files arn't really deleted and malicious software has a harder time living through a reboot. There are also certain files that need to be written to, for example /etc/resolv.conf. For these files you can move them to a separate directory with write access and then place a symlink in their place.<br />
 
-Mounting a file system with nosuid can also add more grief to an administrator's life. But this disables the suid and sgui bits so that sudo and su -c to not execute commands, a user must first login as the user with permission to execute or modify a file either directly or through su. This makes it more difficult for privilege escalation attacks to be successful. <br />
+Mounting a file system with '''nosuid''' can also add more grief to an administrator's life. But this disables the suid and sgui bits so that files can not run with the permissions of their owner. This makes it more difficult for privilege escalation attacks to be successful. <br />
 
-Using nodev disables special device files on that file system. The kind commonly found under /dev. Really you don't want these kinds of files anywhere but /dev, they can let an attacker break out of a chroot jail and bypass other restrictions.<br />
+Using '''nodev''' disables special device files on that file system. The kind commonly found under /dev. Really you don't want these kinds of files anywhere but /dev, they can let an attacker break out of a chroot jail and bypass other restrictions.<br />
 
-Noexec is a tricky option to enable. It disables executable permissions, and is great to place on directories like /tmp. However, extracting compressed files, for example distfiles, requires executable permissions. This is why, at least on Gentoo systems, /var/tmp should be placed on its own partition. Disabling executable permissions on /var is usually a good idea but without /var/tmp on a separate partition software installation under Gentoo would be hampered.<br />
+'''Noexec''' is a tricky option to enable. It disables executable permissions, and is great to place on directories like /tmp. However, extracting compressed files, for example distfiles, requires executable permissions. This is why, at least on Gentoo systems, /var/tmp should be placed on its own partition. Disabling executable permissions on /var is usually a good idea but without /var/tmp on a separate partition software installation under Gentoo would be hampered.<br />
 
-Nouser requires that root mount the file system. Specifying user means that any user can mount the system but it implies; noexec, nosuid, and nodev unless explicitly overridden. Some systems offer the users option which is similar to user but there is a corresponding users group which a user must first be a member of to mount the file system.<br />
+'''Nouser''' requires that root mount the file system. Specifying user means that any user can mount the system but it implies; '''noexec''', '''nosuid''', and '''nodev''' unless explicitly overridden. Some systems offer the users option which is similar to user but there is a corresponding users group which a user must first be a member of to mount the file system.<br />
 
-In the example above, noauto is passed to the /boot partition. Noauto means that the file system is not automatically mounted at boot time, conversely auto explicitly mounts file systems at boot time. It is desirable to mount /boot as noauto so that should something ever happen, for example a power outage, your boot partition is not uncleanly unmounted. So that when you go to boot, the kernel image is safe and any recovery tools such as a statically compiled busybox can be used to repair any damage.<br />
+In the example above, '''noauto''' is passed to the /boot partition. '''Noauto''' means that the file system is not automatically mounted at boot time, conversely auto explicitly mounts file systems at boot time. It is desirable to mount /boot as '''noauto''' so that should something ever happen, for example a power outage, your boot partition is not uncleanly unmounted. So that when you go to boot, the kernel image is safe and any recovery tools such as a statically compiled busybox can be used to repair any damage.<br />
 
-Defaults will typically replace all of the following permissions with one word; rw, suid, dev, exec, auto, nouser, async <br />
+'''Defaults''' will typically replace all of the following permissions with one word; '''rw, suid, dev, exec, auto, nouser, async''' <br />
 
 Further Reading:<br />
 Arch Linux has a fairly in depth overview of fstab at their wiki:
@@ -177,6 +177,21 @@ under construction
 ==Permissions==
 under construction
 ===The Traditional Unix Way===
+In Unix, everything is a file. As such, permissions revolve around a series of file attributes. In a nutshell these attributes relate to a; read-bit, write-bit, executable-bit, setuid-bit, setgid-bit, sticky-bit, and information about owner, group, and world.
+Have a look at the out put of ls in this command:
+{{GenericCmd|ls -la /etc/rsyncd.conf
+-rw-r--r-- 1 root root 405 Apr  1 14:49 /etc/rsyncd.conf
+}}
+In the third column you can see that root is the owner, and in the forth column root is also the group. Now lets look at the first column. The first dash indicates this is a file not a directory, otherwise there would be a ''d'' there, if an ''s'' where there it would indicate a socket file, and if it was an ''l'' it would be a link. The next three spaces indicate whether the read-bit(r), write-bit(w), or executable-bit(x) is set for the owner on this file. The next three denote the same permissions bits but for the group owner instead of the user owner, and the third group of three denote permissions for the world, or everyone else on the system. This is the basic Unix permissions model.
+<br />
+<br />
+Lets look a little deeper. Grasping your basic permissions bits are usually pretty easy, but setuid and setgid bits are a little trickier to beginners and considerably more dangerous if used incorrectly. But if used correctly, setuid and setgid bits can make system management much easier by making permissions more flexible. Essentially the setuid (set user id) bit when activated, will allow the file to be executed with the permissions of its owner by anyone. As you might have already guessed setgid (set group id) will allow any user to execute a file with the permissions of its group.<br />
+The logic here, is that this allows administrators to give users access to particular programs that would otherwise need privileged without handing out the root password and allowing them full access to the rest of the system.
+With the ls command, the ''x'' denoting user executable permission will be replaced with an ''s'' if the setuid-bit is set. Naturally this means that in the group permission section, an ''s'' will replace the ''x'' if the setgid-bit is set.
+<br />
+<br />
+Deeper still, we have the sticky-bit. The sticky-bit can be very confusing, while traditionally it had a very clear usage, that usage has evolved over time and now many different flavors of Unix have as many different uses for the sticky-bit. On Linux the sticky bit can be set on directories, and any files in this directory can only be deleted or unlinked by the owner.
+====Managing permission bits, bit wrangling====
 ===Access Control Lists, how long til you loose your mind===
 ==Backups==
 under construction, lightly discuss, link to existing Gentoo wikis
