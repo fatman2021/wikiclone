@@ -4,9 +4,35 @@ Many web clients have the possibility to detect proxy settings for their current
 
 Once the proxy autoconfiguration file is obtained, clients evaluate it to see how to connect to the proxy.
 
+== The PAC file ==
+A PAC file is a simple javascript file clients can evaluate to get their configuration. For each request, the client executes the javascript, passing along the URL and host name it would like to make the request to. The script will return a proxy name to use for this server/URL, or DIRECT if there is no proxy for this host or protocol.
+
+== Getting the PAC file for a client ==
+
+In order to get to the PAC file, a client can use several options.
+
+ * local file: The .pac file can be stored locally and e.g. firefox can be pointed to that file
+ * URL: It can have a URL configured which serves out the pac file.
+ * DHCP: DHCP servers can provide information where a .pac file is available on the network
+ * WPAD: following a set of conventions, clients can automatically obtain the correct .pac file for the netork they're in
+
+The last two options are what we are going for because once a client is set up it can work the same way regardless which network it is in. 
+
+=== WPAD ===
+WPAD works like this:
+
+A client tries to figure out is domain name by stripping its own host name from the FQDN it likel got from DHCP. It will then try to contact a HTTP server by the name of wpad.<domain>. If it can't find one, and the domain name has one ore more subdomains, it will strip the first subdomain and try again to find a server named wpad.<domain> up until the top-level domain is reached.
+
+From those HTTP servers it will request a file called /wpad.dat which should be a PAC file like we created above. 
+
+For example:
+ * Client Name: laptop.office.corporate.example.org
+ * First Server tried: http://wpad.office.corporate.example.org/wpad.dat
+ * Second Server tried: http://wpad.corporate.example.org/wpad.dat
+ * Last Server tried: http://wpad.example.org/wpad.dat
+
 = Step 1: Creating the PAC file =
 
-A PAC file is a simple javascript file clients can evaluate to get their configuration. For each request, the client executes the javascript, passing along the URL and host name it would like to make the request to. The script will return a proxy name to use for this server/URL, or DIRECT if there is no proxy for this host or protocol.
 For details on which commands are supported in this file, see [URL].
 
 A simple PAC file looks like this:
@@ -44,8 +70,6 @@ If the return value of the script is DIRECT, the client won't use a proxy. The l
 
 = DHCP Server configuration =
 
-
-
 Some Operating systems can use information provided via DHCP to obtain the proxy autoconfiguration file. Here we show how to make the ISC dhcpd server ({{Package|net-misc/dhcp}}) serve this information:
 
 In dhcpd.conf in the general section define a new option with code 252 and in the section for our network we provide the value of the config server valid for that network.
@@ -62,23 +86,6 @@ subnet 192.168.0.0 netmask 255.255.255.0 {
 </pre>}}
 
 {{Note|You can call the option anything you want, but you have to give it code 252 and type text}}
-
-For information about the 'http://proxy.example.org/proxy.pac' URL see below.
-
-= WPAD =
-
-WPAD works like this:
-
-A client tries to figure out is domain name by stripping its own host name. It will then try to contact a HTTP server by the name of wpad.<domain>. If it can't find one, and the domain name has one ore more subdomains, it will strip the first subdomain and try again to find a server named wpad.<domain> up until the top-level domain is reached.
-
-From those HTTP servers it will request a file called /wpad.dat which should be a PAC file like we created above. 
-
-For example:
- * Client Name: laptop.office.corporate.example.org
- * First Server tried: http://wpad.office.corporate.example.org/wpad.dat
- * Second Server tried: http://wpad.corporate.example.org/wpad.dat
- * Last Server tried: http://wpad.example.org/wpad.dat
-
 
 
 == DNS Server configuration ==
