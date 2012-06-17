@@ -1,0 +1,286 @@
+
+
+= How it works =
+
+
+
+Many web clients have the possibility to detect proxy settings for their current network automatically. This can be done via DHCP, via a method called WPAD, or a manually configured URL.
+
+
+
+Once the proxy autoconfiguration file is obtained, clients evaluate it to see how to connect to the proxy.
+
+
+
+= Step 1: Creting the PAC file =
+
+
+
+A PAC file is a simple javascript file clients can evaluate to get their configuration. For each request, the client executes the javascript, passing along the URL and host name it would like to make the request to. The script will return a proxy name to use for this server/URL, or DIRECT if there is no proxy for this host or protocol.
+For details on which commands are supported in this file, see [URL].
+
+
+
+A simple PAC file looks like this:
+
+{{File|proxy.pac||<pre>
+
+function FindProxyForURL(url, host) {
+
+    var proxy = "PROXY proxy.example.org:8080; DIRECT";
+
+    var direct = "DIRECT";
+
+    
+
+    // no proxy for local hosts without domain:
+
+    if(isPlainHostName(host)) return direct;
+
+
+
+    //We only cache http
+
+     if (
+
+         url.substring(0, 4) == "ftp:"   ||
+
+         url.substring(0, 6) == "rsync:" ||
+
+    return direct;
+
+
+
+    // proxy everything else:
+
+    return proxy;
+
+
+
+}
+
+</pre>}}
+
+
+
+If the return value of the script is DIRECT, the client won't use a proxy. The line "PROXY proxy.example.org:8080; DIRECT" will tell clients to first try to use the host proxy.example.org at port 8080 as a proxy, and if that fails, go direct.
+
+
+
+To test that your PAC file is functioning correctly you can use the [pacparser|https://code.google.com/p/pacparser/] utility.
+
+
+
+Example:
+
+<pre>
+
+/usr/bin/pactester -p proxy.pac -u http://www.gentoo.org -h gentoo.org
+
+PROXY proxy.example.org:8118; DIRECT
+
+
+
+/usr/bin/pactester -p proxy.pac -u rsync://rsync.gentoo.org -h gentoo.org
+
+DIRECT
+
+</pre>
+
+
+
+= DHCP Server configuration =
+
+
+
+Some Operating systems can use information provided via DHCP to obtain the proxy autoconfiguration file. Here we show how to make the ISC dhcpd server ({{Package|net-misc/dhcp}}) serve this information:
+
+
+
+in /etc/dhcp/dhcpd.conf in the general section define a new option with code 252.
+
+
+
+{{File|/etc/dhcp/dhcpd.conf||<pre>
+
+# do windows-style proxy autoconfig:
+
+option local-proxy-config code 252 = text;
+
+
+
+...
+
+
+
+subnet 192.168.0.0 netmask 255.255.255.0 {
+
+  range 192.168.0.20 192.168.0.30;
+
+  ...
+
+  option local-proxy-config "http://proxy.example.org/proxy.pac";
+
+}
+
+</pre>}}
+
+
+
+{{Note|You can the option anything you want, but you have to give it code 252 and type text}}
+
+For information about the 'http://proxy.example.org/proxy.pac' URL see below.
+
+
+
+= WPAD =
+
+
+
+WPAD works like this:
+
+
+
+A client tries to figure out is domain name by stripping its own host name. It will then try to contact a HTTP server by the name of wpad.<domain>. If it can't find one, and the domain name has one ore more subdomains, it will strip the first subdomain and try again to find a server named wpad.<domain> up until the top-level domain is reached.
+
+
+
+From those HTTP servers it will request a file called /wpad.dat which should be a PAC file like we created above. 
+
+
+
+For example:
+
+
+
+ * Client Name: http://laptop.office.corporate.example.org/wpad.dat
+
+ * First Server tried: http://wpad.office.corporate.example.org/wpad.dat
+
+ * Second Server tried: http://wpad.corporate.example.org/wpad.dat
+
+ * Last Server tried: http://wpad.example.org/wpad.dat
+
+
+
+== DNS Server configuration ==
+
+
+
+The responsible DNS Server must have records for the wpad.<domain> servers. We will not discuss how to set up an DNS server here, but a simple modification to the records of bind would look like this:
+
+
+
+{{File|/etc/bind/pri/example.org.zone||<pre>
+
+server1    IN A     192.168.0.1
+
+server2    IN A     192.168.0.2
+
+www        IN CNAME server1.example.org.
+
+proxy        IN CNAME server2.example.org.
+
+; proxy autoconfig server:
+
+wpad    IN      CNAME server1.example.org.
+
+</pre>}}
+
+
+
+= serving the WPAD file =
+
+
+
+Now that we have created a PAC file and DNS points to the correct server, all that is left is actually serving the file to clients:
+
+
+
+We need a HTTP Server (we use {{Package|www-servers/apache}} here), a virtual host which will respond to the wpad server name, and the PAC file.
+
+
+
+== Apache setup ==
+
+=== Virtual Host ===
+
+
+
+{{File|/etc/apache2/vhosts.d/00_server1.example.org.conf||<pre>
+
+NameVirtualHost 192.168.0.1:80
+
+Listen 192.168.0.1:80
+
+NameVirtualHost 192.168.0.1:80
+
+
+
+<VirtualHost 192.168.0.1:80>
+
+        ServerName server1.example.org
+
+        ServerAlias wpad.example.org
+
+
+
+        DocumentRoot "/var/www/example.org/htdocs"
+
+        <Directory "/var/www/example.org/htdocs">
+
+                AllowOverride All
+
+                Options MultiViews FollowSymlinks SymLinksIfOwnerMatch IncludesNoExec
+
+                Options -Indexes
+
+                Order allow,deny
+
+                Allow from all
+
+        </Directory>
+
+        # serve proxy autoconfig correctly:
+
+        <Files "wpad.dat)">
+
+                AddType application/x-ns-proxy-autoconfig dat
+
+        </Files>
+
+        <Files "proxy.pac">
+
+                AddType application/x-ns-proxy-autoconfig pac
+
+        </Files>
+
+</VirtualHost>
+
+
+
+</pre>}}
+
+
+
+Now all that is left is to copy our PAC file to /var/www/example.org/htdocs/ and add a symlink so it is also called wpad.dat
+
+
+
+{{Important|The file MUST be accessible under the URI http://wpad.example.org/wpad.dat, you can not name it anything else or place it deeper in the web server hierarchy. You probably also shouldn't use fancy stuff like redirects.}}
+
+
+
+= enabling clients =
+
+== Firefox ==
+
+== Opera ==
+
+== KDE ==
+
+
+
+[[Category:Server]]
+
+[[Category:Software]]
