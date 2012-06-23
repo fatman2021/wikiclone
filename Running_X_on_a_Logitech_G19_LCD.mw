@@ -34,6 +34,100 @@ You will also need fbdev to run X later:
 {{RootCmd|emerge -uav xf86-video-fbdev}}
 You may now reboot.
 
+== Secondary X server ==
+The following method is based on the {{DisplayLink}} wiki page. In it, it says you need x11-drivers/xf86-input-void to make it work but I haven't installed it and it all works fine. If it doesn't work for you, follow the instructions on the {{DisplayLink}} page.
 
+If you need to switch keyboard/mouse focus to the LCD screen, you will need x2x. If you know what you are doing and plan to just open apps in the G19 LCD, then you won't need x2x.
 
-Before installing the
+{{RootCmd|emerge -uav x11-misc/x2x}}
+==== xorg.conf.g19 ====
+Create this file in /etc/X11/ and name it xorg.conf.g19:
+{{File|/etc/X11/xorg.conf.DL||<pre>
+Section "Device"
+    Identifier     "g19lcd"
+    Driver         "fbdev"
+    VendorName     "Logitech"
+    BusID          "USB"
+    Option         "fbdev" "/dev/fb0"
+    Screen         0
+EndSection
+
+Section "Monitor"
+    Identifier     "G19monitor"
+    VendorName     "Logitech"
+    ModelName      "Logitech G19"
+EndSection
+
+Section "Screen"
+    Identifier     "Screen0"
+    Device         "g19lcd"
+    Monitor        "G19monitor"
+    DefaultDepth   16
+    SubSection     "Display"
+        Depth      16
+        Modes      "320x240"
+    EndSubSection
+EndSection
+
+Section "ServerLayout"
+    Identifier     "Layout0"
+    Screen      0  "Screen0" 0 0
+    Option "AllowMouseOpenFail" "True"
+    InputDevice "Keyboard0" "CoreKeyboard"
+    InputDevice "Mouse0" "CorePointer"
+EndSection
+
+Section "ServerFlags"
+    Option "AllowEmptyInput" "false"
+    Option "AutoAddDevices" "false"
+    Option "AutoEnableDevices" "false"
+EndSection
+
+Section "InputDevice"
+    Identifier "Keyboard0"
+    Driver "void"
+EndSection
+
+Section "InputDevice"
+    Identifier "Mouse0"
+    Driver "void"
+EndSection</pre>}}
+
+==== .xinitrc2 ====
+Next we create the ~/.initrc2 for our G19 display. Create and customize the file to your needs, here is an example:
+{{File|~/.xinitrc2||<pre><nowiki>
+# run profile to set $PATH and other env vars correctly
+. ${HOME}/.bash_profile
+
+## turn on display
+xset dpms force on
+
+## disable sleep modes etc.
+xset -dpms
+
+## disable screensaver
+xset s off
+
+## turn off beep
+xset -b
+
+xset r rate 250 30
+
+## activate zapping (ctrl+alt+Bksp killall X)
+setxkbmap -option terminate:ctrl_alt_bksp
+
+# run initial programs
+uxterm -ls -geometry 200x62+0+162 -fg white -bg black &
+exec icewm || exec xterm -fg red
+</nowiki></pre>}}
+Please note the commands there will only affect your G19 display, not your main X.
+==== g19lcd.sh ====
+This is the actual script that starts the second instance of xorg-server. Make it executeable and save it somewhere in your home folder, in this example we save it to ~/.g19lcd.sh
+{{File|~/.g19lcd.sh||<pre><nowiki>
+#!/bin/sh
+xinit ~/.xinitrc2 -- /usr/bin/X :1 -xf86config xorg.conf.g19 -novtswitch -sharevts -audit 0 vt12 &
+sleep 5
+x2x -west -from :0 -to :1 &
+</nowiki></pre>}}
+
+[[Category:Hardware]]
