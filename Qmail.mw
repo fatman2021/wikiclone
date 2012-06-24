@@ -47,8 +47,8 @@ move the the qmail control directory
 Upgrade the Cert Info to create a 2048bit key 
 
 {{Cmd|sed -i 's/1024/2048/' /var/qmail/control/servercert.cnf}}
-Update the Cert Info 
-{{File|/var/qmail/control/servercert.cnf|Type in information pertinent to you.  CN is your fully qualified domain name ie. foo.domain.com}}
+Update the Cert Info with information pertinent to you.  CN is your fully qualified domain name ie. foo.domain.com
+{{File|/var/qmail/control/servercert.cnf|<pre>CN=foo.domain.com</pre>}}
 
 create the pem files and key 
 {{Cmd|openssl req -new -nodes -out req.pem -config /var/qmail/control/servercert.cnf  -keyout /var/qmail/control/servercert.pem}}
@@ -75,52 +75,48 @@ mysql> flush privileges;
 mysql> quit}}
 
 Edit /etc/vpopmail.conf and update the mysql password for the vpopmail user:
-{{vim /etc/vpopmail.conf}}
-{{# Read-only DB
+{{File|/etc/vpopmail.conf|<pre># Read-only DB
 localhost|0|vpopmail|mypassword|vpopmail
 # Write DB
-localhost|0|vpopmail|mypassword|vpopmail}}
+localhost|0|vpopmail|mypassword|vpopmail</pre>}}
 
 Run the init scripts and setup supervisor links for qmail: 
-{{emerge --config =mail-mta/netqmail-1.06
-ln -s /var/qmail/supervise/qmail-send /service/qmail-send
-ln -s /var/qmail/supervise/qmail-smtpd /service/qmail-smtpd}}
+{{Cmd|emerge --config =mail-mta/netqmail-1.06}}
+{{Cmd|ln -s /var/qmail/supervise/qmail-send /service/qmail-send}}
+{{Cmd|ln -s /var/qmail/supervise/qmail-smtpd /service/qmail-smtpd}}
 
 Finally we'll add dovecot to talk to our email clients.
 
-{{echo "net-mail/dovecot vpopmail -mysql -pam" >> /etc/portage/package.use
-emerge dovecot
-etc-update -3}}
+{{Cmd||echo "net-mail/dovecot vpopmail -mysql -pam" >> /etc/portage/package.use}}
+{{Cmd||emerge dovecot}}
+{{Cmd||etc-update -3}}
 
 add vpopmail uid info to the default dovecot config 
-{{echo 'first_valid_uid = 89' >> /etc/dovecot/dovecot.conf
-echo 'last_valid_uid = 89' >> /etc/dovecot/dovecot.conf}}
+{{Cmd||echo 'first_valid_uid = 89' >> /etc/dovecot/dovecot.conf}}
+{{Cmd||echo 'last_valid_uid = 89' >> /etc/dovecot/dovecot.conf}}
 
 edit dovecot ssl configs to pass our ssl certificate to email clients when the login to get mail securely
-{{vim /etc/dovecot/conf.d/10-ssl.conf
-
+{{File||/etc/dovecot/conf.d/10-ssl.conf|<pre>
 ssl_cert = </var/qmail/control/servercert.pem
-ssl_key = </var/qmail/control/myserver.domain.com.key}}
+ssl_key = </var/qmail/control/myserver.domain.com.key</pre>}}
 
 edit the dovecot auth configs
-{{vim /etc/dovecot/conf.d/10-auth.conf
-
+{{File|/etc/dovecot/conf.d/10-auth.conf|<pre>
 disable_plaintext_auth = no
 auth_mechanisms = plain cram-md5
 
 #!include auth-system.conf.ext  comment this out, don't need it
-!include auth-vpopmail.conf.ext}}
+!include auth-vpopmail.conf.ext</pre>}}
 
 comment these two vpopmail lines 
-{{vim /etc/dovecot/conf.d/auth-vpopmail.conf.ext
-
+{{File|/etc/dovecot/conf.d/auth-vpopmail.conf.ext|<pre>
 # [quota_template=<template>] - %q expands to Maildir++ quota
-#  args = quota_template=quota_rule=*:backend=%q}}
+#  args = quota_template=quota_rule=*:backend=%q}}</pre>}}
 
 start dovecot and add to the default runlevel 
-{{/etc/init.d/dovecot start
-rc-update add dovecot default}}
+{{Cmd|/etc/init.d/dovecot start}}
+{{Cmd|rc-update add dovecot default}}
 
 start and add netqmail to the default run level
-{{/etc/init.d/svscan start
-rc-update add svscan default}}
+{{Cmd|/etc/init.d/svscan start}}
+{{Cmd|rc-update add svscan default}}
