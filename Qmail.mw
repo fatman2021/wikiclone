@@ -1,0 +1,126 @@
+Qmail is a fast popular Mail Transfer Agent (MTA).  It is one of the top MTA's in the world today.  
+
+== Pre-installation ==
+As only one MTA can be installed at the same time on a system, you might be required to unmerge all other installed MTAs like {{Package|mail-mta/ssmtp}}, {{Package|mail-mta/exim}}, {{Package|mail-mta/sendmail}}, {{Package|mail-mta/postfix}}.
+
+The package manager will report a block when another MTA is still installed. You can resolve this block by manually unmerging the old mail server. For example you can remove <tt>ssmtp</tt> (which might have been installed as the default when a program requested a mail server to be installed) with this command:
+{{RootCmd|emerge -C ssmtp}}
+
+== Installation ==
+netqmail has several USE flags that may be desired for certain bigger setups. As this article aims at installing and configuring a ''basic'' netqmail setup, we'll add qmail plugin support with qmail-spp and ucspi-tcp support.
+
+{{echo "mail-mta/netqmail qmail-spp" >> /etc/portage/package.use
+echo "sys-apps/ucspi-tcp qmail-spp" >> /etc/portage/package.use}}
+
+{{Emerge|mail-mta/netqmail}}
+
+
+== Configuration ==
+
+We'll be using vpopmail to handle virtual domain managent, so we need to tell qmail to use vpopmail
+{{
+vim /var/qmail/control/conf-smtpd
+QMAIL_SMTP_CHECKPASSWORD="/var/vpopmail/bin/vchkpw"
+}}
+
+We'd also like to update the memory used by qmail to 32MB from 16MB
+{{
+sed -i 's/16000000/32000000/' /var/qmail/control/conf-common
+}}
+
+=== Fully Qualified Domain Name (FQDN) ===
+Though not entirely related, for a MTA to function properly, it is imperative that its hostname is set up correctly. Under Gentoo '''/etc/conf.d/hostname''' and '''/etc/conf.d/net''' are the files responsible for this. In this example, the mail server is named <tt>foo</tt> on the domain <tt>example.com</tt>.
+
+{{File|/etc/conf.d/net|Setup domain name|<pre>dns_domain_lo="example.com"</pre>}}
+{{File|/etc/conf.d/hostname|Setup hostname|<pre>HOSTNAME="foo"</pre>}}
+
+{{Note|Do not use <tt>mail.example.com</tt> just because it may be externally known as such. Use the actual name of the system.}}
+
+Verifying that the FQDN is setup properly for the domain.
+{{Cmd|hostname --fqdn|output=foo.example.com}}
+
+=== Creating Properly Signed Certificates ===
+
+move the the qmail control directory 
+{{Cmd|cd /var/qmail/control/}}
+
+Upgrade the Cert Info to create a 2048bit key 
+
+{{Cmd|sed -i 's/1024/2048/' /var/qmail/control/servercert.cnf}}
+Update the Cert Info 
+{{File|/var/qmail/control/servercert.cnf|Type in information pertinent to you.  CN is your fully qualified domain name ie. foo.domain.com}}
+
+create the pem files and key 
+{{Cmd|openssl req -new -nodes -out req.pem -config /var/qmail/control/servercert.cnf  -keyout /var/qmail/control/servercert.pem}}
+
+Get the contents of the request pem file: 
+{{Cmd|cat /var/qmail/control/req.pem}}
+
+Send req.pem to your CA(ie godaddy/Starfield, Versign, etc.) to obtain signed_req.pem and do:
+{{Cmd|cat myserver.domain.com.crt  sf_bundle.crt >> servercert.pem}}
+{{Cmd|awk '/BEGIN PRIVATE KEY/,/END PRIVATE KEY/' servercert.pem > myserver.domain.com.key}}
+
+vpopmail will handle virtual domains, adding delete mail accounts, storing password etc.
+vpopmail uses mysql in this setup, so if you don't have it running please install it.
+ 
+Let's install and setup vpopmail
+{{Cmd|echo 'net-mail/vpopmail clearpasswd mysql' >> /etc/portage/package.use}}
+{{Cmd|emerge -avq vpopmail}}
+
+Create the vpopmail database 
+{{Cmd|mysql -u root -p
+mysql> create database vpopmail;
+mysql> grant select, insert, update, delete, create, drop on vpopmail.* to vpopmail@localhost identified by 'mypassword';
+mysql> flush privileges; 
+mysql> quit}}
+
+Edit /etc/vpopmail.conf and update the mysql password for the vpopmail user:
+{{vim /etc/vpopmail.conf}}
+{{# Read-only DB
+localhost|0|vpopmail|mypassword|vpopmail
+# Write DB
+localhost|0|vpopmail|mypassword|vpopmail}}
+
+Run the init scripts and setup supervisor links for qmail: 
+{{emerge --config =mail-mta/netqmail-1.06
+ln -s /var/qmail/supervise/qmail-send /service/qmail-send
+ln -s /var/qmail/supervise/qmail-smtpd /service/qmail-smtpd}}
+
+Finally we'll add dovecot to talk to our email clients.
+
+{{echo "net-mail/dovecot vpopmail -mysql -pam" >> /etc/portage/package.use
+emerge dovecot
+etc-update -3}}
+
+add vpopmail uid info to the default dovecot config 
+{{echo 'first_valid_uid = 89' >> /etc/dovecot/dovecot.conf
+echo 'last_valid_uid = 89' >> /etc/dovecot/dovecot.conf}}
+
+edit dovecot ssl configs to pass our ssl certificate to email clients when the login to get mail securely
+{{vim /etc/dovecot/conf.d/10-ssl.conf
+
+ssl_cert = </var/qmail/control/servercert.pem
+ssl_key = </var/qmail/control/myserver.domain.com.key}}
+
+edit the dovecot auth configs
+{{vim /etc/dovecot/conf.d/10-auth.conf
+
+disable_plaintext_auth = no
+auth_mechanisms = plain cram-md5
+
+#!include auth-system.conf.ext  comment this out, don't need it
+!include auth-vpopmail.conf.ext}}
+
+comment these two vpopmail lines 
+{{vim /etc/dovecot/conf.d/auth-vpopmail.conf.ext
+
+# [quota_template=<template>] - %q expands to Maildir++ quota
+#  args = quota_template=quota_rule=*:backend=%q}}
+
+start dovecot and add to the default runlevel 
+{{/etc/init.d/dovecot start
+rc-update add dovecot default}}
+
+start and add netqmail to the default run level
+{{/etc/init.d/svscan start
+rc-update add svscan default}}
