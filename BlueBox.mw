@@ -34,35 +34,34 @@ So I made my own copy:<br />
 }}
 
 Also, portage seems to install the freeswitch configuration directory twice:
- * once into /etc/freeswitch
- * and a second time into /etc/freeswitch/freeswitch
+* once into {{Path|/etc/freeswitch}}
+* and a second time into {{Path|/etc/freeswitch/freeswitch}}
 A "diff" for each file/folder in /etc/freeswitch/* and /etc/freeswitch/freeswitch/* shows no differences. Is this a mistake?
 
-'''DOUBLE CHECK FS PERMISSIONS:''' -- I think during BlueBox installation<br />
-I may have done a "chown -R apache.freeswitch /opt/freeswitch"<br />
-If apache needs read access to "/opt/freeswitch" during BlueBox installation, the ownership/permissions need to be reset as follows<br />
-or you cannot run freeswitch as user "freeswitch"<br />
+'''Double check FreeSWITCH permissions:''' -- I think during BlueBox installation I may have done a "chown -R apache.freeswitch /opt/freeswitch".
+If apache needs read access to {{Path|/opt/freeswitch}} during BlueBox installation, the ownership/permissions need to be reset as follows or you cannot run freeswitch as user "freeswitch":
+{{Code|Changing ownership/permissions|<pre>
+        chown -R root:freeswitch "/etc/freeswitch"
+        chmod -R u=rwX,g=rX,o=   "/etc/freeswitch"
 
-        chown -R root:freeswitch "/etc/freeswitch"<br />
-        chmod -R u=rwX,g=rX,o=   "/etc/freeswitch"<br />
-        #
-        # prefix<br />
-        chown -R root:freeswitch "/opt/freeswitch"<br />
-        chmod -R u=rwX,g=rX,o=   "/opt/freeswitch" <br />
-        # allow read access for things like building external modules<br />
-        chmod -R u=rwx,g=rx,o=rx "/opt/freeswitch/"{lib*,bin,include}<br />
-        chmod    u=rwx,g=rx,o=rx "/opt/freeswitch" <br />
-        #
-        # directories owned by the fs user<br />
-        for x in db run log cores storage recordings; do<br />
-                chown -R freeswitch:freeswitch "/opt/freeswitch/${x}"<br />
-        done<br />
+        # prefix
+        chown -R root:freeswitch "/opt/freeswitch"
+        chmod -R u=rwX,g=rX,o=   "/opt/freeswitch"
+        # allow read access for things like building external modules
+        chmod -R u=rwx,g=rx,o=rx "/opt/freeswitch/"{lib*,bin,include}
+        chmod    u=rwx,g=rx,o=rx "/opt/freeswitch"
 
-Also, the {{Path|/etc/init.d/freeswitch}} script tries to change the pid file from the default for FreeSwitch<br />
-{{Path|/opt/freeswitch/run/freeswitch.pid}} to {{Path|/var/run/freeswitch.pid}}<br />
+        # directories owned by the freeswitch user
+        for x in db run log cores storage recordings; do
+                chown -R freeswitch:freeswitch "/opt/freeswitch/${x}"
+        done
+</pre>}}
+
+Also, the {{Path|/etc/init.d/freeswitch}} script tries to change the pid file from the default for FreeSwitch from {{Path|/opt/freeswitch/run/freeswitch.pid}} to {{Path|/var/run/freeswitch.pid}}.
 FreeSwitch insists on writing its pid to {{Path|/opt/freeswitch/run/freeswitch.pid}}, but the Gentoo init script looks for the pid in {{Path|/var/run/freeswitch.pid}}.
-So my solution is to change the init script:<br />
- start() {
+So my solution is to change the init script:
+{{Code|some description|<pre>
+start() {
         local OPTS
  
         [ -n "${FREESWITCH_USER}" ] && \
@@ -79,7 +78,8 @@ So my solution is to change the init script:<br />
         start-stop-daemon --start --quiet --exec ${FREESWITCH_BIN} \
                 --pidfile /opt/freeswitch/run/freeswitch.pid -- -nc ${OPTS}
         eend $?
- }
+}
+</pre>}}
 
 === Web Server ===
 Install a web server such as 
