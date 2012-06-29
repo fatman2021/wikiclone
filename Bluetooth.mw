@@ -1,34 +1,18 @@
-<languages />
-{{Warning|This is only a draft version of this article and far from being complete yet.}}
-<translate>
-Bluetooth support for Linux is provided through the Kernel and the [http://bluez.org BlueZ] project.
+Bluetooth is an international standard for short-distance wireless communication between devices. It is often used for input devices (mice and keyboards), phones and wireless headsets, but many more other uses are possible.
 
-== BlueZ ==
+Bluetooth support for Linux is provided through the Linux kernel and the [http://bluez.org BlueZ] project.
 
-When using a Desktop environment such as [[KDE]], [[GNOME]] or [[Xfce]], the Bluetooth application will automatically install BlueZ as a dependency. Otherwise install the {{Package|net-wireless/bluez}} package:
-</translate>
+== Installing BlueZ ==
+
+When using a Desktop environment such as [[KDE]], [[GNOME]] or [[Xfce]], the Bluetooth application will automatically install BlueZ as a dependency. 
+
+However, if this is not the case, or you want to use bluetooth devices without any specific application, install the {{Package|net-wireless/bluez}} package:
+
 {{Emerge|net-wireless/bluez}}
-<translate>
-The {{Package|net-wireless/bluez}} package comes with the following USE flags:
 
-{{USEflag
-|package=net-wireless/bluez
-|alsa
-|caps
-|consolekit+yes
-|cups
-|debug
-|gstreamer
-|maemo6
-|health
-|old-daemons
-|pcmcia
-|pnat
-|test-programs+yes
-|usb
-}}
+=== Kernel-level requirements ===
 
-== Configuration ==
+When you want to pair bluetooth devices with your Linux workstation, you will need to enable the proper kernel configuration settings.
 
 {{Kernel||<pre>
 Networking --->
@@ -79,33 +63,40 @@ USB support  --->
 < > SL811HS HCD support
 </pre>}}
 
-{{File|/etc/conf.d/modules|Add:|<pre>
+Do not forget to add in to automatically load the ''bluetooth'' kernel module at boot-up:
+
+{{File|/etc/conf.d/modules|Add in autoloading of the bluetooth module|<pre>
 modules="${modules} bluetooth"
 </pre>}}
 
-{{Emerge|net-wireless/bluez}}
+=== System configuration ===
+
+Add the ''bluetooth'' init script to the default runlevel so that the necessary bluetooth services are started automatically.
 
 {{RootCmd
 |rc-update add bluetooth default
 |/etc/init.d/bluetooth start
 }}
 
-Most probably you would like to access bluetooth daemon from regular user, so add these users to the ''plugdev'' group:
+=== User authorizations ==
+
+Most probably you would like to access bluetooth devices (through the bluetooth services) from a regular user, so add the user(s) to the ''plugdev'' group:
+
 {{RootCmd|usermod -a -G plugdev your-username}}
 
-To apply these changed group membership, the user needs to be logged out and logged in again.
+To apply these changed group membership, the user needs to log out and logged in again.
 
 == Device Attach/Pairing ==
 
 Before a device can be used, it must be attached (''paired'' in Bluetooth-lingo). This is done by entering a PIN (or other code) on both devices.
 
-{{Note|Some simple devices like headsets do not allow entering an arbitrary PIN, they always use the same one (usually 0000 or 9999). check the manual of your device which is to be used.}}
+{{Note|Some simple devices like headsets do not allow entering an arbitrary PIN, they always use the same one (usually 0000 or 9999). Check the manual of your device which is to be used.}}
 
-In order to pair, you must first have interaction agent active, if you are using desktop environment, with bluetooth integration you probably have one already, for example KDE has {{Package|net-wireless/bluedevil}}. If you are unsure or need console mode only there is a simple-agent utility within the bluez sources.
+In order to pair, you must first have the interaction agent active. Most desktop environments have bluetooth integration so will automatically support the interaction agent. For example, KDE has {{Package|net-wireless/bluedevil}}. 
 
 === Using the simple-agent ===
 
-<tt>sample-agent</tt> is installed with bluez if it is built with the "test-programs" USE flag.
+To help debugging bluetooth interaction (without the overhead of desktop environment libraries), the bluez package provides the '''simple-agent''' application. It is installed if the ''test-programs'' USE flag is set.
 
 {{RootCmd
 |simple-agent
@@ -113,24 +104,30 @@ In order to pair, you must first have interaction agent active, if you are using
 Agent registered
 </pre>}}
 
-If you get the following output, it means that you probably have already interaction agent in your system, no need to use the simple-agent.
-  <snip>
- dbus.exceptions.DBusException: org.bluez.Error.AlreadyExists: Already Exists
+If you get the following output, it means that you already have an interaction agent running on your system:
+ 
+{{GenericCmd|<pre>
+dbus.exceptions.DBusException: org.bluez.Error.AlreadyExists: Already Exists</pre>
+}}
 
-Scan for devices:
+To scan for devices, use the '''hcitool''':
+
 {{RootCmd|hcitool scan|output=<pre>
 Scanning ...
         00:24:7C:2F:92:7C       orange Nokia E71
 </pre>}}
 
-Attach device:
+The '''hcitool''' can also be used to attach a device:
+
 {{RootCmd|hcitool cc 00:24:7C:2F:92:7C && hcitool auth 00:24:7C:2F:92:7C}}
 
-Notice that the simple-agent request interaction:
- RequestPinCode (/org/bluez/13983/hci0/dev_00_24_7C_2F_92_7C)
- Enter PIN Code: 1234
+Any interaction requirement is handled through the '''simple-agent''' application (or the interaction agent of your preferred desktop environment).
 
-Enter a PIN and press {{Key|Enter}} then enter the same PIN at device.
+{{GenericCmd|<pre>RequestPinCode (/org/bluez/13983/hci0/dev_00_24_7C_2F_92_7C)
+ Enter PIN Code: 1234</pre>
+}}
+
+Enter a PIN and press {{Key|Enter}}, then enter the same PIN at the device.
 
 You are now ready to proceed.
 
@@ -144,7 +141,6 @@ You are now ready to proceed.
 
 {{Emerge|net-wireless/blueman}}
 
-</translate>
 
 == Devices ==
 
