@@ -34,3 +34,31 @@ Also check if the ''udev-postmount'' init script is started through the default 
   sshd                      [started]
   udev-postmount            [started]
   vixie-cron                [started]</pre>}}
+
+== How it works ==
+
+=== uevents ===
+
+The Linux kernel is of course in charge of handling device drivers and events. When it detects that a change occurs within the systems' device tree, it will eventually submit a uevent to whatever process is interested. Udev, through the '''udevd''' daemon, is one of those processes. It registers itself as an interested party by reading messages from a netlink socket (an inter-process communication method for transferring information between kernel and user-space processes).
+
+When a uevent is received, the '''udevd''' daemon then goes through its rule definitions to find out which action(s) it has to take.
+
+=== rules.d ===
+
+The rule definitions for udev are stored in {{Path|/etc/udev/rules.d}} (for end-user specified rules) and {{Path|/lib/udev/rules.d}} (for system-specified rules). In these directories, multiple rule files (with suffix {{Path|.rules}}) are traversed in alphanumerical order. Inside the rules files, udev will find expressions that might match a uevent together with the state to match (is the uevent because a device is added or removed) and the command to execute.
+
+The event matching is based on information such as:
+
+* the ''SUBSYSTEM'' of the uevent (for which type of device is the uevent fired)
+* the ''ACTION'' that is taken (add, change or remove)
+* one or more attributes (through ''ATTR'' or ''ATTRS''), such as the device class, vendor or other device information
+* the kernel-provided name (through ''KERNEL''), such as sd* (for SCSI/SATA disks) or input* (for input devices such as mice and keyboards)
+* one or more environment settings (through ''ENV''), used to send information between multiple rules
+
+Based on this information, the rule can then state if 
+
+* some information needs to be shared with later events (through environment variables)
+* links need to be created in {{Path|/dev}}
+* commands need to be executed
+
+Udev does this for every rule that matches (so it does not stop after the first match) to allow a flexible device management approach.
