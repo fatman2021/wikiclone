@@ -1,0 +1,337 @@
+== File system information ==
+
+=== The fstab file ===
+
+{{Path|fstab}} stands for ''file system table''; when you would take a
+look at a fully configured {{Path|/etc/fstab}} file you can easily see why:
+
+{{File|/etc/fstab||<pre>
+/dev/sda8               /             ext3    defaults,noatime          0 0
+/dev/sda5               none          swap    sw                        0 0
+/dev/sda6               /boot         ext2    noauto,noatime            0 0
+/dev/sda7               /home         ext3    defaults,noatime,noexec   0 0
+/dev/cdroms/cdrom0      /media/cdrom  auto    defaults,user,noauto      0 0
+
+none                    /proc         proc    defaults                  0 0
+none                    /dev/shm      tmpfs   defaults                  0 0
+</pre>
+}}
+
+Each line declares what storage location (first field) is mounted at a certain
+location (second field) using a file system (third field) and mounted with
+one or more options (fourth field). The last two numbers are not that actively
+used anymore so you can safely set them to {{Path|0 0}}.
+
+It is vital that your {{Path|/etc/fstab}} file is a reflection of your
+environment. By default, Gentoo offers an almost empty {{Path|/etc/fstab}}
+file with illegal storage locations (such as {{Path|/dev/BOOT}} and
+{{Path|/dev/ROOT}}). Any user should change the file, otherwise the system
+might not boot.
+
+The {{Path|fstab}} file is used during the system boot procedure to find out
+what file systems should be mounted, but also during regular system operation.
+For instance, when you insert a CD in your CD-ROM player, Linux ought to know
+where it should mount the CD so that you (and perhaps other users) can reach it.
+
+=== Mount options ===
+
+The mount options which you can place in the fourth field in
+{{Path|/etc/fstab}} are well documented in the '''mount''' manual page:
+
+{{RootCmd|man mount}}
+
+Each set of mount options is documented in a section pertaining to the file
+system used (for instance, ext2, reiserfs, ...). Some of them are available to
+all file systems, such as '''defaults''', '''auto''' or '''noauto'''
+(automatically mount file system or not).
+
+=== Special file systems ===
+
+Some lines in the {{Path|/etc/fstab}} file have a ''none'' as the storage
+location. Such file systems are ''pseudo file systems'' and do not require
+any storage on the disk.
+
+* The ''proc'' file system represents kernel information (like statistics, hardware settings, process information, memory data, ...) as regular files on the file system. You can read from those files to obtain the information you need, but these files are never actually written to disk. Every time you read them, the information is recalculated.
+* The ''tmpfs'' file system is storage located entirely in memory. Although it is extremely fast, it is also volatile meaning that it loses its content when you reboot the system. The ''tmpfs'' file system is often used for temporary file storage (hence the name), but in the previously given {{Path|/etc/fstab}} example it serves as a storage point for certain applications who want to share memory without using the shared memory functionality offered by the c library.
+* The ''sysfs'' file system (not shown in the example as Gentoo mounts {{Path|/sys}} automatically when it is present) is the successor of the proc file system. It servers the same purpose, but is restructured so it scales well in larger environments.
+  
+=== Edit /etc/fstab ===
+
+Don't forget to edit {{Path|/etc/fstab}} to suit your environment. You can
+use '''nano''' to open the file:
+
+{{RootCmd|nano -w /etc/fstab}}
+
+== System logging ==
+
+=== Purpose of logging ===
+
+The system logger is an important ''daemon'' on the system. A daemon is a
+tool that runs in the background; you can't work with it interactively.
+
+The job of the system logger is to obtain information from various processes
+(and in certain configurations even from remote processes) like logon events,
+web server requests, security events, kernel messages, ... and write them down
+in separate files: log files.
+
+Such log files can then be used to resolve issues on the machine (hardware
+errors are usually quite verbose), generate usage statistics (for instance for
+web servers), backtrack logon events (for security purposes), etc.
+
+=== Installing a system logger ===
+
+Gentoo provides various system loggers, each of them with their own pros and
+cons: '''metalog''', '''newsyslog''', '''socklog''', '''sysklogd''' and
+'''syslog-ng'''. Which one you choose is up to you, but it is quite important
+that you pick one: if you do not install a system logger, all events will be
+displayed on your terminal, cluttering up your screen instead of nicely
+archiving the events in files.
+
+{{RootCmd|emerge <systemlogger>}}
+
+Next you'll need to add the system logger of your choice to the default run
+level. First find out how the init script is called
+
+{{RootCmd|ls /etc/init.d}}
+
+hen, add it to the default runlevel
+
+{{RootCmd|rc-update add <initscript> default}}
+
+== System information ==
+
+=== Root password ===
+
+With the '''passwd''' tool you can set or change any user account password. At
+first, you need to set the ''root'' user his password. Run '''passwd''' and
+enter the new password. The tool will ask you to confirm the password by
+reentering it after which the password is updated.
+
+{{RootCmd|passwd}}
+
+You might want to verify that your keyboard settings are correct before you
+enter the root password. If the keyboard settings deviate a bit from what you
+expect them to be, your root password might actually differ from the one you
+thought you have entered. As the '''passwd''' tool does not echo the characters
+on screen, you can not verify the password by just looking at it.
+
+On most Gentoo installations, the password itself will be stored in a hashed
+format in {{Path|/etc/shadow}} which is only readable by the root user.
+Hashed means that the password itself is not shown, but a mathematical result
+based on the password. A hash gives a theoretically unique value based on
+certain input (here: the password) but from which you can not revert (i.e. you
+can not use the hash to obtain the password).
+
+The {{Path|/etc/passwd}} file, which contains user account information, is
+readable by any user. Note though that this file does not always contain your
+user account information - larger networks will probably store this information
+on a central server (for instance an LDAP server). Where to look for the account
+information is stored in {{Path|/etc/nsswitch.conf}} at the '''passwd'''
+field.
+
+=== User account ===
+
+Next, it is ''heavily'' recommended to create a user account for daily tasks.
+The root user is all-powerful; any mistyped command can severely damage your
+system. Running your applications as the root user also exposes you to security
+breaches - although not many Linux viruses exist, the damage that a virus can do
+depends on the privileges it obtains, and it obtains the privileges from the
+tool whose flaw it has exploited.
+
+To create a user, use '''useradd''' and pass on the '''-m''' option so that
+the user's home directory ({{Path|/home/username}} for the ''username''
+user) is created. Also add the groups to which you want to make the user part
+of:
+
+{{RootCmd|useradd -m -g users -G wheel,audio,cdrom,games,users john}}
+
+Most groups are self-explanatory, but the ''wheel'' group
+might need a small introduction.
+
+The ''wheel'' group contains all users who can run '''su''' to switch from
+one user to another (including the root user). Only put trusted users in this
+group. A better alternative to the ''wheel'' access (since it still requires
+the user to know the passwords of the accounts it wants to switch to) is to use
+'''sudo''' of which an excellent [http://www.gentoo.org/doc/en/sudo-guide.xml guide] exists on the
+Gentoo web site.
+
+== Networking information ==
+
+=== Introduction ===
+
+To configure your wired network, Gentoo uses the {{Path|/etc/conf.d/net}}
+file. Its syntax might seem a bit strange at first - you'll find 
+well-documented examples at {{Path|/etc/conf.d/net.example}} - but allows
+you to configure your entire network easily.
+
+=== Automatic IP retrieval ===
+
+If your network interface(s) should retrieve their configuration automatically
+(using DHCP) you don't need to do anything in this file - you can leave it
+empty. You will find that Gentoo gives a cosmetical warning that it assumes DHCP
+since you haven't provided anything. If you don't want any warning, explicitly
+enable DHCP for each interface:
+
+{{File|/etc/conf.d/net|Default DHCP setting for network configuration|<pre>
+config_eth0=( "dhcp" )
+</pre>
+}}
+
+Don't forget to install a DHCP client. Available ones are '''dhcpcd''',
+'''dhclient''' (in the '''dhcp''' package), '''udhcpc''' (in the '''udhcp'''
+package) and '''pump'''.
+
+{{Emerge|net-misc/dhcpcd}}
+
+If you want to pass additional options to the DHCP client (we refer you to the
+man page of each DHCP client for more information about the available options)
+use the '''<client>_<interface>''' directive. For instance, to set
+the time out to 10 seconds (the default for most clients is 1 minute) for the
+'''dhcpcd''' client:
+
+{{File|/etc/conf.d/net|Setting additional DHCPd options|<pre>
+dhcpcd_eth0="-t 10"
+</pre>
+}}
+
+=== Static IP address ===
+
+If your interface should be configured with a static IP address, you need to
+provide the following information:
+
+* the IP address, 
+* the gateway (where the network packets for different networks should hop to first) address, and
+* the domain name server(s) (which translate hostnames to IP addresses)
+  
+For instance, suppose that your IP address is 192.168.0.2 and you're part of a
+network where all IP addresses start with 192.168.0, then you specify:
+
+{{File|/etc/conf.d/net|Static IP configuration|<pre>
+config_eth0=( "192.168.0.2/24" )
+</pre>
+}}
+
+The '''/24''' tells the configuration that the first three numbers (each number
+uses 8 bits, so 24 bits in total) define the network and the last number the
+host. If all of your IP addresses start with 192.168, then the configuration
+would read '''192.168.0.2/16'''.
+
+Next, we need to define where all network packets should go to if they aren't
+meant for the internal network: the ''gateway''. For instance, if 192.168.0.1
+would be the gateway:
+
+{{File|/etc/conf.d/net|Default gateway information|<pre>
+route_eth0=( "default via 192.168.0.1" )
+</pre>
+}}
+
+The last setting defines where the domain name service servers are. These DNS
+addresses translate hostnames (such as '''www.google.com''') to an IP address
+(such as '''66.249.93.104'''). Save {{Path|/etc/conf.d/net}} first and then
+open {{Path|/etc/resolv.conf}}:
+
+{{File|/etc/resolv.conf||<pre>
+## # Substitute the IP addresses with your DNS server addresses
+# Contact your network administrator or ISP if you don't know what to enter.
+nameserver 195.130.130.133
+nameserver 195.130.131.10
+</pre>
+}}
+
+=== The hosts file ===
+
+The {{Path|/etc/hosts}} file is a small table the system uses to make
+immediate translations between hostnames and IP addresses. This file should
+at least contain one line:
+
+{{File|/etc/hosts||<pre>
+127.0.0.1       localhost
+</pre>
+}}
+
+All other lines should be set under that line using the following syntax:
+
+{{File|/etc/hosts||<pre>
+<ip address> <fully qualified hostname> <aliases>
+</pre>
+}}
+
+For instance, if you want to assing the host name '''gentoobox''' to your eth0
+interface address (for instance, 192.168.0.2):
+
+{{File|/etc/hosts||<pre>
+192.168.0.2     gentoobox
+</pre>
+}}
+
+If you use a domainname for your network (like '''boxes''', but it can also be
+a real reserved domain name like '''company.com'''), you should set it like so:
+
+{{File|/etc/hosts||<pre>
+192.168.0.2     gentoobox.boxes     gentoobox
+</pre>
+}}
+
+Next to the host names assigned to your interfaces, you can also add in the IP
+address and hostname information for the other hosts on your system if they
+aren't known to the DNS servers you've specified (in
+{{Path|/etc/resolv.conf}}, perhaps automatically with DHCP).
+
+=== Automatically starting the network at boot ===
+
+With the configuration in place, your next step would be to assure that the
+configuration is loaded when you boot your system. Go to
+{{Path|/etc/init.d}} and make symbolic link from the {{Path|net.lo}}
+init script to the interfaces you need. For instance, if you have one interface
+(called '''eth0'''):
+
+{{RootCmd|cd /etc/init.d
+| ln -s net.lo net.eth0
+| rc-update add net.eth0 default}}
+
+These commands might need some explanation:
+
+* The '''ln''' command makes a named link to a file (in this case, {{Path|net.lo}}) called {{Path|net.eth0}}. This file shouldn't exist before you run this command. There are two types of links one can make:
+  * ''symbolic'' links merely point to a file or directory. If you remove the destination (like {{Path|net.lo}}) then the file is really gone - the symbolic link will point to a non-existing file. You can create a symbolic link using the '''-s''' option to the '''ln''' command.
+  * ''hard'' links don't just point to a file, they are actually a second name for the same file. If you remove the destination file, the hard link still contains the content of that file. More technically, if you create a file, you actually reserve some space on a device and create a hard link to it. '''ln''' just makes a second hard link to it. The advantage to using hard links should be obvious - if you remove one, the content still remains accessible through the other link. However, hard links have one disadvantage to symbolic links: they can not point to files on a different file system. Symbolic links can.
+* The '''rc-update''' command configures the boot sequence Gentoo Linux goes through when starting the system. By using the '''add''' option, you tell the system that the given script (in this case, {{Path|net.eth0}}) should be added to the '''default''' runlevel.
+  * A ''runlevel'' is a name for a certain set of scripts that need to be started in order for the system to function. By default, Gentoo calls its default runlevel ... default. Others are '''nonetwork''' (which doesn't start network related scripts), '''boot''' (important scripts that ''must'' be started) and '''single''' (where only those scripts are started that are needed for an administrator to be able to fix a broken system).
+  * The script {{Path|net.eth0}} is an ''init script''. Such scripts are written using a specific syntax and reside in {{Path|/etc/init.d}}.
+  
+== Various configuration settings ==
+
+=== The /etc/rc.conf file ===
+
+The {{Path|/etc/rc.conf}} file contains system-wide settings for the entire
+system. You will find lots of variables already defined in the file, accompanied
+with lots of documentation.
+
+The first variable you'll see is the '''UNICODE''' variable. Unicode (also
+known as UTF-8) is the new standard for character encoding. Character encoding
+tells the system what sequence of bits resembles what character. Well-known
+encodings are ASCII, ISO-8859-1, etc. The UTF-8 or Unicode encoding is important
+because it is able to provide encodings for every possible language (including
+special characters like ¬ but also chinese characters, etc.).
+
+If you are interested in using Unicode on your system, please read the [http://www.gentoo.org/doc/en/utf-8.xml UTF-8 Guide] on the Gentoo 
+web site.
+
+Another variable of importance is the '''DISPLAYMANAGER'''. A display manager
+is a tool which shows a graphical logon screen after having booted your system.
+Most display managers even allow you to automatically log on as a specific user.
+If you want to use a display manager, you need to install one, add the
+'''xdm''' init script to the default runlevel and make sure that this variable
+points to the display manager of your choice.
+
+Together with the '''DISPLAYMANAGER''' variable you'll find the '''XSESSION'''
+one. This tells the display manager what graphical environment it should load by
+default if the user didn't specify one explicitly. Well-known graphical
+environments are KDE, GNOME, XFCE, fluxbox, ... For specific instructions on how
+this variable influences the graphical logon process please read the comments in
+the {{Path|rc.conf}} file.
+
+=== Select keyboard language ===
+
+If you aren't using a US Qwerty keyboard, you'll need to edit the
+{{Path|/etc/conf.d/keymaps}} file to tell the Gentoo system what keyboard
+layout it should use.
