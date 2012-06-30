@@ -1,0 +1,411 @@
+== Storage ==
+
+=== Introduction ===
+
+A difficult job of any Linux installation is to prepare the partitions to house
+the Operating System. Each person has a different taste as to what should be on
+a different partition and what shouldn't, or what file system to use. 
+
+The idea behind partitioning is to make some sort of separation between one set
+of data and another. For instance, people have their {{Path|/boot}}
+separated from the root file system because they want to be able to hide the
+{{Path|/boot}} content from the system during regular operations. Or they
+want to have {{Path|/home}} separate because that would allow them to store
+all user-specific information, settings and data on a different disk so they are
+able to easily retrieve the data after an Operating System reinstallation.
+
+You can also choose to have a separate partition because you want to improve
+performance by using a different file system tweaked to the use of the data
+stored on the partition.
+
+Deciding on the partition scheme requires intimate knowledge of the file system:
+
+* What files are stored where?
+* How often are the files used? Read or written?
+* What is the function of the system you are building?
+* What features do the various file systems have?
+
+Because this is something that comes with age (err, experience ;) your first,
+second, third, ... attempt for a perfect scheme will undoubtedly fail. Lots of
+people therefore opt for a simple partitioning scheme (like everything on a
+single partition, with a separate partition for the swap<sup>1</sup> 
+information). Others attempt to use a more dynamical approach and use 
+''Volume Management''. 
+
+With Volume Management, you place a layer in between the partitions on the disk
+and the file systems that hold your data. This layer can be used to combine
+multiple partitions as if they were just a single one, or to use several logical
+divisions on a single partition. Of course, Volume Management is much more than
+that: it makes it easier to move data across partitions, shrink or grow file
+systems, etc.
+
+{{Note|<sup>1</sup> Swap space is a specific location on the disk where the Linux kernel can store memory pages (regions of data in memory, assigned for use by processes or by the kernel itself) that will most likely not be used in a while. The Linux kernel will, once your memory is completely filled (not sooner!), move such memory pages to the swap location, thereby freeing internal memory for other, more important memory pages.}}
+
+=== Designing a scheme ===
+
+You should start designing a partitioning scheme for your system. Telling you
+what partitioning scheme is best for you is impossible, but here are some
+pointers:
+
+* For each partition you want to create, ask around how much space the partition might get given the tools and services you want to install. Make sure you design each partition to be larger than the size given by others: growing a file system is ''not'' without danger.
+* Not all Linux file system locations are partitionable:
+  # The {{Path|/etc}}, {{Path|/lib}}, {{Path|/bin}} and {{Path|/sbin}} locations must stay on the root file system as they are required by the Operating System under any circumstances. This is because they are needed to be able to mount other partitions on the file system.
+  # Only directories can be separated from a file system. Each separation automatically includes all subdirectories.
+  # You can not separate two different locations and still store them on a single partition (logical, that is - with Volume Management physical partitions ''can'' hold several logical ones), so you can't put both {{Path|/usr}} and {{Path|/opt}} on a single location.
+
+Some locations also require special attention:
+# The {{Path|/dev}} location will already be separated from the main file system by the device manager, so you don't need to devote a specific partition for {{Path|/dev}}.
+# The {{Path|/tmp}} and {{Path|/var/tmp}} locations are used for temporary file storage. Although the content of these locations is slim in most situations, it can grow exponentially. For instance, during the installation of software through Portage, {{Path|/var/tmp/portage}} is used and can require up to a few gigabytes (!) of space.      
+
+* Ask yourself if you really need that nifty file system feature: using Volume Management or (Software) RAID does require more work. Without much guidance, you might lose too much time stabbing at storage related problems.
+* Many backup solutions are file system independant, but some of them aren't. If the backup storage is limited but you are using a file system dependant solution, make sure that the total amount of data that it will backup doesn't exceed the dedicated backup storage size.
+  
+We will discuss the more advanced storage solutions in more detail in a
+different part of this book, but to make you aware of the possibilities we'll
+give a quick rundown of those features first. We won't integrate these solutions
+with the installation procedure though as that would complicate things too much.
+
+=== RAID arrays ===
+
+RAID stands for ''Redundant Array of Inexpensive Disks'' and is a well-known
+way of putting disks together. There are several RAID levels defined:
+
+* ''RAID-Linear'' places two (or more) disks next to each other and let the user view them as if those disks were a single one. At first, all data is written to the first disk. Once that disk is filled, the second disk is used, etc.
+*  ''RAID-0'' is also called ''striping'': unlike with RAID-Linear data is first partitioned after which each 'stripe' of data is written to a disk. Therefore data written to a RAID-0 array is stored across all disks.
+* ''RAID-1'', also known as ''mirroring'', places all data written to the array on ''all disks''. In other words, each member of the RAID-1 array is an exact copy of the others.
+* ''RAID-5'' requires at least three disks. We'll explain its inner workings for three disks, but more than three is perfectly possible as well. When data is sent to the array, it is partitioned. For each two parts of data, a simple ''checksum'' is created, so we have three data segments. Those three segments are then stored to a disk. If one of the segments is lost, it can be retrieved from the other two segments if necessary.
+  
+Other RAID levels exists but are less frequently used.
+
+RAID arrays are interesting when you need high availability of your data. For
+instance, with RAID-1, if one of the disks crashes, the other one takes over.
+Something similar happens with RAID-5: if one of the disks crashes, the other
+disks can work together to generate the data that was stored on the
+malfunctioning disk.
+
+If you have a true hardware RAID card, using RAID within Linux (or any other
+Operating System for that matter) does not require any input at all: the
+operating system does not handle anything RAID-related. You only see the result,
+the hardware RAID card handles all the rest.
+
+Pseudo-hardware RAID cards offer various RAID-related services but still require
+some (or a lot) of operating system input. Such cards therefore require a good
+working driver and perhaps even a few tools. Although they aren't as transparent
+as true hardware RAID cards, they still beat the software RAID.
+
+Software RAID allows users to benefit from most of the RAID functionality
+without requiring any specific hardware. This does require the operating system
+to handle all the RAID-related tasks, requiring some computing time.
+
+Information about using Software RAID is discussed further in this book.
+
+=== Logical Volume Management ===
+
+Unlike RAID, which is most often used for redundancy, LVM allows the user to
+maximise the flexibility of his storage. Basically LVM (actually, LVM2) should
+be seen as a layer in between the physical storage (the disks) and the logical
+view (the file system).
+
+With LVM, you create ''logical volumes'' (partitions) which hold the file 
+systems. One or more logical volumes are stored on a ''volume group'' which 
+is nothing more than a collection of ''physical volumes'' (partitions). A
+physical volume is an entire disk, or a partition, controller by LVM.
+
+The LVM software offers services on top of this intermediate layer. For
+instance, you can `spread' data across several partitions (like RAID-Linear or
+RAID-0), or have several logical partitions on a single physical one. But that's
+not it. LVM allows you to add (or remove) physical volumes from a volume group
+without affecting the logical volumes (unless of course the logical volumes
+require more space than the volume group has to offer), move data from one disk
+to another without requiring any manual copy procedure or take a snapshot of an
+entire file system without really having to take a full copy of the system.
+
+These (and more) features make LVM a powerful tool of many system
+administrators.
+
+Information about LVM2 is discussed further in this book.
+
+=== Preparing the devices ===
+
+Before you can start creating the necessary partitions, you need to make sure
+that the Linux Operating System can work with your hardware. If the installation
+CD that you used to boot didn't automatically detect your hardware, you will
+need to load the appropriate support manually.
+
+Although we can start by educating you how the Linux kernel addresses the disks
+(like {{Path|/dev/hd*}} for IDE, {{Path|/dev/sd*}} for SCSI and Serial
+ATA, ...) and what logic is behind it, we will leave this for another document
+(or perhaps a later chapter :) and immediately tell you how to discover where
+your disks are.
+
+If your disks are SCSI or Serial ATA (although some SATA disks are treated as
+native IDE disks, most of them are using a SCSI-like driver), run '''dmesg'''
+and filter out any occurrence of 'disk'. IDE disk users should filter out 'ide'
+and 'hd':
+
+For SCSI or SATA:
+{{RootCmd|dmesg <nowiki>|</nowiki> grep -i disk|output=<pre>
+Attached scsi disk sda at scsi0, channel 0, id 0, lun 0
+</pre>
+}}
+
+In the above example we discover that our SCSI (or SATA) disk is at
+{{Path|/dev/sda}} and our IDE disks are at TODO. If this does not reflect
+the setup you have, you will need to load the appropriate drivers. Otherwise
+continue with the next section on [[INTERNAL #raid_arrays]].
+
+Your Linux system can tell you what controllers you have and what chipset they
+use. This information is vital if you need to load additional drivers. The
+combination of the '''lspci''' tool and the '''grep''' filter proves to be
+quite efficient.
+
+For instance, if you have an IDE controller but it wasn't loaded by default, try
+filtering for 'ide'. Similar actions should be performed for Serial ATA ('sata')
+or SCSI ('scsi'):
+
+{{RootCmd|lspci <nowiki>|</nowiki> grep -iE '(ide<nowiki>|</nowiki>sata)'|output=<pre>
+0000:00:1f.1 IDE interface: Intel Corporation 82801FB/FBM/FR/FW/FRW (ICH6 Family) 
+  IDE Controller (rev 04)
+0000:00:1f.2 Class 0106: Intel Corporation 82801FBM (ICH6M) SATA Controller 
+  (rev 04)
+</pre>
+}}
+
+Based on this information you can try searching for the appropriate support
+drivers. A quick '''grep''' on the content of the {{Path|/lib/modules}}
+directory (which stores all the additional kernel modules):
+
+{{RootCmd|find /lib/modules <nowiki>|</nowiki> grep -iE '(82801<nowiki>|</nowiki>ich6)'}}
+
+If you found a matching kernel module, load it in memory and rediscover where
+your disks are:
+
+{{RootCmd|modprobe yourkernelmodulename}}
+
+
+== Partitioning ==
+
+=== Architecture-specific ===
+
+Partitioning is architecture-dependant as partitions are generally tagged for
+some function. The ''type'' of a distribution is therefore a very important
+setting. Two important types are:
+
+{| class="wikitable" style="text-align: left;"
+|-
+! 82 (Linux Swap)
+| The partition holds swap information
+|-
+! 83 (Linux)
+| The partition holds a Linux file system
+|-
+|}
+
+The partition structure is also architecture-dependant. Some architectures only
+allow a few partitions (sometimes also called ''slices'') to be available,
+others have some weird solution to get over a very narrow limit causing
+confusion in the numbering scheme of the partitions. There are even
+architectures where certain partition numbers are reserved for a specific use.
+
+You will find architecture-specific partitioning information in the first 
+Appendix of this book, together with an example partition layout which you can
+use to get started with Gentoo Linux.
+
+=== Create them, now! ===
+
+Read the partitioning information for your architecture ''now'' and create
+the partitions you'll use to store Gentoo Linux on. 
+
+== Filesystems ==
+
+=== Overview ===
+
+Partitions alone aren't sufficient to store data (unless the partition for a
+specific purpose, like raw access for databases). You need to apply some
+structure to the partition so that Linux knows where files and directories are
+stored, what permissions are set to the file, what security attributes are
+applied, etc.
+
+This is the task of the file system. A ''file system'' is a standard way of
+storing and retrieving information from a partition. It dictates where the files
+data is stored and how to get access to the file ''metadata'' (everything
+about a file except the content, like name, creation date, owner, ...). 
+
+Linux supports quite a lot file systems, but not all of them are functional
+enough to store Linux files. For instance, the FAT-family (FAT12 for floppies,
+FAT16 for small partitions and FAT32 for larger ones) has no concept of
+permissions while the NTFS-family (all the dozen versions that Microsoft has
+released thus far) is too complex (partially due to its closed-source nature)
+and not fully supported.
+
+We will describe the most known file systems that you can use to hold your Linux
+Operating System together with some information on the tools associated with the
+file system.
+
+=== Extended 3 ===
+
+Extended 3 is the ''journaled'' version of Extended 2, the older (but proven)
+file system which is the first real Linux file system ever developed for Linux
+(before ext2, the Minix file system was used - but that was a long, long time
+ago). Extended 3 is currently the most used file system as well.
+
+As a ''journaled'' file system, ext3 can make sure that the entire file
+system is consistent at any time. In other words, if your system would ever
+crash (for instance due to a power interruption), the file system would never
+contain garbled data - if you were busy writing data to the disk, either the old
+data is there, or the new data, but not a partial write.
+
+You can choose between no journaling (which basically means that the file system
+should be seen a an Extended 2), metadata journaling (where only the metadata is
+consistent across time) where you can choose between writeback (first metadata
+write, then data) and ordered (first data write, then metadata) and full
+journaling. The ordered metadata journaling is the default.
+
+Extended 3 supports access control lists and is therefore a candidate file
+system for more security enhanced Linux kernels who require ACLs to be available
+for the file system.
+
+To write an ext3 file system on a device, use the '''mke2fs''' tool with the
+'''-j''' option (for ''journaling''):
+
+{{RootCmd|mke2fs -j /dev/hda3}}
+
+The '''mke2fs''' command has a few interesting options as well:
+
+* Writing a file system to the disk is quite fast. If you want to check the device for bad blocks during the file system write, add a '''-c''' option. If you specify this option twice, a full read-write test is performed instead of a read-only test.
+* To speed up lookups in large directories, you can enable directory indexing by adding '''-O dir_index'''.
+* Large file systems might free more space by adding '''-O sparse_super'''. This will decrease the percentage of blocks used as backups for the file metadata.
+
+=== The swap file system ===
+
+Although you can't 'use' the swap space directly, it does use a specific file
+system to store the memory pages. To create a swap file system on the swap
+partition, use '''mkswap''':
+
+{{RootCmd|mkswap /dev/hda2}}
+
+Unlike the other file system creation tools, '''mkswap''' hardly takes
+additional options for tuning purposes.
+
+=== Create the file systems ===
+
+Create the file systems on your partitions ''now'' and don't forget to create
+the swap file system as well.
+
+== Getting in the minimal environment ==
+
+=== Mounting the partitions ===
+
+The next step is to ''mount'' the file systems in the Linux file system
+hierarchy so that you can use it. As we have said in the previous part, mounting
+attaches the file system to the current hierarchy at a specified location.
+
+On the Gentoo installation CD, a directory {{Path|/mnt/gentoo}} is available
+to mount your root file system in spe. Let us suppose that the file system is at
+{{Path|/dev/hda3}}, then the '''mount''' command would be:
+
+{{RootCmd|mount /dev/hda3 /mnt/gentoo}}
+
+You'll also need to mount the other file systems at the correct place. Because
+your root file system doesn't contain any directories yet, you'll need to create
+them. For instance, if you have a separate {{Path|/boot}} (at
+{{Path|/dev/hda1}} and {{Path|/usr}} (at {{Path|/dev/hda4}}) file 
+system:
+
+{{RootCmd|mkdir /mnt/gentoo/boot /mnt/gentoo/usr
+| mount /dev/hda4 /mnt/gentoo/usr
+| mount /dev/hda1 /mnt/gentoo/boot}}
+
+You will also need to activate the swap partition. This is accomplished using
+the '''swapon''' command:
+
+{{RootCmd|swapon /dev/hda2}}
+
+=== Preparing the stage tarball ===
+
+A Gentoo stage tarball contains a minimal Gentoo environment. If you are booted
+from a Gentoo universal installation CD you might find the stage of your choice
+on the CD (probably at {{Path|/mnt/cdrom/stages}}). If not, you can download
+one from one of our [http://www.gentoo.org/main/en/mirrors.xml mirrors]. They are stored
+in the appropriate release directory under the name {{Path|stages/}}.
+
+A ''tarball'' is an archive, usually compressed using Lempel-Ziv coding
+(LZ77 - '''gzip''') or Burrows-Wheeler compression with Huffman coding
+('''bzip2'''). Uncompressed, you will have a single file (a tar<sup>2</sup> 
+file) that contains all the files in the archive, nicely appended one after 
+another.
+
+To download such a stage tarball, ''first'' go to {{Path|/mnt/gentoo}}.
+This is required so that, once you start downloading the file, it is stored on
+the disk and not in memory (the Gentoo installation CD creates a virtual 'disk'
+in memory so that you can use the CD without requiring any pre-installed Linux
+system).
+
+{{RootCmd|cd /mnt/gentoo
+| lynx http://www.gentoo.org/main/en/mirrors.xml}}
+
+Next, extract the tarball to the {{Path|/mnt/gentoo}} location. Use the
+'''tar''' tool with '''xjpf''' as options and the tarball as argument:
+* e'''x'''tract the files from the archive
+* use '''bunzip2''' to decompress the archive ('''j''' due to shortage of available options :)
+* '''p'''reserve the permissions that were stored in the tarball
+* use the next '''f'''ile as the archive
+
+{{RootCmd|tar xjpf filename}}
+
+If your stage tarball is stored on the CD, just use the path to the file for
+{{Path|<file>}}.
+
+{{Note|<sup>2</sup>: the name ''tar'' comes from Tape ARchive. The '''tar''' tool was (and still is) commonly used for backing up files to tapes which only have linear access (unlike digital media where you can quickly jump from one location to another). Because of this limitation, all files are aligned after another with a table of contents stored in the beginning of the tape. The '''tar''' tool is still a very popular tool for creating archives.}}
+
+=== Extracting a Portage snapshot ===
+
+We need to extract another tarball, namely a ''portage snapshot''. Portage is
+the software management system Gentoo uses. The package information itself is
+stored in what we call the ''Portage tree''. A ''portage snapshot''
+is a Portage tree taken at a certain point in time. 
+
+On a universal installation CD, you might find such a snapshot at
+{{Path|/mnt/gentoo/snapshot}}, but you can always download a snapshot from
+the Internet as well. Go to one of our [http://www.gentoo.org/main/en/mirrors.xml mirrors] and locate the
+most recent portage snapshot in the {{Path|snapshots/}} directory.
+
+{{RootCmd|lynx http://www.gentoo.org/main/en/mirrors.xml}}
+
+We don't need any specific permission information from the snapshot, so the
+'''tar''' command only requires '''xjf''' as options. However, the snapshot
+''must'' be extracted inside {{Path|/mnt/gentoo/usr}}. We could do the
+same as we did with the stage tarball and first go to
+{{Path|/mnt/gentoo/usr}} before we run the extraction command, but you can
+also use '''-C <location>''' (with a capital C) to inform '''tar''' that
+the {{Path|/mnt/gentoo/usr}} location is the destination:
+
+{{RootCmd|tar xjf <snapshot> -C /mnt/gentoo/usr}}
+
+=== Preparing the minimal Gentoo environment ===
+
+As you might have guessed already, we are trying to have 
+{{Path|/mnt/gentoo}} contain a fully functional Linux environment. To finish
+this off, we need to mount a specific ''pseudo file system'' called proc at
+{{Path|/mnt/gentoo/proc}}. This is not a file system stored on a disk, but
+rather an interface to the Linux kernel showing kernel information as regular
+files. This allows you to retrieve kernel (and system) information by just
+reading files instead of requiring specific tools.
+
+{{RootCmd|mount -t proc none /mnt/gentoo/proc}}
+
+To be able to use the network you have defined (if applicable), you need to copy
+over the {{Path|/etc/resolv.conf}} file to the new Linux environment:
+
+{{RootCmd|cp /etc/resolv.conf /mnt/gentoo/etc}}
+
+=== Changing the root from CD to the new environment ===
+
+The final step now is to change the root of your file system from the one
+provided by the CD to the one you just set up, namely {{Path|/mnt/gentoo}}.
+Using the '''chroot''' tool, your terminal session will not see anything
+outside {{Path|/mnt/gentoo}} unless you finish the '''chroot''' itself.
+Because you need a shell to navigate, we run {{Path|/bin/bash}} (the Bourn
+Again SHell) right after changing the root:
+
+{{RootCmd|chroot /mnt/gentoo /bin/bash}}
