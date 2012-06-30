@@ -1,3 +1,222 @@
+{{InfoBox stack
+|{{InfoBox wikipedia|Bash_(Unix_shell)|header=true}}
+}}
+''Bash'' ('''B'''ourne-'''a'''gain '''sh'''ell) is a shell program, it is the first program started if someone logs in at a terminal. Which user uses what shell is defined in the file /etc/passwd. It enables users to easier interact with the system and start additional programs.
+
+== Installation ==
+''Bash'' is in any stage tarballs in Gentoo and part of the core system. You usually do not need to install it manually.
+=== Program ===
+To install {{Package|app-shells/bash}}:
+{{Emerge|app-shells/bash}}
+=== USE Flags ===
+{{USEflag
+|net+yes+yes+
+|nls
+|readline+yes+yes+
+|afs
+|bashlogger
+|examples
+|mem-scramble
+|plugins
+|vanilla++no+
+}}
+
+== Configuration ==
+=== Shell ===
+The default shell for a user is defined in ''/etc/passwd''. It can be changed using ''/usr/bin/chsh'', which is part of {{Package|sys-apps/coreutils}}
+=== Configs ===
+Many settings on how the shell behaves, dan be defined via variables. Those variables are defined in several different configuration files, where the settings in the last file parsed do overwrite previous definitions.
+
+* {{Path|/etc/profile}} - initial settings for all users
+* {{Path|/home/USER/.bash_profile}} - settings for this user
+* {{Path|/home/USER/.bash_login}} - settings for this user, if {{Path|/home/USER/.bash_profile}} doesn't exist
+* {{Path|/home/USER/.profile}} - settings for this user, if {{Path|/home/USER/.bash_profile}} and {{Path|/home/USER/.bash_login}} don't exist
+If the shell is started without login (e.g. in a terminal on a desktop), the following files are used
+* {{Path|/etc/bashrc}} - initial settings for all users
+* {{Path|/home/USER/.bashrc}} - settings for this user
+In Gentoo any many other distributions {{Path|/etc/bashrc}} is parsed in the {{Path|/etc/profile}} to ensure that {{Path|/etc/bashrc}} and {{Path|/home/USER/.bashrc}} are always checked when someone logs into the system. The final settings are defined by the user in his {{Path|.bashrc}}
+
+=== .bashrc ===
+Example of a {{Path|/home/USER/.bashrc}}
+{{File|/home/BENUTZER/.bashrc||<pre>
+# configure PS1 command prompt
+export PS1="\u@\h \w \$ "
+
+# no double entries in the shell history
+export HISTCONTROL{{=}}"$HISTCONTROL erasedups:ignoreboth"
+
+# do not overwrite files when redirecting output
+set -o noclobber
+
+# ask before performing the following command
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'</pre>}}
+
+== Usage ==
+=== Environment Variables ===
+See all defined variables for this user (not all are shell related):
+{{Cmd|printenv}}
+Of course can user define their own variables, which are readily available in memory until the end of the session (terminal closes):
+{{Cmd|export MYSTUFF{{=}}'Hello'}}
+In the previous command we used ''export'' to have the variable for the whole session, if this is not needed you can just define the variable and the information will be released when the command finished execution:
+{{Cmd|USE{{=}}"kde" emerge -pv libreoffice}}
+To check the value of a variable:
+{{Cmd|echo $MYSTUFF}}
+{{Note|to have variables set every session, you could use the {{Path|/home/USER/.bashrc}}}}
+
+=== PS1 ===
+The enrivonment variable ''PS1'' defines how the prompt looks like. The prompt is everything displayed in from of the blinking cursor in the console:
+{{Code|Prompt|MyUserName@MyPC: ~ $}}
+This prompt would be the following value in '''PS1''':
+{{Code|PS1|PS1{{=}}"\u@\h \w $"}}
+{{Note|the '''~''' symbol represents the home directory {{Path|/home/USER/}}}}
+
+Table with available values to set in your '''PS1'''
+{| border="2" align="center" style="border:solid 1px #AAAAAA; border-collapse:collapse;text-align:left;position:left;"
+|- style="background-color: grey"
+| Code
+| Effect
+|-
+| \u
+| Username
+|-
+| \h
+| Computername
+|-
+| \w
+| Current directory
+|-
+| \d
+| Current date
+|-
+| \t
+| Current time
+|-
+| \$
+| Indicate the root login with '#' and normal users with '$'
+|-
+| \j
+| Number of currently running tasks (jobs)
+|}
+You can also put complete commands into your prompt using a subshell. Here we want to execute ''uanme -s'' to show system information in the prompt:
+{{Code|PS1|PS1{{=}}"\$(uname -s) $"}}
+Having colours in the prompt:
+{{Code|PS1|PS1{{=}}"\e[0;32m\]\u@\h \w >\e[0m\]"}}
+The '''\e[0;32m\]''' changes the colour for every next output, we have to put '''\e[0m\]''' at the end of our variable to reset the colour, or we would type everything in green.
+ColourCodes:
+{| border="2" align="center" style="border:solid 1px #AAAAAA; border-collapse:collapse;text-align:left;position:left;"
+|- style="background-color: grey"
+| Code
+| Colour
+|-
+| \e[0;30m\]
+| Black
+|-
+| \e[0;37m\]
+| White
+|-
+| \e[0;31m\]
+| Red
+|-
+| \e[0;32m\]
+| Green
+|-
+| \e[0;33m\]
+| Yellow
+|-
+| \e[0;34m\]
+| Blue
+|-
+| \e[0m\]
+| Reset to standard colours
+|}
+The '''0;''' in '''\e[0;31m\]''' means foreground, you can define other values like '''1;''' is foreground bold, '''4;''' is foreground underlined and without means background, e.g. '''\e[31m\]'''
+
+=== set ===
+Display and change settings in the Bash shell
+* {{Cmd|set -o}} - Show all current settings
+* {{Cmd|set +o history}} - disable the shell history
+* {{Cmd|set -o history}} - enable the shell history
+
+=== alias ===
+Define a new command or another command with custom options or long command lines
+{{Cmd|alias ll = 'ls -l'}}
+Whenever now ''ll'' is send to the shell, it will actual execute '''ls -l'''
+To remove an alias:
+{{Cmd|unalias ll}}
+{{Note|it is possible to overwrite or redefine existing commands, no harm is done to the actual program}}
+
+=== history ===
+The history of used commands in a session is written to a file in the user home share. The easiest way to access the commands in the history is using the {{Key|Up}} and {{Key|Down}} keys.
+To show all commands in the current history:
+{{Cmd|history}}
+To search for commands in the history, by piping the output through '''grep''' and filter for words:
+{{Cmd|history | grep echo}}
+The commands are numbered and can be executed using its index:
+{{Cmd|!2}}
+To execute the last command used:
+{{Cmd|!!}}
+Delete every command in the history:
+{{Cmd|history -c}}
+Show the current settings for history:
+{{Cmd|echo $HISTCONTROL}}
+{{Note|simple typing and some part of the command like '''!ls''', using {{Key|TAB}} lets you cycle through similar commands used}}
+
+== Scripts ==
+Scripts are textfiles which contain a series of commands or complete program like definitions. Which shell is used to interpret the commands in a script is defined in the first line like this:
+{{File|Bash-Skript||<pre>
+#!/bin/bash
+echo 'Hello World!'</pre>}}
+'''#!/bin/bash''' defines the shell to use, if no shell is defined the default shell for the user who executes the script is used. Often '''/bin/sh''' is used, which is the father of all shells and has very limited functionalities. Nearly all shells available understand commands used in '''/bin/sh''', those scripts are highly portable.
+{{Note|on many distributions '''/bin/sh''' is a symbolic link to '''/bin/bash''', effectively Bash is used here}}
+=== Start Scripts ===
+To start scripts, they need to be executeable or used as a parameter for a shell. To make a shell script executeable:
+{{Cmd|chmod 755 MyScript.sh}}
+Now it can be executed by using the '''./''' prefix, where either the defined shell in script or the default shell of the user is used:
+{{Cmd|./MyScript.sh}}
+The other way is to directly start the shell with it (no change of permissions needed):
+{{Cmd|sh MyScript.sh}}
+The file extension ''.sh'' does not matter, but it helps to distinguish scripts from normal text files. In case the extension is missing, the tool '''/bin/file''' can be used to learn about its content:
+{{Cmd|file MyScript.sh}}
+It should recongnize if it is a shell, python, perl script or a binary file.
+
+=== Redirection ===
+In Bash it is possible to directly redirect output of one program into input of another program using a pipe, indicated by the '''|''' symbol. This enables user to create command chains. Here is an example to redirect the output of '''ls -l''' into the program '''/usr/bin/less''' (Pager):
+{{Cmd|ls -l | less}}
+To redirect output into a file:
+{{Cmd|ls -l > ls_l.txt}}
+The single '''>''' will create a new file and write the output to it, while '''>>''' would only create a new file if it doesn't exist, otherwise append the output to the existing file
+
+=== Conditional Tests ===
+Very useful to chain commands are conditional statements, to check if the previous command finished successfully or not
+* && - AND - the following command is only executed if the first was successful
+{{Cmd|ls MyScript.sh && sh MyScript.sh}} - Here we first list all files called 'MyScript.sh' and only if this is successful, the script is started
+* || - OR - the following command is only executed if the first command is not successfully
+{{Cmd|sh MtScript.sh <nowiki>||</nowiki> echo 'Error executing the script!'}} - Here we first try to run the script and if not successfullt, it gives an error message to the terminal
+
+=== Jobs and Subshell ===
+Usually if we start a script or command, the input is blocked until the command is finished. To start a program directly in the background, so we can continue to work in the shell:
+{{Cmd|sh MyScript.sh &}}
+This will execute the script as '''job''' number 1 and my prompt expects the next input.<br>
+If a program is already running and I need to do something on the shell, it is possible to move programs from '''foreground'' to '''background'' and vise versa. To get a command prompt if a command is running on the shell, put it into ''sleep'' using {{Key|Ctrl}}+{{Key|Z}}, then move it to the background:
+{{Cmd|bg 1}}
+To list all jobs running in the background:
+{{Cmd|jobs}}
+To move a job back to foreground:
+{{Cmd|fg 1}}
+{{Note|programs running as a jobs usually do not terminate once they finish execution, there will be a message if a job finished and bringing it to foreground will then terminate the program}}
+Using a sub shell, it is possible to run programs as parameters of other commands like here:
+{{Cmd|emerge $(qlist -C -I x11-drivers)}}
+This will first execute the commands in the brackets and append the output as parameter of emerge
+{{Note|this command is quiet useful in Gentoo to quickly rebuild all X11 drivers}}
+You can run more subshells parallel at a time like this:
+{{Cmd|emerge $(qlist -C -I x11-drivers) $(qlist -C -I modules)}}
+
+== Links ==
+* [http://www.gnu.org/s/bash/ GNU Bash]
+* [http://tldp.org/LDP/abs/html/ Advanced Bash-Scripting Guide]
+
 Bash is the default shell for Gentoo linux, and the language upon which its [http://dev.gentoo.org/~ulm/pms/head/pms.html package manager specification] is built.
 
 == Resources ==
