@@ -1,0 +1,304 @@
+== Configuring the Gentoo environment ==
+
+=== The build configuration file ===
+
+As Gentoo is primarily a ''build the software''-distribution it requires a
+bit more configuration directives than most other distributions. The first and
+foremost configuration file is {{Path|/etc/make.conf}} (remember, we are now
+inside the chrooted environment - outside it would be
+{{Path|/mnt/gentoo/etc/make.conf}}). Open up the file with '''nano''', an
+easy to use editor. We add the '''-w''' option to turn off word wrapping since
+this might harm the configuration itself.
+
+{{RootCmd|nano -w /etc/make.conf}}
+
+Inside this configuration file you can define various configuration directives
+that affect Portage' behavior or the software building process. We will only 
+discuss a few here - others exist as well, but are not that important at the 
+beginning of the installation procedure.
+
+Each directive is a variable with some specific content. Variables are often
+used throughout Linux (and this is even more so within Gentoo). To set a certain
+variable, you define its name followed by an equal sign and then the content of
+the variable.
+
+{{GenericCmd|<pre>
+MYVARIABLE="value of the variable"
+</pre>
+}}
+
+== Compiler directives ==
+
+=== The compiler flags ===
+
+The first directives that we'll discuss are the compiler flags. A compiler is a
+tool that builds executable code from source code and one of the benefits of
+using Gentoo is that you can define how the compiler should behave. More
+precisely, you can tell the compiler to use certain optimizations on your
+system. Although a compiler can take a lot more options than just optimization
+options, most Gentoo users only use the optimization options.
+
+The GNU Compiler Collection, the compiler toolchain used by most architectures,
+supports more than hundred optimization flags. Some of them are interesting,
+others hardly used. Some of them are harmless, others quite intrusive. We must
+warn you that '''using anything beyond the Gentoo-recommended optimization
+flags is not supported'''.
+
+=== CFLAGS and CXXFLAGS ===
+
+The '''CFLAGS''' and '''CXXFLAGS''' directives are immediately passed to the
+C and C++ compilers respectively as command line arguments. They are often used
+to inform the compiler about the destination architecture and optimization
+settings.
+
+Quite often, the '''CXXFLAGS''' is told to contain the same setting as the
+'''CFLAGS''' variable:
+
+{{File|/etc/make.conf|Setting the CXXFLAGS variable|<pre>
+CXXFLAGS="${CFLAGS}"
+</pre>
+}}
+
+The GNU Compiler Collection has lots of possible directives. The first directive
+that most users will want to set is the destination CPU type. This is
+configurable with the '''-march=<CPU-TYPE>''' setting. For most people,
+finding out what CPU-TYPE to pick is quite a challenge and indeed, it is not
+possible to document what you should use. What we can tell you is that it is
+safe to pick an older type while a more recent type can cause malformed software
+on your system.
+
+To obtain a list of valid '''-march=''' settings, please consult the GCC Manual
+or the GCC Info pages:
+
+{{RootCmd|info gcc}}
+
+Select GCC Command Options, Submodel Options, and pick your architecture.
+
+A second often used compiler setting is the optimization setting. By adding a
+'''-O''' followed by a number you can ask the compiler to optimize the code in
+various degrees. Gentoo recommends '''-O2''' (that is "O" for "Optimization",
+not "0" like in "007"). The highest possible value is '''-O3''' - if you want
+even stronger optimization settings you'll need to add them to the variable.
+
+If you don't want to optimize the code for speed but for size, use '''-Os'''.
+
+The third option we add is '''-pipe''' which tells GCC that it can use process
+pipes instead of temporary files for communication between the various stages of
+compilation. This considerably improves compiling performance on systems with
+sufficient memory.
+
+=== CHOST ===
+
+The '''CHOST''' variable is an identifier for the target host for which the
+compiler should build software. It is vital that this variable identifies your
+system, but it is even more vital that you '''do not edit this variable if
+you are not performing a bootstrap installation'''. If you alter this
+variable, any toolchain rebuild will cause the toolchain to be in an
+intermediate state, possibly producing malfunctioning libraries.
+
+=== So your settings would be ... ===
+
+At the end of this handbook you will find architecture-specific chapters. For
+each architecture, precise (and valid) examples for various systems are listed
+so that you can pick one of those if the above explanation isn't sufficient.
+
+== Gentoo directives ==
+
+=== USE ===
+
+The '''USE''' variable is probably the most important setting of all inside
+{{Path|/etc/make.conf}}. With this variable you define what purposes your
+system serves. Each flag set in the '''USE''' variable enables or disables
+specific support in one or more packages.
+
+The idea is pretty simple: if your system has a DVD reader, you'll probably set
+'''dvd''' as one of the '''USE''' flags to add support for DVD readers. When
+you want to play DVDs as well, '''dvdread''' should be added. Writing DVDs will
+require the '''dvdr''' setting.
+Similar, if your system will host an IBM DB2 server (or any application you'll
+use connects to such a server) you'll probably want '''db2''' as a '''USE'''
+flag.
+
+A list of all possible USE flags can be found in
+{{Path|/usr/portage/profiles/use.desc}}. This is a plain text file which is
+also reproduced online at the [http://www.gentoo.org/dyn/use-index.xml Gentoo web site]. But
+starting to dig through this list is cumbersome as many USE flags will have no
+clear description (which is ''not'' because we want to remain vague on the
+subject, but because the USE flag is either used by different applications for
+slightly different purposes, or because the topic itself is too technical).
+
+To resolve this issue, Gentoo provides you with a default '''USE''' setting. To
+find out what the default setting is, run '''emerge --info''' and filter
+out the line that starts with '''USE''':
+
+{{RootCmd|emerge --info <nowiki>|</nowiki> grep -E ^USE}}
+
+Any setting you place in {{Path|/etc/make.conf}} is ''added'' to the USE
+flag - you don't substitute the default setting but embrace and extend it.
+Therefore you need to place a hyphen in front of the USE flags you do not want.
+For instance, the '''arts''' USE flag (which enables support for the aRts sound
+daemon) might be set by default. To deselect it, use '''-arts'''. As an example
+we'll select support for the Enlightened Sound Daemon and disable support for
+aRts:
+
+{{File|/etc/make.conf|Setting USE variable|<pre>
+USE="-arts esd"
+</pre>
+}}
+
+There are also USE flags that are specific to a single package. Such USE flags
+are called ''local USE flags''. Although you can set those USE flags in
+{{Path|/etc/make.conf}}, it is wiser to enable or disable those USE flags on
+a per-package basis. We'll refrain from explaining how to do this here - you
+don't need to set USE flags during the installation, Portage is intelligent
+enough to handle USE flag changes after an installation.
+
+Before we go on with the next setting there are four remarks we want to make
+regarding USE flags:
+
+# Changing the USE flag in this stage of the installation might result in Portage downloading tools you don't want to install at this point yet. A frequently occurring issue is where a USE flag combination triggers the installation of '''kde-base/kdebase''' which is a quite huge build. You should consider altering the USE flags at any point later and ask Portage to just rebuild those tools that are affected by the USE flag change.
+# USE flags allow Gentoo to make decisions regarding ''optional'' support and features. If any feature or support is not optional but mandatory or inherent to the package, the respective USE flags are ignored. A good example here is the '''qt''' USE flag. If a package can (but doesn't have to) support the Qt Graphical Widget library, it uses the '''qt''' USE flag to decide whether or not to build in support for Qt. If the package requires Qt to function, it'll install Qt regardless of USE flag.
+# Some packages override the default USE flag settings (not the one you specify in {{Path|/etc/make.conf}} though) if you install them. For instance, the '''tetex''' USE flag is not set by default, but when you install the TeX distribution, Gentoo will automatically enable the '''tetex''' USE flag so that other programs can now be built with TeX support if they can handle it.
+# If you want to hard-set a custom USE flag listing regardless of the default USE flags, you can start with deactivating all USE flags and then list those you want to enable. This can be accomplished using '''USE="-* flag1 flag2 ..."'''.
+  
+=== The Gentoo Portage repository ===
+
+Any Gentoo package information is stored inside an ebuild. That is a small text
+file which contains some metadata about the package (like the description, home
+page, source code location, ...) and instructions for Gentoo on how to
+succesfully build and deploy the package on your system.
+
+The complete set of all supported ebuilds is stored inside the Gentoo Portage
+Tree, also known as the Gentoo Portage Repository. You will find a snapshot of
+this repository at {{Path|/usr/portage}} where all the ebuilds are
+categorised by function and name. Gentoo Portage, Gentoo's software management
+tool, builds decisions such as "What packages should be updated" or "What
+software is available for installation" based on the content of the repository
+snapshot ''on your disk''. 
+
+It is therefore quite important that you regularly update the snapshot on your
+disk with the latest Gentoo Portage Repository content released by the Gentoo
+Developers. By default, Gentoo Portage chooses a random mirror<sup>1</sup> but
+it is more efficient to use a mirror that is either close to you or fastest for
+your environment. The '''SYNC''' variable is where you put the location of the
+Gentoo Portage Repository where you want to take a snapshot of.
+
+Because you can't know what mirrors are available, Gentoo provides an easy to
+remember naming scheme for the mirrors. The default setting picks a random
+mirror. The country-based still picks a random mirror, but only of a pool of
+mirrors inside that country. The single mirror syntax always picks the mirror
+you define.
+
+{{File|/etc/make.conf|Possible SYNC settings|<pre>
+## (Default)
+SYNC="rsync://rsync.gentoo.org/gentoo-portage"
+## (Country-based)
+SYNC="rsync://rsync.${COUNTRYCODE}.gentoo.org/gentoo-portage"
+## (Single mirror)
+SYNC="rsync://rsync#.${COUNTRYCODE}.gentoo.org/gentoo-portage"
+</pre>
+}}
+
+An example setting for {{Path|/etc/make.conf}} could be:
+
+{{File|/etc/make.conf|Example SYNC setting|<pre>
+SYNC="rsync://rsync3.us.gentoo.org/gentoo-portage"
+</pre>
+}}
+
+{{Note|<sup>1</sup> A mirror is a location on a server on the Internet where the exact content of another server location is replicated. The idea behind mirrors is to decrease the stress put on a single server by allowing clients to retrieve the data from various sources.
+}}
+
+=== Gentoo source code location ===
+
+Most Gentoo ebuilds inform Gentoo about the original location of the source
+code. This could be a mirror set (like with the many sourceforge hosted
+projects) or a fixed URL. Some ebuilds can't point to this location for whatever
+possible reason. If this is the case, the source code is pushed on the Gentoo
+mirrors in a specific location called the {{Path|distfiles/}} directory.
+
+The '''GENTOO_MIRRORS''' variable declares what mirrors Gentoo Portage should 
+check to find the required source code. Each mirror declared in this variable
+should point to the parent location of the mirror (i.e. not the
+{{Path|distfiles/}} directory but one level higher). A list of possible
+mirrors can be found [http://www.gentoo.org/main/en/mirrors.xml online].
+
+== Bootstrapping ==
+
+=== What is bootstrapping? ===
+
+A bootstrap procedure prepares a system with the c library and compiler
+specifically for a certain environment. This procedure is very sensitive for
+problems which is why you shouldn't touch the bootstrap script (called
+{{Path|bootstrap.sh}} inside {{Path|/usr/portage/scripts}}).
+
+And because you shouldn't really touch it, you also don't really need to perform
+a bootstrap yourself: if you are using a stage-2 or stage-3 tarball, the
+bootstrapping has already been done. If you do want to rebuild your system (for
+instance, because you altered your compiler directives), you should follow the
+method explained next.
+
+=== Bootstrapping your system from stage 3 ===
+
+If you are performing a bootstrap installation where you don't alter the
+{{Path|bootstrap.sh}} script, the procedure should perform the following
+steps:
+# Use your current toolchain to rebuild itself using the new settings
+# Use the new toolchain to rebuild itself again. Unlike the previous time, your toolchain is now built, not only with the new settings, but also by a toolchain built with those settings.
+# Use the new toolchain to build the rest of the packages using the new settings.
+# Rebuild the packages again to make sure that all packages are built against rebuilt libraries. If you don't have any circular dependencies, this won't be necessary, but as you will probably not know if this is the case<sup>1</sup> it is better to perform this step anyway.
+  
+These steps can all be performed using the following commands:
+
+{{RootCmd|emerge -e system
+| emerge -e world
+| emerge -e world}}
+
+To be honest, the last '''emerge -e world''' will rebuild some tools that don't
+need to be rebuilt: the ''world'' collection (all packages that should be
+installed on your system) contains the ''system'' collection (all packages
+that are vital for your system) as well, so that the system collection is built
+three times where it only needs to be built twice. 
+
+Since in this stage of the installation you don't have any differences between
+the system collection and the world one, performing '''emerge -e system'''
+twice instead of the system-world-world combination is sufficient.
+
+{{Note|<sup>1</sup> Although Portage can detect circular dependencies, it only detects those on metadata level. That means that it depends on the content of the ebuild, written by the package maintainer, and not on the ''real'' dependencies that the package has (the maintainer can always miss one or two that are almost always met) so Portage doesn't know that it needs to rebuild the
+dependency before the package.}}
+
+=== Bootstrapping your system from stage 1 ===
+
+When you need to bootstrap your system different from the procedure set forth in
+the {{Path|bootstrap.sh}} script, you can use any tarball you like,
+including a stage1. You can base your bootstrap procedure from the one
+documented in the {{Path|bootstrap.sh}} script but you don't have to.
+However, make sure that the toolchain you build it built with Portage (using
+'''emerge'''), otherwise the Portage database will be inconsistent.
+
+{{RootCmd|/usr/portage/scripts/bootstrap.sh}}
+
+== Progressing from a bootstrapped system ==
+
+=== Installing core system packages ===
+
+A bootstrapped system doesn't offer much beyond some libraries and compiler. You
+will need additional core system packages before you can actually work on your
+system. Gentoo Portage obtains a list of core system packages from your profile
+and installs them on your system after building them with the bootstrapped
+toolchain.
+
+The list of core system packages is available as the ''system'' keyword for
+'''emerge'''. '''emerge''' is Gentoo's command-line interface to Gentoo
+Portage, Gentoo's software management system. 
+
+If you have bootstrapped your system previously, or you are installing Gentoo
+through a stage-2 tarball, or you are installing Gentoo through a stage-3
+tarball but want to rebuild your packages with the configuration directives
+you've set in your {{Path|make.conf}} previously, run the following command
+to build all core system packages for your profile:
+
+{{RootCmd|emerge -e system}}
+
+Remember, most users will not need to perform this step: the stage3 tarball
+provided by Gentoo already contains a prepared system.
