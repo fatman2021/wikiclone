@@ -1,0 +1,185 @@
+== Loading the kernel in memory ==
+
+=== Introduction to bootloaders ===
+
+When your system is powered on, your system will first perform some sanity
+checks against its own components. When all tests succeed, the system loads the
+kernel image which you have built previously in memory. This action is performed
+by the boot loader.
+
+Since loading files in memory is very architecture specific, you should consult
+the architecture specific information for your architecture now to find out 
+how to install and configure a boot loader. 
+
+== Configuring the kernel ==
+
+=== Kernel parameters ===
+
+Inside the configuration file of your boot loader you can enter specific
+instructions for the Linux kernel. These parameters allow you to tweak and
+change the kernel behaviour at boot-time.
+
+=== Important parameters ===
+
+'''Root File System Location'''
+
+The first parameter we'll discuss is the '''root''' parameter. This tells the
+Linux kernel where the root file system of the Linux system is located. You
+really should provide this parameter as the Linux kernel will otherwise not know
+where the Linux installation is.
+
+{{GenericCmd|<pre>
+## (The root file system in this example is at /dev/sda3)
+root=/dev/sda3
+</pre>
+}}
+
+''However'', you can only specify the root file system ''if'' you are
+certain that the kernel image (not through separate kernel modules, but really
+inside the kernel image) has support for:
+
+* the device controller that governs your disk (for instance the SATA controller if you use SATA disks), and
+* the file system that the partition uses (for instance ext3 support)
+  
+If this isn't the case, then you have probably made an initialized RAM disk
+which allows the Linux kernel to load the appropriate kernel modules in memory
+before it continues with the Gentoo boot-up. Users of the '''genkernel''' tool
+have indeed made such an ''initrd'' file, perhaps without their knowledge.
+
+To use such an initrd file, you need to specify {{Path|/dev/ram0}} as the
+root file system and the real root file system with the '''real_root='''
+parameter<sup>1</sup>. It is also adviseable to inform the kernel about the
+amount of memory you want to reserve for the RAM disk. 
+
+You also need to tell the boot loader where the initrd file is. This is boot
+loader specific so we don't mention that here - consult the information for your
+boot loader for more information. 
+
+For instance:
+
+{{GenericCmd|<pre>
+root=/dev/ram0 ramdisk=8192 real_root=/dev/sda3
+</pre>
+}}
+
+'''The Initial Program'''
+
+When the kernel has finished its own procedures and mounted the root file
+system, it hands over the control to the system to the '''init''' process. This
+process then takes care of the rest of the boot sequence. By default, the kernel
+looks for this tool at {{Path|/sbin/init}}. You can however define another
+initial program if you like using the '''init=''' parameter.
+
+For instance, to get a Unix shell immediately, use '''init=/bin/sh'''. This
+is often used to allow you to remount your partitions and make fixes that 
+prevent your system from booting regularly (or when you forgot your root
+password).
+
+'''Single User Mode'''
+
+To inform the system to boot up in the single user mode (which is the
+'''single''' run level we've talked about in the previous chapter), simply add
+an '''S'''.
+
+{{Note|<sup>1</sup> The '''real_root''' parameter is not really a kernel parameter but
+is intended for a script inside the initrd file. However, the parameter is used
+just like kernel parameters which is why we list it here.
+}}
+
+=== Hardware related parameters ===
+
+'''ACPI Support'''
+
+Not all hardware devices are conform the ACPI specification, even though they
+think they are. This sometimes results in unstable behaviour of the device, or
+of other devices influenced by the device.
+
+You can specifically disable ACPI support using the '''acpi=off''' parameter.
+
+'''Disabling IDE Controllers'''
+
+When one of your IDE disks is broken, your system might not be able to boot even
+though the system itself is stored on a disk controlled by a different IDE
+controller. If this is the case, you can explicitly disable a controller using
+'''ide0=noprobe'''.
+
+'''Disabling Multi-Processing'''
+
+If you have an SMP system (Synchronous MultiProcessor), you can tell the Linux
+kernel to only use one CPU by setting '''nosmp'''.
+
+'''Disabling USB Support'''
+
+To disable USB support, use '''nousb'''
+
+=== More parameters ===
+
+More extensive information about available kernel parameters can be found at
+{{Path|/usr/src/linux/Documentation/kernel-parameters.txt}}.
+
+== The boot sequence ==
+
+=== Init ===
+
+When the Linux kernel has almost finished with its boot process (where it
+initializes the memory structures, loads drivers, etc.) it mounts the root file
+system (given by the '''root''' parameter) and then starts the '''init'''
+process (which is default at '''/sbin/init''' but can be configured).
+
+The '''init''' process is responsible for the rest of the system boot sequence.
+It looks for the {{Path|/etc/inittab}} file which contains the instructions
+how to further boot the system. At first, it fires up the command that is
+assigned to the ''boot'' and ''bootwait'' entries which are, in Gentoo's
+case:
+
+{{File|/etc/inittab|The boot entry|<pre>
+rc::bootwait:/sbin/rc boot
+</pre>
+}}
+
+Where '''init''' is rather distribution-independant (and quite simple in its
+use too), '''/sbin/rc''' is quite distribution-specific, especially the
+'''rc''' that Gentoo offers. Its task is to make sure that the scripts in a run
+level are started well or take appropriate action if they aren't.
+
+Once the boot runlevel has succeeded, the '''init''' process goes on by
+executing the command for the specified runlevel. By default, the runlevel
+entered at the ''initdefault'' part of {{Path|/etc/inittab}} is started,
+but you can ask '''init''' to start a different run level by specifying its
+corresponding number as a boot parameter (entirely similar to how you add kernel
+parameters).
+
+{{File|/etc/inittab|The initdefault entry|<pre>
+id:3:initdefault:
+## (...)
+l3:3:wait:/sbin/rc default
+</pre>
+}}
+
+When this run level has also finished starting its required scripts, the
+'''init''' process starts the terminal processes at the various ttys (the
+Alt+F# locations where you get a logon prompt):
+
+{{File|/etc/inittab||<pre>
+c1:12345:respawn:/sbin/agetty 38400 tty1 linux
+c2:2345:respawn:/sbin/agetty 38400 tty2 linux
+c3:2345:respawn:/sbin/agetty 38400 tty3 linux
+c4:2345:respawn:/sbin/agetty 38400 tty4 linux
+c5:2345:respawn:/sbin/agetty 38400 tty5 linux
+c6:2345:respawn:/sbin/agetty 38400 tty6 linux
+</pre>
+}}
+
+=== Managing runlevels ===
+
+You can manage the runlevels using the '''rc-update''' tool. Its syntax is
+quite simple:
+
+{{RootCmd|rc-update <add <nowiki>|</nowiki> del> <initscript> <runlevel>}}
+
+All the init scripts that you can use are located inside
+{{Path|/etc/init.d}}. You will most likely use at least the runlevels
+''boot'' and ''default''.
+
+* The ''boot'' runlevel makes sure that the most important init scripts, which are required for every succesful system boot, are started properly. Any init script that is added to the boot runlevel may not require any service offered by the init scripts in the default runlevel (as it is started later). It may depend on other scripts in the boot runlevel though, Gentoo's '''rc''' is smart enough to tackle dependencies.
+* The ''default'' runlevel contains all init scripts which should be started during normal system operation. This is the runlevel where you will probably add most of the init scripts.
