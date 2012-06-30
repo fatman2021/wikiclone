@@ -1,0 +1,269 @@
+
+== Booting CDs ==
+
+=== BIOS ===
+
+The BIOS (Basic Input/Output System) is the first system started when you power
+on your computer. It first performs a POST (Power-On Self Test) to verify if
+your hardware is still in good shape. When the POST gives the BIOS an okay, the
+BIOS will load the boot loader from the boot device configured in its memory.
+This boot loader then fires up the operating system and the entire system dance
+starts...
+
+To boot from a CD, you need to configure your BIOS so that the CD-ROM device is
+the first boot device. Reboot your system and fire up the BIOS. You will be
+informed about what key to press right after (or during) the POST to get in the
+BIOS setup. Most BIOSes use '''Esc''', '''F1''', '''F2''', '''DEL''' or
+'''F8'''.
+
+Once you are inside the BIOS setup, search for the setting where you can change
+the boot device sequence. Some BIOSes place it beneath ''CMOS Setup'', but
+there isn't a standard - each BIOS has its differences. Change the order so that
+the CD-ROM device is mentioned first before the first hard disk (HD-0). Such a
+setting will allow you to boot from a bootable CD if there is one in the CD-ROM
+drive, or boot from the hard drive otherwise.
+
+== Partitioning the disks ==
+
+=== Partition layout ===
+
+Each disk on an x86 system can have at most ''four'' primary partitions.
+This is a remnant of the old days when four partitions were considered enough.
+Each primary partition has its identification inside the first sector on the
+disk (the ''boot record''). When you want more than four partitions, you
+should configure one of the primary partitions to contain all the non-primary
+partitions. This large primary partition is called the ''extended'' partition
+and the partitions inside it are called ''logical'' partitions.
+
+The de facto standard device naming convention tells us that the primary
+partitions for a disk are numbered as 1 to 4 while the logical ones are 5
+and higher, regardless of how many primary partitions you use. The naming
+convention also tells us how the disks themselves are named.
+
+* IDE device names start with {{Path|hd}} followed by an alphabetic character which resembles the location of the disk in the system: the primary master<sup>1</sup> is {{Path|hda}}, the primary slave {{Path|hdb}}, the secondary master {{Path|hdc}}, etc.
+* SCSI device names (and most Serial ATA ones as well) start with {{Path|sd}} followed by an alphabetic character which resembles the position of the disk in the disk chain: the first one is {{Path|sda}}, the second one {{Path|sdb}}, etc.
+  
+Device files are located inside {{Path|/dev}}, so if you want to identify
+the primary master IDE drive you would state {{Path|/dev/hda}}. 
+
+{{Note|<sup>1</sup> IDE drives are controlled by an IDE controller. Each controller can govern two IDE devices at most: a master and a slave. The master drive has higher priority when both drives are attempting to send or receive data. A standard x86 system has two controllers, a primary one ({{Path|ide0}}) and a secundary one ({{Path|ide1}}). }}
+
+=== Partitioning using cfdisk ===
+
+The '''cfdisk''' tool allows you to quickly partition your disks and is a lot
+easier to use than '''fdisk'''. When you have fired up '''cfdisk''' (which
+selects {{Path|/dev/hda}} by default - you can use a different disk by
+giving the device file name as an argument) you will get an overview of the
+available partitions, each one listed with the device name, partition type, file
+system type and size.
+
+When you take a look at the interface, you'll notice that it is quite
+self-explanatory:
+
+* When you select a free space region, you can add new partitions by pressing '''New'''. '''cfdisk''' will ask you what kind of partition you want (primary or logical) and its size after which the partition is added to the overview pane.
+* When you select a partition entry, you can change the file system type. Just select '''Type''' and search for the type you are interested in (probably 82 - Linux swap / Solaris, or 83 - Linux).
+* Since some BIOSes require the partition that stores the boot loader for the operating system to be marked as bootable, there is also an option of doing so.
+  
+You should create your partitions, not forgetting to mark at least one of them
+for swap usage. Even though swap files are supported by Linux, it is not
+recommended since they have some impact on the system's performance. A dedicated
+swap partition performs far better than a swap file.
+
+A frequently asked question is how to partition the disk. There is no satisfying
+answer to that, and any attempt to obtain one will result in a cataclysmic
+series of flamewars. So we'll stick with a simple suggestion: it doesn't hurt to
+use two partitions: one for the entire Linux system and one for the swap space.
+You'll get to know your own preferences when you are more experienced with
+Linux.
+
+== The make.conf file ==
+
+=== Introduction ===
+
+The information given in this section is not meant to be exhaustive. We provide
+you with the settings Gentoo supports. If you use different settings we don't
+say that Gentoo doesn't support it, but it is possible. We list the settings by
+subarchitecture - a set of machine instructions supported by a range of x86
+systems. All subarchitectures are derived from older, ''compatible''
+subarchitectures. If at any time you are uncertain which one to pick, you should
+use the oldest subarchitecture. Picking one that is more recent than the one
+your system supports will result in segmentation faults or internal errors.
+
+The '''CXXFLAGS''' setting is never shown, you should set it to the
+'''CFLAGS''' one:
+
+{{File|/etc/make.conf|CFLAGS and CXXFLAGS values|<pre>
+CFLAGS="..."
+CXXFLAGS="${CFLAGS}"
+</pre>
+}}
+
+=== The generic x86 subarchitecture ===
+
+The next settings work on every x86 system (apart from the i286 and lower):
+
+{{File|/etc/make.conf|Architecture-related settings|<pre>
+CHOST="i386-pc-linux-gnu"
+CFLAGS="-march=i386 -O2 -pipe"
+</pre>
+}}
+
+=== The ix86 series ===
+
+The ix86 series (i486, i586, i686) all refer to Intel- and Intel compatible
+CPUs. The i586 instruction set is also known as the ''Pentium'' and the i686
+one as the ''Pentium Pro'', the predecessor of the ''Pentium MMX''.
+
+{{File|/etc/make.conf|Pentium-related settings|<pre>
+## (Substitute i486 with i586 or i686 accordingly)
+CHOST="i486-pc-linux-gnu"
+CFLAGS="-march=i486 -O2 -pipe"
+</pre>
+}}
+
+You can also substitute the '''i486''' value ''inside the CFLAGS'' setting
+(and ''not'' the CHOST one) with '''pentium''' or
+'''pentium-pro''' for such systems.
+
+=== Intel CPUs ===
+
+Additional support is available for various Intel CPUs, such as
+'''pentium-mmx''', '''pentium2''' (including Celeron), '''pentium3''',
+'''pentium4''', and '''nocona''':
+
+{{File|/etc/make.conf|Higher-level pentium settings|<pre>
+## (Substitute the pentium-mmx value in CFLAGS with the value you need)
+CHOST="i686-pc-linux-gnu"
+CFLAGS="-march=pentium-mmx -O2 -pipe"
+</pre>
+}}
+
+=== AMD CPUs ===
+
+AMD CPU users can use any of the following settings for '''-march''':
+'''athlon-xp''', '''athlon-mp''', '''athlon-tbird''', '''athlon''',
+'''k6''', '''k6-2''', '''k6-3'''.
+
+{{File|/etc/make.conf|AMD related settings|<pre>
+## (Substitute the athlon-xp value in CFLAGS with the value you need)
+CHOST="i686-pc-linux-gnu"
+CFLAGS="-march=athlon-xp -O2 -pipe"
+</pre>
+}}
+
+== Bootloaders ==
+
+=== GRUB ===
+
+The '''grub''' bootloader is a powerful application, able to boot various
+operating systems, including Microsoft Windows. One of its most powerful
+features is its ability to understand various file systems, which makes it
+possible for '''grub''' to aide you in your boot setup, especially when there
+are some issues you need to fix.
+
+For instance, you can browse a file system looking for files, reading different
+'''grub''' configurations, using various Linux kernels, locate files on the
+system (and view their contents), but also hide partitions, boot from a network 
+using BOOTP (a simple file transfer protocol, very often used to send boot 
+images to various systems), change the partition table, ...
+
+=== GRUB: configuration ===
+
+To use '''grub''', you need to install it first (from within the chrooted
+environment):
+
+{{RootCmd|emerge grub}}
+
+Next, edit (or create) the {{Path|/boot/grub/grub.conf}} file. 
+We'll first give you a simple example of a {{Path|grub.conf}} file:
+
+{{File|/boot/grub/grub.conf||<pre>
+default 0
+timeout 5
+
+title=Gentoo Linux
+root (hd0,5)
+kernel /kernel-2.6.14-gentoo-r2 root=/dev/sda8
+</pre>
+}}
+
+'''grub''' always starts counting from zero. For instance, to boot the first
+entry by default, we state '''defaultÂ 0'''. The other line,
+'''timeoutÂ 5''', tells GRUB to wait 5 seconds before it actually boots the
+entry pointed to by the '''default''' setting.
+
+This is of course not the most difficult part of GRUB. The entries themselves
+however are. In the given example, there are three commands given to GRUB:
+
+# The '''title''' entry tells GRUB what to display to the user when he is asked to make his selection.
+# The '''root''' entry informs GRUB where its own files are stored. This is '''not''' the Linux root file system (it can be, but this isn't always true). If you have {{Path|/boot}} (where GRUB stores its files) as a separate partition, you point this directive to that partition.
+# The '''kernel''' entry is used by GRUB to know what Linux kernel to boot (relative to the file system where '''root''' points to) and what boot parameters to add.
+  
+Many users often make a mistake when they configure the '''root''' parameter.
+That's mostly because the syntax used by GRUB to identify partitions is
+different from what they're used to work with. Its syntax is quite simple:
+
+{{GenericCmd|<pre>
+(hdharddisk-#,partition-#)
+</pre>
+}}
+
+The '''harddisk-#''' is the hard disk number, starting from 0. If you only have
+one hard disk, it is '''0''', regardless of where the disk is at. If you have
+several disks, start counting from the one which your system checks first. For
+instance, if you only have IDE disks, your system will probably start with the
+primary master, then primary slave, then secundary master, ... 
+
+The '''partition-#''' is the partition number, starting from 0, and uses the
+same logic used with the partitioning you did earlier. The first four partitions
+(0-3) are the primary partitions. The logical partitions start from the number
+4. So, in the above example, the GRUB files are stored on the second logical
+partition on the first disk (also known as {{Path|/dev/sda6}}).
+
+You'll find more information about GRUB (including nicely commented
+configuration examples) in the GRUB info pages:
+
+{{RootCmd|info grub}}
+
+=== GRUB: installation ===
+
+You still have to install '''grub''' in the MBR (Master Boot Record) though, so
+that your BIOS is able to find and start it. Otherwise, your system will inform
+you that no operating system is found...
+
+The recommended method uses '''grub-install''' to setup GRUB. Yet this tool
+relies on some information not present on your system yet: the
+{{Path|/etc/mtab}} file, a cache file which contains information about the
+mounted file systems. Create one that makes '''grub-install''' happy, you only
+need to enter the file system for your root partition ({{Path|/}}) and, if
+you have one, for your boot partition ({{Path|/boot}}):
+
+{{File|/etc/mtab||<pre>
+/dev/sda8   /       ext3   rw,noatime   0 0
+/dev/sda6   /boot   ext2   rw,noatime   0 0
+</pre>
+}}
+
+Then, run '''grub-install''' with the device that resembles your first
+disk that the system will boot. For instance, if that first disk is
+{{Path|/dev/sda}}:
+
+{{RootCmd|grub-install /dev/sda}}
+
+The '''grub-install''' tool will then search through {{Path|/etc/mtab}} to
+find out where the GRUB files are stored and install a minimal boot loader in
+the MBR whose only job is to find and start the rest of the GRUB files.
+
+If you come to the conclusion that the installation has failed, you can try to
+perform the '''grub-install''' steps manually. Run '''grub''', then enter the
+configuration commands '''root''' (where are the GRUB files located - same as 
+the one in the configuration file {{Path|grub.conf}}),  '''setup''' (where 
+to install GRUB - {{Path|(hd0)}} is most likely) and '''quit''' (to exit 
+the GRUB installation):
+
+{{RootCmd|grub|output=<pre>
+grub> root (hd0,5)
+grub> setup (hd0)
+grub> quit
+</pre>
+}}
