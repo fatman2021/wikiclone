@@ -1,0 +1,240 @@
+== Why multi-user? ==
+
+=== Separation of privileges ===
+
+One of the advantages of a multi-user operating system like Linux is that the
+privileges are separated. Each process runs with specific privileges and can
+only execute a limited number of tasks. As long as the process does not run
+as the '''root''' user (the allmighty administrator privilege) it can only deal
+with files and tasks that are assigned to that particular user.
+
+This separation of privileges provides a small but working security wall: as
+long as all your users use the system with their user account and not with the
+'''root''' account, the worst that can happen is that the user removed his own
+files - the system itself is left untouched.
+
+For this reason, you will always hear not to use the '''root''' account. 
+
+=== System accounts ===
+
+To enforce the separation of privileges, specific system accounts are created
+for each task. If you run a mail server on your system, that mail server will
+have a user account on your system. 
+
+These accounts are not usable by regular users: you can not log in on your
+system using those accounts. They exist only to allow the specific processes to
+run with their own permissions and privileges.
+
+== Users and permissions ==
+
+=== The user ID ===
+
+To identify a system account, a unique ''user identification'' is used: the
+UID. This is a number used by the Linux kernel and other applications as 
+numbers are easier to deal with than names (strings). However, Linux is 
+intelligent enough to immediately translate the UID to a user name and vice 
+versa, so in most cases you will only see or use the user name instead of the 
+UID.
+
+=== The process ID ===
+
+When your Linux system is up and running, it will have started various processes
+already. Each process is an application (or part of an application) and receives
+a unique ''process identifier'' (which is also a number): the PID. 
+
+PIDs play an important role in the administration of a running Linux system:
+you need the PID of a specific process to be able to terminate it (in case it
+behaves badly), change priorities or receive specific system usage statistics
+regarding a particular application.
+
+For regular Linux usage however, the PID is less important: you still need to
+understand what a PID is, but you will probably not encounter any use of it
+until you administer your system.
+
+=== Privileges ===
+
+Each process obtains privileges based on the user account it uses. By default, 
+a process runs with the privileges of the user that started the
+process. For instance, if you start '''firefox''' it will run with your
+privileges.
+
+However, some processes have a specific flag set that tells the Linux kernel not
+to run the process as the user that executed it, but as a specific user
+instead. This flag is called the ''set user id'' (SetUID or SUID) and tells 
+the Linux kernel to run this application with the privileges of the 
+''owner'' of that application instead of the ''executor''.
+
+Most tools that have the SUID bit set are owned by the '''root''' user and
+therefore start running with the privileges of the '''root''' user. Because
+this is a security thread (remember, running things as '''root''' can be
+dangerous) most tools have a feature called ''privilege separation'': when
+they are started, they first run the tasks they have to run as '''root''' after
+which they automatically decrease their own privileges to a less powerful state.
+
+== Linux file system hierarchy ==
+
+=== Structure of a file system ===
+
+The most pertinent change Linux users will have to be comfortable with is the
+file system structure which is quite different from the file system structure
+operating systems like Microsoft Windows use.
+
+In Linux, the entire file system is structured as one huge tree. You start with
+the root of the tree and traverse down until you reach your goal. The next Code
+Listing shows you the first depth of a Linux file system:
+
+{{GenericCmd|<pre>
+/        ## (The root)
++- bin/  ## (Executable programs needed to get the system up and running)
++- boot/ ## (Files related to the boot loader and Linux kernel)
++- dev/  ## (Device files)
++- etc/  ## (Configuration files)
++- home/ ## (User home directories)
++- lib/  ## (Libraries needed to get the system up and running)
++- mnt/  ## (Location for mount points)
++- opt/  ## (Contains large package installations not part of a regular install)
++- proc/ ## (Kernel-provided information)
++- root/ ## (Home directory for the root user)
++- sbin/ ## (System administration executables to get the system up and running)
++- sys/  ## (Kernel-provided information)
++- tmp/  ## (Temporary files)
++- usr/  ## (Applications for day-to-day system usage)
+`- var/  ## (Variable information like log-files, caches, ...)
+</pre>
+}}
+
+Suppose you want to navigate to the CUPS error logs (CUPS is a printing service
+frequently used on Linux systems) which are located inside
+{{Path|/var/log/cups}} you will find the following tree:
+
+{{GenericCmd|<pre>
+/
++- bin/
+## (...)
++- usr/
+`- var/
+   +- cache/
+   +- db/
+   +- lock/
+   +- log/
+   |  +- cups/
+   |  |  +- access_log
+   |  |  +- error_log
+   |  |  `- page_log
+   |  +- dmesg
+   |  +- emerge.log
+   |  +- lastlog
+   |  `- messages
+   +- run/
+   +- spool/
+   +- state/
+   `- tmp/
+</pre>
+}}
+
+Each location has its purpose as defined in the [http://www.pathname.com/fhs Linux File System Hierarchy Standard].
+As said before, Linux builds upon standards and the file system structure is no
+exception. Each Linux distribution adheres to this standard (although a few
+deviations are known). If you want to learn more about the file system
+structure, please read this standard. A short summary can also be found on your
+Linux system in the '''hier''' manual ("hier" is short for "hierarchy").
+
+=== Scattered files ===
+
+One often frowned upon result of this file system structure is that applications
+scatter their files around on the system. Indeed, the locations for executable
+files, data files, documentation files, configuration files, ... are defined in
+the hierarchy standard but result in files being scattered throughout the file
+system instead of at a single location.
+
+For instance, for a regular application the executable files will be stored in
+{{Path|/usr/bin}}, data files in 
+{{Path|/usr/share/<applicationÂ name>/}}, documentation files in 
+{{Path|/usr/share/man}} (for the manuals) or in the data file location, 
+configuration files in {{Path|/etc}}, libraries in {{Path|/usr/lib}}, 
+etc.
+
+It is up to the distribution to keep track of the files that belong to a
+particular package. The software management system of a distribution is
+therefore a very important tool and is often the application that distinguishes
+one distribution from the others. For Gentoo, the software management system is
+called Portage.
+
+=== System administration versus system usage ===
+
+When you are using your Linux system for daily tasks you should be logged on as
+a regular user. This user will only have write-access to his personal ''home
+directory'', located in {{Path|/home}}, and have read access to most
+other places on the system (except where sensitive information is stored). 
+
+This user will be able to execute most applications that are stored in the
+regular executable locations ({{Path|/bin}}, {{Path|/usr/bin}} and a few
+other places). Whenever the user wants to run an application, the system will
+search through those directories for a matching application: it will not 
+search through the entire system.
+
+The administrative user ('''root''') however has access to every location on
+the system. When he wants to execute an application, the system will search
+through ''system administration locations'' such as {{Path|/sbin}} and
+{{Path|/usr/sbin}} as well. Those locations contain tools that should only
+be ran by the '''root''' user. The '''root''' user can also read and write to
+every location on the system (although particular kernel projects exist that
+allow for more access control, limiting even the '''root''' user's
+capabilities).
+
+=== The role of hardware ===
+
+Within the tree structure there does not seem to be any room for the hardware 
+(like disks, CD-ROMs, USB sticks or network mounts). Of course, hardware is 
+important - where else would you store your files on if you do not have a hard 
+disk? The use of such hardware however happens transparent to the user.
+
+Storing files in Linux happens in a layered structure. At the bottom of the
+layer, you have the actual storage (most likely the partition or removable
+media). On top of the actual storage you have the file system. A file system can
+be spanned across several storage devices but most users will have one partition
+per file system. The file system is ''mounted'' in the Linux file system
+structure. Such mount always happens at a certain directory.
+
+By default, you will have at least one file system for the root of your file
+system. If you only want to use a single file system, you can have your entire
+Linux system on a single partition. If you want to use several partitions, you
+need to think about what directory (and its subdirectories) you want to store 
+on a different file system. 
+
+For instance, you might want to have {{Path|/home}} stored on a separate
+file system which allows you to have all the users their data on a single
+partition (or drive). What happens is that you create a file system on that
+partition (or drive) and then ''mount'' this at {{Path|/home}}.
+
+If you do not mount it at {{Path|/home}}, the {{Path|/home}} and all its
+contents will be stored on the file system that contains the root of the file
+system. If you do mount it at {{Path|/home}}, {{Path|/home}} and all its
+contents will be stored on the other file system.
+
+This mounting does have an important implication: if you forget to mount a file
+system at a certain location, the Linux file system structure will look as if
+that location contains no files. You will be able to add files to that location
+of course, but they will then be stored on the root file system instead of on
+the file system you forgot to mount.
+
+In the next Code Listing we show you an example layered approach. The root file
+system is stored on {{Path|/dev/hda1}} which represents the first partition
+on the first IDE disk in your system. The {{Path|/home}} location is stored
+on a separate file system (which happens to be the same ''kind'' of file
+system: an ext3 one). This file system is stored on a ''meta device'' (a 
+device that actually consists of multiple devices - in this case two 
+partitions).
+
+{{GenericCmd|<pre>
++--------------------+----------------------------+
+|   / (root)         |   /home (home directories) |  ## <- location
++--------------------+----------------------------+
+|   ext3 instance    |   ext3 instance            |  ## <- file system
++--------------------+--------------+-------------+
+|                    |        /dev/md/0           |
+|   /dev/hda1        +--------------+-------------+  ## <- devices
+|                    |  /dev/hdb1   |  /dev/hdc1  | 
++--------------------+--------------+-------------+
+</pre>
+}}
