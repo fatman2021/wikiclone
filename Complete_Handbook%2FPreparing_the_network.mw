@@ -1,0 +1,261 @@
+== Introduction ==
+
+=== Why you need it ... ===
+
+Not everyone requires a working Internet connection, but if you ''can'' it is
+best if you do - this part of the book only covers installations with a
+working Internet connection because it is highly advantageous. Not only can 
+you immediately install the latest versions of all
+the Gentoo packages, it also allows you to go on the Internet to seek help and
+support, or to chat while your system is installing Gentoo.
+
+In this chapter we cover one specific network type: Ethernet. An
+Ethernet network connection is often referred to as the ''wired network'',
+using a RJ-45 network plug. Wireless networking, also known as ''WiFi'' or
+''IEEE 802.11x'', is also supported from the Gentoo installation CDs but not
+covered in this chapter (you will find more information about it further in this
+book).
+
+== Recognizing the hardware ==
+
+=== Auto-detection ===
+
+You first need to configure your system to support your network card. Chances
+are that the card is already found and supported - to verify this, use the
+'''ifconfig''' tool. This tool will tell you what interfaces are available on
+your system. Interfaces are where Linux can assign IP address information to. It
+can represent a networking device but doesn't have to: there are interfaces for
+the local system (''localhost'', which doesn't need a network card), network
+tunnels, bridges, etc.
+
+{{RootCmd|ifconfig -a}}
+
+The above command will display statistics about each interface found on your
+system. The interfaces that start with ''eth'' are the ones that interest us
+the most. Those interfaces represent the network cards. If you have one network
+card, it will probably be called ''eth0''. If you have two, they would be 
+called ''eth0'' and ''eth1'', etc.
+
+If you have several network cards, you can't tell right now what interface
+represents what network card. There are several ways to find this out, but the
+easiest method is to assume that eth0 is the one you are interested in - and if
+it turns out your network doesn't work, try switching the cable :)
+
+Now, if you have seen eth-interfaces then your hardware is found and 
+supported and you can continue with the next section ([[INTERNAL #net_config_type]]). Otherwise you need to
+find out what chipset your network card uses and load the necessary hardware 
+support.
+
+=== Manual hardware discovery ===
+
+With '''lspci''' you can get an overview of all PCI devices found on your
+system. The interesting part of this tool is that it shows the function of the
+device ''and'' the brand and type, making it excellent to discover what you
+have under the hood of your system.
+
+We are interested in the ''Ethernet controller'' or ''Network controller'', so we filter out the output of the '''lspci''' command using 
+the '''grep''' tool, only giving us those lines that have 'Ethernet controller'
+or 'Network controller' in it:
+
+{{RootCmd|lspci <nowiki>|</nowiki> grep 'Ethernet controller'}}
+
+Substitute with 'Network controller' if this doesn't give satisfying results
+
+{{RootCmd|lspci <nowiki>|</nowiki> grep 'Ethernet controller'|output=<pre>
+0000:06:00.0 Ethernet controller: Realtek Semiconductor Co., Ltd. RTL-8169 
+  Gigabit Ethernet (rev 10)
+</pre>
+}}
+
+With this information, you can start searching for the ''kernel module'' that
+offers support for your Ethernet card. In the above example, the 
+module is {{Path|r8169.ko}}. Although there is a quite efficient way to 
+find out what kernel module exists for what chipset (search through the Linux 
+kernel menu configuration information) we can't use this from the Gentoo 
+installation CD as you don't have this configuration information available yet.
+
+You are not left in the dark though. You can try digging through all the
+available kernel modules that support network cards, hoping to find any
+reference of the chipset you have. An easy method is to 'dump' a list of all
+kernel modules and filter out those that contain a good identifier in their
+name.
+
+For instance, the above example could lead to the discovery of the
+{{Path|r8169.ko}} module using the following method:
+
+{{RootCmd|find /lib/modules <nowiki>|</nowiki> grep -i '8169'}}
+
+The '''-i''' tells the '''grep''' tool to behave case insensitive. Okay, it
+doesn't matter for the example since we're asking '''grep''' to filter out a
+number - which isn't affected by case sensitivity - but this is quite important
+for different filters.
+
+You can try out various terms that occur in the chipset name as well, either as
+separate jobs, or by providing '''grep''' with an entire list of terms you want
+to filter on. This can be accomplished by adding the '''-E''' option and
+handing it a list, separated by '|' signs and contained within '(' and ')'. The
+'''-E''' tells '''grep''' to interprete the filter as a ''regular
+expression'':
+
+{{RootCmd|find /lib/modules <nowiki>|</nowiki> grep -iE '(8169<nowiki>|</nowiki>realtek<nowiki>|</nowiki>rtl)'}}
+
+Once you have found a possible kernel module for your network card, you can try
+to load it in memory using '''modprobe'''. This tool will search for the
+module, query for possible depending modules (some modules require another
+module to be loaded first) and then load the module in memory. For instance, 
+for the {{Path|r8169.ko}} module:
+
+{{RootCmd|modprobe r8169}}
+
+Notice that we have dropped the ".ko" suffix!
+
+If this command didn't fail out, try '''ifconfig -a''' again to see if you
+have a working interface. If not, keep trying...
+
+== DHCP or static IP address? ==
+
+=== Setting the IP address information ===
+
+Now we need to configure the interface to obtain an IP address, a unique
+address that identifies your system in the network (''Internet Protocol
+address''). In most environments, this can be obtained automatically using 
+DHCP (''Dynamic Host Configuration Protocol''). This protocol
+allows interfaces to send out a request for an IP address on the network and
+receive IP address and routing information from the DHCP server (which is often
+found in home routers or in enterprise environments as a stand-alone service).
+
+{{Note|TCP, the other part of the TCP/IP combo, stands for ''Transfer Control Protocol'' and is responsible for the applicative communication between two systems. It has no recollection of system addresses (that's the IP's job) but uses ''ports'' instead to distinguish one communication session from another.}}
+
+If you have a DHCP service on your network, you need to run a DHCP client for
+your interface. With Gentoo, you have '''dhcpcd''' at your disposal. Other
+clients exists as well though, such as '''dhclient''' and '''pump'''. To
+automatically obtain an IP address for the eth0 interface, run
+'''dhcpcd eth0''' after which you can continue with [[INTERNAL #network_testing]].
+
+{{RootCmd|dhcpcd eth0}}
+
+If your network card was automatically detected by Gentoo and your network
+supports DHCP, you'll probably receive a warning telling you that an instance of
+'''dhcpcd''' is already running. That's okay, it means that the installation
+already had the network configured for you.
+
+If you need to configure your network using a static IP address, you have to
+know:
+
+* which IP address you can use,
+* what IP address your ''gateway'' listens to, and
+* what part of the IP address is reserved for the network identification
+
+A ''gateway'' is a system that acts as the connection between your network
+and the outside world. If you have a PC that shares an Internet connection
+(which often uses NAT - Network Address Translation) it is most likely that its
+IP address is your gateway IP address.
+
+The network part of the IP address is what separates your IP address from an
+outside IP address. For instance, if your IP address is 192.168.1.12 and all IP
+addresses in your network are in the range of 192.168.1.1 to 192.168.1.255, then
+the network part of the IP address are the first three numbers. This is
+identified by a ''netmask'' 255.255.255.0.
+
+To configure your interface with a static IP address you can use the
+'''ifconfig''' application which we have already seen when we tried to discover
+what interfaces were available on your system.
+
+The '''ifconfig''' tool requires you to pass it the interface, the IP address
+and the netmask of the network. Suppose that 192.168.1.12 is your IP address and
+255.255.255.0 your netmask:
+
+{{RootCmd|ifconfig eth0 192.168.1.12 netmask 255.255.255.0 up}}
+
+Next we need to configure the system to pass on requests for the Internet to the
+gateway. With the '''route''' command you can set up the ''default
+gateway'', which is the default location where requests that are for an
+unknown network are passed to. Assuming that 192.168.1.1 is the gateway IP
+address:
+
+{{RootCmd|route add default gw 192.168.1.1}}
+
+We are almost there. You should be able to get on the Internet ... if you knew
+all the IP addresses of all the servers by heart. To be able to use hostnames as
+well, you need to tell the system where the ''name servers'' are: systems
+that can translate hostnames to IP addresses. Your Internet Service Provider
+or network administrator should be able to tell you what the IP addresses for
+the name servers are.
+
+You need to place these IP addresses in the {{Path|/etc/resolv.conf}} file
+which sole purpose is to configure anything related to name configuration,
+including where the name servers are located. 
+
+To edit this file, you can use '''nano''', a simple text editor for the command
+line. Other editors that might be available are '''vi''' and '''emacs'''.
+'''nano''' however is certainly available, so we will use '''nano''' as an
+example. Assuming that the name servers are 123.45.67.89 and 123.45.67.90:
+
+{{RootCmd|nano /etc/resolv.conf|output=<pre>
+## (Change the content of the file to contain the name servers:)
+nameserver 123.45.67.89
+nameserver 123.45.67.90
+</pre>
+}}
+
+Now that's done, you should test your network connectivity.
+
+=== Testing the network ===
+
+With the '''ping''' tool you can send small requests to servers around the
+Internet (but also on your network) and ask them to reply back. This makes
+'''ping''' a perfect tool to check if a system is reachable. We'll use this
+tool to verify the network connectivity.
+
+First, we will try to reach a [http://www.google.com Google] web
+server. We'll send it three requests - if they come back, your network (and
+Internet connection) is working great and you can continue with the next
+chapter.
+
+{{RootCmd|ping -c 3 www.google.com}}
+
+If you are not able to ping this system by name, you should try to ping an
+Internet server by its IP address. In the following example, we send three
+requests to 66.249.93.104, which is an IP address for a Google server. However, 
+IP addresses might change so it is easier if you first verify that this IP 
+address is really functional on a different system which has a working Internet
+connection.
+
+{{RootCmd|ping -c 3 66.249.93.104}}
+
+If this works, then the problem is with the name resolving. Verify that your
+{{Path|/etc/resolv.conf}} contains the correct IP addresses for the name
+servers. Those IP addresses should be reachable (you can ping those as well to
+verify). Also verify that {{Path|/etc/nsswitch.conf}} has a line that starts
+with 'hosts' and contains 'dns' as a keyword. This file tells your system where
+to look for various resources, such as name resolving information. The 'dns'
+keyword tells the system that {{Path|/etc/resolv.conf}}'s name servers
+should be used. The 'files' keyword tells the system that
+{{Path|/etc/hosts}} contains a few IP address with hostnames which should be
+used as well.
+
+{{RootCmd|grep -E '^hosts' /etc/nsswitch.conf|output=<pre>
+hosts:       files dns
+</pre>
+}}
+
+Suppose that 66.249.93.104 wasn't reachable as well, you might have an issue 
+with the gateway being malconfigured. Verify if your gateway is set correctly by
+running '''route -n''': the gateway IP address is the one mentioned right
+next to the 0.0.0.0 destination. In the next example, we use the '''awk''' tool
+to filter the output of the '''route''' command: of the line that starts with
+0.0.0.0 we only show the second 'word' (which, in this case, is the gateway IP
+address):
+
+{{RootCmd|route -n <nowiki>|</nowiki> awk '/^0.0.0.0/ {print $2}'}}
+
+If the gateway IP address seems correct, try to ping it to see if you can reach
+it. If you can, then the gateway itself is either blocking your Internet 
+connections (perhaps a firewall issue) or the system isn't the gateway at all
+but just another host on your network.
+
+If you can't reach the gateway IP address but you are confident that the IP
+address is correct and doesn't have a firewall that is dropping all your
+requests (including the ping requests), then your interface is malfunctioning.
+Make sure the network cable is plugged in and the cable is meant for the
+connection type you are using (the straight versus crossed UTP cable debacle).
