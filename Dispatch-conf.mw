@@ -1,0 +1,60 @@
+The '''dispatch-conf''' utility is used on Gentoo to manage configuration file updates. It allows the user to review (and accept) changes on the files and integrates with '''rcs''' to allow for version-controlled configuration file management.
+
+== Feature: RCS Integration ==
+
+When '''dispatch-conf''' is configured to integrate with '''rcs''', it will store all changes in {{Path|/etc/config-archive}}. 
+
+Administrators can then view the differences using the '''rcs''' utilities like '''rlog''' as well as roll-back changes using '''co'''. The '''rcs''' utilities work with file locking itself, so the moment you want to use it in your administrative tasks, understand that:
+* '''dispatch-conf''' only stores the changes made when the package suggests to alter the file. Changes you made afterwards are ''not'' registered yet
+* when you check out a file, '''rcs''' will want to write the file to the file system, so make sure you backup your existing file first, or work with standard output (see later)
+* if you want to check in a file, you first need to take a lock on said file. Also, make sure you opt not to remove the working file
+
+To view the commit history on {{Path|/etc/conf.d/udev}}:
+
+{{Cmd|rlog /etc/config-archive/etc/conf.d/udev,v|output=<pre>
+
+RCS file: /etc/config-archive/etc/conf.d/udev,v
+Working file: udev
+head: 1.1
+branch:
+locks: strict
+access list:
+symbolic names:
+keyword substitution: kv
+total revisions: 2;     selected revisions: 2
+description:
+Archived config file.
+----------------------------
+revision 1.1
+date: 2011/06/15 18:14:59;  author: root;  state: Exp;
+branches:  1.1.1;
+dispatch-conf update.
+----------------------------
+revision 1.1.1.1
+date: 2011/06/15 18:14:59;  author: root;  state: Exp;  lines: +3 -2
+dispatch-conf update.
+=============================================================================</pre>
+}}
+
+If you want to roll back to a particular version, a simple way to do so is to check out a previous version:
+
+{{RootCmd|cp udev udev.orig
+|co -p -r1.1.1.1 /etc/config-archive/etc/conf.d/udev,v > udev|output=<pre>
+etc/config-archive/etc/conf.d/udev,v  -->  standard output
+revision 1.1.1.</pre>
+}}
+
+After making your final changes (you can use the backup {{Path|udev.orig}} to merge any changes made later), check in the file again.
+
+{{RootCmd|co -p -l /etc/config-archive/etc/conf.d/udev,v}}
+
+Edit the file, and finally check in the changes:
+
+{{RootCmd|ci -l /etc/config-archive/etc/conf.d/udev,v|output=<pre>
+/etc/config-archive/etc/conf.d/udev,v  <--  udev
+new revision: 1.2; previous revision: 1.1
+enter log message, terminated with single '.' or end of file:
+>> Merged changes for persistant rules
+>> .
+done</pre>
+}}
