@@ -2,6 +2,7 @@ This article aims to explain the basics of an Arch Tester's work.
 
 == Prerequisites ==
 This article assumes that the reader passed the Arch Tester (AT) quiz; knows the basics of work with the shell, portage and bugzilla; and knows the drill of package stabilization.
+The system used for arch testing should be considered stable, this does not mean that tree must be ''stable'' though.
 
 Recommended tools are:
 
@@ -15,9 +16,6 @@ Recommended tools are:
 |-
 | ccache || compiler cache || [http://linux.die.net/man/1/ccache ccache's manpage]
 |}
-
-=== a stable enough system ===
-The system used for arch testing should be considered stable, this does not mean that tree must be ''stable'' though.
 
 === make.conf ===
 An AT box should use a mix of reasonably stable global CFLAGS (no -funsafe-optimizations, -funroll-loops etc).
@@ -61,11 +59,11 @@ A similar script that uses portage files can be used to see deps on per-exectuab
 <pre>
 #!/bin/sh
 if [ $# -eq 0 ]; then echo "expects package atom as first argument" >&2; exit; fi
-find /var/db/pkg/ -name NEEDED | grep "$@" | xargs cat
+find /var/db/pkg -regex ".*$(echo "$@" | sed 's@=@@g').*\\/NEEDED" | xargs cat
 </pre>}}
 
 === tatt ===
-tatt is simple tool that creates automated test suite that attempts to emerge package with various use-flag combinations. Packages are emerged multiple times so ccache may be very useful and having FEATURES=test is a bad idea time-wise.
+app-portage/tatt is simple tool that creates automated test suite that attempts to emerge package with various use-flag combinations. Packages are emerged multiple times so ccache may be very useful and having FEATURES=test is a bad idea time-wise.
 
 Example usage (using bug number):
 {{RootCmd |tatt -b 423987 
@@ -103,7 +101,7 @@ For further information about tatt's usage, please read
 === Executables ===
 {{Note|Executables should always be run from a console or by some other means of capturing output (stdout,stderr).}}
 Generally, programs produce one or more executables. An AT should attempt to execute these and check for any problems.
-Naturally, some programs are harder to test than others (sci-chemistry/..). The best way to test packages that you are unfamiliar with, is to extract the homepage from the ebuild and look for "Quick-start" to test basic functionality.
+Naturally, some programs are harder to test than others (sci-chemistry/..). The best way to test packages that you are unfamiliar with, is to extract the homepage from the ebuild and look for "quickstart" to test basic functionality.
 
 Sometimes it may be hard to even find an executable. In that case the above script "rdepscan2" may be useful as it also prints executables installed by package.
 
@@ -112,14 +110,15 @@ Always run tests in a console, and check for any warnings or errors.
 
 === Libraries ===
 
-These are generally rather hard to test, as a new library version may have added ''broken features'' that ATs have no chance to catch by using programs that use the library, as new ''features'' are rarely implemented ahead of time in current stable user-space.
+Libraries are generally hard to test, main thing here is to make sure library compiles fine with various useflags (if present) and that test phase finishes fine.
+New versions often adds unstable or broken new features, but stable (=older) userspace does not generally use these, thus it's very hard to test these.
+It's a good idea to make sure stuff in userspace does not break with updated lib, to see what packages depend on a library that is being tested use equery:
 
-This is ok, we generally only need to make sure that the library does not break the current tree. To do that, we can print all programs that depend on a library that is being tested, and make sure these run fine (re-emerging these is not a bad idea). To do that, use equery:
+These are generally rather hard to test, as a new library version may have added ''broken features'' that ATs have no chance to catch by using programs that use the library, as new ''features'' are rarely implemented ahead of time in current stable user-space.
 {{Cmd |equery depends <library name>}}
-{{Note|
-Such testing may be extremely time-consuming and intellectually demanding, and as such it is not generally required.
-Maintainers should add a note to the stabilization bug if this is required.
-}}
+
+Reemerging dependencies is not a bad idea either, thought this isn't always needed (be extra careful with static-libs).
+{{Note |Maintainers often add 'todo checklist' for ATs in stabilisation bug.}}
 
 == Bug reporting ==
 === Gentoo bugzilla ===
@@ -139,6 +138,10 @@ If anything goes wrong, it's up to the AT to find out what's wrong, and help fix
 This is where you report any failures during compilation, test phase or usage. It's a good idea to read 
 [http://www.chiark.greenend.org.uk/~sgtatham/bugs.html How to report bugs effectively] first though.<br />
 To make things simpler, link reports on both bugzillas. Also don't forget to drop some means of communication, as a developer or maintainer may contact you asking for further tests or logs.
+
+== Not sure? ==
+If you are not sure about anything, feel free to ask an irc (irc.freenode.net) in ''#gentoo-dev channel'' (or sub-channels like ''#gentoo-dev-amd64''...).
+{{Warning| Stuff happens, improperly tested package can cause damage to users or gentoo name (be praised). If you think you can't test package, don't do it, eventually some other AT will test it or determine stability by heuristics (dice roll, goat sacrifice... :))}}
 
 == External resources ==
 
