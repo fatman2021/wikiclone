@@ -53,6 +53,100 @@ GnuPG crypted key file should be piped to cryptsetup with something like `gpg -q
 When done, creating logical volume if using LVM or adding the crypted cyphertext to a vdev can be done then.
 
 == Generating an initramfs ==
+
+After encrypting system or disk(s), one will need an intramfs so that rootfs can be mounted in there and the pass the control to real init. There are a few generic initramfs builder that can be used to accomplish the task such as dracut, mkinitcpio (there's an ebuild ad thread in the forums) [https://github.com/tokiclover/bar-overlay sys-boot/mkinitramfs-ll] or even sys-kernel/genkernel[cryptsetup] which has support.
+
+Now, with a complicated setup one could have to build his/her own to satisfy specific requirements. This where modular or advanced initramfs package shine such as [https://github.com/tokiclover/mkinitrmfs-ll mkinitramfs-ll] dracut or mkinitcpio.
+
+The following is a simple script that will build an initramfs with LUKS support for the running kernel or for the kernel version passed as argument 1.
+
+{{File|mkinitramfs.bash||<pre>
+#!/bin/bash
+kv=${1:-$(uname -r)}
+[[ -n "$(uname -m | grep 64)" ]] && arc=64 || arc=32
+pushd
+mkdir -p initramfs-$kv && pushd initramfs-$kv
+mkdir -p {,s}bin lib$arc dev proc sys newroot mnt
+[[ "$arc" = "64" ]] && mkdir lib32
+ln -s lib$arc lib
+mknod -m 600 dev/console c 5 1
+mknod -m 666 dev/urandom c 1 9
+mknod -m 666 dev/random  c 1 8
+mknod -m 640 dev/mem     c 1 1
+mknod -m 666 dev/null    c 1 3
+mknod -m 666 dev/tty     c 5 0
+mknod -m 666 dev/zero    c 1 5
+mknod -m 640 dev/tty1    c 4 1
+[[ $(echo "$kv" | cut -d'.' -f1 ) -eq 3 ]] &&
+    [[ $(echo "$kv" | cut -d'.' -f2) -ge 1 ]] &&
+    mknod -m 600 dev/loop-control c 10 237
+cp $(which bb) bin/busybox || exit 1
+cp ../init . && chmod 755 init || exit 1
+for app in $(bin/busybox --list-full); do
+    ln -sf /bin/busybox $app
+done
+# this is handy for password
+keymap="${2:-$(grep -E '^keymap' /etc/conf.d/keymaps|cut -d'"' -f2)}"
+loadkeys -b -u $keymap > usr/share/keymaps/${keymap}-$(uname -m).bin
+cp $(which cryptsetup) sbin/
+mount /boot &>/dev/null
+find . -print0 | cpio --null -ov --format=newc | xz -9 --check=crc32 > /boot/initramfs-$kv.cpio.xz
+popd
+unset -v arc kv keymap</pre>}}
+
+And the following is a simple init script which will mount rootfs in initramfs environment. The following script and the previous are adapted from mkinitramfs-ll.
+
+{{File|init||<pre>
+#!/bin/sh
+init=/sbin/init # real init to execute after switching to real root
+rmap=root       # root mapping for dmcrypt
+sh=/bin/sh
+
+rescueshell() {
+	export PS1='rsh:$(tty | cut -c6-):$PWD # '
+	if ack setsid; then setsid $sh -i 0<$console 1>$console 2>&1
+	else $sh -i 0<$console 1>$console 2>&1; fi
+}
+
+die() {
+	echo -ne "Dropping into a rescueshell..."
+	echo -ne "$@"
+        rescueshell || exec $sh -i
+}
+
+export PATH=/bin:/sbin
+unmask 0077
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+if grep devtmpfs /proc/filesystems &>/dev/null; then
+    mount -t devtmpfs devtmpfs /dev
+else mount -t tmpfs tmpfs /dev; fi
+mdev -s
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+
+[ -h /dev/fd     ] || ln -fs /proc/self/fd   /dev/fd
+[ -n /dev/stderr ] || ln -fs /proc/self/fd/2 /dev/stderr
+[ -n /dev/stdin  ] || ln -fs /proc/self/fd/0 /dev/stdin
+[ -n /dev/stdout ] || ln -fs /proc/self/fd/1 /dev/stdout
+:   ${console:=/dev/tty1}
+exec 0<$console 1>$console 2>&1
+
+for arg in $(cat /proc/cmdline); do
+   case $arg in
+      rescue*)  rescue=1;;
+      single)   level=2;;
+      *init=*)  export init=${arg#*=};;
+      *root*) export $arg;;
+   esac
+done
+
+# doo your stuff here
+
+exec switch_root /newroot ${init:-/sbin/init} $level
+</pre>}}
+
+I am not going to finish the init script because it will just be a more simplified version of mkintramfs-ll/init with lesser flexibility.
+
 == References ==
 
 * [http://en.gentoo-wiki.com/wiki/DM-Crypt_with_LUKS DM-Crypt with LUKS community wiki article]
