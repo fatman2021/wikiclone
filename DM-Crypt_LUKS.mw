@@ -110,6 +110,25 @@ die() {
         rescueshell || exec $sh -i
 }
 
+kmap() {
+    local _font=$(echo "$kmap" | cut -d':' -f2)
+    local _kmap=$(echo "$kmap" | cut -d':' -f1)
+    if [ -n "$_kmap" ]; then
+        for _dir in /usr/share/keymaps /etc /; do
+            if [ -f "$_dir/$_kmap" ]; then
+                loadkmap < "$_dir/$_kmap" && break
+            fi
+        done
+    fi
+    if [ -n "$_font" ]; then
+        for _dir in /usr/share/consolefonts /etc /; do
+            if [ -f "$_dir/$_font" ]; then
+                loadfont < "$_dir/$_font" && break
+            fi
+        done
+    fi
+}
+
 export PATH=/bin:/sbin
 unmask 0077
 mount -t proc proc /proc
@@ -132,10 +151,11 @@ for arg in $(cat /proc/cmdline); do
       rescue*)  rescue=1;;
       single)   level=2;;
       *init=*)  export init=${arg#*=};;
-      *root*) export $arg;;
+      *root*|kmap*) export $arg;;
    esac
 done
 
+[ -n "$kmap" ] && kmap
 # do your stuff here
 
 exec switch_root /newroot ${init:-/sbin/init} $level
