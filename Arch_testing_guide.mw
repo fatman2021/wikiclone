@@ -35,11 +35,47 @@ Other useful flags are ''GFLAGS="-g3 -ggdb"'' and ''USE="debug"''. These are, ho
 == Build testing ==
 
 === ebuild checking and repoman ===
-Repoman is the tool that checks ebuilds for common mistakes (hey, maintainers are people too). Rule of thumb dictates that only repoman-checked ebuilds should go into the tree, but this isn't always true, especially if the ebuilds are big and complicated. As an AT, you should be able to use this tool to check ebuilds and then go over ebuild itself to verify that warnings will cause no problems.
+Repoman checks ebuilds for common mistakes (hey, maintainers are people too). Rule of thumb dictates that only repoman-checked ebuilds should go into the tree, but this isn't always true, especially if the ebuilds are big and complicated. As an AT, you should be able to use this tool to check ebuilds and then go over ebuild itself to verify that warnings will cause no problems.
 
 <todo> Another thing to do is to remove unneeded die checks in EAPI-4 functions <insert more info here with relevant links>. 
 
-<todo> Insert some info on B/RDEP validating within ebuild.
+=== tatt ===
+app-portage/tatt is simple tool that creates automated test suite that attempts to emerge package with various use-flag combinations. Packages are emerged multiple times so ccache may be very useful and having FEATURES=test is a bad idea time-wise.
+
+Example usage (using bug number):
+{{RootCmd |tatt -b 423987 
+|output=<pre>
+Bugnumber:  423987
+Stabilization bug detected.
+Jobname: gimps
+Found the following package atom : =sci-mathematics/gimps-27.7-r1
+Unmasked =sci-mathematics/gimps-27.7-r1 in /etc/portage/package.keywords/archtest
+No stable rdeps for gimps
+Success Report script written to gimps-success.sh
+Commit script written to gimps-commit.sh
+</pre>}}
+
+This command will generate 4 scripts in your current directory:
+{{Cmd |ls
+|output= sylpheed-cleanup.sh  sylpheed-commit.sh  sylpheed-rdeps.sh  sylpheed-success.sh  sylpheed-useflags.sh
+}}
+
+{{RootCmd | sh sylpheed-useflags.sh}}
+''-useflags.sh'' will batch emerge package with different USE flags to make sure everything is ok.
+Test results are written to {{Path|./<pkg>.report}}.
+
+{{RootCmd | sh sylpheed-rdeps.sh }}
+''-rdeps.sh'' will reemerge rdeps.
+
+{{RootCmd | sh sylpheed-cleanup.sh}}
+''-cleanup.sh'' will remove keyword from {{Path|/etc/portage/package.keywords/archtest}} and created scripts.
+
+{{Note
+|tatt assumes that package.keywords is a directory, if you have this as a file instead, it will not work. The fix is intuitive: backup your package.keywords, create a directory with this name instead, and place your backup in it.
+}}
+
+For further information about tatt's usage, please read 
+[https://github.com/tom111/tatt/blob/master/manual.org tatt's manpage].
 
 === rdep checking ===
 Ago 
@@ -61,41 +97,6 @@ A similar script that uses portage files can be used to see deps on per-exectuab
 if [ $# -eq 0 ]; then echo "expects package atom as first argument" >&2; exit; fi
 find /var/db/pkg -regex ".*$(echo "$@" | sed 's@=@@g').*\\/NEEDED" | xargs cat
 </pre>}}
-
-=== tatt ===
-app-portage/tatt is simple tool that creates automated test suite that attempts to emerge package with various use-flag combinations. Packages are emerged multiple times so ccache may be very useful and having FEATURES=test is a bad idea time-wise.
-
-Example usage (using bug number):
-{{RootCmd |tatt -b 423987 
-|output=<pre>
-Bugnumber:  423987
-Stabilization bug detected.
-Jobname: gimps
-Found the following package atom : =sci-mathematics/gimps-27.7-r1
-Unmasked =sci-mathematics/gimps-27.7-r1 in /etc/portage/package.keywords/archtest
-No stable rdeps for gimps
-Success Report script written to gimps-success.sh
-Commit script written to gimps-commit.sh
-</pre>}}
-
-This command will generate 4 scripts in your current directory:
-{{Cmd |ls
-|output= gimps-cleanup.sh  gimps-commit.sh  gimps-success.sh  gimps-useflags.sh
-}}
-
-{{RootCmd | sh gimps-useflags.sh}}
-''-useflags.sh'' will batch emerge package with different USE flags to make sure everything is ok.
-Test results are written to {{Path|./<pkg>.report}}.
-
-{{RootCmd | sh gimps-cleanup.sh}}
-''-cleanup.sh'' will remove keyword from {{Path|/etc/portage/package.keywords/archtest}} and created scripts.
-
-{{Note
-|tatt assumes that package.keywords is a directory, if you have this as a file instead, it will not work. The fix is intuitive: backup your package.keywords, create a directory with this name instead, and place your backup in it.
-}}
-
-For further information about tatt's usage, please read 
-[https://github.com/tom111/tatt/blob/master/manual.org tatt's manpage].
 
 == Run testing ==
 === Executables ===
