@@ -154,3 +154,43 @@ The ptest script will just look if VGASwitcheroo is available and hich driver is
 {{File|/etc/hprofile/profiles/vga/default||intel}}
 
 == Switching disk profile ==
+
+A disk profile is even forward because there fewer issue to keep in mind. So this section will be short and straightforward. Additional, one need {{Package|sys-apps/hdparm}}.
+
+{{File|/etc/hprofile/profiles/disk/default||adp}}
+{{File|/etc/hprofile/profiles/disk/post-start||<pre>
+#!/bin/sh
+for dev in $(ls -d /sys/devices/pci*/*/ata*/host*/target*/*/block/sd[a-z] 2>/dev/null); do
+    echo cfq > /sys/block/${dev##*/}/queue/scheduler
+    echo 0 > /sys/block/${dev##*/}/queue/iosched/slice_idle
+    echo 64 > /sys/block/${dev##*/}/queue/iosched/quantum
+    # more opitmizations with ncq
+    echo 1024 > /sys/block/${dev##*/}/queue/nr_requests
+    echo 2 > /sys/block/${dev##*/}/device/queue_depth
+done
+for dev in $(ls -d /sys/devices/pci*/*/usb*/*/*/host*/target*/*/block/sd[a-z] 2>/dev/null)
+do echo noop > /sys/block/$dev/queue/scheduler; done</pre>}}
+{{File|/etc/hprofile/profiles/disk/ptest||<pre>
+#!/bin/sh
+[ -e /etc/runlevels/battery ] &&
+    [ "$(rc-status --nocolor|sed -ne 's/^Runlevel://p')" = "battery" ] &&
+    echo "bat" || echo "adp"
+exit</pre>}}
+{{File|/etc/hprofil/profiles/disk/profiles||<pre>
+bat
+adp
+fast
+quiet</pre>}}
+{{File|/etc/hprofile/profiles/disk/stop||<pre>#!/bin/sh
+# put extra action here if need be</pre>}}
+
+{{File|/etc/hprofile/profiles/disk/scripts/adp.start||<pre>#!/bin/sh
+hdparm -q -S120 -B230 -M254 /dev/sd[a-z]</pre>}}
+{{File|/etc/hprofile/profiles/disk/scripts/bat.start||<pre>#!/bin/sh
+hdparm -q -S120 -B210 -M230 /dev/sd[a-z]</pre>}}
+{{File|/etc/hprofile/profiles/disk/scripts/fast.start||<pre>#!/bin/sh
+hdparm -q -S180 -B254 -M254 /dev/sd[a-z]</pre>}}
+{{File|/etc/hprofile/profiles/disk/scripts/quiet.start||<pre>#!/bin/sh
+hdparm -q -S120 -B200 -M200 /dev/sd[a-z]</pre>}}
+
+[[category:Desktop]]
