@@ -655,6 +655,39 @@ Xreset script.
 su -l -c 'mpd --kill; pulseaudio -k' $USER
 </pre>}}
 
+=== Single sound card per seat===
+For the ones who don't like PulseAudio and want to assign sound card per seat, here is possible way.
+first, make sure that aplay is installed or your system, second take note that the output of aplay -l will decide which card to attach to which seat so make sure you attach the cards in the right order.
+
+all users should have at least the following file in their home folder:
+
+{{File|~/.asoundrc|asoundrc basic config|<pre>
+pcm.!default {
+        type hw
+        card 0
+}
+
+ctl.!default {
+        type hw           
+        card 0
+}
+</pre>}}
+this file defines which sound card to use.
+
+now under /etc/profile.d, put the next file:
+{{File|/etc/profile.d/define_sound_card.sh|logon seat sound card def script|<pre>
+#!/bin/bash
+SOUND_CARD_ID=0
+
+if [ $(who | grep ${USER} | awk '{print $2" "$5}' | grep -v ${DISPLAY} | wc -l) -eq 0 ]; then
+        SOUND_CARD_ID=$(aplay -l | grep "device 0:" | sed -n $(expr $(echo ${DISPLAY} | sed 's/://g') + 1)p | awk '{print $2}' | sed 's/://g')
+        sed -i "s/card [0-9]*/card ${SOUND_CARD_ID}/g" ~/.asoundrc
+        export SOUND_CARD_ID=${SOUND_CARD_ID}
+fi
+</pre>}}
+
+now when ever a user logs in to a seat, his local .asoundrc will be updated to the seat's soundcard.
+
 == Bypassing policykit ==
 As of early 2012, consolekit fails to serve its purpose of identifying which users are physically preset. It can only track one local user, which is the one using the first seat. The other users are identified as "inactive", which causes policykit to deny them access to local resources. Put simply, only the first seat can perform actions such as mounting a USB memory device through udisks (which is the interface desktop environments use).
 
