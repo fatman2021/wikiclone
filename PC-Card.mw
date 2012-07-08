@@ -1,0 +1,56 @@
+{{InfoBox stack
+  |{{InfoBox wikipedia|Personal Computer Memory Card International Association|header=true}}
+}}
+This article describes the setup of ''PC-Card'' (also known as PCMCIA) controllers.
+
+== Installation ==
+
+=== Kernel ===
+You need to activate the following kernel options:
+{{Kernel||
+Bus options (PCI etc.)  --->
+    PCCard (PCMCIA/CardBus) support  --->
+        <*>   16-bit PCMCIA support
+        [*]     Load CIS updates from userspace (EXPERIMENTAL)
+        [*]   32-bit CardBus support
+{{User:Astaecker/Kernel table|level=3
+  |{{User:Astaecker/Kernel table row|CardBus yenta-compatible bridge support|yenta-socket|}}
+}}
+{{Clear}}
+}}
+
+=== Software ===
+Portage knows the global USE flag ''pcmcia'' for enabling support for PC-Cards in other packages. Enabling this USE flag will pull in {{Package|sys-apps/pcmciautils}} automatically:
+{{File|/etc/make.conf||
+USE{{=}}"... pcmcia ..."
+}}
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
+
+You want to install pcmciautils yourself, if it isn't already pulled in:
+{{USEflag|package=sys-apps/pcmciautils
+|debug
+|static
+|staticsocket
+}}
+{{Emerge|pcmciautils}}
+
+==== Card Information Structure ====
+A ''PC-Card'' has a firmware called '''Card Information Structure'''. Some CISs are flawed, but you can patch them at boot time. For them install {{Package|sys-apps/pcmcia-cs-cis}}:
+{{Emerge|pcmcia-cs-cis}}
+
+==== Resource database ====
+Some old 16-bit ''PCMCIA'' cards works only, if a resource database is set up. This affects only x86 and x86_64 computers and also not all. To find out, if you need the database, have a look at your controllers PCI-ID. You can use  [[Hardware detection#lspci|lspci]] for this task, e.g.:
+{{RootCmd|lspci {{!}} egrep --color -i "pcmcia{{!}}cardbus"
+|output= '''03''':01.0 CardBus bridge: O2 Micro, Inc. Cardbus bridge (rev 21)}}
+If the first two numbers are not zeros (here in bold: 03), then you need no resource database. If they are zeros, you need to copy the database to  <tt>/etc/pcmcia/config.opts</tt>:
+{{RootCmd|cd /usr/portage/sys-apps/pcmciautils
+|ebuid pcmciautils-017.ebuild unpack
+|cp -p /var/tmp/portage/sys-apps/pcmciautils-017/work/pcmciautils-017/config/config.opts /etc/pcmcia/
+}}
+Edit it to your needs.
+
+== Usage ==
+You can use '''pccardctl''' (part of pcmciautils) to show informations about the PC-Card controller and the inserted cards and to load and unload cards.
+
+[[Category:Interfaces]]
