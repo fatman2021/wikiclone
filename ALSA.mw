@@ -1,4 +1,79 @@
-== ~/.asoundrc ==
+{{InfoBox stack
+  |{{InfoBox wikipedia|Advanced Linux Sound Architecture|header=true}}
+  |{{InfoBox gdoc|alsa-guide}}
+}}
+This article describes the setup of a sound card with ''ALSA'' ('''A'''dvanced '''L'''inux '''S'''ound '''A'''rchitecture).
+
+== Installation ==
+
+=== Hardware detection ===
+To choose the right driver, first detect the used audio controller. You can use [[Hardware detection#lspci|lspci]] for this task:
+{{RootCmd|lspci {{!}} grep --color -i audio}}
+With the controller name you can find the needed driver in the [http://www.alsa-project.org/main/index.php/Matrix:Main ALSA SoundCard Matrix].
+
+=== Kernel ===
+You need to activate the following kernel options:
+{{Kernel||
+Device Drivers --->
+    Sound --->
+        <*> Sound card Support
+            <*> Advanced Linux Sound Architecture --->
+                [*]   PCI sound devices  --->
+
+                    ''Select the driver for your audio controller:''
+{{User:Astaecker/Kernel table|level=5
+  |{{User:Astaecker/Kernel table row|Intel HD Audio  --->|snd-hda-intel|Intel HD Audio controller}}
+  |{{User:Astaecker/Kernel table row|Build Realtek HD-audio codec support|sub|}}
+  |{{User:Astaecker/Kernel table row|...|sub| }}
+  |{{User:Astaecker/Kernel table row|Build Silicon Labs 3054 HD-modem codec support|sub| }}
+  |{{User:Astaecker/Kernel table row|Enable generic HD-audio codec parser|sub|Enable all codecs and let the parser choose the right one.}}
+}}
+{{Clear}}
+}}
+
+=== Software ===
+Portage knows the global USE flag ''alsa'' for enabling support for ALSA in other packages. Enabling this USE flag will pull in {{Package|media-libs/alsa-lib}} automatically (default in x86 and amd64 desktop profiles):
+{{File|/etc/make.conf||
+USE{{=}}"... alsa ..."
+}}
+The USE flags of lm_sensors are:
+{{USEflag|package=media-libs/alsa-lib
+|alisp
+|debug
+|doc
+|python+yes
+}}
+
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
+
+You also want to install {{Package|media-sound/alsa-utils}}, if it isn't already pulled in:
+{{Emerge|alsa-utils}}
+
+== Configuration ==
+
+=== Permissions ===
+If you have the USE flag '''''acl''''' enabled globally and are using ConsoleKit (i.e you're using a Desktop profile) permissions to sound cards will be handled automatically. You can check the permissions using '''getfacl''':
+{{Cmd|getfacl /dev/snd/controlC0 {{!}} grep larry|output=
+ user:'''larry''':rw-
+}}
+A broader solution is to add the user you want to be able to access the sound card to the ''audio'' group:
+{{RootCmd|gpasswd -a larry audio}}
+
+=== Service ===
+You can now start ''ALSA'':
+{{RootCmd|/etc/init.d/alsasound start}}
+To start ''ALSA'' at boot time, add it your boot runlevel:
+{{RootCmd|rc-update add alsasound boot}}
+
+=== Mixer ===
+If you can't hear nothing, maybe some channels are muted. Unmuted the channels with your Desktop Environment's mixer or  with ''alsamixer'':
+{{Cmd|alsamixer}}
+
+== Advanced Configuration ==
+* [[Power Management/Soundcards|Power Management]]
+
+=== ~/.asoundrc ===
 This file can be optionally used so that on a per-user basis, ALSA defaults can be overridden. You might have special hardware, or card 0 and device 0 (the defaults) are not going to work for you.
 
 One of the simplest changes is card and device. This is the case for me with an HDMI coming from an Nvidia card connected to an onboard Realtek ALC88* audio device.
@@ -12,7 +87,12 @@ You can find out what devices and cards you have with:
 
 {{GenericCmd|aplay -L}}
 
-== Sound mixing inconsistent ==
+=== Tips ===
+Try one of the many configuration options in [http://dl.dropbox.com/u/18371907/asoundrc PaulBredbury's asoundrc file].
+
+== Troubleshooting ==
+
+=== Sound mixing inconsistent ===
 Sometimes one app essentially takes over all sound devices. This might even be for performance reasons.
 
 Force the use of dmix instead of direct audio output (which is what most things use by default, such as Flash (which really means your browser) and Wine).
@@ -63,7 +143,4 @@ pcm.!default {
 
 Use of ~/.asoundrc is immediate and as long as you are not forcing the use of specific devices in any applications, they either will require a restart or will begin working immediately. One of the best tests is to run Chrome, go to YouTube, open a terminal, run mplayer with an audio or video file and see that you do not get an error about audio (such an error might be 'Device or resource busy').
 
-== Tips ==
-Try one of the many configuration options in [http://dl.dropbox.com/u/18371907/asoundrc PaulBredbury's asoundrc file].
-
-[[Category:Core system]]
+[[Category:Sound devices]]
