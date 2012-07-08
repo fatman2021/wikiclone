@@ -1,93 +1,71 @@
-Bluetooth is an international standard for short-distance wireless communication between devices. It is often used for input devices (mice and keyboards), phones and wireless headsets, but many more other uses are possible.
+{{InfoBox stack
+  |{{InfoBox wikipedia|Bluetooth|header=true}}
+}}
+This article describes the setup of a bluetooth controller.
 
-Bluetooth support for Linux is provided through the Linux kernel and the [http://bluez.org BlueZ] project.
+== Installing ==
 
-== Installing BlueZ ==
+=== Kernel ===
+You need [[USB]] and/or [[PC-Card]] support. Also you need to activate the following kernel options:
+{{Kernel||
+[*] Networking support  --->
+    <*> Bluetooth subsystem support  --->
+{{User:Astaecker/Kernel table|level=3
+  |{{User:Astaecker/Kernel table row|RFCOMM protocol support|rfcomm|[[Wikipedia:RFCOMM|RFCOMM]] is a requirement of the [[Wikipedia:OBEX|OBEX]]-file transfer, dialup connections and more bluetooth applications.}}
+  |{{User:Astaecker/Kernel table row|RFCOMM TTY support|sub|Enables [[terminal]] connections over RFCOMM.}}
+  |{{User:Astaecker/Kernel table row|BNEP protocol support|bnep|Enables network support, e.g. for the [[Wikipedia:Personal Area Network|PAN]] profile.}}
+  |{{User:Astaecker/Kernel table row|Multicast filter support|sub|Enables multicast filter support.}}
+  |{{User:Astaecker/Kernel table row|Protocol filter support|sub|Enables protocoll filter support.}}
+  |{{User:Astaecker/Kernel table row|HIDP protocol support|hidp|Enables input device support. See the [[hidp]] article.}}
+}}
+{{Clear}}
 
-When using a Desktop environment such as [[KDE]], [[GNOME]] or [[Xfce]], the Bluetooth application will automatically install BlueZ as a dependency. 
 
-However, if this is not the case, or you want to use bluetooth devices without any specific application, install the {{Package|net-wireless/bluez}} package:
-
-{{Emerge|net-wireless/bluez}}
-
-=== Kernel-level requirements ===
-
-When you want to pair bluetooth devices with your Linux workstation, you will need to enable the proper kernel configuration settings.
-
-{{Kernel||<pre>
-Networking --->
-
-<*> Bluetooth subsystem support  --->
-
---- Bluetooth subsystem support
-<M>   L2CAP protocol support
-<M>   SCO links support
-<M>   RFCOMM protocol support
-[*]     RFCOMM TTY support
-<M>   BNEP protocol support
-[*]     Multicast filter support
-[*]     Protocol filter support
-<M>   HIDP protocol support
-
-Bluetooth device drivers  --->
-<M> HCI USB driver
-[*]   SCO (voice) support
-<M> HCI UART driver
-[*]   UART (H4) protocol support
-[*]   BCSP protocol support
-[*]   Transmit CRC with every BCSP packet
-<M> HCI BCM203x USB driver
-<M> HCI BPA10x USB driver
-<M> HCI BlueFRITZ! USB driver
-(The four drivers below are for PCMCIA Bluetooth devices and will only
-show up if you have also selected PCMCIA support in your kernel.)
-<M> HCI DTL1 (PC Card) driver
-<M> HCI BT3C (PC Card) driver
-<M> HCI BlueCard (PC Card) driver
-<M> HCI UART (PC Card) device driver
-(The driver below is intended for HCI Emulation software.)
-<M> HCI VHCI (Virtual HCI device) driver
-
-(Move back three levels to Device Drives and then check if USB is
-enabled. This is required if you use a Bluetooth dongle, which are mostly USB
-based.)
-USB support  --->
-
-<*> Support for Host-side USB
---- USB Host Controller Drivers
-<M> EHCI HCD (USB 2.0) support
-[ ]   Full speed ISO transactions (EXPERIMENTAL)
-[ ]   Root Hub Transaction Translators (EXPERIMENTAL)
-<*> OHCI HCD support
-<*> UHCI HCD (most Intel and VIA) support
-< > SL811HS HCD support
-</pre>}}
-
-Do not forget to add in to automatically load the ''bluetooth'' kernel module at boot-up:
-
-{{File|/etc/conf.d/modules|Add in autoloading of the bluetooth module|<pre>
-modules="${modules} bluetooth"
-</pre>}}
-
-=== System configuration ===
-
-You might want to add the ''bluetooth'' init script to the default runlevel so that the necessary bluetooth services are started automatically. However, recently, bluetooth services are started by udev the moment it detects a bluetooth-capable device, so this option might be redundant now.
-
-{{RootCmd
-|rc-update add bluetooth default
-|/etc/init.d/bluetooth start
+            Bluetooth device drivers  --->
+{{User:Astaecker/Kernel table|level=4
+  |{{User:Astaecker/Kernel table row|HCI USB driver|btusb|Generic bluetooth USB controller driver.}}
+}}
+{{Clear}}
 }}
 
-=== User authorizations ===
+=== Software ===
+Portage knows the global USE flag ''bluetooth'' for enabling support for Bluetooth in other packages. Enabling this USE flag will pull in {{Package|net-wireless/bluez}} automatically:
+{{File|/etc/make.conf||
+USE{{=}}"... bluetooth ..."
+}}
+The USE flags of bluez are:
+{{USEflag|package=net-wireless/bluez
+|alsa+yes
+|consolekit+yes
+|cups+yes
+|debug
+|gstreamer
+|pcmcia
+|readline+yes
+|test-programs
+|usb+yes
+}}
 
-Most probably you would like to access bluetooth devices (through the bluetooth services) from a regular user, so add the user(s) to the ''plugdev'' group:
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
 
-{{RootCmd|usermod -a -G plugdev your-username}}
+== Configuration ==
 
-To apply these changed group membership, the user needs to log out and logged in again.
+=== Service ===
+You can now start bluetooth:
+{{RootCmd|/etc/init.d/bluetooth start}}
+To start bluetooth at boot time, add it your default runlevel:
+{{RootCmd|rc-update add bluetooth}}
 
-== Device Attach/Pairing ==
+=== Permissions ===
+If you have the USE flag '''''acl''''' enabled globally and are using ConsoleKit (i.e you're using a Desktop profile) permissions to bluetooth devices will be handled automatically.
 
+A broader solution is to add the user you want to be able to access bluetooth devices to the ''plugdev'' group:
+{{RootCmd|gpasswd -a larry plugdev}}
+
+== Usage ==
+
+=== Device Attach/Pairing ===
 Before a device can be used, it must be attached (''paired'' in Bluetooth-lingo). This is done by entering a PIN (or other code) on both devices.
 
 {{Note|Some simple devices like headsets do not allow entering an arbitrary PIN, they always use the same one (usually 0000 or 9999). Check the manual of your device which is to be used.}}
@@ -95,7 +73,6 @@ Before a device can be used, it must be attached (''paired'' in Bluetooth-lingo)
 In order to pair, you must first have the interaction agent active. Most desktop environments have bluetooth integration so will automatically support the interaction agent. For example, KDE has {{Package|net-wireless/bluedevil}}. 
 
 === Using the simple-agent ===
-
 To help debugging bluetooth interaction (without the overhead of desktop environment libraries), the bluez package provides the '''simple-agent''' application. It is installed if the ''test-programs'' USE flag is set.
 
 {{RootCmd
@@ -132,21 +109,13 @@ Enter a PIN and press {{Key|Enter}}, then enter the same PIN at the device.
 You are now ready to proceed.
 
 == Desktop integration ==
-
-=== KDE ===
-
-{{Emerge|net-wireless/bluedevil}}
-
-=== Gnome/XFCE/GTK+ ===
-
-{{Emerge|net-wireless/blueman}}
+* {{Package|net-wireless/bluedevil}} for [[KDE]]
+* {{Package|net-wireless/blueman}} for [[GNOME]], [[Xfce]], GTK+
 
 == Compatible Devices ==
-
 A few guides and resources have been written to help with enabling particular bluetooth devices:
+* [[hidp|Input devices]]
+* [[Bluetooth Headset|Headset]]
+* [[Bluetooth Modem|Modem]]
 
-* [[Bluetooth_Headset|Headset]]
-* [[Bluetooth_Modem|Modem]]
-* [[Sony_DualShock3_SixAxis|Joystick:Sony DualShock3]]
-
-[[Category:Hardware]]
+[[Category:Interfaces]]
