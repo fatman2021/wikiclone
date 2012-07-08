@@ -1,15 +1,25 @@
 <languages />
+<span class="mw-translate-fuzzy">
 Производители оборудования часто предоставляют обновления для своих BIOS и встроенного ПО. Чтобы обновить BIOS (часто упоминается как перепрошивка) иногда требуется поработать. {{Warning|Если оборудование работает, зачастую нет необходимости обновления BIOS. Если что-то пойдет не так, это может привести к неисправимому повреждению вашего BIOSа, и вы можете потерять гарантию}}
+</span>
 
+<span class="mw-translate-fuzzy">
 == Получение BIOS ==
 Вначале нужно найти название производителя и модели материнской платы. Проверьте руководство пользователя, которое поставляются вместе с компьютером, как правило, там вы найдете все что вам нужно.
+</span>
 
+<span class="mw-translate-fuzzy">
 Вы также можете использовать {{package|sys-apps/dmidecode}} для получения информации.
+</span>
 
+<span class="mw-translate-fuzzy">
 {{RootCmd|dmidecode -t bios}}
+</span>
 
+<span class="mw-translate-fuzzy">
 Наконец, если у вас есть непосредственный доступ к компьютеру, вы можете найти необходимую информацию на материнской плате.
 {{Warning|вы можете потерять гарантию, после этого}}
+</span>
 
 После поиска на сайте производителя вы можете получить обновления BIOS, в виде zip, exe или iso файлов. 
 
@@ -26,32 +36,64 @@
 == BIOS Вариант ==
 Многие BIOS имеют возможность прочитать новый образ (в двоичном формате) с внешнего флэш накопителя или дискеты. Все, что вам нужно сделать, это пойти в настройках BIOS и поискать эту возможность в меню .
 
+<span class="mw-translate-fuzzy">
 == Загрузочный-CD ==
 Производители зачастую предлагает образ загрузочного CD-ROM. Файл должен иметь расширение .iso, чтобы записать образ на пустой CD-R:
 {{RootCmd|Cdrecord BOOT-cd.iso}}
 {{Note|Cdrecord является частью пакета {{Package|app-cdr/cdrtools}} }}
 Теперь вы можете выбрать в BIOS загрузку с компакт-диска и выполнить инструкции с веб-сайта производителя.
+</span>
 
-== FreeDOS / SystemRescueCD ==
-SystemRescueCD поставляется с версией FreeDOS, мы можем заменить исходный образ и создать загрузочный флэш-накопитель, который содержит необходимые программы для прошивки нашего BIOS'a.
+== FreeDOS Environment ==
+You can use FreeDOS to run the DOS-based BIOS utility from your manufacturer.  You must first create a custom FreeDOS image which includes the necessary BIOS tools, and then boot this image via one of the methods shown here.
 
-=== Установка ===
-Вначале нам нужно скачать и установить необходимые программы и активировать кольцевое устройство (loopback device) в ядре:
+Download FreeDOS and tools:
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - download the fdboot.img file
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - download the file sys-freedos-linux.zip
+* The DOS-Flash program and new BIOS from your manufacturers website
+
+=== Create Custom FreeDOS Image ===
+First we need to install and download the required software and enable the loopback device in our kernel:
 {{Kernel|enable loopback device|<pre>
 Device Drivers  --->
     [*] Block devices  --->
         <M>   Loopback device support</pre>}}
-Если модуль еще не загружен:
+If the module isn't loaded yet:
 {{RootCmd|modprobe loop}}
 
-Установите необходимые программы : {{Package|dev-lang/nasm}}, {{Package|app-arch/unzip}} и {{Package|sys-fs/dosfstools}}
-{{RootCmd|emerge -av dev-lang/nasm app-arch/unzip sys-fs/dosfstools}}
-Скачайте SystemRescueCD и FreeDOS:
-* [http://www.sysresccd.org/Download SystemRescueCD] - скачать нормальный ISO образ
-* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - скачать fdboot.img файл
-* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - скачать sys-freedos-linux.zip файл
-* И DOS программу для перепрошивки BIOS'a с сайта производителя
+Install required software:
+{{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
 
+Create an image file of ~20MB using dd (the name needs to be freedos.img if you will be replacing the one on the SystemRescueCD):
+{{RootCmd|<nowiki>dd if=/dev/zero of=freedos.img bs=1024 count=20480</nowiki>}}
+Write a file system to the image:
+{{RootCmd|mkfs.msdos freedos.img}}
+Write the bootsector to the image file:
+{{RootCmd|<nowiki>unzip sys-freedos-linux.zip && ./sys-freedos.pl --disk=freedos.img</nowiki>}}
+Now we need to copy the FreeDOS files to our new image.<br>
+Create the mountpoints:
+{{RootCmd|mkdir -p /mnt/freedos /mnt/freedos_new}}
+Mount the original image:
+{{RootCmd|mount -o loop fdboot.img /mnt/freedos}}
+Mount the new image:
+{{RootCmd|mount -o loop freedos.img /mnt/freedos_new}}
+Copy the FreeDOS system files to our new image:
+{{RootCmd|cp -ar /mnt/freedos/* /mnt/freedos_new/}}
+Now you should also copy your flash program and the new BIOS to the image file:
+{{RootCmd|cp -ar FLASH-PROGRAM BIOS-UPDATE /mnt/freedos_new}}
+Unmount both images:
+{{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
+{{Note|DOS can only display names up to a length of 8 characters, you probably want to rename some of the files}}
+
+<span class="mw-translate-fuzzy">
+== FreeDOS / SystemRescueCD ==
+SystemRescueCD поставляется с версией FreeDOS, мы можем заменить исходный образ и создать загрузочный флэш-накопитель, который содержит необходимые программы для прошивки нашего BIOS'a.
+</span>
+
+==== Download SystemRescueCD and prepare LiveUSB ====
+* [http://www.sysresccd.org/Download SystemRescueCD] - download the normal ISO image
+
+<span class="mw-translate-fuzzy">
 === Создание загрузочного флэш накопителя ===
 Мы будет использовать предлагаемый скрипт usb_isnt.sh для создания загрузочной флэшки с SystemRescueCD. 
 {{Warning|Все данные на флэш накопителе после этой операции будут удалены}}
@@ -88,7 +130,9 @@ Device Drivers  --->
 Отмонтировать оба образа:
 {{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
 {{Note|DOS может отображать имена файлов до 8 символов, поэтому переименуйте файлы с длинными именами}}
+</span>
 
+<span class="mw-translate-fuzzy">
 === Замена образа FreeDOS ===
 Мы собираемся заменить исходный образ FreeDOS на флэш накопителе с SystemRescueCD
 смонтируйте SystemRescueCD флэш накопитель (/ dev/sdX1 - имя должно соответствовать имени флэш накопителя в вашей системе):
@@ -97,7 +141,23 @@ Device Drivers  --->
 {{RootCmd |ср freedos.img /mnt/SysRescueCD/bootdisk/}}
 Размонтировать SystemRescueCD флэшку:
 {{RootCmd|umount /mnt/SysRescueCD}}
+</span>
 
+=== Booting the FreeDOS image from GRUB directly ===
+If you would like to boot FreeDOS without any external media, you can use the "memdisk" tool from syslinux to allow grub (or another bootloader) to boot your FreeDOS image directly.
+{{Emerge|sys-boot/syslinux}}
+Mount your /boot partition (if needed):
+{{RootCmd|mount /boot}}
+Copy the memdisk binary, and your newly built FreeDOS image to /boot:
+{{RootCmd|cp /usr/share/syslinux/memdisk /boot}}
+{{RootCmd|cp freedos.img /boot}}
+Edit /boot/grub/grub.conf and add an entry for FreeDOS:
+{{File|/boot/grub/grub.conf|Example grub.conf entry|<pre>
+title FreeDOS (BIOS update)
+kernel /boot/memdisk floppy
+initrd /boot/freedos.img</pre>}}
+
+<span class="mw-translate-fuzzy">
 === Обновление BIOS ===
 Перезагрузитесь и выберите загрузку с USB накопителя. В приглашении GRUB введите:
 {{Code||freedos}}
@@ -108,6 +168,7 @@ Device Drivers  --->
 * cd <dir> - Перейдите в каталог, 
 * dir - Список файлов в текущем каталоге 
 * type - отображать содержимое файла
+</span>
 
 == flashrom ==
 Материнская плата вашего компьютера возможно поддерживает перепрошивку с помощью  {{package|sys-apps/flashrom}} напрямую из вашей системы. В таком случае вам потребуется только образ BIOS. Пожалуйста проверьте первый список поддерживаемого оборудования [http://www.flashrom.org/Supported_hardware supported hardware].
@@ -121,4 +182,4 @@ Device Drivers  --->
 == См. также ==
 * [[Bootable DOS USB stick]]
 
-[[Category:Hardware]]
+[[Category:Core system]]
