@@ -1,0 +1,42 @@
+'''This page is still "under construction". This line will be removed when it's ready for use.'''
+
+This page describes how to implement automounting of USB devices on a machine using mdev as the device manager. There are many links on the web describing how to implement automounting on embedded devices, running busybox with mdev. They all seem to assume only one user, namely root. It's more of a challenge to allow regular users to automount and unmount, without compromising overall system security. Unless otherwise specified, all steps below are to be done by root. This example is done on Gentoo linux, but it is hopefully portable to any linux distro.
+
+== Constraints (or "why did he do it this way"?) ==
+# Why use pmount? Because pmount supports mounting FAT-based-filesystems with desired permissions and assigns user root and group plugdev.
+# Why does automount use /media? Because pmount is currently hard-coded to automount in /media. It would require a change to the source code of pmount to use a different directory.
+# Why are scripts launched with "#! /bin/busybox ash" rather than "#! /bin/bash"? If a machine is running mdev as the device manager, it's guaranteed to have busybox present. Although this is currently implemented on Gentoo linux, it is hopefully portable to other linux distros, and embedded systems. There may be lightweight distros that do not have bash loaded.
+# Why is the main automount script under "/lib/mdev" Because that's where mdev already puts some scripts under Gentoo. Keeping mdev-related scripts in the same area makes things easier to keep track of.
+
+== Preliminary Setup ==
+* This page assumes a linux distro using busybox's mdev device manager as described in [[Mdev|the mdev page]].
+* Create the directory "/media"
+* Regular user accounts that need to access FAT-formatted USB keys must be added to group "plugdev".
+* Install the programs "pmount" and "sudo", if they have not been installed yet.
+* In /etc/sudoers.d create a file "001" (if it doesn't exist).  To the file add a line like...
+ <nowiki>USERID  HOSTNAME = (root) NOPASSWD: /bin/umount /media/*</nowiki>
+Replace "USERID" and "HOSTNAME" with the actual regular userid and the actual hostname.  If you have 2 or more users that need to unmount USB devices in /media, add a separate line for each one.
+
+== Scripts for use for unmounting ==
+* create a file "/usr/local/bin/ux" containing the following lines
+ <nowiki>
+#!/bin/busybox ash
+case "${1}" in
+#
+# Guard against user trying to umount directory outside of /media
+   *..*) echo "Naughty Naughty.  Going updir.  Mustn't do that".;;
+   *) umount /media/${1}
+esac</nowiki>
+
+* '''This step will be done as local user''' for each user that needs to unmount USB devices that have been automounted. Create an executable script "um" in the user's ~/bin directory containg the lines
+ <nowiki>
+#! /bin/busybox ash
+sudo /usr/local/bin/ux ${1}</nowiki>
+
+== Theoretical background ==
+For more information on mdev scripts, see [http://git.busybox.net/busybox/plain/docs/mdev.txt Busybox's mdev primer]. For the purposes of this page, here are the critical details
+* On a machine running mdev, the pseudo-file /proc/sys/kernel/hotplug should contain a string with the full path and filename of the hotplug handler. On Gentoo linux this is "/sbin/mdev"
+* When the system boots up, mdev is invoked as "mdev -s" to populate /dev. This invocation supplies a very minimal environment, only the device name. When a USB devices is inserted or removed, there can be 1 or more events. The insertion/removal events have additional environmental variables available. Testing for these variables allows a script to determine whether the event is device-population at bootup, or insertion/removal later on.
+* The file /etc/mdev.conf is a list of patterns that is consulted by "mdev". If a pattern is matched, certain attributes can be set for the device (user:group, permissions, symlinks). But most important for our purposes, commands can be executed. This is how auto(un)mounting is accomplished.
+
+== Config files and scripts ==
