@@ -1,5 +1,7 @@
+{{InfoBox stack
+  |{{InfoBox wikipedia|PulseAudio|header=true}}
+}}
 PulseAudio or PA for short is a sound server that provides a number of features on top of the low-level audio interface (ALSA) on Linux, such as:
-
 * Networking support
 * Per-application volume controls
 * Better cross-platform support
@@ -7,49 +9,104 @@ PulseAudio or PA for short is a sound server that provides a number of features 
 
 PulseAudio allows for playing audio applications on the server, while hearing it through the client's soundcard. The application running on the server sends its audio output to the Pulse server instead of the server's soundcard. The Pulse client on the client receives this output and lets Alsa process it to the client's soundcard.
 
-==Setup==
-
-===PA USE flags===
-
-Currently PulseAudio has quite a few USE flags but some of them are more important than others hence only portion of the available USE flags are being explained here.
-
-{{USEflag
-|package=media-sound/pulseaudio
-|alsa+yes+yes+PA is the top part of an audio stack hence PA itself needs support for some form of audio output, ALSA being the most common for non-professional systems.
-|udev+yes+yes+Provides hardware detection, helps greatly if ALSA applications are being routed via PA by default (see [[#Making ALSA-only applications use PA|Making ALSA-only applications use PA]]).
-|realtime++yes
-|caps+yes+yes+Allows PA to drop unneeded capabilities, increasing security.
-|orc+yes+yes+Improves performance of re-sampling (available only starting with PA 1.0).
-|X+yes+yes
-|libsamplerate++no+Provides exceptionally CPU intensive re-samplers that are generally regarded as not worth it.
+== Installation ==
+Portage knows the global USE flag ''pulseaudio'' for enabling support for PulseAudio in other packages. Enabling this USE flag will pull in {{Package|media-sound/pulseaudio}} automatically:
+{{File|/etc/make.conf||
+USE{{=}}"... pulseaudio ..."
+}}
+The USE flags of pulseaudio are:
+{{USEflag|package=media-sound/pulseaudio
+|X
+|alsa+yes+yes
+|asyncns+yes
+|avahi
+|bluetooth+yes
+|caps+yes
+|dbus+yes
+|doc
+|equalizer
+|gdbm+yes
+|glib+yes
+|gnome
+|ipv6+yes
+|jack
+|libsamplerate++no
+|lirc
+|orc+yes+yes
+|oss++no
+|realtime
+|ssl++yes
 |system-wide++no
+|tcpd+yes
+|test
+|udev+yes+yes
 }}
 
-===Relevant USE flags for other ebuilds===
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
 
-{{USEflag
-|pulseaudio++yes+Please enable this if you want to use PA on your system.
+== Configuration ==
+
+=== Permissions ===
+If you have the USE flag '''''acl''''' enabled globally and are using ConsoleKit (i.e you're using a Desktop profile) permissions to sound cards will be handled automatically. You can check the permissions using '''getfacl''':
+{{Cmd|getfacl /dev/snd/controlC0 {{!}} grep larry|output=
+ user:'''larry''':rw-
 }}
+A broader solution is to add the user you want to be able to access the sound card to the ''audio'' group:
+{{RootCmd|gpasswd -a larry audio}}
 
-===PA installation===
+=== Configuring other applications ===
+Some applications need to be configured to output to PulseAudio by default. A detailed list of these can be found on the PulseAudio wiki's [http://pulseaudio.org/wiki/PerfectSetup PerfectSetup page].
 
-The recommend way is to set pulseaudio USE flag for desired ebuilds and then run
-{{emerge|params=--ask --deep --newuse --update --verbose
-|@world
-}}
-
-But if need be PA can be manually installed with
-{{emerge|params=
-|media-sound/pulseaudio
-}}
-
-===Making ALSA-only applications use PA===
-{{Note|Starting with {{Package|media-plugins/alsa-plugins-1.0.25-r1}} having it installed with the '''pulseaudio''' USE flag is enough. If you previous had followed this article, upon upgrade to a fixed version (there should also be an einfo reminder), please remove the ''asound.conf'' file.}}
-For applications with PA support, no additional setup is required but for ALSA-only applications to be able to benefit from PA, it is highly recommended that {{Package|media-plugins/alsa-plugins}} is installed with '''pulseaudio''' USE flag (as of media-sound/pulseaudio-1.1-r1 it's not yet pulled in as a dependency).
+;ALSA
+{{Note|If you previous had followed this article, upon upgrade to a fixed version (there should also be an einfo reminder), please remove the ''asound.conf'' file.}}
+You need to install {{Package|media-plugins/alsa-plugins}} with ''pulseaudio'' USE flag enabled:
+{{Emerge|media-plugins/alsa-plugins}}
 {{Note|It's highly important that udev is being used for hardware detection, else PA itself will be unable to access sound devices without custom configuration!}}
 
-===Fast user switching===
 
+;OSS
+You need to enable the following module in {{Path|/etc/pulse/default.pa}}:
+{{File|/etc/pulse/default.pa||
+load-module module-oss
+}}
+
+;GStreamer
+You need to set serveral GConf keys:
+* You can use the graphical tool gstreamer-properties (part of {{Package|media-sound/paprefs}}). Select under '''Audio Input''' and '''Audio Output''' each '''PulseAudio Sound Server'''.
+* Manuel with gconftool:
+{{Cmd
+|gconftool -t string --set /system/gstreamer/0.10/default/audiosink pulsesink
+|gconftool -t string --set /system/gstreamer/0.10/default/audiosrc pulsesrc
+}}
+
+;ESD
+You need to enable the following module in {{Path|/etc/pulse/default.pa}}:
+{{File|/etc/pulse/default.pa||
+load-module module-protocol-esound-unix
+}}
+Also you need to select with eselect the PulseAudio implementation:
+{{RootCmd|eselect esd set esdcompat}}
+
+;libao
+You need to set the following in {{Path|/etc/libao.conf}}:
+{{File|/etc/libao.conf||
+default_driver{{=}}pulse
+}}
+
+;OpenAL
+You need to set the following in {{Path|/etc/openal/alsoft.conf}}:
+{{File|/etc/openal/alsoft.conf||
+drivers {{=}} pulse
+}}
+
+;MPlayer
+You need to set the following in {{Path|/etc/mplayer/mplayer.conf}}:
+{{File|/etc/mplayer/mplayer.conf||
+ao{{=}}pulse
+}}
+
+=== Fast user switching ===
 For fast user switching to work with PA where each session has its own PulseAudio process, ConsoleKit is used to know which session is active and therefore most likely to be the desired one to be granted exclusive control over device files in ''/dev/snd/''. To make this possible Access Control  Lists (or ACL for short) are required and because /dev is usually devfs, which is a form of tmpfs, ACL support for tmpfs is a must.
 
 {{Kernel|Enabling ACL for tmpfs|<pre>
@@ -82,6 +139,7 @@ load-module module-alsa-source device=hw:1,0
 These instructions are for setting up a headless pulse audio server. Meaning a server which has no display on it but does have speakers. This provides the ability to use the remote server's speakers for audio output.
 
 You will get warned in a dozen places for doing this, but it is the proper method.
+
 ==== Server ====
 First configure use flags and emerge the package. The system-wide use flag is masked, so we have to unmask it.
 {{RootCmd|mkdir -p /etc/portage/profile|echo "-system-wide" >> /etc/portage/profile/use.mask|echo "media-sound/pulseaudio system-wide" >> /etc/portage/package.use}}
@@ -96,40 +154,51 @@ load-module module-alsa-sink
 {{Note|If you have multiple ALSA devices, you will need to specify the device to use by adding <u>device</u> or <u>device_id</u> to the module-alsa-sink module}}
 
 Tell the init script that we really do want to do this, and then start it up.
-{{RootCmd|<nowiki>echo "PULSEAUDIO_SHOULD_NOT_GO_SYSTEMWIDE=1" &gt;&gt; /etc/conf.d/pulseaudio</nowiki>|rc-update add pulseaudio default|rc-service pulseaudio start}}
+{{RootCmd
+|echo "PULSEAUDIO_SHOULD_NOT_GO_SYSTEMWIDE{{=}}1" >> /etc/conf.d/pulseaudio
+|rc-update add pulseaudio default|rc-service pulseaudio start
+}}
 
 ==== Client ====
-{{Cmd|<nowiki>pacmd load-module module-tunnel-sink server=1.2.3.4</nowiki>}}
-''<u>server</u> (1.2.3.4) is the IP of the server.''
+{{Cmd|pacmd load-module module-tunnel-sink server{{=}}1.2.3.4|output=server (1.2.3.4) is the IP of the server.}}
 
 For a more permanent solution you can add the following to your default.pa file
-{{File|/etc/pulse/default.pa||<nowiki>load-module module-tunnel-sink server=1.2.3.4</nowiki>}}
+{{File|/etc/pulse/default.pa||<pre>
+load-module module-tunnel-sink server=1.2.3.4
+</pre>}}
 
 Now in the pulse audio volume control you should see the remote server listed under <u>Output Devices</u>. Under playback you should have a button next to the ''Mute audio'' button that when clicked will let you switch that audio stream to whichever output you want.
 
-==Usage==
-
+== Usage ==
 A handy cross-desktop graphical tool is available for setting various aspects of PA. Install it with
-
-{{emerge|params=
-|media-sound/pavucontrol
-}}
+{{Emerge|media-sound/pavucontrol}}
 
 KDE users can to some extent use Phonon`s configuration but it is not a full replacement for pavucontrol.
 
-==Configuring other applications==
+== Troubleshooting ==
+* {{Bug|pulseaudio|search=package}}
+* {{Bug|pulseaudio|site=fdo|search=package}}
 
-Some applications need to be configured to output to PulseAudio by default. A detailed list of these can be found on the PulseAudio wiki's [http://pulseaudio.org/wiki/PerfectSetup PerfectSetup page].
+=== Enable debug mode ===
+To get more informations you need to set the following in {{Path|/etc/pulse/daemon.conf}}:
+{{File|/etc/pulse/daemon.conf||
+log-level{{=}}debug
+}}
+Afterwards restart the daemon:
+{{Cmd|pulseaudio -k}}
 
-==Known problems and limitations==
+=== Dummy Output ===
+If the only playback device is the '''Dummy Output''', PulseAudio can not access your sound devices. Either the user has no permissions (see section [[#Permissions|}} or another program blocks the access. Try:
+{{Cmd|fuser -v /dev/snd/*}}
+It shows the relevant program. Close the program und reconfigure it to use PulseAudio.
 
-===No guarantees on actual latencies===
+=== No guarantees on actual latencies ===
 Currently PA provides whatever latency at that moment is possible be it some milliseconds to hundreds of milliseconds without regard to what applications ask for.
 
-===In case of buffer under-run latencies are never decreased===
+=== In case of buffer under-run latencies are never decreased ===
 Currently, if a buffer under-run occurs, PA buffers for longer increasing latency, but it then never tries to buffer for less until restart.
 
-===Re-sampling using up a lot of CPU time===
+=== Re-sampling using up a lot of CPU time ===
 Re-sampling can require quite a lot of computational power, PA defaults are rather conservative but in certain cases can still take a significant toll, in such cases edit ''/etc/pulse/daemon.conf'' and consider changing '''resample-method''' to something less CPU intensive, '''default-sample-format''' and '''default-sample-rate''' can also affect CPU utilization with higher bit-depth and larger difference in sample-rate generally needing more resources (e.g. re-sampling 44.1 kHz to 48 kHz is faster than re-sampling either to 192 kHz). Since re-sampling is done per each channel per input, channel configuration and number of applications can affect performance as well.
 
 {{Note|
