@@ -1,22 +1,27 @@
 {{Lowercase title}}
-
+{{InfoBox stack
+|{{InfoBox wikipedia|systemd|header=true}}
+}}
 [http://freedesktop.org/wiki/Software/systemd systemd] is a modern sysvinit & RC replacement for Linux systems. It is supported in Gentoo as an alternate init system.
 
 See also: [[Comparison of init systems]]
 
 == Installation ==
+
 === Prerequisites: kernel ===
 systemd makes use of many modern Linux kernel features. Right now, the lower bound on kernel version is set in the ebuild to 2.6.38. In addition to that, the following kernel configuration options should be enabled:
-
-{{Kernel|Kernel features required or suggested by systemd|<pre>
+{{Kernel||<pre>
 General setup  --->
     [*] Control Group support
 Device Drivers --->
     Generic Driver Options  --->
         [*] Maintain a devtmpfs filesystem to mount at /dev
 File systems --->
-    [*] Filesystem wide access notification
     <M> Kernel automounter version 4 support (also supports v3)
+
+Optional options:
+File systems --->
+    [*] Filesystem wide access notification
 Networking support --->
     Networking options --->
         TCP/IP networking --->
@@ -24,28 +29,107 @@ Networking support --->
 </pre>}}
 
 === Prerequisites: filesystem ===
-==== /run directory ====
-The ''/run'' directory is used by systemd (and some applications) as a non-persistent storage for runtime data like pidfiles, sockets and state files.
 
-The systemd ebuild will create ''/run'' directory itself. However, please note that this change will trigger automatic mounting of it in OpenRC as well, and may trigger using it by different software packages.
+==== /run directory ====
+The {{Path|/run}} directory is used by systemd (and some applications) as a non-persistent storage for runtime data like pidfiles, sockets and state files.
+
+The systemd package will create {{Path|/run}} directory itself. However, please note that this change will trigger automatic mounting of it in OpenRC as well, and may trigger using it by different software packages.
 
 ==== /etc/mtab symlink ====
-Upstream suggests that the ''/etc/mtab'' file should be a symlink to ''/proc/self/mounts''. This is not obligatory and can create problems with ''mount -o user'' and NFS mounts.
+Upstream suggests that the {{Path|/etc/mtab}} file should be a symlink to {{Path|/proc/self/mounts}}. This is not obligatory and can create problems with ''mount -o user'' and NFS mounts.
 
 To create the symlink:
 {{RootCmd|ln -sf /proc/self/mounts /etc/mtab}}
 
 ==== /etc/machine-id ====
-Often systemd guides mention creating the file ''/etc/machine-id'' as a global replacement for the D-Bus specific ''/var/lib/dbus/machine-id''. In Gentoo this is already done in the {{Package|sys-apps/dbus}} ebuild.
+Often systemd guides mention creating the file {{Path|/etc/machine-id}} as a global replacement for the D-Bus specific {{Path|/var/lib/dbus/machine-id}}. This is already done in the {{Package|sys-apps/dbus}} package.
 
-=== Installing ===
-Installing systemd is as simple as emerging {{Package|sys-apps/systemd}}.
+=== Software ===
+{{Note|systemd is still masked right now. You will need to unmask it and it's dependencies.}}
+Portage knows the local USE flag ''systemd'' for enabling support for systemd in other packages. Enabling this USE flag will pull in {{Package|sys-apps/systemd}} automatically:
+{{File|/etc/make.conf||
+USE{{=}}"... systemd ..."
+}}
 
-{{Emerge|sys-apps/systemd}}
+The USE flags of systemd are:
+{{USEflag|package=sys-apps/systemd
+|acl+yes
+|audit
+|cryptsetup
+|lzma
+|pam+yes
+|plymouth
+|selinux
+|tcpd+yes
+}}
+
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
+
+== Configuration ==
+
+=== Shared configuration files===
+systemd comes with some degree of OpenRC compatibility, so it will gracefully read most of the base system options from its files. This includes the following files:
+* {{Path|/etc/conf.d/hostname}} for hostname,
+* {{Path|/etc/profile.env}} for locale (created by ''env-update'' from ''/etc/env.d''),
+* {{Path|/etc/rc.conf}} for the ''unicode'' console setting,
+* {{Path|/etc/conf.d/consolefont}} for the console font settings,
+* {{Path|/etc/conf.d/keymaps}} for the keymap setting (but only the actual ''keymap'').
+
+Additionally, the following configuration directories are both used by OpenRC and systemd:
+* {{Path|/etc/modules-load.d}},
+* {{Path|/etc/sysctl.d}},
+* {{Path|/etc/binfmt.d}}
+
+Alternatively, you can migrate your system to use [[#Native systemd configuration files|Native systemd configuration files]]. Bear in mind that upstream has made it clear that at some point in the future it will stop supporting configuration files for specific distributions, and it will only support the native systemd configuration files. If you plan to use systemd exclusively, please use its native configuration files.
+
+=== Native configuration files ===
+systemd supports a few system configuration files to set the most basic system details.
+
+;/etc/hostname: A trivial file containing the system hostname. Replaces {{Path|/etc/conf.d/hostname}}.
+
+{{File|/etc/hostname|Setting an example hostname of ''frobnicator''|<pre>
+frobnicator
+</pre>}}
+
+;/etc/vconsole.conf: Configuration file specifying console font and keymap. Replaces {{Path|/etc/conf.d/consolefont}} and {{Path|/etc/conf.d/keymaps}}, yet it doesn't support all features of those init.d scripts.
+
+{{File|/etc/vconsole.conf|An example, simple console configuration|<pre>
+KEYMAP=pl2
+FONT=LatArCyrHeb-16
+</pre>}}
+
+;/etc/locale.conf: Configuration file for locale settings. The file supports same syntax as shell locale variables, so you can basically rename {{Path|/etc/env.d/02locale}} or a similar file.
+
+{{File|/etc/locale.conf|An example for utf8|<pre>
+LANG="pl_PL.UTF-8"
+LC_ALL="pl_PL.UTF-8"
+</pre>}}
+
+;/etc/machine-info: Configuration file for local machine informations
+
+{{File|/etc/machine-info||<pre>
+PRETTY_NAME="Larry's Computer"
+ICON_NAME="computer-laptop"
+</pre>}}
+
+;/etc/os-release: Configuration file for operation system identification.
+
+{{File|/etc/os-release||<pre>
+NAME="Gentoo"
+ID="gentoo"
+PRETTY_NAME="Gentoo Linux"
+ANSI_COLOR="1;34"
+</pre>}}
+
+=== systemd-logind & pam_systemd ===
+systemd intends to provide an integrated ConsoleKit replacement called logind. Some applications (like {{Package|net-misc/networkmanager}} and {{Package|sys-auth/polkit}}) provide support for it through ''USE=systemd''. Please note that this flag usually disables ConsoleKit support as well and thus packages may stop working as expected if the procedure described below is not fulfilled.
+
+In order to enable session tracking for systemd-logind, you have to enable the ''pam_systemd'' PAM module first. This can be done using USE=systemd on {{Package|sys-auth/pambase}}.
+
+Except for tracking user logins (like ConsoleKit does), this will cause all user processes to belong to a cgroup. You can add ''controllers=...'' to provide additional cgroup controllers (like ''cpu'' for CPU load balancing). You can also add ''kill-session-processes=1'' to ensure that all processes spawned by user are killed on logout. For more information, take a look at ''man pam_systemd''.
 
 === Enabling ===
-Before doing this [[#Configuration|configure]] systemd first.
-
 In order to run systemd, you have to switch the ''init'' executable kernel (or your initramfs) uses.
 
 With simple kernels, the ''init=/bin/systemd'' argument should be added to the kernel command-line. An example excerpt from ''grub.conf'' would look like:
@@ -65,26 +149,7 @@ kernel /my-genkernel... root=/dev/hda2 real_init=/bin/systemd
 initrd /initramfs-genkernel...
 </pre>}}
 
-== Configuration ==
-
-=== System configuration ===
-
-systemd comes with some degree of OpenRC compatibility, so it will gracefully read most of the base system options from its files. This includes the following files:
-* ''/etc/conf.d/hostname'' for hostname,
-* ''/etc/profile.env'' for locale (created by ''env-update'' from ''/etc/env.d''),
-* ''/etc/rc.conf'' for the ''unicode'' console setting,
-* ''/etc/conf.d/consolefont'' for the console font settings,
-* ''/etc/conf.d/keymaps'' for the keymap setting (but only the actual ''keymap'').
-
-Additionally, the following configuration directories are both used by OpenRC and systemd:
-* ''/etc/modules-load.d'',
-* ''/etc/sysctl.d'',
-* ''/etc/binfmt.d'' (since OpenRC-0.9.4).
-
-Alternatively, you can migrate your system to use [[#Native systemd configuration files|Native systemd configuration files]]. Bear in mind that upstream has made it clear that at some point in the future it will stop supporting configuration files for specific distributions, and it will only support the native systemd configuration files. If you plan to use systemd exclusively, please use its native configuration files.
-
 === Listing available services ===
-
 All global service files are installed in ''/lib/systemd/system'' or ''/usr/lib/systemd/system''. Thus, the simplest way of looking up available service units is listing that directory:
 
 {{RootCmd|ls /lib/systemd/system
@@ -105,7 +170,6 @@ The following file suffixes are of interest:
 * ''.path'' - filesystem triggers for services (running services when files change etc.).
 
 Alternatively, ''systemctl'' tool can be used to list all services (including implicit ones):
-
 {{RootCmd|systemctl --all --full}}
 
 And finally the ''systemadm'' graphical tool can be used. It can be installed with the {{Package|sys-apps/systemd-ui}} package.
@@ -115,17 +179,14 @@ Any custom service files should be copied to the ''/etc/systemd/system'' directo
 
 === Enabling and disabling services ===
 The usual way of enabling a service is using
-
 {{RootCmd|systemctl enable foo.service}}
 
 Services can be disabled likewise:
-
 {{RootCmd|systemctl disable foo.service}}
 
 These commands enable services using their default name in default target (both specified in ''Install'' section of the service file). However, sometimes services either don't provide that information or you want to use another name/target.
 
 === Enabling a service under a custom name ===
-
 This is especially a case for template services -- services in which part of the name following ''@'' (at sign) is used as a parameter to the service. This is often used to specify the terminal on which getty will run.
 
 To enable a service under custom name, you have to create a symlink to the service file in correct ''/etc/systemd/system/*.wants'' directory. The name of that directory can either specify a target or another service which will depend on the new one.
@@ -135,57 +196,14 @@ For example, to enable stand-alone {{Package|net-wireless/wpa_supplicant}} on ''
 {{RootCmd|ln -s /lib/systemd/system/wpa_supplicant@.service /etc/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service}}
 
 To disable the service, just remove the symlink:
-
 {{RootCmd|rm /etc/systemd/system/multi-user.target.wants/wpa_supplicant@wlan0.service}}
-
-=== Native systemd configuration files ===
-
-systemd supports a few system configuration files to set the most basic system details.
-
-==== /etc/hostname ====
-
-A trivial file containing the system hostname. Replaces ''/etc/conf.d/hostname''.
-
-{{File|/etc/hostname|Setting an example hostname of ''frobnicator''|<pre>frobnicator</pre>}}
-
-==== /etc/vconsole.conf ====
-
-Simple configuration file specifying console font and keymap. Replaces ''/etc/conf.d/consolefont'' and ''/etc/conf.d/keymaps'', yet it doesn't support all features of those init.d scripts.
-
-{{File|/etc/vconsole.conf|An example, simple console configuration|<pre>
-KEYMAP=pl2
-FONT=LatArCyrHeb-16
-
-# example: German keyboard and console
-KEYMAP=de-latin1
-FONT=latarcyrheb-sun16
-</pre>}}
-
-==== /etc/locale.conf ====
-
-In systemd, locale settings are stored in ''/etc/locale.conf''. The file supports same syntax as shell locale variables, so you can basically rename ''/etc/env.d/02locale'' or a similar file.
-
-{{File|/etc/locale.conf|An example locale.conf for utf8|<pre>
-LANG="pl_PL.UTF-8"
-LC_ALL="pl_PL.UTF-8"
-</pre>}}
-
-=== systemd-logind & pam_systemd ===
-
-systemd intends to provide an integrated ConsoleKit replacement called logind. Some applications (like {{Package|net-misc/networkmanager}} and {{Package|sys-auth/polkit}}) provide support for it through ''USE=systemd''. Please note that this flag usually disables ConsoleKit support as well and thus packages may stop working as expected if the procedure described below is not fulfilled.
-
-In order to enable session tracking for systemd-logind, you have to enable the ''pam_systemd'' PAM module first. This can be done using USE=systemd on {{Package|sys-auth/pambase}}.
-
-Except for tracking user logins (like ConsoleKit does), this will cause all user processes to belong to a cgroup. You can add ''controllers=...'' to provide additional cgroup controllers (like ''cpu'' for CPU load balancing). You can also add ''kill-session-processes=1'' to ensure that all processes spawned by user are killed on logout. For more information, take a look at ''man pam_systemd''.
 
 == Services ==
 
 === Native services ===
-
 Some of Gentoo packages already install systemd unit files. For these services, it is enough to enable them. A quick summary of packages installing unit files can be seen on [http://qa-reports.gentoo.org/output/eclass-usage/systemd.txt systemd eclass users list].
 
 The following table lists systemd services matching OpenRC ones:
-
 {| class="wikitable" style="text-align: center;"
 |+ Migration chart
 |-
@@ -315,16 +333,24 @@ The following table lists systemd services matching OpenRC ones:
 |-
 ! scope="row" | {{Package|x11-apps/xdm}}
 | (xdm) || xdm.service || OpenRC uses common <tt>xdm</tt> init.d installed by {{Package|x11-base/xorg-server}}
-|-
 |}
 
 === OpenRC services ===
-
 Although systemd originally intended to support running old init.d scripts, that support is not suited well for a dependency-based RC like OpenRC and thus is completely disabled on Gentoo. OpenRC provides additional measures to ensure that init.d scripts can't be run when OpenRC was not used to boot the system (otherwise the results would be unpredictable).
 
-== Links ==
+== Troubleshooting ==
+* {{Bug|systemd|search=package}}
+* {{Bug|systemd|search=product|site=fdo}}
+
+=== Enable debug mode ===
+To get more informations you need to set the following in {{Path|/etc/systemd/system.conf}}:
+{{File|/etc/systemd/system.conf||
+LogLevel{{=}}debug
+}}
+
+== External resources ==
 * [http://www.freedesktop.org/wiki/Software/systemd systemd homepage]
-* [http://www.freedesktop.org/wiki/Software/systemd/TipsAndTricks Tips and tricks]
-* [http://www.freedesktop.org/wiki/Software/systemd/FrequentlyAskedQuestions FAQ]
+** [http://www.freedesktop.org/wiki/Software/systemd/TipsAndTricks Tips and tricks]
+** [http://www.freedesktop.org/wiki/Software/systemd/FrequentlyAskedQuestions FAQ]
 
 [[Category:Core system]]
