@@ -1,0 +1,69 @@
+{{InfoBox stack
+|{{InfoBox wikipedia|CT-API|header=true}}
+}}
+CTAPI is a german standard for PC to smartcard reader communication, which is implemented by OpenCT. The international standard is in contrast [[PCSC-Lite|PC/SC]].
+
+== Installation ==
+
+=== Kernel ===
+You have to enable kernel support depending on how your cardreader is connected:
+* For USB cardreader see the [[USB]] article.
+* For PC-Card cardreader see the [[PC-Card]] article.
+* For serial cardreader enable serial support.
+
+=== Software ===
+Portage knows the local USE flag ''openct'' for enabling support for OpenCT in other packages. Enabling this USE flag will pull in {{Package|dev-libs/openct}} automatically:
+{{File|/etc/make.conf||
+USE{{=}}"... openct ..."
+}}
+The USE flags of openct are:
+{{USEflag|package=dev-libs/openct
+|doc
+|pcsc-lite
+|usb+yes
+}}
+
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
+
+== Configuration ==
+USB cardreader are detected automatically und work out of the box. For PC-Card and serial cardreader you have to adjust your {{Path|/etc/reader.conf.d/reader.conf}}. See the man page for more informations:
+{{Cmd|man reader.conf}}
+
+=== Permissions ===
+Add your user to the ''openct'' group to be able to access the cardreader:
+{{RootCmd|gpasswd -a larry openct}}
+
+=== Service ===
+You can now start OpenCT:
+{{RootCmd|/etc/init.d/openct start}}
+To start OpenCT at boot time, add it your default runlevel:
+{{RootCmd|rc-update add openct}}
+
+{{Note|The OpenCT daemon blocks all detected cardreaders for every other software. An exception is, if you use the ifdhandler for PCSC-Lite, see below.}}
+
+== Testing ==
+List all detected cardreaders:
+{{Cmd|openct-tool list}}
+
+If there is a detected cardreader, insert a smartcard. Test the access by checking the [[Wikipedia:Answer to reset|ATR]]:
+{{Cmd|openct-tool atr|output=<pre>
+Detected CCID Compatible
+Card present, status changed
+ATR: 3B 75 94 00 00 62 02 02 03 01
+</pre>}}
+
+== ifdhandler ==
+If you installed OpenCT with ''pcsc-lite'' USE flag, a pseudo ifd driver is installed, so that [[PCSC-Lite]] kann use the OpenCT drivers. Additionally you have to do some extra steps, so that PCSC-Lite recognizes the idf driver:
+{{RootCmd
+|mkdir -p /usr/lib/readers/usb/ifd-openct.bundle/Contents/Linux
+|ebuild /usr/portage/dev-libs/openct/openct-0.6.20.ebuild unpack
+|cp /var/tmp/portage/dev-libs/openct-0.6.20/work/openct-0.6.20/etc/Info.plist /usr/lib/readers/usb/ifd-openct.bundle/Contents
+|ln -s /usr/lib/openct-ifd.so /usr/lib/readers/usb/ifd-openct.bundle/Contents/Linux/
+|cp /var/tmp/portage/dev-libs/openct-0.6.20/work/openct-0.6.20/etc/reader.conf.in /etc/readers.conf.d/openct.conf
+|sed -i -e "s/@libdir@/}/\/usr\/lib/" /etc/reader.conf.d/openct.conf
+|update-reader.conf
+}}
+{{Note|These steps are only necessary until {{Bug|310985}} is fixed.}}
+
+[[Category:Smartcards]]
