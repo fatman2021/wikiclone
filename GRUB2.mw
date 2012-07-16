@@ -382,14 +382,16 @@ There's a truly improved chainload mode compared to GRUB LEGACY: the new iso (or
 
 === ISO images ===
 To chainload an iso with custom or defaults kernel cmdline arguments, something like the following can be easily added:
-{{GenericCmd|<pre>menuentry "SYSRESCUECD" {
+{{Code||<pre>
+menuentry "SYSRESCUECD" {
 	loopback loop /sysrecuecd-x86-2.3.1.iso
 	linux  (loop)/isolinux/rescue64 nomodeset vga{{=}}791 docache setkmap{{=}}fr isoloop{{=}}/sysrecuecd-x86-2.3.1.iso
 	initrd (loop)/isolinux/initram.igz
 }</pre>}}
 
 For a permanent and automatic entry to grub.cfg, a custum file could be added to `/etc/grub.d'.
-{{File|/etc/grub.d/50_isofile||<pre>#!/bin/sh
+{{File|/etc/grub.d/50_isofile||<pre>
+#!/bin/sh
 exec tail -n +3 $0
 
 menuentry "GRUB4DOS" {
@@ -407,7 +409,8 @@ menuentry "STG3-AMD64" {
 	loopback loop /stg3-amd64-<DATE>.iso
 	linux  (loop)/isolinux/gentoo $cmdline root{{=}}/dev/ram0 init{{=}}/linuxrc initrd{{=}}gentoo.igz
 	initrd (loop)/isolinux/gentoo.igz
-}</pre>}}
+}
+</pre>}}
 Make the script executable:
 {{RootCmd|chmod +x /etc/grub.d/50_isofile}}
 And lastly regenerate your ''grub.cfg'' with '''''grub2-mkconfig'''''.
@@ -415,31 +418,34 @@ And lastly regenerate your ''grub.cfg'' with '''''grub2-mkconfig'''''.
 === Another Bootloader ===
 Chainloading other bootloader is fairly easy if there's support in GRUB2 for that specific bootloader. Otherwise, one could use a ''man in the middle'' or another bootloader in other words to do the task if necessary.  In the latter case, one could use GRUB4DOS as it has functionalities similar to GRUB LEGACY. This is required when loading another bootloader like TrueCrypt become problematic in a single multiboot disk, otherwise something as simple as the following is enough to boot another disk with whatever bootloader.
 
-{{GenericCmd|<pre>menuentry "WHATEVER" {
+{{Code||<pre>
+menuentry "WHATEVER" {
      insmod part_msdos
      insmod chain
      chainloader (hd1,1)+1
-}</pre>}}
+}
+</pre>}}
 
 === TrueCrypt ===
 Well, let's make a long story short: GRUB2 cannot neither chainload a disk with TrueCrypt in the MBR neither the rescue CD image. This is perfectly possible, feasible and works just fine with GRUB LEGACY. It even works with [https://sites.google.com/site/grubdos/ GRUB4DOS]! This could be used as workaround. See {{Bug|385619}} for more info and the above GRUB4DOS menu entry as a starting point. The infamous `invalid signature' await the more adventurous ones. 
 
 Simply put, one should stick to GRUB LEGACY or to another bootloader or else... use GRUB4DOS as workaround for this. GRUB4DOS has a very similar GRUB LEGACY interface and menu.lst entry which can be used to chainload TrueCrypt bootloader or rescue CD to boot from an encrypted partition. An executable with grldr in the `/' root of the booting device is required, plus a menu.lst. See below for a menu entry example. Chainloading TrueCrypt bootloader in another disk is straightforward like any other bootloader.
 
-{{GenericCmd|<pre>title Windows7-TrueCrypt-BIOS/MBR
+{{Code||<pre>
+title Windows7-TrueCrypt-BIOS/MBR
 find --set-root /truecrypt_rescue_image.iso
 map --mem /truecrypt_rescue_image.iso (hd32)
 map (hd0) (hd1)
 map (hd1) (hd0)
 map --hook
 root (hd32)
-chainloader (hd32)</pre>}} 
+chainloader (hd32)
+</pre>}}
 {{Note|The remapping may not be necessary for you if you have a single boot disk system. The mapping are necessary before chainlading TrueCrypt bootloader in that case because the boot disk (here hd1) should appear as the primary boot device (hd0) otherwise TrueCrypt would just fail to boot because... it did not find the right disk.}}
 
 Another workaround cited on the bug is to boot from TrueCrypt as the main boot loader and then hit ESC[ape] to chainload the following partition if any or the following disk.
 
 === MSDOS/Windows ===
-
 If MSDOS/Windows is in another disk with its bootloader in the MBR, then one can boot with a simple menu entry as the previous example in Chainloading other bootloader section.
 
 Things could become more complicated if MSDOS/Windows is in another partition of the disk and the partition is encrypted with TrueCrypt for example, or simply if a hybrid MBR is involved.
@@ -447,50 +453,60 @@ Things could become more complicated if MSDOS/Windows is in another partition of
 The simpliest way to dual boot MSDOS/Windows is using BIOS/MBR combination. Simply backup the whole MBR to be safe or simply the bootloader before installing MSDOS/Windows as that thing will overwrite the bootloader for sure. 
 And then simple menu entry could added to grub.cfg.
 
-{{GenericCmd|<pre>menuentry "Windows 7 BIOS/MBR" {
+{{Code||<pre>
+menuentry "Windows 7 BIOS/MBR" {
      insmod part_msdos
      insmod ntldr
      insmod ntfs
      ntldr (hd0,msdos1)/bootmgr
-}</pre>}}
+}
+</pre>}}
 
 Or the following for MSDOS/Windows XP
 
-{{GenericCmd|<pre>menuentry "Windows XP BIOS/MBR" {
+{{Code||<pre>
+menuentry "Windows XP BIOS/MBR" {
      insmod part_msdos
      insmod ntldr
      insmod ntfs
      ntldr (hd0,msdos1)/ntldr
-}</pre>}}
+}
+</pre>}}
 
 An entry with GPT/hybrid MBR doesn't not to the list to the previous usual BIOS/MBR examples. Booting multiple MSDOS/Windows could be achieved with remapping and/hiding partion with partool.
 
-{{GenericCmd|<pre>menuentry "Windows 7 BIOS/MBR" {
+{{Code||<pre>
+menuentry "Windows 7 BIOS/MBR" {
      insmod part_msdos
      insmod chain
      parttool hd1,msdos1 hidden+ boot-
      parttool hd1,msdos2 hidden- boot+
      chainloader (hd1,msdos2)+1
-}</pre>}}
+}
+</pre>}}
 
 {{Note|Remapping the disk with parttoll in that manner is only required if multiple MSDOS/Windows systems are installed on the same boot device. Oterwise, remapping the devices to set the primary boot disk to another disk could be achieved with something as the following example.}}
 
-{{GenericCmd|<pre>menuentry "Windows 7 BIOS/MBR" {
+{{Code||<pre>
+menuentry "Windows 7 BIOS/MBR" {
      insmod part_msdos
      insmod chain
      drivemap hd0 hd1
      chainloader (hd1,msdos2)+1
-}</pre>}}
+}
+</pre>}}
 
 An UEFI dual boot could be achieved with the following, if, for example, the default bootloader was overwritten with GRUB2 or simply that bootmgr doesn't do the trick for different reasons.
 
-{{GenericCmd|<pre>menuentry "Windows 7 UEFI/GPT" {
+{{Code||<pre>
+menuentry "Windows 7 UEFI/GPT" {
     insmod part_gpt
     insmod search_fs_uuid
     insmod chain
     search --fs-uuid --no-floppy --set{{=}}root 28cf-35de
     chainloader ($root)/EFI/MICROSOFT/BOOT/bootmgfw.efi
-}</pre>}}
+}
+</pre>}}
 
 == Troubleshooting ==
 
@@ -507,7 +523,6 @@ Reemerge if needed. Next tell GRUB2 to preload its "lvm" module,
 And (re)generate grub.cfg with '''''grub2-mkconfig'''''.
 
 === Booting from RAID Array ===
-
 The documentation on this subject, along with booting from encrypted physical volumes, is close to null. As I do not boot from a RAID array, anyone who managed to boot from a complex RAID array is welcomed to complete this section.
 
 {{Note|Booting from RAID is only relevant for BIOS [boot]. EFI users shall roll out their custom initramfs or use an initramfs package available out there. Depending on your setup, you may use a BIOS/MBR or BIOS/GPT combination. Here is an example to a BIOS/GPT setup with `/boot' and `root' [`/'] on RAID-1 [http://sinodun.com/2010/07/installing-grub2-on-gnulinux-software-raid/] and Xen on RAID-5.}}
@@ -528,14 +543,16 @@ And then re-generate GRUB2 configuration file. Checkout out the generated cfg fi
 
 Booting from a RAID array is very similar to booting from a LVM Logical Volume aside from RAID specific terminology and syntax of raid partitioned volume.
 
-{{GenericCmd|<pre>...
+{{Code||<pre>
+...
      insmod raid
 #    and load the related `mdraid' module `mdraid09' for raid arrays with version 0.9 metadata, and `mdraid1x' for arrays with version 1.x metadata.
      insmod mdraid09
      set root=(md0p1)
 #    or the following for an unpartitioned raid array
      set root=(md0)
-...</pre>}}
+...
+</pre>}}
 
 {{Note|RAID user might merge the live ebuild to get the latest bit of fixes and updates.}}
 
@@ -544,8 +561,8 @@ Booting from a RAID array is very similar to booting from a LVM Logical Volume a
 I can guess tat this should work with a simple software RAID setup. However, I have no idea or what command, if any exit at the moment of writing, to use to assemble an array such as `mdadm --assemble --scan /dev/md0' that an initramfs could take care of.
 
 === Booting from LUKS Physical Volume ===
-
-{{GenericCmd|<pre>...
+{{Code||<pre>
+...
 insmod gzio
 	insmod part_gpt
 	insmod cryptodisk
@@ -556,22 +573,20 @@ insmod gzio
 	insmod lvm
 	insmod ext2
 	set root='lvm/<VG>-<LV>'
-...</pre>}}
+...
+</pre>}}
 {{Note|To be done when information will be available. That menu entry was generated with sys-boot/grub-2.00 things changed with the beta releases. cryptomount can be use like `cryptomount hd0,gpt1' for example as well. This should be able to decrypt the cyphertext. I have a LVM stack on top of LUKS which could be a supplementary difficulty. I could not finish <i>mount</i> cyphertext(s) and finish my test with qemu-kvm. Other contributor(s) without a supplementary LVM stack are encouraged to complete this section.}}
 
 === Booting from newtwork (PXE) ===
-
-[https://www.gnu.org/software/grub/manual/grub.html#Network Booting from newtwork (PXE)]
-[http://en.gentoo-wiki.com/wiki/Network_boot_from_read-only_server Network boot from read-only server]
+* [https://www.gnu.org/software/grub/manual/grub.html#Network Booting from newtwork (PXE)]
+* [http://en.gentoo-wiki.com/wiki/Network_boot_from_read-only_server Network boot from read-only server]
 
 === GPT hybrid MBR workaround ===
-
 GRUB2 require an EE00 partition type first in the MBR partition list entry, but that may pose a problem to boot other OSs in the same disk especially MSDOS/Windows, to recognize a GPT partitioned disk with or without hybrid MBR. A workaround would be simply removing any protective EE00 partition, with fdisk for example but not gdisk! (it won't work with gdisk as the ''fake'' partition is just there to protect GPT main table), and boot in BIOS/MBR mode. Just remember to not use other disk tools but gdisk (it should work with [g]parted) to resize after that, else, use gdisk to add protective EE00 partitions to protect at least GPT main and backup partition before using any non GPT aware tools if necessary.
 
 There's another issue, MSDOS/Windows may not find any suitable partition to boot from if there's a EE00 partition protecting GPT main partition table (sector 1-2047). This is happened to me and I had to remove the protective EE00 protective partition before getting a valid MBR partition list in [MS]DOS tools (to format a partition for example, the tools recognized a GPT partitioned disk at least). And then use gdisk to recompute the CHS value for hybrid MBR (in the ''recovery and transformation'' menu, or in the ''expert'' main menu).
 
 === Commons errors ===
-
 First off, checkout if you have an EFI02 (GPT disk) or bios_grub ([G]parted) for BIOS/GPT installation or enough gap before the first partion of the disk or the boot partition for BIOS/MBR installation before firing up `grub2-install' command. This will spare you some time.
 
 Secondly, checkout if `/boot/grub2/grub.cfg' was correctly generated with `grub2-mkconfig' or generate one yourself with at least a `menuentry'. Refers to previous section for more information. And avoid writing `Boots up to prompt' section in the wiki because of failing to do that simple check before rebooting!
@@ -580,7 +595,8 @@ Secondly, checkout if `/boot/grub2/grub.cfg' was correctly generated with `grub2
 
 ===== Attempting to install GRUB to a disk or a partition =====
 * If you're getting this error:
-{{GenericCmd|<pre>Attempting to install GRUB to a partition disk or to a partition.  This is a BAD idea.
+{{Code||<pre>
+Attempting to install GRUB to a partition disk or to a partition.  This is a BAD idea.
 Embedding is not possible.  GRUB can only be installed in this setup by using blocklists. 
 However, blocklists are UNRELIABLE and their use is discouraged.
 </pre>}}
@@ -595,7 +611,8 @@ this could mean that:
 {{Note|This is true for sys-boot/grub-1.99x only... for sys-boot/grub-2.x one should edit `/etc/grub.d/00_header', transform{{=}}"s,grub,grub2-qemu," to transform{{=}}"s,grub,grub2," for example, to install rightly with grub2-$platform-install.}}
 
 ===== No post-MBR gap =====
-{{GenericCmd|<pre>grub-setup: warn: This msdos-style partition label has no post-MBR gap; embedding won't be possible!
+{{RootCmd|grub-setup ..|output=<pre>
+grub-setup: warn: This msdos-style partition label has no post-MBR gap; embedding won't be possible!
 grub-setup: warn: Embedding is not possible. GRUB can only be installed in this setup by using blocklists.
             However, blocklists are UNRELIABLE and its use is discouraged.
 grub-setup: error: If you really want blocklists, use --force.
@@ -604,8 +621,7 @@ grub-setup: error: If you really want blocklists, use --force.
 This error means, that grub could not find the usual gap between the MBR and first partition of a disk. It is possible that the disk does not have this gap. Some tools format disks (e.g. LiveUSB disk installer) so that the first partition starts at sector 1 instead of 2048. Repartitioning the disk can fix this.
 Some visualization-based blockdevices can also cause problems. See http://bbs.archlinux.org/viewtopic.php?pid=581760#p581760
 
-== References ==
-
+== External resources ==
 * [https://www.gnu.org/software/grub/manual/grub.html GNU GRUB 2 manual page]
 * [http://www.rodsbooks.com/gdisk/bios.html Legacy BIOS issues with GPT article]
 * [http://www.rodsbooks.com/gdisk/hybrid.html GPT and Hybrid MBR article]
