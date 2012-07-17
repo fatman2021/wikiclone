@@ -1,14 +1,70 @@
 {{Subpage}}
 I use [http://www.shorewall.net net-firewall/shorewall] for my firewall
 with the following {{Path: /etc/shorewall/rules}}
-#ASTERISK
-ACCEPT          loc             $FW     tcp     5038 # AMP -- Asterisk Manager Protocol
-ACCEPT          all             $FW     udp     5036 # iax
-ACCEPT          all             $FW     udp     4569 # iax2
-ACCEPT          all             $FW     udp     5060 # sip
-ACCEPT          all             $FW     tcp     5060 # sip Some SIP servers need tcp as well
-ACCEPT          all             $FW     udp     5061 # sips
-ACCEPT          all             $FW     tcp     5061 # sips
-#ACCEPT         all             $FW     udp     10000:20000     # rtp
-#ACCEPT         all             $FW     udp     2727 # MGCP media gateway control protocol
-#H323 tcp 522, 1503, 1720, 1731 and 8080
+
+Next caveat is that I use NAT and need to forward the following udp ports from my router to my FreeSWITCH server:
+* 5060 (standard SIP)
+* 5070 
+* 5080
+as well as the port range for rtp (10000 to 20000).
+
+In addition I use shorewall for the firewall on my FreeSWITCH server, so I need the following in my {{Path|/etc/shorewall/rules}}:
+ # ASTERISK and FreeSWITCH
+ ACCEPT          loc             $FW     tcp     5038 # AMP -- Asterisk Manager Protocol
+ ACCEPT          all             $FW     udp     5036 # iax
+ ACCEPT          all             $FW     udp     4569 # iax2
+ # SIP
+ ACCEPT          all             $FW     udp     5060 # sip
+ ACCEPT          all             $FW     tcp     5060 # sip Some SIP servers need tcp as well
+ ACCEPT          all             $FW     udp     5061 # sips
+ ACCEPT          all             $FW     tcp     5061 # sips
+ ACCEPT          all             $FW     udp     5070 # FreeSWITCH sip udp
+ ACCEPT          all             $FW     tcp     5070 # FreeSWITCH sip tcp
+ ACCEPT          all             $FW     udp     5080 # FreeSWITCH sip udp
+ ACCEPT          all             $FW     tcp     5080 # FreeSWITCH sip tcp
+ ACCEPT          all             $FW     udp     10000:20000     # rtp
+ #ACCEPT         all             $FW     udp     2727 # MGCP media gateway control protocol
+ #H323 tcp 522, 1503, 1720, 1731 and 8080
+
+Following the Forum Thread [http://www.mail-archive.com/shorewall-users@lists.sourceforge.net/msg03965.html How do I configure shorewall to work with VoIP SIP? (FIXED!)]
+I first tried disabling kernel connection tracking for sip:
+
+I also disabled connection tracking for sip in {{Path|/etc/shorewall/start}}
+ modprobe -r nf_nat_sip        &> /dev/null<br />
+ modprobe -r nf_conntrack_sip  &> /dev/null<br />
+ #<br />
+ modprobe -r nf_nat_h323       &> /dev/null<br />
+ modprobe -r nf_conntrack_h323 &> /dev/null<br />
+
+And I also added the above ports to {{Path|/etc/shorewall/notrack}}:
+ NOTRACK          loc             192.168.1.0/24     udp     5060 # sip<br />
+ NOTRACK          loc             192.168.1.0/24     tcp     5060 # sip<br />
+ NOTRACK          $FW             192.168.1.0/24     udp     5060 # sip<br />
+ NOTRACK          $FW             192.168.1.0/24     tcp     5060 # sip<br />
+ and so on for ports 5061, 5070, 5080, 10000:20000<br />
+
+But (not unexpectedly) after calling the DID and picking up my extension, there was no audio on either my cell phone or sip phone. So next I edited the "Unauthenticated SIP" interface and changed the "Default Interface" to "Authenticated SIP -- NAT" and checked the following:
+* Server is behind NAT?: ON
+* NAT detection mechanism: "Detect IP via uPnP"
+* SIP Ping Registered Devices: ON
+* Aggressive NAT Detection: ON
+* Use Network IP & Port for RTP: OFF
+Now I had audio on my cell phone but still no audio on my sip phone. <br />
+
+
+After reading the [http://wiki.freeswitch.org/wiki/Firewall FreeSwitch Firewall WIKI]
+I solved the one-way audio problem by instead using the kernel's conntrack  modules for sip.
+So I removed the above ports from {{Path|/etc/shorewall/notrack}}
+and removed the entries for conntrack modules for nat, sip, h323 in {{Path|/etc/shorewall/start}}
+
+Then I enabled module loading for these modules in {{Path}/etc/shorewall/modules.essential}}
+loadmodule nf_nat_sip                               <br/>
+loadmodule nf_conntrack_sip    ports=5060,5070,5080 <br/>
+
+Because BlueBox/FreeSwitch uses multiple ports {5060, 5070, 5080} to distinguish multiple interfaces for multiple domains, it is necessary to compile the kernel with connection tracking as modules so that the module can be loaded specifying which ports to track instead of the default 5060.
+
+{{RootCmd
+|zgrep -i conntrack /proc/config.gz
+}}
+CONFIG_NF_CONNTRACK=m     <br/
+CONFIG_NF_CONNTRACK_SIP=m <br/>
