@@ -407,6 +407,39 @@ matches the path of the hub. If there were useful attributes to
 identify it, we could copy-paste the relevant "ATTR" and/or "ATTRS"
 lines from udevadm output instead of using the "DEVPATH".
 
+=== Sound cards detection and assignment ===
+If one wants to assign a card per seat, it is doable even if one of the cards isn't usb.
+first, decide what cards goes to which seat, then assign the usb cards the same as above to each seat.
+in order to assign the O\B cards, run the following command, I'm attaching the output of my system:
+
+{{Cmd
+|<nowiki>find /sys/devices/  -name "input*"| grep input[0-9][0-9]*</nowiki>
+|output=<pre>
+/sys/devices/pci0000:00/0000:00:01.0/0000:01:00.1/sound/card1/input8
+/sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.2/1-1.2:1.0/input/input10
+/sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.2/1-1.2:1.1/input/input11
+/sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.3/1-1.3.1/1-1.3.1:1.0/input/input12
+/sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.3/1-1.3.1/1-1.3.1:1.1/input/input13
+/sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.4/1-1.4:1.0/input/input14
+/sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.4/1-1.4:1.0/input/input15
+/sys/devices/pci0000:00/0000:00:1b.0/input/input2
+/sys/devices/pci0000:00/0000:00:1b.0/sound/card0/input3
+/sys/devices/pci0000:00/0000:00:1b.0/sound/card0/input4
+/sys/devices/pci0000:00/0000:00:1b.0/sound/card0/input5
+/sys/devices/pci0000:00/0000:00:1b.0/sound/card0/input6
+/sys/devices/pci0000:00/0000:00:1b.0/sound/card0/input7
+/sys/devices/pci0000:00/0000:00:1c.4/0000:06:00.1/sound/card2/input9
+/sys/devices/LNXSYSTM:00/device:00/PNP0C0C:00/input/input0
+/sys/devices/LNXSYSTM:00/LNXPWRBN:00/input/input1
+</pre>}}
+after matching the cards to the actual adapter, one can conclude that card0 is the O\B and card 2 is usb one (card 1 seem to be gpu hdmi card)
+so assuming that we decide to add the O\B card to input_right, /etc/udev/rules.d/99-seats.rules should look like this:
+{{File|/etc/udev/rules.d/99-seats.rules|udev rules for tagging input devices|<pre>
+SUBSYSTEM=="input", ENV{ID_INPUT.tags}="input_default"
+SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:13.2/usb2/2-4/*", ENV{ID_INPUT.tags}="input_right"
+SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:1b.0/sound/card0/*", ENV{ID_INPUT.tags}="input_right"
+SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:1b.0/input/*", ENV{ID_INPUT.tags}="input_right"
+</pre>}}
 == Desktop manager ==
 While it is possible to run a multiseat system without a DM, it is
 easier to have one. It has to be configured to start up an X server
