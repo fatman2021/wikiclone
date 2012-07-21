@@ -712,15 +712,16 @@ now under /etc/profile.d, put the next file:
 #!/bin/bash
 SOUND_CARD_ID=0
 
-if [ "$(whoami)" != "root" -a -f ~/.asoundrc -a ! -z "${DISPLAY}" ]; then
-        if [ $(who | grep ${USER} | awk '{print $2" "$5}' | grep -v ${DISPLAY} | wc -l) -eq 0 ]; then
-                SOUND_CARD_ID=$(aplay -l | grep "device 0:" | sed -n $(expr $(echo ${DISPLAY} | sed 's/://g') + 1)p | awk '{print $2}' | sed 's/://g')
-                sed -i "s/card [0-9]*/card ${SOUND_CARD_ID}/g" ~/.asoundrc
-                export SOUND_CARD_ID=${SOUND_CARD_ID}
-        fi
+if [ "$(whoami)" != "root" -a -f ~/.asoundrc -a $(who | grep "${USER}" | grep -cv "pts") -eq 1 ]; then
+        index=$(($(echo "${DISPLAY}" | cut -f2 -d:)+1))
+        line="$(arecord -L | grep -A1 sysdefault  |  tr '\n' ' ' | sed 's/ -- /\n/g' | sed ${index}'q;d')"
+        regex="$(echo "${line}" | sed -e 's/sysdefault:CARD=/\.\*/g;s/,/\.\*/g;s/[[:blank:]][[:blank:]][[:blank:]]*/\.\*/g')"
+        card="$(arecord -l | grep "device 0:" | grep "${regex}")"
+        SOUND_CARD_ID=$(echo "${card}" | sed 's/:.*$//g' | awk '{print $2}')
+        sed -i "s/card [0-9]*/card ${SOUND_CARD_ID}/g" ~/.asoundrc
+        export SOUND_CARD_ID=${SOUND_CARD_ID}
 fi
 </pre>}}
-
 now when ever a user logs in to a seat, his local .asoundrc will be updated to the seat's soundcard.
 
 == Bypassing policykit ==
