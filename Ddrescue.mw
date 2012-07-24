@@ -1,16 +1,19 @@
 {{Lowercase title}}
 
-{{Stub}}
-''ddrescue'' is a tool provided by GNU to retrieve data from failing (block) storage devices like hard disk drives, cdrom or memory sticks etc. It uses a similar technique as ''dd'' and copies block by block, but has an itelligent algorithm to recover failed data.
+''ddrescue'' is a tool provided by GNU to retrieve data from failing (block) storage devices like hard disk drives, cdrom or memory sticks etc. It uses a similar technique as [[dd]] and copies block by block, but has an itelligent algorithm to recover failed data.
 
 == Installation ==
 You can install {{Package|sys-fs/ddrescue}} using the following command:
 {{Emerge|sys-fs/ddrescue}}
 
 == Usage ==
-General usage of ''ddrescue'' to recover data. It can be also used as a general disk (or even file) copying tool with quite a good efficiency and a nice progress bar.
+The general purpose of ''ddrescue'' is to recover data from failing block devices. It can be also used as a general disk (or even file) copying tool with quite a good efficiency and a nice progress bar.
 
-=== Information ===
+=== Copy data ===
+''ddrescue'' can use block devices or files as input and out. The main difference to other programs to copy files, the destination needs to be specified:
+{{Cmd|ddrescue /etc/make.conf ~/make.conf}}
+
+=== Rescue data ===
 The strategy is to read and copy as much data as possible in the first round, since every access to the storage device could be the last one before it totally fails. Then try to copy the data off the failed/failing areas on drive. Things to check before getting started:
 * the exact device name of the drive to rescue and any other device involved. {{Path|/bin/dmesg}}
 * check the drive' health using {{Package|sys-apps/smartmontools}}
@@ -22,16 +25,21 @@ The strategy is to read and copy as much data as possible in the first round, si
 In this scenario the hard disk drive {{Path|/dev/sdb}} is about to fail and we want to create a copy of it in form of an image.
 * First round, we just copy every block without read error and log the errors into {{Path|/root/rescue.log}}
 {{Note|this takes at least as much disk space as the size of the failing hard disk drive}}
-{{RootCmd|ddrescue -f -n /dev/sdb /root/sdb_rescue.img /root/rescue.log}}
+{{RootCmd|ddrescue -f -g -n /dev/sdb /root/sdb_rescue.img /root/rescue.log}}
+: -f - force, this makes ddrescue run, even if the destination file already exists
+: -g - generate a logfile to continue later and do not copy data twice
+: -n - do not look for other parts of a file to reconstruct the data
 * Second round, we copy only the bad blocks and try 3 times to read from source before we give up
 {{RootCmd|ddrescue -d -f -r3 /dev/sdb /root/sdb_rescue.img /root/rescue.log}}
+: -d - use direct access to the drive and skip any cache
+: -rN - try ''N'' times to rescue the block
 * Now the image could be mounted as loop device and the file system checked for corruption
 
 === Disk to Disk ===
 In this scenario the hard disk drive {{Path|/dev/sdb}} is about to fail and we want to create a copy of it on out new hard disk drive {{Path|/dev/sdc}}, which should be at least the same size as the source drive.
 * First round, we just copy every block without read error and log the errors into {{Path|/root/rescue.log}}
 {{Warning|all data on {{Path|/dev/sdc}} will be lost and also are the partitions or partition table, if any}}
-{{RootCmd|ddrescue -f -n /dev/sdb /dev/sdc /root/rescue.log}}
+{{RootCmd|ddrescue -f -g -n /dev/sdb /dev/sdc /root/rescue.log}}
 * Second round, we copy only the bad blocks and try 3 times to read from source before we give up
 {{RootCmd|ddrescue -d -f -r3 /dev/sdb /dev/sdc /root/rescue.log}}
 * Now the new drive could be mounted and the file system checked for corruption
