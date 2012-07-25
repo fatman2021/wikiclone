@@ -17,7 +17,7 @@ Munin implements a master and slave node structure; one master node with many sl
 |syslog
 }}
 
-== Installation ==
+== Installation and setup ==
 
 The installation of Munin is easy enough, as it only requires to install the one package {{Package|net-analyzer/munin}}, and contains no extra plugins or anything, by default.
 
@@ -25,7 +25,9 @@ The installation of Munin is easy enough, as it only requires to install the one
 
 But since Munin is fundamentally made of two components – the ''node'' and the ''master'' – you should first decide which of the two configurations you want to set up for any given box.
 
-=== Node setup ===
+Note: some of the configuration coming up is going to use the '''sudo'' command. This is required because by default the plugins and the master scripts are executed as the munin user. If you prefer you can easily perform the actions using '''su''' instead.
+
+=== Node (client) ===
 
 Munin nodes have the task of reporting the results of a series of scripts (called plugins), which report data in a structured format so that the master can log the values and generate a report. Usually you set up one node for each box you intend to monitor, including the master.
 
@@ -35,9 +37,26 @@ To set up a simple node, which only has to gather data and does not have to prod
 net-analyzer/munin minimal -cgi
 </pre>}}
 
-The ebuild has a few USE flags that can be enabled to add dependencies for monitoring some given services. See the '''metadata.xml''' file for more information.
+The nodes shouldn't in general need any particular configuration specific to Gentoo, so you can follow the upstream manual just fine. In general you can use the '''munin-node-configure''' command to enable all the plugins that can be used on a system; this is not recommended though, simply because some of the data might not be of interest and would simply add load to the system when executed.
 
-=== Master setup ===
+You can use the following command to identify which plugins would be enabled:
+
+{{RootCmd|sudo -u munin munin-node-configure --shell}}
+
+'''Some of the plugins that are installed might not be functional due to missing dependencies; check [[Munin#USE_Flags|the USE flags description]] for further information.'''
+
+If the selection sounds correct, you can execute the script by using the following command, or simply manually link the plugins you're interested in.
+
+{{RootCmd|sudo -u munin munin-node-configure --shell <nowiki>|</nowiki> /bin/bash}}
+
+Finally you have to start up the service and set it for automatic start.
+
+{{RootCmd
+|/etc/init.d/munin-node start
+|rc-update add munin-node default
+}}
+
+=== Master ===
 
 The Munin master has the task of fetching the values reported by the nodes and producing a report, composed of HTML pages and PNG graphs. This can be done either within the cron job (so that the pages are generated statically) or via the CGI scripts that come installed by default. In either case you're likely going to need a web server, such as [[Apache2]], [[Lighttpd]], or [[nginx]], to display the reports.
 
@@ -45,6 +64,33 @@ When setting up a Munin master you have to make sure the '''minimal''' USE flag 
 
 {{File|/etc/portage/package.use||<pre>
 net-analyzer/munin -minimal
+</pre>}}
+
+==== '''cron''' configuration ====
+
+The Munin master needs to executed periodically a script that gathers the data from the configured nodes; this can be set up in cron by simply using the following command:
+
+{{Emerge|params=--config| net-analyzer/munin}}
+
+This will set up a cron job for the '''munin''' user to execute every five minutes. It is designed to work with [[vixie-cron]], [[dcron]] and [[fcron]] (as of version 2.0.3). The user should already be listed in the '''cron''' group required to use the service.
+
+==== CGI reports ====
+
+Starting from version 2, upstream recommends using the CGI applications to produce the reports, both for HTML pages and PNG graphs. Documentation on how to set this up should be available on upstream's website.
+
+==== Static reports ====
+
+The static generation of reports, which is equivalent to what was supported in the previous version 1.4, is still available; it's recommended that if you intend to proceed this way, you disable the '''cgi''' USE flag so that you risk no conflict:
+
+{{File|/etc/portage/package.use||<pre>
+net-analyzer/munin -minimal -cgi
+</pre>}}
+
+The default configuration will put the generated files in '''/var/www/localhost/htdocs/munin''' which makes it work out of the box with Apache2 and lighttpd as http://localhost/munin/ — but this might not be suitable or desirable for your setup. If you want to change the path where the files are placed, either to change it to a different virtual host or to a different path, you just have to edit '''/etc/munin/munin.conf''':
+
+{{File|/etc/munin/munin.conf||<pre>
+# we want to use http://localhost/monitor/ to access the report
+htmldir /var/www/localhost/htdocs/monitor
 </pre>}}
 
 == Set up ==
