@@ -1,0 +1,77 @@
+This modest contribution will guide you get the new Open Sound System v4 sound support. Users of v3 are encouraged to use the not so maintained v4 version which has a BSD and GPL-2 licences. You can build everything by hand, see end of the article, the following will use [[Portage]] package manager.
+
+== Installation ==
+
+First off, you will have to have [[layman]] with mercurial support or add an overlay which have OSS ebuilds.
+
+{{File|/etc/portage/package.use||app-portage/layman mercurial}}
+{{RootCmd|layman -a oss-overlay}}
+{{Emerge|media-sound/oss}}
+
+Or else you may write your ebuild or get if from another overlay, [https://github.com/tokiclover/bar-overlay here] for example. 
+
+{{File|/etc/portage/package.use||app-portage/layman git}}
+{{RootCmd|layman -a bar}}
+{{Emerge|media-sound/oss}}
+
+There's not much update in the official oss-overlay so you can take an ebuild from another overlay. There are now USE flags in media-sound/oss::bar so that one can build only a few drivers instead of all and OSS_CARDS environment variable can be used to build a few drivers easily.
+
+{{File|/etc/make.conf||<pre>OSS_CARDS="cmi878x cmpci hdaudio ich imux midiloop midimix usb userdev"</pre>}}
+
+That previous ebuild try to keep up with upstream with a nice additions like the latest patches. Now, media-sound/oss uses unusual way to enforce FLAGS (CFLAGS, CPPFLAGS, CXXFLAGS). So anybody who has the time to edit the build is welcomed.
+
+== Configuration ==
+
+Unlike [[ALSA]] OSS has fewer complexity to configure a la `~/.asoundrc' so you won't need any `soundon.user' if you don't have a complex set up or simply more than one sound card. In the latter case, you may want to keep a `soundon.user' file to be able to choose your first card ( first card equal default card) and then put a few line to correct devices nodes which can be a little problematic.
+
+{{File|[https://raw.github.com/tokiclover/dotfiles/master/.scripts/soundon.user /usr/lib/oss/soundon.user]||<pre>
+#!/bin/sh
+# $ID: /usr/lib/oss/soundon.user, 2012/07/27 12:57:40 -tclover Exp $
+modprobe -a oss_{cmi878x,hdaudio}
+/usr/sbin/ossdetect -diu
+/usr/sbin/ossdevlinks 
+# Remapping ossdevlinks links
+if [ -d /dev/oss/oss_cmi878x ]; then
+	ln -sf /dev/oss/oss_cmi878x0/pcm1 /dev/dsp
+	ln -sf /dev/oss/oss_cmi878x0/pcm1 /dev/dsp_ac3
+	ln -sf /dev/oss/oss_cmi878x0/pcm1 /dev/dsp_in
+	ln -sf /dev/oss/oss_cmi878x0/pcm1 /dev/dsp_mmap
+	ln -sf /dev/oss/oss_cmi878x0/pcm1 /dev/dsp_multich
+	ln -sf /dev/oss/oss_cmi878x0/pcm1 /dev/dsp_out
+	vmixctl attach /dev/oss/oss_cmi878x0/pcm1 /dev/oss/oss_cmi878x0/pcm1
+else
+	ln -sf /dev/oss/oss_hdaudio0/pcm0 /dev/dsp
+	ln -sf /dev/oss/oss_hdaudio0/pcmin0 /dev/dsp_in
+#	ln -sf /dev/oss/oss_hdaudio0/spdout0 /dev/dsp
+	ln -sf /dev/oss/oss_hdaudio0/spdout0 /dev/dsp_ac3
+#	ln -sf /dev/oss/oss_hdaudio0/spdin0 /dev/dsp_in
+	ln -sf /dev/oss/oss_hdaudio0/spdout0 /dev/dsp_mmap
+	ln -sf /dev/oss/oss_hdaudio0/spdout0 /dev/dsp_multich
+	ln -sf /dev/oss/oss_hdaudio0/spdout0 /dev/dsp_out
+#	vmixctl attach /dev/oss/oss_hdaudio0/pcm0 /dev/oss/oss_hdaudio0/pcmin0
+fi
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=2:ts=2:</pre>}}
+
+The previous script will check if there are devices nodes, so a sound card, with CMI878x driver and then relink almost everything to it or else use HDAudio.
+
+{{Note|Notice that, that file will be overridden whenever media-sound/oss is updated so you will have to add that file to:}}
+
+{{File|/etc/make.conf||<pre>CONFIG_PROTECT="/usr/lib/oss/soundon.user /usr/share/config/kdm /etc"</pre>}}
+
+Or else, put that file to something like `~/.scripts/soundon.user' and then edit `/etc/init.d/oss' to your liking.
+
+{{File|/etc/init.d/oss||<pre>
+	/usr/sbin/soundon
+	/root/.scripts/soundon.user
+	/usr/sbin/savemixer -L
+</pre>}}
+
+No you can enjoy Open Sound System. I found the sound with OSS4 to be better than what I can get with [[ALSA]]. There was a time when my CMI878x sound works only with OSS but a few things changed.
+
+== External Resources ==
+
+[http://www.opensound.com/wiki/index.php/Configuring_Applications_for_OSSv4 configuring applications for OSSv4]
+[http://www.opensound.com/wiki/index.php/Main_Page Opensound wiki page]
+[http://www.opensound.com/wiki/index.php/Building_OSSv4_from_source building OSSv4 from source]
+
+[[Category:Sound devices]]
