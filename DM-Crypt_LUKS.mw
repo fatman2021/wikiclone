@@ -65,7 +65,7 @@ After encrypting system or disk(s), one will need an [[initramfs]] so that rootf
 
 Now, with a complicated setup one could have to build his/her own to satisfy specific requirements. This where modular or advanced initramfs package shine such as [https://github.com/tokiclover/mkinitrmfs-ll mkinitramfs-ll] [[dracut]] or [[mkinitcpio]].
 
-The following is a simple script that will build an initramfs with LUKS support for the running kernel or for the kernel version passed as argument 1.
+The following is a simple script that will build an initramfs with LUKS support for the running kernel or for the kernel version passed as argument 1. Be careful as this will build the initramfs image and copy it into '/boot' so you need to have that mounted (and if you have an existing initramfs for this kernel, it might get overwritten). Also notice that you need a statically linked lvm binary.
 
 {{File|mkinitramfs.bash||<pre>
 #!/bin/bash
@@ -96,6 +96,7 @@ done
 keymap="${2:-$(grep -E '^keymap' /etc/conf.d/keymaps|cut -d'"' -f2)}"
 loadkeys -b -u $keymap > usr/share/keymaps/${keymap}-$(uname -m).bin
 cp $(which cryptsetup) sbin/
+cp $(which lvm.static) sbin/lvm
 mount /boot &>/dev/null
 find . -print0 | cpio --null -ov --format=newc | xz -9 --check=crc32 > /boot/initramfs-$kv.cpio.xz
 popd
@@ -167,12 +168,34 @@ for arg in $(cat /proc/cmdline); do
 done
 
 [ -n "$kmap" ] && kmap
-# do your stuff here
+# do your stuff here e.g. opening LUKS device, scanning for LVM etc. (this section
+# needs to be tweaked to match your setup (LUKS devices, LVM volume groups etc.)
+# 
+# cryptsetup luksOpen /dev/sda vault
+# lvm vgscan
+# lvm vgchange -ay vg
+# mount /dev/mapper/vg-root /newroot
+#
+# You should also take care of /dev, /proc and /sys filesystems - mount them into
+# the new root (/newroot).
+# 
+# mount -t devtmpfs none /newroot/dev
+# mount -t proc none /newroot/proc
+# mount -t sysfs none /newroot/sys
 
 exec switch_root /newroot ${init:-/sbin/init} $level
 </pre>}}
 
 See [https://github.com/tokiclover/mkinitramfs-ll/blob/master/init mkintramfs-ll/init] for a fully featured init script.
+
+Finally, you need to tweak the bootloader to use the initramfs - e.g. for Grub, something like this should work
+
+{{title Gentoo Linux 3.4.0-gentoo
+root (hd0,0)
+kernel /boot/kernel-3.4.0-gentoo
+initrd /boot/initramfs-3.4.0-gentoo.cpio.xz}}
+
+{{Note|While playing with the initramfs (finding out what needs to be done in the init script), I do recommend to disable automatic start of X Window. It may happen that some of the devices won't work under X (e.g. keyboard and mouse), thus making you stuck on login screen. The change of happening this in the console is much lower, and you can always start X with something like 'sleep 30; /etc/init.d/xdm' stop in another console.}}
 
 == External resources ==
 * [http://en.gentoo-wiki.com/wiki/DM-Crypt_with_LUKS DM-Crypt with LUKS community wiki article]
