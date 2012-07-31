@@ -62,6 +62,130 @@ That sum up quite a few considerations to what a user can face when trying to bu
 
 Now {{Package|sys-power/powertop}}-2 grew up to be quite a good piece of software. If you're runnng an Intel based platform, you can get access to pretty much everything one would expect if trying to build power manager profiles. But the package does not ship with a daemon nor with a configuration or profile file which PowerTOP could pick up when launched in the next restart. One has to launch it again and again in a terminal and enable power management for every power manageable hardware.
 
+Now, it will a bit long to go pick enough power management tuning that a software like PowerTOP use to be able to manage almost everything. This is just a beginning to that. One can use [[ACPI]d to switch between different hardware profiles depending on hardware state.
+
+This basic profile will try to implement [[Hprofile#Disk]], CPU (see [[Hprofile#Extra_resources]], network interfaces and [[ALSA]] drivers power saving capabilities.
+
+One would need the following files to set up basic power management profiles.
+
+{{File|/etc/hprofile/profiles/power||
+adp
+bat
+dyn
+med
+quiet}}
+
+{{Note|''adp'' stand for AC adapter, ''bat'' for battery, ''dyn'' for dynamic (performance profile), ''med'' for medium and ''quiet'' for quiet of courses.}}
+
+{{File|/etc/hprofile/profiles/power/default||adp}}
+
+{{File|/etc/hprofile/profiles/power/ptest||<pre>#!/bin/sh
+profile="adp"
+
+if [ -e "/sys/class/power_supply/ADP1/online" ] ; then
+	status=$(cat /sys/class/power_supply/ADP1/online)
+	case "$status" in
+		1) profile="adp";;
+		0) profile="bat";;
+	esac
+fi
+
+echo "$profile"</pre>}}
+
+{{File|/etc/hprofile/profiles/power/scripts/adp.start||<pre>#!/bin/sh
+hprofile disk.adp
+for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo ondemand >$c/cpufreq/scaling_governor
+done
+echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
+echo 0   >/sys/devices/system/cpu/sched_mc_power_savings
+echo default >/sys/module/pcie_aspm/parameters/policy
+for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ "$(cat $h/proc_name)" = "ahci" ] &&
+		echo min_power >$h/link_power_management_policy
+done
+[ -e /run/openrc/started/alsasound ] &&
+	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
+#iwpriv wlan0 set_power 2
+#xbacklight -set 40
+xset dpms 0 0 1200</pre>}}
+
+{{File|/etc/hprofile/profiles/power/scripts/bat.start||<pre>#!/bin/sh
+hprofile disk.adp
+for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo ondemand >$c/cpufreq/scaling_governor
+done
+echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
+echo 1   >/sys/devices/system/cpu/sched_mc_power_savings
+echo powersave >/sys/module/pcie_aspm/parameters/policy
+for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ "$(cat $h/proc_name)" = "ahci" ] &&
+		echo min_power >$h/link_power_management_policy
+done
+[ -e /run/openrc/started/alsasound ] &&
+	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
+#iwpriv wlan0 set_power 4
+#xbacklight -set 30
+xset dpms 0 0 600</pre>}}
+
+{{File|/etc/hprofile/profiles/power/scripts/dyn.start||<pre>#!/bin/sh
+hprofile disk.adp
+for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo performance >$c/cpufreq/scaling_governor
+done
+echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
+echo 0   >/sys/devices/system/cpu/sched_mc_power_savings
+echo performance >/sys/module/pcie_aspm/parameters/policy
+for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ "$(cat $h/proc_name)" = "ahci" ] &&
+		echo max_performance >$h/link_power_management_policy
+done
+[ -e /run/openrc/started/alsasound ] &&
+	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
+#iwpriv wlan0 set_power 1
+#xbacklight -set 40
+xset dpms 0 0 2400</pre>}}
+
+{{File|/etc/hprofile/profiles/power/scripts/med.start||<pre>#!/bin/sh
+hprofile disk.adp
+for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo ondemand >$c/cpufreq/scaling_governor
+done
+echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
+echo 1   >/sys/devices/system/cpu/sched_mc_power_savings
+echo performance >/sys/module/pcie_aspm/parameters/policy
+for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ "$(cat $h/proc_name)" = "ahci" ] &&
+		echo min_power >$h/link_power_management_policy
+done
+[ -e /run/openrc/started/alsasound ] &&
+	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
+#iwpriv wlan0 set_power 6
+#xbacklight -set 30
+xset dpms 0 0 900</pre>}}
+
+{{File|/etc/hprofile/profiles/power/scripts/quiet.start||<pre>#!/bin/sh
+hprofile disk.adp
+for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo ondemand >$c/cpufreq/scaling_governor
+done
+echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
+echo 1   >/sys/devices/system/cpu/sched_mc_power_savings
+echo powersave >/sys/module/pcie_aspm/parameters/policy
+for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ "$(cat $h/proc_name)" = "ahci" ] &&
+		echo min_power >$h/link_power_management_policy
+done
+[ -e /run/openrc/started/alsasound ] &&
+	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
+#iwpriv wlan0 set_power 6
+#xbacklight -set 20
+xset dpms 0 0 300</pre>}}
+
+{{Note|xset dpms last argument unit is second, previous ones are screen related; I do not remember the effect of increasing/decreasing ''sampling_down_factor'' anymore, and I could not found the source (that setting impact on how often CPU should scale down/up obviously); the other lines are pretty obvious.}}
+
+I have a ''battery'' runlevel, a copycat of default runlevel, that is dynamically switched if AC power is on or not. See [[ACPI]] article for more info. That's not enough? Do you want more tunings? Expand the article then! I wish PowerTOP implement a daemon-ish profile-able application which is the right sport for Intel based hardware.
+
 === RFKill ===
 
 
