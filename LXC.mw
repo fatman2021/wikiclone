@@ -90,7 +90,6 @@ The user-space access to these new kernel features is a kernel-provided filesyst
 ====POSIX File Capabilities====
 POSIX file capabilities are a way to allocate privileges to a process that allow for more specific security controls than the traditional 'root' vs. 'user' privilege separation on unix family operating systems.
 
-
 ==Host Setup==
 To get an lxc-capable host system working you will need the following steps.
 
@@ -98,8 +97,14 @@ To get an lxc-capable host system working you will need the following steps.
 If you are unfamiliar with recompiling kernels, see the copious documentation available on that subject in addition to the notes below.
 
 ====Kernel options required====
-The complete list of relevant kernel options (tested on 3.2.1-gentoo-r2) is as follows.  You can check your running kernel with the ''lxc-checkconfig'' script.
-{{note| if lxc-checkconfig complaints about missing File capabilities: The feature is classified as deprecated and already missing in 3.2.1-gentoo-r2}}
+The {{Package|app-emulation/lxc}} ebuild will check for the most important options for the kernel that are required to set up a LXC host. This is, though, not a fatal check which means you have to make sure to have the options correctly enabled manually. The package also comes with an upstream-provided ''lxc-checkconfig'' script that should report on the proper options.
+
+{{RootCmd|cd /usr/src/linux
+|lxc-checkconfig
+{{note|write down missing kernel options in output, or leave it open and switch to a new terminal; if lxc-checkconfig complaints about missing "File capabilities" ignore it; the feature is now enabled by default and the setting has been removed.}}
+|make menuconfig
+{{note|search for each CONFIG_SOMETHING using '/SOMETHING', enable them one by one, quit & save.}}
+|make && make install modules_install}}
 
 =====General Options=====
 {{kernel|3.2.1-gentoo-r2|<pre>
@@ -198,7 +203,8 @@ CONFIG_CGROUP_CPUACCT / "Cgroup cpu account" ('General Setup -> Control Group su
 </pre>
 
 =====Networking Options=====
-Ethernet bridging, veth, macvlan and vlan (802.1q) support are optional, but you probably want these.
+Ethernet bridging, veth, macvlan and vlan (802.1q) support are optional, but you probably want at least one of these:
+
 <pre>
 CONFIG_BRIDGE / "802.1d Ethernet Bridging" ('Networking support -> Networking options -> 802.1d Ethernet Bridging')
 CONFIG_VETH / "Veth pair device"
@@ -206,130 +212,48 @@ CONFIG_MACVLAN / "Macvlan"
 CONFIG_VLAN_8021Q / "Vlan"
 </pre>
 
-====Reconfig Gentoo kernel====
-You can use the '''lxc-checkconfig''' tool to list kernel options that you need to enable in order to make your existing kernel configuration lxc compatible(tested on 3.2.1-gentoo-r2).
-Process would be something like...
-
-{{RootCmd|cd /usr/src/linux}}
-{{RootCmd| lxc-checkconfig}}
-{{note|note missing kernel options in output, or leave it open and switch to a new terminal}}
-{{RootCmd|make menuconfig}}
-{{ note | search for each CONFIG_SOMETHING using '/SOMETHING', enable them one by one, quit & save.  (most are in general, except for multiple unix98 pty's, in device drivers, and POSIX file capabilities, in security options (but apparently invisible in 3.2.1-gentoo-r2))}}
-{{RootCmd|make && make modules_install}}
-
-Then copy your kernel to your boot partition, reconfigure your boot loader, and reboot.
+Further details about LXC networking options are available [http://blog.flameeyes.eu/2010/09/linux-containers-and-networking on Flameeyes's Weblog]
 
 ===lxc userspace utilities===
-Because lxc is currently very new, it is probably worth making sure that you have the absolute latest version.  Therefore, before we begin, you should ensure that your portage tree is up to date with the following command.
-{{RootCmd|emerge --sync}}
 
-Next, figure out which version of lxc is available with:
+Due to LXC's still unstable nature, Gentoo provides ebuilds only for the most recent version available, therefore make sure to update your Portage tree before proceeding:
 
-{{RootCmd|emerge -vp app-emulation/lxc|output=<pre>
+{{RootCmd|emerge --sync
+|emerge -av app-emulation/lxc|output=<pre>
 These are the packages that would be merged, in order:
 
 Calculating dependencies... done!
-[ebuild  N   ~] app-emulation/lxc-0.8.0-rc1-r1  USE="-examples -vanilla" 0 kB
+[ebuild  N   ~] app-emulation/lxc-0.8.0_rc2-r1  USE="-examples -vanilla" 0 kB
 
 Total: 1 package (1 new), Size of downloads: 0 kB
 
+Would you like to merge these packages? [Yes/No] 
 </pre>}}
 
-Now go ahead and install with...
-{{Emerge|app-emulation/lxc}}
-
 === Mounted cgroup filesystem ===
-The 'cgroup' filesystem provides user-space access to the required kernel control group features, and is required by the lxc userspace utilities.
-
-Recent kernels introduced /sys/fs/cgroup as default location.
-
-The [[OpenRC|openrc]] has already mounts 'cgroup' filesystem during bootstrap, therefore, there is no need for users to mount it manually.
+The 'cgroup' filesystem provides user-space access to the required kernel control group features, and is required by the lxc userspace utilities. Up to kernel 3.1, the filesystem's mountpoint wasn't well defined; nowadays it's defined to be mounted (split) within '''/sys/fs/cgroup'''. Recent [[OpenRC]] versions already mount it during boot, and the {{Package|app-emulation/lxc}} ebuild already depends on a new enough version.
 
 You can check it using:
-<pre>
-# mount | grep cgroup
-
+{{RootCmd|mount \|grep cgroup|output=<pre>
 cgroup_root on /sys/fs/cgroup type tmpfs (rw,nosuid,nodev,noexec,relatime,size=10240k,mode=755)
-openrc on /sys/fs/cgroup/openrc type cgroup (rw,nosuid,nodev,noexec,relatime,release_agent=/lib/rc/sh/cgroup-release agent.sh,name=openrc)
+openrc on /sys/fs/cgroup/openrc type cgroup (rw,nosuid,nodev,noexec,relatime,release_agent=/lib64/rc/sh/cgroup-release-agent.sh,name=openrc)
 cpuset on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
 cpu on /sys/fs/cgroup/cpu type cgroup (rw,nosuid,nodev,noexec,relatime,cpu)
 cpuacct on /sys/fs/cgroup/cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct)
 memory on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
 devices on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)
 freezer on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)
-blkio on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
-perf_event on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,perf_event)
-
 </pre>
 
-==Networking: Ethernet bridge==
-You probably want to set up an ethernet bridge.  Note that this requires the CONFIG_BRIDGE and CONFIG_VETH symbol to be enabled in your kernel.
+== Network configuration ==
 
-===Installation===
-To check if the tools are already installed for configuring and modifying a bridge, use the portage preview command...
-{{RootCmd|emerge -pv net-misc/bridge-utils}}
-<pre>
-# emerge -pv net-misc/bridge-utils
+There are three main options for giving network access to containers:
 
-These are the packages that would be merged, in order:
+ * [[Network bridge|network bridges]] (the simplest solution in most cases);
+ * isolated network;
+ * MACVLAN.
 
-Calculating dependencies... done!
-[ebuild  N    ] net-misc/bridge-utils-1.4  32 kB
-
-Total: 1 package (1 new), Size of downloads: 32 kB</pre>
-
-If you see this, the tools are not installed yet. Go ahead and install with...
-{{RootCmd|emerge --ask net-misc/bridge-utils}}
-
-===Host Configuration===
-First, we need to add the bridge device to the /etc/conf.d/net file. As an example, bridge configuration with DHCP:
-
-{{note|Note that it is important to include 'setfd 0' and 'sethello 10' in order to bring the interface up quickly.  Other values will cause a delay after the guest starts, before the guest's networking will function.}}
-
-{{File|/etc/conf.d/net||<pre>
-#host
-config_eth0=("192.168.0.3 netmask 255.255.255.0")
-route_eth0=("default via 192.168.0.1") #gateway
-
-# bridge (some guest)
-config_br0=("dhcp")
-brctl_br0="setfd 0
-sethello 10
-stp off"
-bridge_br0="eth0"
-</pre>}}
-
-More documentation can be found in /usr/share/doc/openrc-0.9.9.3/net.example.
-
-Next, create the init script and start the interface as follows:
-{{RootCmd|ln -s /etc/init.d/net.lo /etc/init.d/net.br0}}
-{{RootCmd|/etc/init.d/net.br0 start}}
-
-Finally, to make sure the bridge is automatically set up on subsequent boots, run:
-{{RootCmd|rc-update add net.br0 default}}
-
-To grant the guest access to the internet, you will need to use iptables.  If it's not installed, first emerge it.
-{{RootCmd|emerge --ask iptables}}
-
-Allow ip forwarding in your {{Path|/etc/sysctl.conf}} or with the following command:
-{{RootCmd|echo 1 > /proc/sys/net/ipv4/ip_forward}}
-
-Add the iptables rules to grand masqueraded access to the internet. For
-example (substitute 'eth0' with your external facing physical interface):
-{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source ''your_eth0_ipaddr''}}
-
-This is equivalent to:
-<pre>
-EXTIF=eth0 # external facing physical interface
-IP=`ifconfig $EXTIF|grep 'inet addr'|cut -d ':' -f2|cut -d ' ' -f1`
-iptables -t nat -A POSTROUTING -o $EXTIF -j SNAT --to-source $IP
-</pre>
-
-Save the configuration and ensure it is restored at boot:
-{{RootCmd|/etc/init.d/iptables save}}
-{{RootCmd|rc-update add iptables default}}
-
-===Guest Configuration===
+== Guest configuration for network bridges ==
 Your guest network configuration resides in the guest's lxc.conf file.  Documentation for this file is accessible with:
 <pre>man lxc.conf</pre>
 
@@ -349,7 +273,7 @@ lxc.network.link = br0
 If, like me, you are using dhcp inside the container to get an IP address, then run it once as shown.  LXC will generate a random MAC address for the interface.  To keep your DHCP server from getting confused, you will want to use that MAC address all the time.  So find out what it is, and then uncomment the 'lxc.network.hwaddr' line and specify it there.
 
 ==Guest Setup==
-====Template scripts====
+===Template scripts===
 A number of 'template scripts' are distributed with the lxc package.  These scripts assist with generating various guest environments.
 
 Template scripts live in ''/usr/lib(lib64)/lxc/templates/'' but should be executed via the '''lxc-create''' tool as follows:
@@ -384,16 +308,12 @@ The template scripts included in ''app-emulation/lxc-0.8.0-rc1-r1'' are:
 *'''lxc-opensuse''' assists with setting up opensuse linux guest.
 :'''Fixme''': lack of zypper command line package manager tool in gentoo portage.
 *'''lxc-sshd''' assistss with setting up minimal sshd guests (see [http://www.openssh.com/ openssh.com]).
-:'''Fixme''': '''libdir''' is empty in lxc-sshd template, which will cause an mount error when starting sshd guest.
+:'''Fixme''': '''libdir''' is empty in lxc-sshd template, which will cause an mount error when starting sshd guest. ''And why not reporting the bug so I can fix it? ~ Flameeyes''
 *'''lxc-ubuntu''' assist with setting up Ubuntu guests (see [http://www.ubuntu.com/ ubuntu.com]).  Note that in order to use lxc-ubuntu, you must:
 :{{RootCmd|emerge dev-util/debootstrap}}
 :Usage is as follows...
 :{{RootCmd|lxc-create -t ubuntu -n ''guest-name''-f ''network-configuration-file''}}
 :It takes a very long time to create a ubuntu guest, please be patient.
-
-The following commands enable the template guest to be started via init scripts.
-{{RootCmd|cp /etc/lxc/'''guest-name'''/config /etc/lxc/'''guest-name'''.conf}}
-{{RootCmd|ln -s /etc/init.d/lxc /etc/init.d/lxc.'''guest-name'''}}
 
 ===Gentoo===
 ====Automatic setup: lxc-gentoo====
@@ -404,23 +324,12 @@ You can download it here: [http://globalcitizen.github.com/lxc-gentoo/ lxc-gento
 Additional developers, bug fixes, comments, etc. are welcome.
 
 ====Manual Guest Configuration====
-LXC allows a configuration file for each guest container, specifying name, IP address,  etc. 
-As my , you can use lxc-gentoo script to create a gentoo guest:
+LXC allows a configuration file for each guest container, specifying name, IP address,  etc.  yu can use lxc-gentoo script to create a gentoo guest:
 
-{{RootCmd| mkdir /etc/lxc/gentoo && cp /path/of/lxc-gentoo /etc/lxc/gentoo && cd /etc/lxc/gentoo }}
-{{RootCmd| ./lxc-gentoo create -i 192.168.0.6/24 -g 192.168.0.1 -n <''guestname''> -u <''utsname''>}}
+{{Rootcmd
+|/path/of/lxc-gentoo create -i 192.168.0.6/24 -g 192.168.0.1 -n <''guestname''> -u <''utsname''>}}
 
-After creating the gentoo guest, you can manage guest as follows: 
-
-{{RootCmd|lxc-start -f /etc/lxc/gentoo/<''utsname''>.conf -n <''guestname''>}}
-{{RootCmd|lxc-stop -n <''guestname''>}}
-{{RootCmd|lxc-destroy -n <''guestname''>}}
-
-The final command enables the guest to be started via init scripts.
-{{RootCmd|cp /path/of/'''utsname'''.conf /etc/lxc/}}
-{{RootCmd|ln -s /etc/init.d/lxc /etc/init.d/lxc.'''utsname'''}}
-
-{{Note|The /etc/init.d/lxc gets config file from the path: /etc/lxc/'''utsname'''.conf.}}
+After creating the guest you can manage it as usual.
 
 ====Option: Shared /usr/portage/distfiles====
 If you want to share distfiles from your host, you can set the <tt>PORTAGE_RO_DISTDIRS</tt> variable to a space-separated list of directories to search. Portage will create a symlink in <tt>DISTDIR</tt> to the first matching file found in <tt>PORTAGE_RO_DISTDIRS</tt> if the file does not already exist in <tt>DISTDIR</tt>.
@@ -454,31 +363,29 @@ lxc contains a minimal template script for Ubuntu guests (see [http://www.ubuntu
 
 ==Using the Guest Container==
 ===Manual use===
-To start the guest, simply run:
-{{RootCmd|lxc-start -n '''guestname'''}}
-
-To stop the guest, run:
-{{RootCmd|lxc-stop -n '''guestname'''}}
-
-If for any reason guest fails to start, see the error messages by running:
-{{RootCmd|tail /var/log/lxc/'''guestname'''.log}}
-But it needs to be created from /etc/init.d/lxc.'''guestname''' script.
+To start and stop the guest, simply run:
+{{RootCmd
+|lxc-start -n '''guestname'''
+|lxc-stop -n '''guestname'''}}
 
 Please be aware, that when you have daemonized the booting process (-d), you will not get any output on screen. This might happen when you conveniently use an alias wich daemonizes by default, and forgot about it. You may get puzzled later by this if there is problem while booting a new the container that has not been configured properly (e.g. network).
 
 ===Use from gentoo init system===
-If you have made a symbolic link in /etc/init.d for each guest container you have created then instead of using the LXC userland tools directly you can start and stop a guest as follows:
-{{RootCmd|/etc/init.d/lxc.'''guestname''' stop}}
-{{RootCmd|/etc/init.d/lxc.'''guestname''' start}}
+
+Gentoo's ebuild (without the ''vanilla'' USE flag enabled), provides an init script to manage containers and start them at boot time. To make use of the init script you just have to create a symlink in the '''/etc/init.d/''' folder:
+
+{{RootCmd
+|ln -s lxc /etc/init.d/lxc.'''guestname'''
+|/etc/init.d/lxc.'''guestname''' stop
+|/etc/init.d/lxc.'''guestname''' start}}
 
 Of course, the use of such scripts is primarily intended for booting and stopping the system. To make a guest to the rc chain, run:
 {{RootCmd|rc-update add lxc.'''guestname'''}}
 
 To enter a (already started) guest directly from the host machine, see the '''lxc-console''' section below.
 
-== Notes ==
-===Console access===
-====lxc-console====
+=== Accessing the guest ===
+=== lxc-console ===
 Using '''lxc-console''' provides console access to the guest. To use type:
 {{RootCmd|lxc-console -n '''guestname'''}}
 If you get a message saying lxc-console: console denied by '''guestname''', then you need to add to your container config:
@@ -492,7 +399,7 @@ Note that unless you log out inside the guest, you will remain logged on, so the
 
 Usage of lxc-console should be restricted to root. It should be primarily a tool for system administrators (root) to enter a (newly) container after it is first created, e.g. when the network connection is not properly configured yet. Using multiple instances of lxc-console on distinct guests works fine, but starting a second instance for a guest that is already governed by another lxc-console session, leads to redirection of keyboard input and terminal output. Best is to avoid use of lxc-console at all. (Perhaps lxc developers should enhance the tool in such way that is only possible for singleton use per guest. ;-)
 
-====Accessing the container with sshd====
+=== Accessing the container with sshd ===
 A common technique to allow users direct access into a system container is to run a separate sshd inside the container. Users then connect to that sshd directly. In this way, you can treat the container just like you treat a full virtual machine where you grant external access. If you give the container a routable address, then users can reach it without using ssh tunneling. 
 
 If you set up the container with a virtual ethernet interface connected to a bridge on the host, then it can have its own ethernet address on the LAN, and you should be able to connect directly to it without logically involving the host (the host will transparently relay all traffic destined for the container, without the need for any special considerations). You should be able to simply 'ssh <container_ip>'.
@@ -500,12 +407,7 @@ If you set up the container with a virtual ethernet interface connected to a bri
 {{Note|The above comments of ''Hu'' and ''BoneKracker'' have been taken from <nowiki>http://forums.gentoo.org/viewtopic.php?p=6943426</nowiki> in the [http://forums.gentoo.org/index.php Gentoo Forums]}}
 
 ===Filesystem layout===
-For lxc-0.8.0-rc1-r1, the /etc/init.d/lxc init script expect guest configuration to be at '''/etc/lxc/<''guestname''>.conf'''.
-{{Note|If you use the lxc-gentoo script to create the gentoo guest, please be noted that the generated .conf file should be <''utsname''>.conf}}
-
-Some of the lxc tools apparently assume that '''/etc/lxc/<''guestname''>/''' exists.  Probably then, that's the 'right' place to store your lxc.conf files (guest configuration files) and any extra guest configuration information.
-
-However, you should keep the guests' root filesystems out of /etc since it's not a path that's supposed to store large volumes of binary data. 
+Some of the lxc tools apparently assume that '''/etc/lxc/<''guestname''>/''' exists. However, you should keep the guests' root filesystems out of /etc since it's not a path that's supposed to store large volumes of binary data. 
 
 The templates of lxc will use the following locations::
 * '''/etc/lxc/<''guestname''>/config''' = guest configuration file
