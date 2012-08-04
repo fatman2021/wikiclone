@@ -1,0 +1,67 @@
+= Setting up a network bridge =
+
+{{Stub}}
+
+===Installation===
+To check if the tools are already installed for configuring and modifying a bridge, use the portage preview command...
+{{RootCmd|emerge -pv net-misc/bridge-utils}}
+<pre>
+# emerge -pv net-misc/bridge-utils
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies... done!
+[ebuild  N    ] net-misc/bridge-utils-1.4  32 kB
+
+Total: 1 package (1 new), Size of downloads: 32 kB</pre>
+
+If you see this, the tools are not installed yet. Go ahead and install with...
+{{RootCmd|emerge --ask net-misc/bridge-utils}}
+
+===Host Configuration===
+First, we need to add the bridge device to the /etc/conf.d/net file. As an example, bridge configuration with DHCP:
+
+{{note|Note that it is important to include 'setfd 0' and 'sethello 10' in order to bring the interface up quickly.  Other values will cause a delay after the guest starts, before the guest's networking will function.}}
+
+{{File|/etc/conf.d/net||<pre>
+#host
+config_eth0=("192.168.0.3 netmask 255.255.255.0")
+route_eth0=("default via 192.168.0.1") #gateway
+
+# bridge (some guest)
+config_br0=("dhcp")
+brctl_br0="setfd 0
+sethello 10
+stp off"
+bridge_br0="eth0"
+</pre>}}
+
+More documentation can be found in /usr/share/doc/openrc-0.9.9.3/net.example.
+
+Next, create the init script and start the interface as follows:
+{{RootCmd|ln -s /etc/init.d/net.lo /etc/init.d/net.br0}}
+{{RootCmd|/etc/init.d/net.br0 start}}
+
+Finally, to make sure the bridge is automatically set up on subsequent boots, run:
+{{RootCmd|rc-update add net.br0 default}}
+
+To grant the guest access to the internet, you will need to use iptables.  If it's not installed, first emerge it.
+{{RootCmd|emerge --ask iptables}}
+
+Allow ip forwarding in your {{Path|/etc/sysctl.conf}} or with the following command:
+{{RootCmd|echo 1 > /proc/sys/net/ipv4/ip_forward}}
+
+Add the iptables rules to grand masqueraded access to the internet. For
+example (substitute 'eth0' with your external facing physical interface):
+{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source ''your_eth0_ipaddr''}}
+
+This is equivalent to:
+<pre>
+EXTIF=eth0 # external facing physical interface
+IP=`ifconfig $EXTIF|grep 'inet addr'|cut -d ':' -f2|cut -d ' ' -f1`
+iptables -t nat -A POSTROUTING -o $EXTIF -j SNAT --to-source $IP
+</pre>
+
+Save the configuration and ensure it is restored at boot:
+{{RootCmd|/etc/init.d/iptables save}}
+{{RootCmd|rc-update add iptables default}}
