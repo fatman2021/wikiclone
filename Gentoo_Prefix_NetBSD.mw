@@ -1,4 +1,6 @@
-This page will contain notes about my efforts to get '''Gentoo Prefix''' working in '''NetBSD 6'''
+=== WARNING ===
+<big>Currently Gentoo Prefix does not work on NetBSD. This is a work in progress and this page will contains notes about my efforts to get it up and running.</big>
+== Instructions ==
 Currently I have built the toolchain, but need to go back and restart.
 Start by installing '''bash''' via '''pkgsrc''' because thats what I use for the guide.
 <br />
@@ -14,55 +16,27 @@ There is no Gentoo Prefix Profile for NetBSD on x86_64 so get [http://mechalogic
 {{Cmd|cd $EPREFIX|tar zxvf ~/profile-x86_64-pc-netbsd.tgz}}
 We have to edit bootstrap-prefix.sh to add support for our profile. Open it up, find i386-pc-netbsd and add the following section below that one.
 {{Cmd|vi bootstrap-prefix.sh|output=<pre>
-                x86_64-pc-netbsd*)
-                        profile="${PORTDIR}/profiles/prefix/bsd/netbsd/6.0/x64"
-                        ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib\""
-                        ;;
+  x86_64-pc-netbsd*)
+    profile="${PORTDIR}/profiles/prefix/bsd/netbsd/6.0/x64"
+    ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib\""
+    ;;
 </pre>}}
 We also need a '''ksh''' compatible <code>print</code> command because our hybrid NetBSD system will confuse '''libtool''' which is used in a great many packages. Since NetBSD comes with '''ksh''' we can use a small shell script to satisfy '''libtool'''.
 {{Cmd|vi ~/print|output=<pre>
 #!/bin/ksh
 print $*
 </pre>}}
-{{Cmd|chmod +x ~/print}}
-Keep that file handy we will probably need it.
+{{Cmd|chmod +x ~/print|mkdir -p $EPREFIX/usr/bin|cp ~/print $EPREFIX/usr/bin}}
+
 <br />
-m4 and Bison must be installed *before* Bash.
+'''m4''' and '''bison''' must be installed *before* '''bash'''. We can just go down the list until we get to '''bison'''
 {{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp make
 |./bootstrap-prefix.sh $EPREFIX/tmp wget
 |./bootstrap-prefix.sh $EPREFIX/tmp sed
 |./bootstrap-prefix.sh $EPREFIX/tmp m4}}
-Bootstrapping m4 will probably fail due to problems with fseeko.c and fflush.c. I will describe the patching process here.
-<pre>$NetBSD: patch-lib-fflush.c,v 1.1 2012/03/06 23:38:04 joerg Exp $
-
---- lib/fflush.c.orig	2011-08-19 16:09:37.000000000 +0000
-+++ lib/fflush.c
-@@ -91,7 +91,7 @@ static inline void
- update_fpos_cache (FILE *fp, off_t pos)
- {
- #if defined __sferror || defined __DragonFly__ /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
--# if defined __CYGWIN__
-+# if defined(__CYGWIN__) || defined(__NetBSD__)
-   /* fp_->_offset is typed as an integer.  */
-   fp_->_offset = pos;
- # else
-</pre>
-<pre>
-$NetBSD: patch-lib-fseeko.c,v 1.1 2012/03/06 23:38:04 joerg Exp $
-
---- lib/fseeko.c.orig	2011-08-12 08:05:46.000000000 +0000
-+++ lib/fseeko.c
-@@ -111,7 +111,7 @@ fseeko (FILE *fp, off_t offset, int when
-       fp->_flags &= ~_IO_EOF_SEEN;
-       fp->_offset = pos;
- #elif defined __sferror || defined __DragonFly__ /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
--# if defined __CYGWIN__
-+# if defined(__CYGWIN__) || defined(__NetBSD__)
-       /* fp_->_offset is typed as an integer.  */
-       fp_->_offset = pos;
- # else
-</pre>
-Keep these files handy we will need them again.
+Bootstrapping m4 will probably fail due to problems with fseeko.c and fflush.c. Download [http://mechalogic.net:8080/public/patch-lib-fflush.c patch-lib-fflush.c] and also [http://mechalogic.net:8080/public/patch-lib-fseeko.c patch-lib-fseeko.c] and put them in your home directory.
+<<Instructions for patching m4 will go here>>
+Keep all these files handy. You may have to start over.
 {{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp bison}}
 
 Now we can go ahead and bootstrap bash
