@@ -1,11 +1,61 @@
-This page will contain notes about my efforts to get Gentoo Prefix working in NetBSD 6
-
+This page will contain notes about my efforts to get '''Gentoo Prefix''' working in '''NetBSD 6'''
 Currently I have built the toolchain, but need to go back and restart.
-
+Start by installing '''bash''' via '''pkgsrc''' it will make things simpler.
+<br />
+The following is added to ''~/.bashrc''
+{{Cmd|vi ~/.bashrc|output=<pre>
+export EPREFIX="$HOME/gentoo"
+export LDFLAGS="-L$EPREFIX/usr/lib -Wl,-rpath=$EPREFIX/usr/lib -L$EPREFIX/lib -Wl,-rpath=$EPREFIX/lib"
+export PATH="$EPREFIX/usr/bin:$EPREFIX/bin:$EPREFIX/tmp/usr/bin:$EPREFIX/tmp/bin:$PATH"
+</pre>}}
+The EPREFIX part is your choice. Another popular option is <code>EPREFIX=/usr/gentoo</code>
+<br />
+We also need a '''ksh''' compatible <code>print</code> command because our hybrid NetBSD system will confuse '''libtool''' which is used in a great many packages. Since NetBSD comes with '''ksh''' we can use a small shell script to satisfy '''libtool'''.
+{{Cmd|vi ~/print|output=<pre>
+#!/bin/ksh
+print $*
+</pre>}}
+{{Cmd|chmod +x ~/print}}
+Keep that file handy we will probably need it.
+<br />
 m4 and Bison must be installed *before* Bash.
-Bash needs to have plugins enabled somehow.
+{{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp make
+|./bootstrap-prefix.sh $EPREFIX/tmp wget
+|./bootstrap-prefix.sh $EPREFIX/tmp sed
+|./bootstrap-prefix.sh $EPREFIX/tmp m4}}
+Bootstrapping m4 will probably fail due to problems with fseeko.c and fflush.c. I will describe the patching process here.
+<pre>$NetBSD: patch-lib-fflush.c,v 1.1 2012/03/06 23:38:04 joerg Exp $
 
-If Bash is built without plugins it will lack the print command which will cause
-all packages which use libtool to fail with "print -r --" command not found.
+--- lib/fflush.c.orig	2011-08-19 16:09:37.000000000 +0000
++++ lib/fflush.c
+@@ -91,7 +91,7 @@ static inline void
+ update_fpos_cache (FILE *fp, off_t pos)
+ {
+ #if defined __sferror || defined __DragonFly__ /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
+-# if defined __CYGWIN__
++# if defined(__CYGWIN__) || defined(__NetBSD__)
+   /* fp_->_offset is typed as an integer.  */
+   fp_->_offset = pos;
+ # else
+</pre>
+<pre>
+$NetBSD: patch-lib-fseeko.c,v 1.1 2012/03/06 23:38:04 joerg Exp $
 
-More to come. Too tired to continue.
+--- lib/fseeko.c.orig	2011-08-12 08:05:46.000000000 +0000
++++ lib/fseeko.c
+@@ -111,7 +111,7 @@ fseeko (FILE *fp, off_t offset, int when
+       fp->_flags &= ~_IO_EOF_SEEN;
+       fp->_offset = pos;
+ #elif defined __sferror || defined __DragonFly__ /* FreeBSD, NetBSD, OpenBSD, DragonFly, MacOS X, Cygwin */
+-# if defined __CYGWIN__
++# if defined(__CYGWIN__) || defined(__NetBSD__)
+       /* fp_->_offset is typed as an integer.  */
+       fp_->_offset = pos;
+ # else
+</pre>
+Keep these files handy we will need them again.
+{{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp bison}}
+
+Now we can go ahead and bootstrap bash
+{{Cmd|./bootstrap-bash.sh $EPREFIX/tmp|hash -r}}
+More to come.
