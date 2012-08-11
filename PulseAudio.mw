@@ -1,71 +1,94 @@
 {{InfoBox stack
-  |{{InfoBox wikipedia|PulseAudio|header=true}}
+|{{InfoBox homepage|http://www.freedesktop.org/wiki/Software/PulseAudio|header=true}}
+|{{InfoBox wikipedia|PulseAudio}}
 }}
-PulseAudio or PA for short is a sound server that provides a number of features on top of the low-level audio interface (ALSA) on Linux, such as:
-* Networking support
+PulseAudio or PA for short is a sound server that provides a number of features on top of the low-level audio interface [[ALSA]] on Linux, such as:
+* Networking support (P2P and server mode).
 * Per-application volume controls
 * Better cross-platform support
 * Dynamic latency adjustment, which can be used to save power
-
-PulseAudio allows for playing audio applications on the server, while hearing it through the client's soundcard. The application running on the server sends its audio output to the Pulse server instead of the server's soundcard. The Pulse client on the client receives this output and lets Alsa process it to the client's soundcard.
 
 == Installation ==
 Portage knows the global USE flag ''pulseaudio'' for enabling support for PulseAudio in other packages. Enabling this USE flag will pull in {{Package|media-sound/pulseaudio}} automatically:
 {{File|/etc/portage/make.conf||
 USE{{=}}"... pulseaudio ..."
 }}
-The USE flags of pulseaudio are:
+The recommend USE flags of pulseaudio are:
+{{USEflag|package=media-sound/pulseaudio
+|alsa+yes+yes
+|caps+yes+yes
+|dbus+yes+yes
+|gdbm+yes+yes
+|glib+yes+yes
+|orc+yes+yes
+|udev+yes+yes
+}}
+
+Optional USE flags of pulseaudio are:
 {{USEflag|package=media-sound/pulseaudio
 |X
-|alsa+yes+yes
 |asyncns+yes
 |avahi
 |bluetooth+yes
-|caps+yes
-|dbus+yes
 |doc
 |equalizer
-|gdbm+yes
-|glib+yes
 |gnome
 |ipv6+yes
 |jack
 |libsamplerate++no
 |lirc
-|orc+yes+yes
 |oss++no
 |realtime
-|ssl++yes
+|ssl
 |system-wide++no
 |tcpd+yes
 |test
-|udev+yes+yes
 }}
 
 After setting this you want to update your system so the changes take effect:
 {{RootCmd|emerge --ask --changed-use --deep world}}
 
+=== Addons ===
+* '''pavucontrol''' is a handy graphical tool for setting various aspects of PA. Install it with:
+{{Emerge|media-sound/pavucontrol}}
+
+* KDE users can to some extent use Phonon`s configuration, but it is not a full replacement for pavucontrol.
+
 == Configuration ==
 
 === Permissions ===
-If you have the USE flag '''''acl''''' enabled globally and are using ConsoleKit (i.e you're using a Desktop profile) permissions to sound cards will be handled automatically. You can check the permissions using '''getfacl''':
+{{Note|This is the only supported configuration by upstream and Gentoo developers.}}
+PulseAudio uses [[udev]] and ConsoleKit to dynamically give access to the soundcards to the currently "active" user. To make this possible ACLs (Access Control  Lists) are required:
+{{Kernel||<pre>
+File systems  --->
+   Pseudo filesystems  --->
+      [*] Virtual memory file system support (former shm fs)
+      [*]   Tmpfs POSIX Access Control List
+</pre>}}
+
+If you're not using a ''desktop'' [[profile]], check that {{Package|sys-auth/consolekit}} is installed with enabled '''acl''' USE flag and that ConsoleKit is running:
+{{RootCmd|/etc/init.d/consolekit status|output=<pre>
+* status: started
+</pre>}}
+If not, enable it at boot time:
+{{RootCmd|rc-update add consolekit}}
+
+When you're finished, check, if your permissions are working correctly:
 {{Cmd|getfacl /dev/snd/controlC0 {{!}} grep -Eo "user:.+:"  {{!}} cut -d: -f2|output=
-larry
+YOUR_USERNAME
 }}
-{{Note|getfacl output shown above is only an example, if everything is working correctly, it should display username of whoever controls the active seat (that is, display/keyboard/mouse/etc set).}}
-Remove any and all users from the audio group!
+
+{{Important|For ConsoleKit managed permissions to be respected '''no one may be part of the ''audio'' group''' (not even even the user pulse). Remove any and all users from the audio group:
 {{RootCmd|gpasswd -d <user> audio}}
-{{Warning|This is the only supported configuration! If anyone loged on is in audio group, then that user can disregard acl (at least on non-selinux systems) and will likely not relinquish access after it has been obtained, effectively not allowing anyone else to output sound, if there's more than one such user,  there can also an added random factor on who gets to control device}}
+}}
 
 === Configuring other applications ===
-Some applications need to be configured to output to PulseAudio by default. A detailed list of these can be found on the PulseAudio wiki's [http://pulseaudio.org/wiki/PerfectSetup PerfectSetup page].
+Some applications need to be configured to output to PulseAudio by default. A detailed list of these can be found on the PulseAudio wiki's [http://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/User/PerfectSetup PerfectSetup page].
 
 ;ALSA
 {{Note|If you previous had followed this article, upon upgrade to a fixed version (there should also be an einfo reminder), please remove the ''asound.conf'' file.}}
 You need to install {{Package|media-plugins/alsa-plugins}} with ''pulseaudio'' USE flag enabled:
 {{Emerge|media-plugins/alsa-plugins}}
-{{Note|It's highly important that udev is being used for hardware detection, else PA itself will be unable to access sound devices without custom configuration!}}
-
 
 ;OSS
 You need to enable the following module in {{Path|/etc/pulse/default.pa}}:
@@ -108,30 +131,12 @@ You need to set the following in {{Path|/etc/mplayer/mplayer.conf}}:
 ao{{=}}pulse
 }}
 
-=== Fast user switching ===
-For fast user switching to work with PA where each session has its own PulseAudio process, ConsoleKit is used to know which session is active and therefore most likely to be the desired one to be granted exclusive control over device files in ''/dev/snd/''. To make this possible Access Control  Lists (or ACL for short) are required and because /dev is usually devfs, which is a form of tmpfs, ACL support for tmpfs is a must.
-
-{{Kernel|Enabling ACL for tmpfs|<pre>
-File systems  --->
-   Pseudo filesystems  --->
-      [*] Virtual memory file system support (former shm fs)
-      [*]   Tmpfs POSIX Access Control List
-</pre>}}
-
-{{Warning|For ConsoleKit managed permissions to be respected '''no one may be part of the ''audio'' group''' (not even even the user pulse). In fact, for users to be able to output sound vai PA they do not have to be part of any specific group.
-
-Also it is recommended that the '''acl''' USE flag is globally enabled (Desktop profiles do this by default).}}
-
-{{Note|For obvious reasons ConsoleKit has to be running for this to work which is usually the case but, if it is not started by default, please enable it. In case of OpenRC, this can be accomplished using
-{{RootCmd|rc-update add consolekit default}}
-}}
-
 === Without udev ===
 {{Warning|Using PA without udev is highly '''not''' recommended. It should be noted that this not only breaks auto-detection but hot-plugging as whole needlessly making your life harder as well as disabling use of ConsoleKit essentially voiding the article. Please, if you have the possibility to use udev (and you most certainly have), just use it.}}
 
 In case that you are using ALSA as a PulseAudio sink (output) and routing ALSA apps to PA but not using udev, you must make sure to have set a specific device to be used. Else, PulseAudio will use ALSA device "default" as sink which may be routed back to PulseAudio, forming a loop. To avoid this, add the parameter ''device=hw:0,0'' (you can find the correct IDs by running ''aplay -l''). In the following example, we use two soundcards, of which card 0, device 0 is used as a sink (audio output, e.g. speakers) and card 1, device 0 as a source (audio input, e.g. microphone). PulseAudio will still be able to access other cards than these but it needs these settings to avoid looping the ''default'' device in this setup.
 
-{{file|/etc/pulse/default.pa|Using a specific ALSA device as PulseAudio sink/source|<pre>
+{{File|/etc/pulse/default.pa|Using a specific ALSA device as PulseAudio sink/source|<pre>
 load-module module-alsa-sink device=hw:0,0
 load-module module-alsa-source device=hw:1,0
 </pre>}}
@@ -171,12 +176,6 @@ load-module module-tunnel-sink server=1.2.3.4
 
 Now in the pulse audio volume control you should see the remote server listed under <u>Output Devices</u>. Under playback you should have a button next to the ''Mute audio'' button that when clicked will let you switch that audio stream to whichever output you want.
 
-== Usage ==
-A handy cross-desktop graphical tool is available for setting various aspects of PA. Install it with
-{{Emerge|media-sound/pavucontrol}}
-
-KDE users can to some extent use Phonon`s configuration but it is not a full replacement for pavucontrol.
-
 == Troubleshooting ==
 * {{Bug|pulseaudio|search=package}}
 * {{Bug|pulseaudio|site=fdo|search=package}}
@@ -208,9 +207,7 @@ Using a version of PA with Orc support can noticeably decrease CPU usage, too. S
 }}
 
 == External resources ==
-* [http://pulseaudio.org/wiki/AboutPulseAudio PulseAudio Homepage]
-* [http://developer.novell.com/wiki/index.php/Feisty/HOWTO:_PulseAudio Ubuntu Feisty LTSP PulseAudio Howto]
-* [http://www.pulseaudio.org/wiki/PerfectSetup PulseAudio: The Perfect Setup]
+* [http://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/User/PerfectSetup PulseAudio: The Perfect Setup]
 * [http://www.linux.com/news/hardware/drivers/8100-why-you-should-care-about-pulseaudio-and-how-to-start-doing-it Why you should care about PulseAudio (and how to start doing it)]
 
 [[Category:Multimedia]]
