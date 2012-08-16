@@ -1,0 +1,62 @@
+
+{{InfoBox stack
+|{{InfoBox homepage|http://www.freedesktop.org/wiki/Software/ConsoleKit/|header=true}}
+}}
+This article describes the setup of ConsoleKit, a framework for defining and tracking users, login sessions, and seats. 
+
+== Description ==
+ConsoleKit's function is to support in multiuser setups. It also works for a single user, but offers no benefit compared to existing methods.
+
+ConsoleKit is a [[D-Bus]] daemon and creates for each PAM session an own session. All appliciations in that session can make use of the permissions granted to this sessions. ConsoleKit determine, if the session is local (created by a local user in contrast to users logged in over the network) and if the session is active (means, it's the most recent session). Based on this distinction, ConsoleKit assigns device file permissions (e.g. for audio, video and more) to the session. Also other software like [[PolicyKit]] make use of this distinction.
+
+Fast user switching is a feature powered by ConsoleKit. When switching device file permissions get changed to the new active user and appliciations in the old session get notified, so they can revoke grants based on ConsoleKit informations.
+
+ConsoleKit support in shutdown/reboot handling, so that only the local, active user can shutdown or reboot the system.
+
+The planned multiseat feature is not fully implemented. At the moment all local sessions are in ''Seat1'', all other sessions are in ''seat2''.
+
+== Installation ==
+
+=== Kernel ===
+You need to activate the following kernel options:
+{{Kernel||<pre>
+General setup  --->
+    [*] Auditing support
+    [*]   Enable system-call auditing support
+</pre>}}
+
+=== Software ===
+Portage knows the global USE flag ''consolekit'' for enabling support for ConsoleKit in other packages. Enabling this USE flag will pull in {{Package|sys-auth/consolekit}} automatically (default for ''desktop'' [[profile]]s):
+{{File|/etc/portage/make.conf||<pre>
+USE="... consolekit ..."
+</pre>}}
+The USE flags of consolekit are:
+{{USEflag|package=sys-auth/consolekit
+|acl+yes
+|debug
+|doc
+|pam+yes
+|policykit+yes
+|selinux
+|test
+}}
+
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
+
+== Configuration ==
+You can now start ConsoleKit:
+{{RootCmd|/etc/init.d/consolekit start}}
+To start ConsoleKit at boot time, add it your default runlevel (although it often also get started by ConsoleKit depending services):
+{{RootCmd|rc-update add consolekit}}
+
+== Usage ==
+* '''ck-list-sessions''': Shows all sessions and their details. For a local, active users ''<code>active</code>'' and ''<code>is-local</code>'' should be set to ''<code>TRUE</code>''.
+
+== Troubleshooting ==
+* {{Bug|consolekit|search=package}}
+* '''ck-history --log''': Shows the logged messages.
+* The ''ConsoleKit'' init.d script {{Path|/etc/init.d/consolekit}} uses the ''<code>-q</code>'' parameter to supress debug messages. Remove this parameter and restart the service to get more messages. Use also the parameter ''<code>--debug</code>'' to get even more messages.
+* Consolekit communicates over D-Bus, so also see the [[D-Bus#Troubleshooting|D-Bus "Troubleshooting" section]].
+
+[[Category:Daemons]]
