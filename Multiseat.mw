@@ -1,96 +1,40 @@
-A multiseat system is a computer system with multiple hardware
-terminals, allowing two or more users to use a single computer. While
-Linux systems running Xorg always supported multiseat, the level of
-support changed a lot over time: sometimes it was hardware that
-changed, and lately, it is software changes that cause documentation
-to become obsolete pretty fast. Multiseat configurations became less
-popular when graphics adapters were predominantly AGP based because a
-motherboard can only have one AGP slot, but they have gained
-popularity again since PCIE became mainstream. The changes in the Xorg
-stack in the last few years make input device management far easier
-than it was in the past: as of 2011, it is possible to have device
-hotplug support on a multiseat system.
+A multiseat system is a computer system with multiple hardware terminals, allowing two or more users to use a single computer. While Linux systems running Xorg always supported multiseat, the level of support changed a lot over time: sometimes it was hardware that changed, and lately, it is software changes that cause documentation
+to become obsolete pretty fast. Multiseat configurations became less popular when graphics adapters were predominantly AGP based because a motherboard can only have one AGP slot, but they have gained popularity again since PCIE became mainstream. The changes in the Xorg stack in the last few years make input device management far easier than it was in the past: as of 2011, it is possible to have device hotplug support on a multiseat system.
 
-Not all changes that have come about lately have been positive. As
-desktop environments have progressed from static configurations
-through HAL and to the current (as of 2011) mixture of
-policykit/consolekit and udisks/upower, the state of the desktop is in
-flux. While these tools aim to ease session management, they are not
-there yet. Specifically, while they aim to implement security policies
-giving local users permissions different from remote users and allow
-fine-grained control over permissions, their current state makes this
-difficult to do properly.
+Not all changes that have come about lately have been positive. As desktop environments have progressed from static configurations through HAL and to the current (as of 2011) mixture of PolicyKit/[[ConsoleKit]] and udisks/upower, the state of the desktop is in flux. While these tools aim to ease session management, they are not
+there yet. Specifically, while they aim to implement security policies giving local users permissions different from remote users and allow fine-grained control over permissions, their current state makes this difficult to do properly.
 
 {{Important|This HOWTO is ''not'' about taming the aforementioned tools. It is about bypassing them. The goal is creating a cooperative multiseat environment, allowing users to share access to all storage, sound (if desired) and other devices. '''Security will therefore be lax.'''}}
-Note: consolekit has been removed in Fedora 17 and replaced with systemd-logind, it is likely that consolekit will disappear in the future.
+{{Note|ConsoleKit has been removed in Fedora 17 and replaced with systemd-logind, it is likely that ConsoleKit will disappear in the future.}}
 
-Configuration examples in this HOWTO are provided for a two-seat
-configuration, with seats labeled "left" and "right", but it is easy
-to generalize to more seats.
+Configuration examples in this HOWTO are provided for a two-seat configuration, with seats labeled "left" and "right", but it is easy to generalize to more seats.
 
 == Choosing hardware ==
+
 === Graphics ===
-When designing a multiseat system, the first consideration should be
-support for multiple graphics adapters. The simplest way to build a
-system is to make all graphics adapters the same (i.e. use the same
-chipset, they don't need to be identical). All adapters will use the
-same graphics drivers and no complications should arise.
+When designing a multiseat system, the first consideration should be support for multiple graphics adapters. The simplest way to build a system is to make all graphics adapters the same (i.e. use the same chipset, they don't need to be identical). All adapters will use the same graphics drivers and no complications should arise.
 
-It is also possible to use entirely different graphics adapters. Such
-configurations do work, but issues may arise. While it is OK to mix
-different adapters that all have e.g. Mesa drivers, it is a bad idea
-to mix adapters with different proprietary drivers with each other or
-with a mesa driver. Proprietary drivers bring with them their own
-OpenGL drivers. Thus, Nvidia and AMD drivers are incompatible both
-with each other and with Mesa. A mixed system will still work, but
-since only one OpenGL stack can be used at once (chosen by 
-''eselect opengl''), only one kind of graphics card will have any kind of
-acceleration.
+It is also possible to use entirely different graphics adapters. Such configurations do work, but issues may arise. While it is OK to mix different adapters that all have e.g. Mesa drivers, it is a bad idea to mix adapters with different proprietary drivers with each other or with a mesa driver. Proprietary drivers bring with them their own OpenGL drivers. Thus, Nvidia and AMD drivers are incompatible both with each other and with Mesa. A mixed system will still work, but since only one OpenGL stack can be used at once (chosen by ''eselect opengl''), only one kind of graphics card will have any kind of acceleration.
 
-If ultimate performance is not required (as is the case most of the
-time &mdash; multiseat systems are usually not meant to be gaming rigs), it
-is recommended to go for an all-mesa stack using AMD cards because it
-is the easiest to set up and offers acceptable performance and
-functionality. Otherwise, choose Nvidia with proprietary drivers. The
-free noveau drivers for Nvidia cards are, as of 2011, not yet ready
-for general use.
+If ultimate performance is not required (as is the case most of the time &mdash; multiseat systems are usually not meant to be gaming rigs), it is recommended to go for an all-mesa stack using AMD cards because it is the easiest to set up and offers acceptable performance and functionality. Otherwise, choose Nvidia with proprietary drivers. The free noveau drivers for Nvidia cards are, as of 2011, not yet ready for general use.
 
-Pick a motherboard with multiple large PCIE slots (x16 or x8),
-depending on how many seats you wish to have. Slower graphics cards
-that fit into smaller PCIE slots are available, as are cards for the
-PCI bus, but they are rarer and thus more expensive so it is prudent
-to instead invest in a more capable motherboard.
+Pick a motherboard with multiple large PCIE slots (x16 or x8), depending on how many seats you wish to have. Slower graphics cards that fit into smaller PCIE slots are available, as are cards for the PCI bus, but they are rarer and thus more expensive so it is prudent to instead invest in a more capable motherboard.
 
 === Input devices ===
-Modern Xorg stack supports USB device hotplugging even in a multiseat
-configuration. To make this easier, it is recommended to provide each
-seat with its own USB hub, preferably powered. This way, unknown
-devices can be bound to a specific seat depending on which hub they
-are plugged into. Otherwise, only devices known when configuring the
-system can be bound to their seats.
+Modern Xorg stack supports USB device hotplugging even in a multiseat configuration. To make this easier, it is recommended to provide each seat with its own USB hub, preferably powered. This way, unknown devices can be bound to a specific seat depending on which hub they are plugged into. Otherwise, only devices known when configuring the system can be bound to their seats.
 
 === Sound ===
 There are several options:
 * use one sound card per seat;
 * use a single sound card, sound is shared between seats;
 * use a single multi-channel sound card and split channels into virtual sound cards.
-All options work well and are described below, so choose according to
-your needs. The easiest way to get the first option is to either use
-USB sound cards or to use graphics cards with HDMI outputs, since they
-can provide sound as well.
+All options work well and are described below, so choose according to your needs. The easiest way to get the first option is to either use USB sound cards or to use graphics cards with HDMI outputs, since they can provide sound as well.
 
 == Xorg ==
-Traditionally, a multiseat Xorg configuration was specified in a
-single xorg.conf file in terms of devices, screens and
-layouts. Nowadays, it's better to leave as much as possible
-''unconfigured'' and rely on autodetection, which is easier to do if
-options specific to each seat are provided in separate config files
-located in /etc/X11/. Additionally, all files in /etc/X11/xorg.conf.d/
-are used when the X server starts; this directory can be
-used to specify options not specific to a seat.
+Traditionally, a multiseat Xorg configuration was specified in a single xorg.conf file in terms of devices, screens and layouts. Nowadays, it's better to leave as much as possible ''unconfigured'' and rely on autodetection, which is easier to do if options specific to each seat are provided in separate config files
+located in /etc/X11/. Additionally, all files in /etc/X11/xorg.conf.d/ are used when the X server starts; this directory can be used to specify options not specific to a seat.
 
 Here is an example for two seats:
-
 {{File|/etc/X11/xorg_left.conf|Left seat|<pre>
 Section "Device"
         Identifier "gfx_left"
@@ -129,28 +73,14 @@ Section "InputClass"
 EndSection
 </pre>}}
 
-The device sections are self-explanatory: take the driver and bind it
-to a specific device. The PCI number can be obtained using the ''lspci''
-tool. The "Identifier" stuff is superfluous, but provided anyway.
+The device sections are self-explanatory: take the driver and bind it to a specific device. The PCI number can be obtained using the ''lspci'' tool. The "Identifier" stuff is superfluous, but provided anyway.
 
-The input sections are more interesting. The first turns on the
-"Ignore" option for ''all'' devices. The next section then disables
-"Ignore" selectively based on a special ''tag'' assigned by udev as
-described below.
+The input sections are more interesting. The first turns on the "Ignore" option for ''all'' devices. The next section then disables "Ignore" selectively based on a special ''tag'' assigned by udev as described below.
 
-You may notice that the left seat uses the "input_default" tag. The
-section is semantically the same as for the right seat so it does the
-same thing, but the name of the tag is chosen to convey our
-intention. As described in the next section, we wish to have the left
-seat as the "default" seat for unknown input devices. If a device
-doesn't belong anywhere else, it is assigned to the left seat. But
-that is up to udev to decide, and has nothing to do with Xorg.
+You may notice that the left seat uses the "input_default" tag. The section is semantically the same as for the right seat so it does the same thing, but the name of the tag is chosen to convey our intention. As described in the next section, we wish to have the left seat as the "default" seat for unknown input devices. If a device
+doesn't belong anywhere else, it is assigned to the left seat. But that is up to udev to decide, and has nothing to do with Xorg.
 
-Options common to all seats should reside in files in
-/etc/X11/xorg.conf.d. These files are always read after the main
-xorg.conf file. An example of such a setting could be keyboard
-layouts.
-
+Options common to all seats should reside in files in /etc/X11/xorg.conf.d. These files are always read after the main xorg.conf file. An example of such a setting could be keyboard layouts.
 {{File|/etc/X11/xorg.conf.d/00-keylayouts.conf|Default keyboard settings for all seats|<pre>
 Section "InputClass"
 	Identifier	"Default Layout"
@@ -162,59 +92,30 @@ EndSection
 </pre>}}
 
 == udev ==
-udev is the component of modern Linux systems that allows automatic
-manipulation of devices according to a set of rules provided in
-/etc/udev/rules.d/. It is very versatile, which comes at the cost of
-considerable complexity. This section is a crash course of the bare
-minimum neccessary to assign tags to input devices. While it should be
-sufficient in most cases, be aware that udev is very flexible and if
-you have an idea on how to identify devices, you can probably do it
-(unless the device refuses to provide information about itself, as is,
-sadly, often the case). Use your imagination and documentation (''man
-udev'' is nice, but there are many blogs and forums which may be easier
-to comprehend).
+udev is the component of modern Linux systems that allows automatic manipulation of devices according to a set of rules provided in /etc/udev/rules.d/. It is very versatile, which comes at the cost of considerable complexity. This section is a crash course of the bare minimum neccessary to assign tags to input devices. While it should be
+sufficient in most cases, be aware that udev is very flexible and if you have an idea on how to identify devices, you can probably do it (unless the device refuses to provide information about itself, as is, sadly, often the case). Use your imagination and documentation (''man udev'' is nice, but there are many blogs and forums which may be easier to comprehend).
 
-An udev rule is simply a comma-separated list of ''keys'' in a single
-line. First come the keys which identify a device, then come the keys
-which manipulate the device. In our case, "manipulate" means assigning
-a tag for Xorg to use.
+An udev rule is simply a comma-separated list of ''keys'' in a single line. First come the keys which identify a device, then come the keys which manipulate the device. In our case, "manipulate" means assigning a tag for Xorg to use.
 
 === Identifying an input device ===
-The simplest way to figure out which device to refer to is to uplug
-it, then plug it back in and check the kernel output using ''dmesg''. An
-example for a Logitech mouse:
+The simplest way to figure out which device to refer to is to uplug it, then plug it back in and check the kernel output using ''dmesg''. An example for a Logitech mouse:
 {{Cmd|dmesg <nowiki>|</nowiki> tail -n 4|output=<pre>
 [12293.500102] usb 2-1: USB disconnect, device number 2
 [12294.456041] usb 2-1: new low speed USB device number 3 using uhci_hcd
 [12294.638513] input: Logitech USB-PS/2 Optical Mouse as /devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1:1.0/input/input8
 [12294.638689] generic-usb 0003:046D:C01B.0002: input,hidraw0: USB HID v1.10 Mouse [Logitech USB-PS/2 Optical Mouse] on usb-0000:00:1d.0-1/input0
 </pre>}}
-The "input:" line is important as it specifies the device path in the
-/sys directory.
+The "input:" line is important as it specifies the device path in the /sys directory.
 
 === Discovering device attributes ===
-The /sys directory is used to communicate with the kernel. Device
-properties can be read by reading the files in proper directories and
-manipulated by writing to the files. This way, properties such as
-serial numbers can be read.
+The /sys directory is used to communicate with the kernel. Device properties can be read by reading the files in proper directories and manipulated by writing to the files. This way, properties such as serial numbers can be read.
 
-Browsing the /sys directory manually can be tedious since it is a
-complicated labyrinth. Instead, the ''udevadm'' tool can be used. It is
-very convenient, since it prints device properties in the form which
-can be copy-pasted directly into udev rules. The command
-{{Cmd|<nowiki>udevadm info --query=all --path=/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1:1.0/input/input8 --attribute-walk</nowiki>}}
-prints not just the properties of the mouse itself, but also
-properties of ''all its parent devices''. This is most useful: often, a
-device refuses to provide enough information about itself to identify
-it well, so a parent device must be used to get additional
-information.
+Browsing the /sys directory manually can be tedious since it is a complicated labyrinth. Instead, the ''udevadm'' tool can be used. It is very convenient, since it prints device properties in the form which can be copy-pasted directly into udev rules. The command
+{{Cmd|udevadm info --query{{=}}all --path{{=}}/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1:1.0/input/input8 --attribute-walk}}
+prints not just the properties of the mouse itself, but also properties of ''all its parent devices''. This is most useful: often, a device refuses to provide enough information about itself to identify it well, so a parent device must be used to get additional information.
 
-Let's return to our example system. It has two seats: the right one
-has a dedicated USB hub and will accept all input devices plugged into
-it, and the left one will accept all other input devices. Let's take a
-look at all the USB devices.
-
-{{Cmd | lsusb | output=<pre>
+Let's return to our example system. It has two seats: the right one has a dedicated USB hub and will accept all input devices plugged into it, and the left one will accept all other input devices. Let's take a look at all the USB devices.
+{{Cmd|lsusb|output=<pre>
 Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
 Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
 Bus 003 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
@@ -229,14 +130,10 @@ Bus 002 Device 005: ID 046d:c069 Logitech, Inc.
 Bus 002 Device 006: ID 046d:c30e Logitech, Inc. UltraX Keyboard (Y-BL49)
 </pre>}}
 
-There are obviously two Logitech keyboards, two other Logitech devices
-(presumably mice), a hub and several root hubs which represent
-physical ports on the computer. Now we pick a keyboard plugged into
-the USB hub using the ''dmesg'' method above and run ''udevadm info''
-against it.
+There are obviously two Logitech keyboards, two other Logitech devices (presumably mice), a hub and several root hubs which represent physical ports on the computer. Now we pick a keyboard plugged into the USB hub using the ''dmesg'' method above and run ''udevadm info'' against it.
 
 {{Cmd
-|<nowiki>udevadm info --query=all --path=/devices/pci0000:00/0000:00:13.2/usb2/2-4/2-4.2/2-4.2:1.1/input/input9 --attribute-walk</nowiki>
+|udevadm info --query{{=}}all --path{{=}}/devices/pci0000:00/0000:00:13.2/usb2/2-4/2-4.2/2-4.2:1.1/input/input9 --attribute-walk
 |output=<pre>
   looking at device '/devices/pci0000:00/0000:00:13.2/usb2/2-4/2-4.2/2-4.2:1.1/input/input9':
     KERNEL=="input9"
@@ -377,23 +274,11 @@ against it.
     DRIVERS==""
 </pre>}}
 
-The first three devices represent the mouse: there's an input device,
-a usbhid device and the low-level USB device; the latter has the
-"idVendor" and "idProduct" attributes that ''lsusb'' also tells
-us. Evidently, no unique identifier such as a serial number is
-available.
+The first three devices represent the mouse: there's an input device, a usbhid device and the low-level USB device; the latter has the "idVendor" and "idProduct" attributes that ''lsusb'' also tells us. Evidently, no unique identifier such as a serial number is available.
 
-The fourth device is most interesting to us: its attributes tell us
-that this is the hub we are interested in. Again, there are no
-attributes to uniquely identify it. If there is more than one hub of
-the same model plugged in, you can't tell which is which. Therefore,
-we must resort to using the ''device path'' to identify it. The "looking
-at parent device" line tells us what it is.
+The fourth device is most interesting to us: its attributes tell us that this is the hub we are interested in. Again, there are no attributes to uniquely identify it. If there is more than one hub of the same model plugged in, you can't tell which is which. Therefore, we must resort to using the ''device path'' to identify it. The "looking at parent device" line tells us what it is.
 
-The problem with using device paths is that they change if you plug
-the device into a different port. So the assumption we make is that
-the hub will always be plugged into the same port on the computer. If
-the port is changed, the udev rules need to be updated.
+The problem with using device paths is that they change if you plug the device into a different port. So the assumption we make is that the hub will always be plugged into the same port on the computer. If the port is changed, the udev rules need to be updated.
 
 === Tagging ===
 The udev rules for this configuration are only two.
@@ -401,19 +286,12 @@ The udev rules for this configuration are only two.
 SUBSYSTEM=="input", ENV{ID_INPUT.tags}="input_default"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:13.2/usb2/2-4/*", ENV{ID_INPUT.tags}="input_right"
 </pre>}}
-The first one simply assigns the "input_default" tag to all input
-devices. The second one overrides this in case that the path prefix
-matches the path of the hub. If there were useful attributes to
-identify it, we could copy-paste the relevant "ATTR" and/or "ATTRS"
-lines from udevadm output instead of using the "DEVPATH".
+The first one simply assigns the "input_default" tag to all input devices. The second one overrides this in case that the path prefix matches the path of the hub. If there were useful attributes to identify it, we could copy-paste the relevant "ATTR" and/or "ATTRS" lines from udevadm output instead of using the "DEVPATH".
 
 === Sound cards detection and assignment ===
-If one wants to assign a card per seat, it is doable even if one of the cards isn't usb.
-first, decide what cards goes to which seat, then assign the usb cards the same as above to each seat.
-in order to assign the O\B cards, run the following command, I'm attaching the output of my system:
-
+If one wants to assign a card per seat, it is doable even if one of the cards isn't usb. First, decide what cards goes to which seat, then assign the usb cards the same as above to each seat. In order to assign the O\B cards, run the following command, I'm attaching the output of my system:
 {{Cmd
-|<nowiki>find /sys/devices/  -name "input*"| grep input[0-9][0-9]*</nowiki>
+|find /sys/devices/  -name "input*" {{!}} grep input[0-9][0-9]*
 |output=<pre>
 /sys/devices/pci0000:00/0000:00:01.0/0000:01:00.1/sound/card1/input8
 /sys/devices/pci0000:00/0000:00:1a.0/usb1/1-1/1-1.2/1-1.2:1.0/input/input10
@@ -432,30 +310,21 @@ in order to assign the O\B cards, run the following command, I'm attaching the o
 /sys/devices/LNXSYSTM:00/device:00/PNP0C0C:00/input/input0
 /sys/devices/LNXSYSTM:00/LNXPWRBN:00/input/input1
 </pre>}}
-after matching the cards to the actual adapter, one can conclude that card0 is the O\B and card 2 is usb one (card 1 seem to be gpu hdmi card)
-so assuming that we decide to add the O\B card to input_right, /etc/udev/rules.d/99-seats.rules should look like this:
+after matching the cards to the actual adapter, one can conclude that card0 is the O\B and card 2 is usb one (card 1 seem to be gpu hdmi card) so assuming that we decide to add the O\B card to input_right, /etc/udev/rules.d/99-seats.rules should look like this:
 {{File|/etc/udev/rules.d/99-seats.rules|udev rules for tagging input devices|<pre>
 SUBSYSTEM=="input", ENV{ID_INPUT.tags}="input_default"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:13.2/usb2/2-4/*", ENV{ID_INPUT.tags}="input_right"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:1b.0/sound/card0/*", ENV{ID_INPUT.tags}="input_right"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:1b.0/input/*", ENV{ID_INPUT.tags}="input_right"
 </pre>}}
+
 == Desktop manager ==
-While it is possible to run a multiseat system without a DM, it is
-easier to have one. It has to be configured to start up an X server
-instance for each seat, and is also useful if other seat-specific
-configuration is to be done (cf. [[#pulseaudio|changing configuration at login]]).
+While it is possible to run a multiseat system without a DM, it is easier to have one. It has to be configured to start up an X server instance for each seat, and is also useful if other seat-specific configuration is to be done (cf. [[#PulseAudio|changing configuration at login]]).
 
 === KDM ===
-The KDE desktop manager's configuration resides in
-/usr/share/config/kdm/kdmrc. It contains lots of settings, but only
-those specific to a multiseat configuration are given here. Note that
-settings under <nowiki>[X-*-core]</nowiki> apply to all X servers, while those with
-headings such as <nowiki>[X-:0-core]</nowiki> are server specific.
+The KDE desktop manager's configuration resides in /usr/share/config/kdm/kdmrc. It contains lots of settings, but only those specific to a multiseat configuration are given here. Note that settings under <nowiki>[X-*-core]</nowiki> apply to all X servers, while those with headings such as <nowiki>[X-:0-core]</nowiki> are server specific.
 
-{{File|
-/usr/share/config/kdm/kdmrc|
-KDM configuration; only multiseat-specific settings are listed|<pre>
+{{File|/usr/share/config/kdm/kdmrc|KDM configuration; only multiseat-specific settings are listed|<pre>
 [General]
 ServerVTs=-12
 StaticServers=:0,:1
@@ -467,42 +336,19 @@ ServerCmd=/usr/bin/X -config xorg_left.conf -br -ac vt12
 ServerCmd=/usr/bin/X -config xorg_right.conf -br -ac -sharevts vt12
 </pre>}}
 
-The settings under <nowiki>[General]</nowiki> specify that two servers are to be
-started, while the next two sections specify their command
-lines. Other settings are necessary to get a well-working KDM, but are
-omitted here. The important part of the X command line are the
-configuration file, the virtual terminal (all X servers must have the
-same terminal) and the -sharevts option for all but the first X
-server. The -ac option is useful in a collaborative environment as it
-disables access control and allows users to put windows to each
-other's screens, but you may wish to omit it.
+The settings under ''[General]'' specify that two servers are to be started, while the next two sections specify their command lines. Other settings are necessary to get a well-working KDM, but are omitted here. The important part of the X command line are the configuration file, the virtual terminal (all X servers must have the same terminal) and the -sharevts option for all but the first X server. The -ac option is useful in a collaborative environment as it disables access control and allows users to put windows to each other's screens, but you may wish to omit it.
 
 == Sound ==
 
 === Single shared sound card ===
-Nowadays, ALSA is configured for software audio mixing by default, so
-nothing special needs to be done to support a shared sound
-configuration.
+Nowadays, ALSA is configured for software audio mixing by default, so nothing special needs to be done to support a shared sound configuration.
 
 === Single split sound card and/or multiple sound cards ===
-Suppose the system has a 7.1 sound card integrated on the mother
-board, while each graphics card also supports audio output through
-HDMI. This section describes how to configure all of them at once;
-cull the examples to your needs.
+Suppose the system has a 7.1 sound card integrated on the motherboard, while each graphics card also supports audio output through HDMI. This section describes how to configure all of them at once; cull the examples to your needs.
 
-We will take the 7.1 sound card with several output jacks and
-configure it so that two of its jacks will act as separate PCM devices
-while the microphone jack is shared. This makes sense since presumably
-both users sit in the same room and can use only one microphone.
+We will take the 7.1 sound card with several output jacks and configure it so that two of its jacks will act as separate PCM devices while the microphone jack is shared. This makes sense since presumably both users sit in the same room and can use only one microphone.
 
-Next, the default sound cards are configured to be routed to
-pulseaudio. Since each user will have two sound cards at their
-disposal, using pulseadio makes it easy to move audio streams between
-them. In addition, since all users sit in the same room, it makes
-sense for them to use headphones. If, however, one has speakers at his
-disposal, pulseaudio allows others to use them if they need to by
-pointing their programs to his pulseaudio server. Pulseaudio thus
-allows a great deal of flexibility for audio usage.
+Next, the default sound cards are configured to be routed to PulseAudio. Since each user will have two sound cards at their disposal, using pulseadio makes it easy to move audio streams between them. In addition, since all users sit in the same room, it makes sense for them to use headphones. If, however, one has speakers at his disposal, PulseAudio allows others to use them if they need to by pointing their programs to his PulseAudio server. PulseAudio thus allows a great deal of flexibility for audio usage.
 
 ==== ALSA ====
 The ALSA configuration is global and resides in /etc/asound.conf.
@@ -582,51 +428,24 @@ pcm.right_sound {
 }
 </pre>}}
 
-The first four blocks simply enable the pulseaudio plugin and set the
-defaults to go through it.
+The first four blocks simply enable the PulseAudio plugin and set the defaults to go through it.
 
-The pcm.int block gives the .int name to the "SB" sound card, which is
-our example integrated sound card. Different ways can be used to
-identify sound cards, such as "hw0,0". You can get this information
-using the ''aplay'' utility's -l and -L options.
+The pcm.int block gives the .int name to the "SB" sound card, which is our example integrated sound card. Different ways can be used to identify sound cards, such as "hw0,0". You can get this information using the ''aplay'' utility's -l and -L options.
 
-The .dshare pcm is a software mixing (dmix) device, which spans two
-physical jacks. The IPC key needs to be deifned so that all programs
-from all users share the same dmix device, and permissions must allow
-this too. The .dshare device is defined to use only 4 channels of the
-.int device and channel bindings are made explicit.
+The .dshare pcm is a software mixing (dmix) device, which spans two physical jacks. The IPC key needs to be deifned so that all programs from all users share the same dmix device, and permissions must allow this too. The .dshare device is defined to use only 4 channels of the .int device and channel bindings are made explicit.
 
-The .rshare device is a dsnoop device, which is a software mixer like dmix but for
-audio input. This is the microphone jack which all users share.
+The .rshare device is a dsnoop device, which is a software mixer like dmix but for audio input. This is the microphone jack which all users share.
 
-The .righto and .lefto devices use the .dshare device, but limit
-themselves to two channels each, using a transfer table
-specification. They need to specify 4 channels, but the table maps
-only channels 0 and 1 to channels 0,1 and 2,3 for left and right
-seats, respectively.
+The .righto and .lefto devices use the .dshare device, but limit themselves to two channels each, using a transfer table specification. They need to specify 4 channels, but the table maps only channels 0 and 1 to channels 0,1 and 2,3 for left and right seats, respectively.
 
-The .left_sound and .right_sound are the actual PCMs the users should
-use since they combine the channel-mapped outputs with the common
-.rshare input. If there was no pulseaudio in the mix, these devices
-should be set as default in the per-user .asoundrc files.
+The .left_sound and .right_sound are the actual PCMs the users should use since they combine the channel-mapped outputs with the common .rshare input. If there was no PulseAudio in the mix, these devices should be set as default in the per-user .asoundrc files.
 
-Note that there is no mention of HDMI cards. We leave handling those
-to pulseaudio.
+Note that there is no mention of HDMI cards. We leave handling those to PulseAudio.
 
-==== pulseaudio ====
-Each user runs their own pulseaudio server. This server needs to be
-configured according to the seat the user is at. We therefore need to
-prepare per-seat configurations. But pointing the users' pulseaudio
-servers to the correct files is not trivial: while the config file can
-be provided on the command line, pulseaudio servers tend to be started
-as needed by the programs that output audio and we don't have much
-control over their command lines. A more persistent solution is then
-to point the default per-user configuration file
-$HOME/.pulse/default.pa to a seat-specific config file.
+==== PulseAudio ====
+Each user runs their own PulseAudio server. This server needs to be configured according to the seat the user is at. We therefore need to prepare per-seat configurations. But pointing the users' PulseAudio servers to the correct files is not trivial: while the config file can be provided on the command line, PulseAudio servers tend to be started as needed by the programs that output audio and we don't have much control over their command lines. A more persistent solution is then to point the default per-user configuration file $HOME/.pulse/default.pa to a seat-specific config file.
 
-First, we prepare the seat-specific files in /etc/pulse. Change the
-example default.pa file provided by pulseadio to disable the udev
-autodetection module, then add the sound cards as below.
+First, we prepare the seat-specific files in /etc/pulse. Change the example default.pa file provided by pulseadio to disable the udev autodetection module, then add the sound cards as below.
 
 {{File|/etc/pulse/left_seat.pa|Left seat sound|<pre>
 load-module module-alsa-sink device=left_sound
@@ -640,16 +459,9 @@ load-module module-alsa-source device=right_sound
 load-module module-alsa-card device_id="2" name="pci-0000_05_00.1" card_name="alsa_card.pci-0000_05_00.1" tsched=yes ignore_dB=yes
 </pre>}}
 
-The specification is straightforward. The options for the HDMI sound
-cards can be obtained by runing a pulseadio instance ''with''
-autodetection and dumping its settings.
+The specification is straightforward. The options for the HDMI sound cards can be obtained by runing a pulseadio instance ''with'' autodetection and dumping its settings.
 
-Next, we configure the desktop manager to choose the right
-configuration at login. The XDM-based desktop managers such as KDM
-have an Xstartup file which runs after the X server starts but before
-the user's session is started. It runs as root, but points the $HOME
-variable to the user's home. More information is available in the
-XDM's man page.
+Next, we configure the desktop manager to choose the right configuration at login. The XDM-based desktop managers such as KDM have an Xstartup file which runs after the X server starts but before the user's session is started. It runs as root, but points the $HOME variable to the user's home. More information is available in the XDM's man page.
 
 {{File|/usr/share/config/kdm/Xstartup|Login configuration|<pre>
 #!/bin/sh
@@ -673,34 +485,26 @@ su -l -c 'pulseaudio -k; pulseaudio -D' $USER
 true
 </pre>}}
 
-This script simply cheks whether the $HOME/.pulse/default.pa file is a
-symlink and whether it points to the correct config file. If not, it
-recreates the correct symlink. It then restarts the pulseaudio daemon;
+This script simply cheks whether the $HOME/.pulse/default.pa file is a symlink and whether it points to the correct config file. If not, it recreates the correct symlink. It then restarts the PulseAudio daemon;
 they tend to hang around.
 
-To prevent pulseaudio and possibly other user-launched audio servers
-such as Music Player Daemon from running while the user is logged in
-and preventing audio access to other users, we can stop them using the
-Xreset script.
-
+To prevent PulseAudio and possibly other user-launched audio servers such as Music Player Daemon from running while the user is logged in and preventing audio access to other users, we can stop them using the Xreset script.
 {{File|/usr/share/config/kdm/Xreset|Logout configuration|<pre>
 #!/bin/sh
 su -l -c 'mpd --kill; pulseaudio -k' $USER
 </pre>}}
 
-=== Single sound card per seat===
-For the ones who don't like PulseAudio and want to assign sound card per seat, here is possible way.
-first, make sure that aplay is installed or your system, second take note that the output of aplay -l will decide which card to attach to which seat so make sure you attach the cards in the right order.
+=== Single sound card per seat ===
+For the ones who don't like PulseAudio and want to assign sound card per seat, here is possible way. First, make sure that aplay is installed or your system, second take note that the output of aplay -l will decide which card to attach to which seat so make sure you attach the cards in the right order.
 
-all users should have at least the following file in their home folder (thanks to the guys at alsa mailing list for the help):
-
+All users should have at least the following file in their home folder (thanks to the guys at alsa mailing list for the help):
 {{File|~/.asoundrc|asoundrc basic config|<pre>
 defaults.pcm.card 0
 defaults.ctl.card 0
 </pre>}}
 this file defines which sound card to use.
 
-now under /etc/profile.d, put the next file:
+Now under /etc/profile.d, put the next file:
 {{File|/etc/profile.d/define_sound_card.sh|logon seat sound card def script|<pre>
 #!/bin/bash
 SOUND_CARD_ID=0
@@ -717,13 +521,13 @@ fi
 </pre>}}
 now when ever a user logs in to a seat, his local .asoundrc will be updated to the seat's soundcard.
 
-== Bypassing policykit ==
-As of early 2012, consolekit fails to serve its purpose of identifying which users are physically preset. It can only track one local user, which is the one using the first seat. The other users are identified as "inactive", which causes policykit to deny them access to local resources. Put simply, only the first seat can perform actions such as mounting a USB memory device through udisks (which is the interface desktop environments use).
+== Bypassing PolicyKit ==
+As of early 2012, ConsoleKit fails to serve its purpose of identifying which users are physically preset. It can only track one local user, which is the one using the first seat. The other users are identified as "inactive", which causes PolicyKit to deny them access to local resources. Put simply, only the first seat can perform actions such as mounting a USB memory device through udisks (which is the interface desktop environments use).
 
 Implementing a good security policy governing local users is difficult. While it may be hoped that systemd will at some point provide a better solution, it is currently best to assume that all local users are trusted.
 
-Sadly, major desktops now depend on policykit and will force its installation. As a workaround, we can enable access to local devices to inactive users. Create a new policy file:
-{{File|/etc/polkit-1/localauthority/50-local.d/mseat.pkla|policykit workaround|<pre>
+Sadly, major desktops now depend on PolicyKit and will force its installation. As a workaround, we can enable access to local devices to inactive users. Create a new policy file:
+{{File|/etc/polkit-1/localauthority/50-local.d/mseat.pkla|PolicyKit workaround|<pre>
 [allow operations]
 Identity=unix-group:plugdev
 Action=org.freedesktop.udisks.*;org.blueman.*
