@@ -1,0 +1,82 @@
+{{Lowercase title}}
+{{InfoBox stack
+|{{InfoBox homepage|http://www.freedesktop.org/wiki/Software/polkit|header=true}}
+|{{InfoBox wikipedia|PolicyKit}}
+}}
+This article describes the setup of '''polkit''' (formerly '''PolicyKit'''), an authorization API intended to be used by privileged programs (e.g. system daemons) offering service to unprivileged programs.
+
+{{Note|This article describes polkit-0.106 and newer. Older versions uses different actions and rules files and locations.}}
+
+== Description ==
+Privileged programs (in the following called daemons) with polkit support offload the decision, if a program is allowed to use some function of the daemon. The daemon keeps an incoming request on hold, ask polkit, if the program is authorized, and then allows or denies the request based on polkit's return. The requesting program is not aware of polkit and so need no polkit support itself. The communication is handled over [[D-Bus]].
+
+Daemons come with polkit action files, which offer some function and define, who is authorized. This can be any user, the [[ConsoleKit|active or inactive user]]. Also they can define, that the user needs to authenticate by entering a password as himself or as admin. The actions does not grant root permission to an entire process, but rather allows a finer level of control of centralized system policy.
+
+The authorization defaults in the action files can be refined by rules files. Here you can define, who's admin (root or any user in a special group), and add special handling for an action.
+
+== Installation ==
+{{Note|If you're only updating, see the [[/changelog|changelog]].}}
+
+Portage knows the global USE flag ''policykit'' for enabling support for polkit in other packages. Enabling this USE flag will pull in {{Package|sys-auth/polkit}} automatically (default for ''desktop'' [[profile]]s):
+{{File|/etc/portage/make.conf||<pre>
+USE="... policykit ..."
+</pre>}}
+The USE flags of policykit are:
+{{USEflag|package=sys-auth/polkit
+|debug
+|doc
+|examples
+|gtk+yes
+|introspection+yes
+|kde+yes
+|nls+yes
+|pam+yes
+|selinux
+|systemd
+}}
+
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
+
+== Configuration ==
+The actions file are in {{Path|/usr/share/polkit-1/actions}}, the rules files are in {{Path|/usr/share/polkit-1/rules.d}} and {{Path|/etc/polkit-1/rules.d}}.
+
+=== Rules ===
+Rules redefine, who's authorized for an action. The rules files begin with a number and are processed in lexical order. Own files should have a high number, like ''99''. The filenames have the {{Path|.rules}} suffix.
+
+To e.g. let also the users of the "wheel" group be functions as administrators, create the following file:
+{{File|/etc/polkit-1/rules.d/99-admin.rules||<pre>
+polkit.addAdminRule(function(action, subject) {
+    return ["unix-user:0;unix-group:wheel"];
+});
+</pre>}}
+
+To e.g. allow user "larry" to mount internal disks, create the following file:
+{{File|/etc/polkit-1/rules.d/99-udisks.rules||<pre>
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.udisks.filesystem-mount-system-internal" &&
+        subject == "larry" {
+        return "yes";
+    }
+});
+</pre>}}
+
+See the ''polkit'' [[man page]] for more information.
+
+=== KDE ===
+If you installed [[KDE]] with the ''policykit'' USE flag, there are systemsettings modules in the "System Administration" section:
+* '''Actions Policy''': Rules configuration.
+* '''Global Policy Configuration''': Administrator configuration.
+
+== Usage ==
+* '''pkaction''' - Shows all available actions.
+* '''pkaction --verbose --action-id ACTION''' - Shows details about the given action.
+* '''pkcheck --list-temp''' - Lists all temporary authorizations for the current session
+* '''pkexec --user USER PROGRAM''' - Runs the given program with the user rights of the given user.
+For more informations see the [[man page]]s, e.g. for '''pkaction''': '''man pkaction'''
+
+== Troubleshooting ==
+* {{Bug|polkit|search=package}}
+* Polkit communicates over D-Bus, so also see the [[D-Bus#Troubleshooting|D-Bus "Troubleshooting" section]].
+
+[[Category:Core system]]
