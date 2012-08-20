@@ -62,15 +62,67 @@ We take arm arch as an example to show how to enter/exit the chroot.
 *Unmount stuff when not in use
 :{{RootCmd|umount usr/portage | umount sys | umount proc}}
 
-=== Automatic setup ===
-The lxc.sh tool can download, configure and create a multi-arch gentoo guest. 
-By now, the script support x86 and arm gentoo guest.
+==Setup Crossdev==
+The first thing that is necessary is the creation of an [[overlay]]. If you have one, emerge the script:
+
+{{RootCmd|emerge crossdev}}
+
+This will provide you with the crossdev script. This script automates the steps necessary to build a toolchain. These steps are, in short:
+
+#binutils:  Build a cross-binutils, which links and processes for the target architecture.
+#linux-headers:  Install a set of C library and kernel headers for the target architecture.
+#libc-headers:  Additional header files
+#gcc-stage-1:  Build a basic (stage 1) gcc cross-compiler. This will be used to compile the C library. It will be unable to build anything almost else (because it can't link against the C library it doesn't have).
+#libc:  Build the cross-compiled C library (using the stage 1 cross compiler).
+#gcc-stage-2:  Build a full (stage 2) C cross-compiler.
+
+All cross toolchains will be kept locally in the [[overlay]], separate from native tools.
+
+{{File|/etc/make.conf||
+source /usr/portage/local/layman/make.conf
+
+PORTDIR_OVERLAY{{=}}"/usr/local/portage $PORTDIR_OVERLAY"
+}}
+
+The script is used like:
+{{RootCmd|crossdev -t powerpc-unknown-linux-gnu}}
+
+This will build a cross-compiling toolchain for PowerPC machines.
+
+By default, the newest stable version of the binutils, libraries, and C compiler will be used. It is quite often the case they will not compile themselves through the entire build process. Less bleeding edge versions can be specified with additional flags:
+
+ --b 2.22      # specifies the version of binutils
+ --g 4.6.3     # specifies the version of gcc
+ --l 2.15-r2   # specifies the version of the tuple-specified libc
+ --k 3.5       # specifies the version of the kernel headers
+
+It is recommended trying older versions, particularly of gcc, if the script fails.
+
+If you want to remove a toolchain, use the clean flag:
+
+{{RootCmd|crossdev -C powerpc-unknown-linux-gnu}}
+
+This will unmerge the packages created by crossdev.
+
+If you got the errors about fortran, use the fellow command:
+{{RootCmd|USE{{=}}"-fortran nossp" crossdev -t powerpc-unknown-linux-gnu}}
+
+== Cross Container ==
+The lxc.sh tool can download, configure and create a multi-arch gentoo guest.
+Using this tool, the user build a native gcc in chroot.
 You can download it here: [https://github.com/jinghuang/cross_container_support lxc.sh]
 
+Next, we will take '''armv7a_hardfloat''' as a example to build the native compiler in chroot.
+
+=== Install a cross compiler ===
+You must install the cross compiler manually:
+
+{{RootCmd|USE{{=}}"-fortran nossp" crossdev -t armv7a-hardfloat-linux-gnueabi}}
+
+=== Create the chroot ===
 You can create an arm gentoo guest:
 {{RootCmd|./lxc.sh create -i ''ip_address'' -g ''gateway'' -n ''guest_name'' -r ''rootfs'' -a arm<br />
 What is the subarch of arm? armv7a}}
-The subarch of arm includes armv6j and armv7a.
 
 You can also start and destroy the arm gentoo guest:
 
@@ -79,3 +131,14 @@ You can also start and destroy the arm gentoo guest:
 {{RootCmd|./lxc.sh destroy -n ''guest_name'' -r ''rootfs''}}
 
 Additional developers, bug fixes, comments, etc. are welcome.
+
+=== Switch to native compiler ===
+In chroot, you can switch to native compiler:
+{{RootCmd|cd /root}}
+{{RootCmd|source switch.sh native}}
+
+Then, you can get the native armv7a-hardfloat-linux-gnueabi-gcc.
+To use it, just specify the '''CC=armv7a-hardfloat-linux-gnueabi-gcc''' in the Makefile.
+
+You also could switch to emulated gcc as well:
+{{RootCmd|source switch.sh emu}}
