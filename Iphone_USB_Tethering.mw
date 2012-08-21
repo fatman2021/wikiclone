@@ -31,3 +31,33 @@ A new network interface '''eth1''' plugged by ipheth can be found, after running
 
 = udev trigger =
 We can use [[OpenRC/Event Driven|hotplug feature of OpenRC]] to set up ipheth interface automatically.
+
+{{Package|sys-fs/udev-init-scripts}} ships /lib/udev/net.sh, which can be used to hotplug network interfaces. The main frame of the script is
+{{File|/lib/udev/net.sh|net interface hotplug|<pre>
+IFACE=$1
+ACTION=$2
+...
+SCRIPT=/etc/init.d/net.$IFACE
+...
+IN_HOTPLUG=1 "${SCRIPT}" --quiet "${ACTION}"
+</pre>}}
+
+and we can call it by an [[Udev|udev rule]],
+{{File|/lib/udev/rules.d/90-iphone-tether.rules|net.sh trigger|<pre>
+# udev rules for setting correct configuration and pairing on tethered iPhones
+ATTR{idVendor}!="05ac", GOTO="ipheth_rules_end"
+
+# Execute pairing program when appropriate
+ACTION=="add", SUBSYSTEM=="net", ENV{ID_USB_DRIVER}=="ipheth", SYMLINK+="iphone", RUN+="ipheth-pair", RUN+="net.sh eth1 start"
+SUBSYSTEM=="net", ACTION=="remove", ENV{ID_USB_DRIVER}=="ipheth", SYMLINK+="iphone", RUN+="net.sh %k stop"
+
+LABEL="ipheth_rules_end"
+</pre>}}
+
+After plugging iPhone, we can see the hotplugged service:
+[{RootCmd|rc-status|output=<pre>
+...
+Dynamic Runlevel: hotplugged
+ net.eth1                        [  started  ]
+...
+</pre>}}
