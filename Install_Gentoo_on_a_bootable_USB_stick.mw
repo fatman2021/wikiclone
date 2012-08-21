@@ -1,0 +1,174 @@
+{{Warning|This should be fine, I am checking it now and will remove this warning soon 21 Aug 2012}}
+
+Booting Gentoo from a USB stick is really quite simple, to make it work properly though you need to setup an initial ramdisk and you will need to make sure you have drivers for all the machines you are going to boot with it. This article will describe how to install Gentoo onto a USB stick that can be booted in any computer. This installation will be just like your desktop installation and changes will be persistent.
+
+== Preparation ==
+
+Before we begin we need some packages, I assume that you are running on a Gentoo system to create this bootable USB stick.
+
+Most importantly we need a kernel and we need the <tt>sys-kernel/genkernel</tt> package.
+
+{{emerge|sys-kernel/gentoo-sources|sys-kernel/genkernel}}
+
+Using the new <tt>package.use</tt> layout we need to make a new file in <tt>/etc/portage/package.use/</tt> (If you would prefer the old layout then just add this line to <tt>/etc/portage/package.use/package.use.file</tt>)
+
+{{File|/etc/portage/package.use/sys-apps|Enable static for sys-apps/busybox|<pre>
+sys-apps/busybox static
+</pre>}}
+
+{{emerge|sys-apps/busybox}}
+{{emerge|sys-boot/lilo}}
+
+== Compile The Kernel ==
+
+Make the required changes to your kernel and compile it. I will not go into detail on how to do this, please see [[http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1&chap=7|section 7 of the handbook]] and [[Kernel/Configuration]] for more detail on this step. Importantly remember that a general kernel is better here because the more general it is the more machines will boot with it, you can still compile modules these will be included in the initramfs and loaded at boot.
+
+{{RootCmd|mkdir /tmp/boot}}
+
+<pre>genkernel --firmware --busybox --disklabel --bootdir=/tmp/boot --no-symlink --all-ramdisk-modules --install all</pre>
+
+The above command will take some time as it will build the default kernel and create a ramdisk then copy them into <tt>/tmp/boot</tt>.
+
+{{RootCmd|ls /tmp/boot/
+|output=<pre>initramfs-genkernel-x86_64-3.5.2-gentoo
+kernel-genkernel-x86_64-3.5.2-gentoo
+System.map-genkernel-x86_64-3.5.2-gentoo</pre>}}
+
+== Prepare the USB Stick ==
+
+Create 2 partitions on the drive (you can probably do it with one but it is normal practice to create a <tt>/boot</tt> and a <tt>/</tt> partition. I assume that your USB stick is <tt>/dev/sdb</tt>.
+
+{{RootCmd|fdisk /dev/sdb
+|output=<pre>Command (m for help): d
+Selected partition 1
+
+Command (m for help): n
+Partition type:
+   p   primary (0 primary, 0 extended, 4 free)
+   e   extended
+Select (default p): p
+Partition number (1-4, default 1): 1
+First sector (2048-4001759, default 2048): 
+Using default value 2048
+Last sector, +sectors or +size{K,M,G} (2048-4001759, default 4001759): +100M
+
+Command (m for help): n
+Partition type:
+   p   primary (1 primary, 0 extended, 3 free)
+   e   extended
+Select (default p): p
+Partition number (1-4, default 2):  
+Using default value 2
+First sector (206848-4001759, default 206848): 
+Using default value 206848
+Last sector, +sectors or +size{K,M,G} (206848-4001759, default 4001759): 
+Using default value 4001759
+
+Command (m for help): a
+Partition number (1-4): 1
+
+Command (m for help): p
+
+Disk /dev/sdb: 2048 MB, 2048901120 bytes
+255 heads, 63 sectors/track, 249 cylinders, total 4001760 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x001663df
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *        2048      206847      102400   83  Linux
+/dev/sdb2          206848     4001759     1897456   83  Linux
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+</pre>}}
+
+Make sure that the first partition is bootable (a command toggles the boot flag).
+
+Now Format the new partitions to the ext2 file system (I recommend you use ext2 for the /boot partition but you can use another file system for the / partition if it has support in your kernel). Notice that we have given the drives a label, this is important because it will be how we detect the root file system later, you also notice <tt>--disklabel</tt> on the genkernel command line earlier.
+
+{{RootCmd|mkfs.ext2 -L GENTOO_USB_BOOT /dev/sdb1}}
+{{RootCmd|mkfs.ext2 -L GENTOO_USB_ROOT /dev/sdb2}}
+
+== Stage 3 Installation ==
+
+The kernel is ready, the initial ramdisk is ready and our file systems have been created and labelled, now we need some shell utilities and such. This is all contained in the stage3 tarball available from your nearest Gentoo mirror... and portage snapshot.
+
+* [[http://mirror.bytemark.co.uk/gentoo/releases/amd64/current-stage3/]]
+* [[http://mirror.bytemark.co.uk/gentoo/snapshots/portage-latest.tar.xz]]
+
+For this example I have downloaded <tt>stage3-amd64-20120621.tar.bz2</tt> and <tt>portage-latest.tar.xv</tt>. This next bit is the same as in the handbook for installing Gentoo.
+
+{{RootCmd|mount /dev/sdb2 /mnt/gentoo}}
+{{RootCmd|cd /mnt/gentoo}}
+{{RootCmd|tar -xjf ~/Download/stage3-amd64-20120621.tar.bz2}}
+{{RootCmd|cd usr}}
+{{RootCmd|tar -xf ~/Download/portage-latest.tar.xz}}
+{{RootCmd|mount /dev/sdb1 /mnt/gentoo/boot}}
+{{RootCmd|cp /tmp/boot/* /mnt/gentoo/boot}}
+
+== Chrooting ==
+
+Now we are going to chroot into the Gentoo environment...
+
+{{RootCmd|mount -t proc none /mnt/gentoo/proc}}
+{{RootCmd|mount -o bind /dev /mnt/gentoo/dev}}
+{{RootCmd|cp /etc/resolv.conf /mnt/gentoo/resolv.conf}}
+{{RootCmd|chroot /mnt/gentoo /bin/bash}}
+
+== Get LILO Installed on your USB stick ==
+
+You must now emerge lilo...
+
+{{RootCmd|emerge sys-boot/lilo}}
+
+== Final Configuration Steps ==
+
+Edit <tt>/etc/lilo.conf</tt> so that it has the correct information in it now.
+
+{{Warning|These settings are very important and I will go through them line by line, if you get this wrong you might break your current Linux installation.}}
+
+{{File|/etc/lilo.conf|Configure lilo.conf|<pre>
+boot=/dev/sdb              # The location of your USB Stick
+lba32                      # use lba32 addressing (ignore)
+compact                    # boot quickly by loading lots of blocks
+                           # remove if you have problems booting
+prompt                     # Prompt for user input
+timeout=20                 # Time to wait before default selection
+default="Gentoo-352"       # Default selection after timeout
+
+image=/boot/kernel-genkernel-x86_64-3.5.2-gentoo
+	label="Gentoo-352"
+	read-only
+	root=/dev/ram0
+	append="real_root=LABEL=GENTOO_USB_ROOT rootdelay=5"
+	initrd=/boot/initramfs-genkernel-x86_64-3.5.2-gentoo
+</pre>}}
+
+The lines after image are all easy but the append line contains some interesting options. <tt>REAL_ROOT=LABEL=GENTOO_USB_ROOT</tt> will use the label of the disk instead of <tt>/dev/sdb2</tt> which is important because these device numbers move around depending on the number of hard disks in the computer or number of USB disk drives.
+
+{{RootCmd|lilo
+|output=<pre>
+gentoohost boot # lilo
+Warning: /dev/sdb is not on the first disk
+Warning: The initial RAM disk is too big to fit between the kernel and
+   the 15M-16M memory hole.  It will be loaded in the highest memory as
+   though the configuration file specified "large-memory" and it will
+   be assumed that the BIOS supports memory moves above 16M.
+Added Gentoo-352 ? *
+2 warnings were issued.</pre>}}
+
+The first warning is to be expected as we are not installing the boot loader onto the hard disk in your computer. The second warning will only cause a problem on machines that are old, if it is a problem for you try cutting down the kernel by removing modules.
+
+{{File|/etc/fstab|Configure your fstab to work with labels<pre>
+LABEL=GENTOO_USB_BOOT   /boot           ext2            noauto,noatime  1 2
+LABEL=GENTOO_USB_ROOT   /               ext2            noatime         0 1
+/dev/SWAP               none            swap            sw              0 0
+/dev/cdrom              /mnt/cdrom      auto            noauto,ro       0 0
+/dev/fd0                /mnt/floppy     auto            noauto          0 0</pre>}}
+
+Set the password for the root user and that is probably it. Exit the chroot environment and unmount all the mounts you made before going into it.
