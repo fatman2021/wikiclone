@@ -84,3 +84,97 @@ stop() {
 
 and add it to our runlevel
 {{RootCmd|rc-update add socksIphone lwifi}}
+
+== proxychains ==
+We are in an interesting realm: an http proxy is behind a socks proxy. Hopefully, {{Package|net-misc/proxychains}} can carry us out.
+
+{{Emerge|net-misc/proxychains}}
+
+and set up its config file.
+{{File|/etc/proxychains.conf|proxy chain setup|<pre>
+# proxychains.conf  VER 3.1
+#
+#        HTTP, SOCKS4, SOCKS5 tunneling proxifier with DNS.
+#
+...
+strict_chain
+#
+# Strict - Each connection will be done via chained proxies
+# all proxies chained in the order as they appear in the list
+# all proxies must be online to play in chain
+# otherwise EINTR is returned to the app
+...
+# Quiet mode (no output from library)
+quiet_mode
+# Some timeouts in milliseconds
+tcp_read_time_out 1000
+tcp_connect_time_out 500
+# ProxyList format
+#       type  host  port [user pass]
+#       (values separated by 'tab' or 'blank')
+#
+#
+#        Examples:
+#
+#               socks5  192.168.67.78   1080    lamer   secret
+#               http    192.168.89.3    8080    justu   hidden
+#               socks4  192.168.1.49    1080
+#               http    192.168.39.93   8080
+#
+#
+#       proxy types: http, socks4, socks5
+#        ( auth types supported: "basic"-http  "user/pass"-socks )
+#
+[ProxyList]
+# add proxy here ...
+# meanwile
+# defaults set to "tor"
+socks5  127.0.0.1       1080
+http    172.24.30.15    8080
+</pre>}}
+In the ProxyList, the first one is our socks proxy in the previous section, the second one happens to be http proxy provided by the library.
+
+== tinc initscript ==
+We need to adjust tinc initscript to make use of proxychains.
+{{File|/etc/init.d/tincd.manifold-lwifi|tinc initscript with proxychains|<pre>
+#!/sbin/runscript
+# Copyright 1999-2012 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+
+extra_started_commands="reload"
+
+EXEC="${EXEC:-$EPREFIX/usr/sbin/tincd}"
+NETNAME="${RC_SVCNAME#*.}"
+PIDFILE="$EPREFIX/run/tinc.${NETNAME}.pid"
+CONFIG="$EPREFIX/etc/tinc/${NETNAME}/tinc.conf"
+[ "x${SYSLOG}" = "xyes" ] && LOG="" || LOG=" --logfile=/var/log/tinc.${NETNAME}.log"
+OPTS_EXEC="--net=${NETNAME}${LOG} --pidfile ${PIDFILE}"
+OPTS_FOREGROUND="-D"
+
+depend() {
+        use logger dns
+        need net
+}
+
+check_config() {
+        if [ ! -f "${CONFIG}" ]; then
+                eerror "Cannot start network ${NETNAME}."
+                eerror "Please set up ${CONFIG} !"
+                return 1
+        fi
+}
+
+reload() {
+        if [ -f "${PIDFILE}" ] ; then
+                        ebegin "Reloading tinc network ${NETNAME}"
+                        start-stop-daemon --signal HUP --pidfile "${PIDFILE}"
+                        eend $?
+        fi
+}
+</pre>}}
+{{Note|this runscript file is written to work with OpenRC's [http://www.awa.tohoku.ac.jp/~benda/projects/runit.html runit template]. It is a working in progress and the interfaces are subject to change.}}
+
+The keyidea, though, is to set proxychains in LD_PRELOAD. Write you own version if necessary.
+{{File|/etc/conf.d/tincd.manifold-lwifi|LD_PRELOAD proxychains|<pre>
+EXEC_ENV="LD_PRELOAD=libproxychains.so.3"
+</pre>}}
