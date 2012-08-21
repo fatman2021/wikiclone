@@ -1,49 +1,82 @@
-{{Stub}}
-The udev application manages the device nodes in {{Path|/dev}}. It is triggered by the Linux kernel through uevents and uses a rule-based configuration to decide what actions to undertake when such a uevent has been fired.
+{{Lowercase title}}
+{{InfoBox stack
+|{{InfoBox wikipedia|udev|header=true}}
+|{{InfoBox gdoc|udev-guide}}
+}}
+'''udev''' is the device manager for the Linux kernel. Primarily, it manages device nodes in {{Path|/dev}} and handles all user space actions when adding/removing devices.
 
-== Using udev ==
+== Installation ==
 
-=== Requirements ===
-Most Gentoo Linux systems use udev for the device node management. As such, the requirements for udev are (most of the time) already fulfilled:
-* A Linux kernel 2.6.32 or higher
-* The <code>CONFIG_INOTIFY_USER</code> kernel setting
-
-=== Installing udev ===
-The {{Package|sys-fs/udev}} package is part of most Gentoo Linux profiles' default set (called the ''system'' set), so should be installed automatically when you install Gentoo Linux.
-
-However, if this isn't the case, you can always install it by simply emerging it:
-{{Emerge|sys-fs/udev}}
-
-Next, validate that the ''udev'' init script is automatically started at boot (through the sysinit runlevel):
-{{RootCmd|rc-config show sysinit|output=<pre>
-Status of init scripts in runlevel "sysinit"
-  devfs                     [started]
-  dmesg                     [started]
-  udev                      [started]
+=== Kernel ===
+You need [[procfs]] support. Also you need to activate the following kernel options:
+{{Kernel||<pre>
+General setup  --->
+    [ ] enable deprecated sysfs features to support old userspace tools
+[*] Enable the block layer  --->
+    [*]   Block layer SG support v4
+[*] Networking support  --->
+        Networking options  --->
+            <*> Unix domain sockets
+Device Drivers  --->
+    Generic Driver Options  --->
+        ()  path to uevent helper
+        [*] Maintain a devtmpfs filesystem to mount at /dev
+        [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs
+    < > ATA/ATAPI/MFM/RLL support (DEPRECATED)  --->
+File systems  --->
+    [*] Inotify support for userspace
 </pre>}}
 
-Also check if the ''udev-postmount'' init script is started through the default runlevel:
-
-{{RootCmd|rc-config show default|output=<pre>
-Status of init scripts in runlevel "default"
-  dnsmasq                   [started]
-  local                     [started]
-  net.eth1                  [started]
-  netmount                  [started]
-  sshd                      [started]
-  udev-postmount            [started]
-  vixie-cron                [started]
+=== Software ===
+Portage knows the global USE flag ''udev'' for enabling support for udev in other packages. Enabling this USE flag will pull in {{Package|sys-fs/udev}} automatically (default in all ''linux'' [[profile]]s):
+{{File|/etc/portage/make.conf||<pre>
+USE="... udev ..."
 </pre>}}
+The USE flags of udev are:
+{{USEflag|package=sys-fs/udev|desc=stable package
+|action_modeswitch
+|build
+|debug
+|edd
+|extras+yes
+|floppy
+|gudev+yes
+|hwdb+yes
+|introspection
+|keymap+yes
+|rule_generator+yes
+|selinux
+|test
+}}
 
-== How it works ==
+{{USEflag|package=sys-fs/udev|desc=testing package
+|acl+yes
+|doc
+|gudev+yes
+|hwdb+yes
+|introspection+yes
+|keymap+yes
+|openrc+yes
+|selinux
+|static-libs
+}}
 
-=== uevents ===
-The Linux kernel is of course in charge of handling device drivers and events. When it detects that a change occurs within the systems' device tree, it will eventually submit a uevent to whatever process is interested. Udev, through the '''udevd''' daemon, is one of those processes. It registers itself as an interested party by reading messages from a netlink socket (an inter-process communication method for transferring information between kernel and user-space processes).
+After setting this you want to update your system so the changes take effect:
+{{RootCmd|emerge --ask --changed-use --deep world}}
 
-When a uevent is received, the '''udevd''' daemon then goes through its rule definitions to find out which action(s) it has to take.
+== Configuration ==
 
-=== rules.d ===
-The rule definitions for udev are stored in {{Path|/etc/udev/rules.d}} (for end-user specified rules) and {{Path|/lib/udev/rules.d}} (for system-specified rules). In these directories, multiple rule files (with suffix {{Path|.rules}}) are traversed in alphanumerical order. Inside the rules files, udev will find expressions that might match a uevent together with the state to match (is the uevent because a device is added or removed) and the command to execute.
+=== Service ===
+To start udev at boot time, add it your sysinit runlevel and udev-postmount to your default runlevel:
+{{RootCmd|rc-update add udev sysinit
+|rc-update add udev-postmount}}
+
+== Advanced Configuration ==
+
+=== Rules ===
+udev provides a set of rules that match against exported values of uevents (events send by the kernel) and properties of the discovered device. A matching rule will possibly name and create a device node and run configured programs to set-up and configure the device.
+
+The rule definitions are stored in {{Path|/lib/udev/rules.d}} (installed by packages) and {{Path|/etc/udev/rules.d}} (for end-user specified rules). In these directories, multiple rule files (with suffix {{Path|.rules}}) are traversed in alphanumerical order. Inside the rules files, udev will find expressions that might match a uevent together with the state to match (is the uevent because a device is added or removed) and the command to execute.
 
 The event matching is based on information such as:
 * the ''SUBSYSTEM'' of the uevent (for which type of device is the uevent fired)
@@ -58,6 +91,55 @@ Based on this information, the rule can then state if
 * commands need to be executed
 
 Udev does this for every rule that matches (so it does not stop after the first match) to allow a flexible device management approach.
+
+=== Persistent device names ===
+The kernel detects devices asynchronous, udev mirrors the kernel's [[sysfs]] filesystem and so the device are named and numbered in order of detection. So by default udev provides no persistent device names. However there are mechanismen for some device classes to provide these:
+
+* udev creates for storage devices additional symlinks based on the device's id, label, uuid and path. See the {{Path|/dev/disk/by-*}} directory.. So instead of using e.g. the device file {{Path|/dev/sda}} use the file {{Path|/dev/disk/by-label/SOME_LABEL}}.
+
+* The same for input devices in the {{Path|/dev/input}} directory.
+
+* udev has the special rule {{Path|/etc/udev/rules.d/70-persistent-cd.rules}} for optical drives. This rule remembers detected devices and restore their device name number.This mechanismen is controlled by the ''rule_generator'' USE flag.
+
+* The same for network devices ({{Path|/etc/udev/rules.d/70-persistent-net.rules}}).
+
+* Using custom rules you can create your own device files.
+
+== Usage ==
+Some useful commands are:
+* '''udevadm info --query=all --name=/dev/DEVICE_FILE''' - Shows all messages about the given device file.
+* '''udevadm monitor''' - Monitor udev activities.
+See the ''udevadm'' [[man page]] for more information.
+
+== Troubleshooting ==
+* {{Bug|udev|search=package}}
+
+=== Log monitor messages ===
+Log all message you see, when you run '''udevadm monitor''':
+{{File|/etc/conf.d/udev||<pre>
+udev_monitor="YES"
+</pre>}}
+It will create the new log file {{Path|/run/udev/udevmonitor.log}}.
+
+=== Debug mode ===
+Enable debug mode to get more log messages:
+{{File|/etc/conf.d/udev||<pre>
+udev_debug="YES"
+</pre>}}
+It will create the new log file {{Path|/run/udev/udev.log}}.
+
+=== Missing device files {{Path|/dev/null}} and {{Path|/dev/console}} ===
+Some udev versions need these files and can't create them on their own. So you have to create them:
+{{RootCmd
+|mkdir test
+|mount --bind / test
+|cd test/dev
+|mknod -m 660 console c 5 1
+|mknod -m 660 null c 1 3
+|cd ../..
+|umount test
+|rmdir test
+}}
 
 [[Category:Core system]]
 [[Category:Daemons]]
