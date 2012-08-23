@@ -1,31 +1,8 @@
-{{InfoBox stack
-|{{InfoBox delete|author=Feystorm|date=Jan 8 2012|header=true}}
-}}
-[http://www.broadbandbuyer.co.uk/Shop/ShopDetail.asp?ProductID=7226 Thomson TG587n] is a decent wireless-N broadband router (currently offered by O2 on high-end packages). This router has 2 USB ports for content sharing.
+{{stub}}
+'''Samba''' is a re-implementation of the SMB/CIFS networking protocol, an MS Windows alternative to [[NFS]].
 
-== Configuring Content Sharing using Thomson Web Interface ==
-The configuration is quite simple. Open the web interface (default to 192.168.1.254) and go to the following section
-{{Code||<pre>Toolbox->Content Sharing->Configure</pre>}}
-
-We only care about the first section ( Network File Server (Windows Networking) ). Let's assume your configuration looks like this
-{{Code||<pre>
-Server Name: O2-Foobar
-Server Description: My Media Server
-Workgroup: WORKGROUP
-Server Enabled: Yes (this must be enabled)
-</pre>}}
-
-Make sure that you have selected your disk (Only '''FAT32''' or '''NTFS''' format for now) on ''List of connected disks'' field
-
-The Network File Server exposes the following two folders to the clients
-* Media
-* Shared
-
-== Client Configuration ==
-The shares are accessible through the smb:// protocol. The smbfs has been replaced by the cifs protocol so this is what we will use to access the disk from our Gentoo box
-
-=== Kernel Configuration ===
-The kernel needs to be configured like this
+=== Kernel configuration ===
+The kernel needs to be configured like this:
 {{Kernel||<pre>
 File Systems --->
      [*] Network File Systems --->
@@ -36,12 +13,12 @@ File Systems --->
                   [*] CIFS POSIX Extentions
 </pre>}}
 
-=== Necessary System Tools ===
-We don't really want the full samba package, hence we will install only the [http://packages.gentoo.org/package/net-fs/mount-cifs net-fs/mount-cifs] package
+=== Necessary system tools ===
+If you don't really want the full samba package, you can install only the {{package|net-fs/mount-cifs}} package:
 {{Emerge|net-fs/mount-cifs}}
 
 === Mount the shared content ===
-Now that our client is fully configured we can access the shares like this
+When your client is fully configured, you can access the shares like this:
 
 ==== Create the mount point ====
 {{RootCmd|mkdir -p /mnt/My-Disk/{Media,Shared} }}
@@ -51,39 +28,37 @@ Now that our client is fully configured we can access the shares like this
 {{RootCmd|mount.cifs //O2-Foobar/Shared /mnt/My-Disk/Shared -o guest}}
 
 ===== Automatically mount shares on every boot =====
-If you want to automatically mount your shares on every boot, then edit your '''/etc/fstab''' to look like this
+If you want to automatically mount your shares on every boot, then edit your '''/etc/fstab''' to look like this:
 {{File|/etc/fstab||<pre>
 //O2-Foobar/Media /mnt/My-Disk/Media cifs guest
 //O2-Foobar/Shared /mnt/My-Disk/Shared cifs guest
 </pre>}}
 {{Note|In case you get permission problems when trying to create files and folders in your disk, try to use gid{{=}}<your_user_gid>, uid{{=}}<your_user_uid> in your '''/etc/fstab''' entries}}
 
-== Known Issues ==
-The following problems may pop up when trying to mount your shiny new CIFS shares
+== Known issues ==
+The following problems may pop up when trying to mount your shiny new CIFS shares:
 
-=== Cannot Resolve <Server-Name> ===
+=== Cannot resolve <server-name> ===
 And more specifically, the actual error looks like this
 {{RootCmd|mount.cifs ...|output=<pre>
 "mount error: could not find target server. TCP name foo/bar not found. No ip
 address specified and hostname not found"
 </pre>}}
 
-This can easily be fixed by editing /etc/nsswitch and appending '''wins''' next to '''hosts''' entry
+This can easily be fixed by editing {{path|/etc/nsswitch}} and appending '''wins''' next to '''hosts''' entry
 {{File|/etc/nsswitch||<pre>
 hosts: files dns wins
 </pre>}}
 
-If this does not work, you can use the NFS server's IP address instead of the O2-Foobar hostname.
-{{Warning|The IP address for NFS server in Thomson router is '''192.168.1.253'''}}
-You can use the '''nmblookup''' utility (provided by the {{Package|net-fs/samba}}) to find out the IP address of an NFS host
+If this does not work, you can use the NFS server's IP address instead of the O2-Foobar hostname. You can use the '''nmblookup''' utility (provided by {{Package|net-fs/samba}}) to find out the IP address of an NFS host
 {{RootCmd|nmblookup O2-Foobar}}
 
 == Shutdown process hangs when trying to unmount cifs shares ==
-In case your system fails to shutdown or reboot properly, then you need to make sure you umount the cifs shares before udev tries to stop
+In case your system fails to shutdown or reboot properly, then you need to make sure you umount the cifs shares before udev tries to stop.
 
-This is an easy way to do it
-{{RootCmd|touch /etc/local.d/cifs.stop; echo "umount -a -t cifs -f" >> /etc/local.d/cifs.stop}}
+This is an easy way to do it:
+{{RootCmd|echo "umount -a -t cifs -f" >> /etc/local.d/cifs.stop}}
 
 This will ensure that your cifs mounts will be umounted properly by the ''local'' init script.
 
-[[Category:Hardware]]
+[[Category:Network]]
