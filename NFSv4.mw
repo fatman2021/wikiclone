@@ -4,24 +4,6 @@
 |{{InfoBox wikipedia|Network_File_System}}
 }}
 
-===Linux===
-Verify if NFS version 4 is enabled in current running linux kernel.
-
-{{RootCmd|cd /usr/src/linux}}
-{{RootCmd|make nconfig}}
-
-{{Kernel||<pre>
-File systems  --->
-   Network File Systems  --->
-      <*>   NFS client support
-      [*]     NFS client support for NFS version 4
-      <*>   NFS server support
-      [*]     NFS server support for NFS version 4 (EXPERIMENTAL)
-</pre>
-}}
-{{Note|NFS server support is not needed on a NFS client installation, also NFS client support is not necessarily needed on a NFS server.}}
-Optionally NFSv4 support could be build as a kernel module. After NFSv4 support has been enabled, new linux kernel needs to be build, installed and the system has to be restarted.
-
 == USE flags ==
 The following USE flags are supported by {{Package|net-fs/nfs-utils}} package:
 {{USEflag
@@ -39,14 +21,43 @@ The following USE flags are supported by {{Package|net-fs/nfs-utils}} package:
 {{emerge|net-fs/nfs-utils}}
 
 ==Configuration ==
-The NFSv4 server configuration is mostly like configuring the version 3, with one major change all NFS shares are exported from one directory on the server side.
-
 This section explains the simplest NFS server - client configuration. 
+
+The NFSv4 server configuration is mostly like configuring the version 3, with one major change all NFS shares are exported from one virtual root directory.
+
 The server has 2 NFS shares these are named 
 * {{Path|/export/home}} - directory with user homes
 * {{Path|/export/data}} - directory with example data
 
+These 2 shares are mounted at the example server system on following points:
+{{Cmd|<nowiki>df -h | egrep 'File|home|data'</nowiki>
+|output=<pre>
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sdb1        20G  977M   19G   5% /home
+/dev/sdc1       200G   91G  110G  46% /data
+</pre>
+}}
+
 The client uses TCP protocol, to mount the shares. Previous NFS versions use UDP as the default protocol.
+
+===Linux===
+Verify if NFS version 4 is enabled in current running linux kernel.
+
+{{RootCmd|cd /usr/src/linux}}
+{{RootCmd|make nconfig}}
+
+{{Kernel||<pre>
+File systems  --->
+   Network File Systems  --->
+      <*>   NFS client support
+      [*]     NFS client support for NFS version 4
+      <*>   NFS server support
+      [*]     NFS server support for NFS version 4 (EXPERIMENTAL)
+</pre>
+}}
+
+{{Note|NFS server support is not needed on a NFS client installation, also NFS client support is not necessarily needed on a NFS server.}}
+Optionally NFSv4 support could be build as a kernel module. After NFSv4 support has been enabled, new linux kernel needs to be build, installed and the system has to be restarted.
 
 ===Server===
 A virtual NFS root directory needs to be created. 
@@ -54,8 +65,22 @@ A virtual NFS root directory needs to be created.
 {{RootCmd|mkdir export}}
 You can substitute the name and the location of the virtual root (here: {{Path|/export}}), with anything else f.e. {{Path|/nfsroot}} or {{Path|/home/NFSv4root}}.
 
-Additionally following configuration files need to be edited:
-* {{Path|/etc/exports}}
+2 mount points need to be created for NFS shares in the {{Path|/export}}
+{{RootCmd|cd /export && mkdir home && mkdir data}}
+
+Finally mount the shares to its mount points:
+{{RootCmd|mount --bind /home /export/home && mount --bind /data /export/data}}
+
+Add following 2 lines to {{Path|/etc/fstab}} file, so these 2 NFS shares will still be available after a system reboot:
+{{File|/etc/fstab||<pre>
+[...]
+/home    /export/home   none    bind  0  0
+/data    /export/data   none    bind  0  0
+[...]
+</pre>
+}}
+
+NFS shares are defined in {{Path|/etc/exports}} file. Specify the virtual root {{Path|/export}} as the first entry, then add your specific shares which should be available via NFS:
 
 {{File|/etc/exports||<pre>
 /export                 *(rw,fsid=0,no_subtree_check)
@@ -80,7 +105,7 @@ Additionally following configuration files need to be edited:
 |-
 | sync || By '''default'''. It is possible to switch to '''async'''.
 |-
-| insecure || Tells the NFS server to use unpriveledged ports (ports above 1024). This may be needed to allow mounting the NFS share from MacOS X or through the nfs:/ kioslave in KDE.
+| insecure || Tells the NFS server to use unprivileged ports (ports above 1024). This may be needed to allow mounting the NFS share from MacOS X or through the nfs:/ kioslave in KDE.
 |-
 |}
 
