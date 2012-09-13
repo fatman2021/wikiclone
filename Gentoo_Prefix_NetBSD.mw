@@ -1,16 +1,16 @@
-=== WARNING ===
-<big>Currently Gentoo Prefix ''does not work'' on NetBSD. This is a work in progress and this page will contains notes about my efforts to get it up and running.</big>
+{{Warning|Currently Gentoo Prefix '''does not work''' on NetBSD. This is a work in progress and this page will contains notes about my efforts to get it up and running.}}
+
 == Instructions ==
-Start by installing ''bash'' via ''pkgsrc'' because thats what I use for the guide.
-<br />
-The following is added to ''~/.bashrc''
-{{Cmd|vi ~/.bashrc|output=<pre>
+Start by installing ''bash'' via ''pkgsrc'', because thats what I use for the guide.
+
+The following is added to {{Path|~/.bashrc}}:
+{{File|~/.bashrc||<pre>
 export EPREFIX="$HOME/gentoo"
 export LDFLAGS="-L$EPREFIX/usr/lib -Wl,-rpath=$EPREFIX/usr/lib -L$EPREFIX/lib -Wl,-rpath=$EPREFIX/lib"
 export PATH="$EPREFIX/usr/bin:$EPREFIX/bin:$EPREFIX/tmp/usr/bin:$EPREFIX/tmp/bin:$PATH"
 </pre>}}
-The EPREFIX part is your choice. Another popular option is <code>EPREFIX=/usr/gentoo</code>
-<br />
+The EPREFIX part is your choice. Another popular option is ''EPREFIX=/usr/gentoo''
+
 Now we need the main tools. We are trying to follow the [http://www.gentoo.org/proj/en/gentoo-alt/prefix/bootstrap-solaris.xml Gentoo Prefix Bootstrap Process for UNIX-like systems] but NetBSD requires a lot of changes to get it working. Anyways, you need the following two files:
 * [http://overlays.gentoo.org/proj/alt/browser/trunk/prefix-overlay/scripts/bootstrap-prefix.sh?format=txt bootstrap-prefix.sh]
 * [http://overlays.gentoo.org/proj/alt/browser/trunk/prefix-overlay/scripts/bootstrap-bash.sh?format=txt bootstrap-bash.sh]
@@ -18,9 +18,11 @@ Save them in your home directory. In fact anything you download, put it there fo
 {{Cmd|chmod 755 ~/bootstrap-bash.sh ~/bootstrap-prefix.sh}}
 <br />
 There is no Gentoo Prefix Profile for NetBSD on x86_64 so get [http://mechalogic.net:8080/public/profile-x86_64-pc-netbsd.tgz profile-x86_64-pc-netbsd.tgz] and put it in your home directory.
-{{Cmd|mkdir $EPREFIX|cd $EPREFIX|tar zxvf ~/profile-x86_64-pc-netbsd.tgz}}
-We have to edit ''bootstrap-prefix.sh'' to add support for our profile. Open it up and add the following sections.
-{{Cmd|vi bootstrap-prefix.sh|output=<pre>
+{{Cmd|mkdir $EPREFIX
+|cd $EPREFIX
+|tar zxvf ~/profile-x86_64-pc-netbsd.tgz}}
+We have to edit {{Path|bootstrap-prefix.sh}} to add support for our profile. Open it up and add the following sections:
+{{File|bootstrap-prefix.sh||<pre>
   x86_64-pc-netbsd*)
     profile="${PORTDIR}/profiles/prefix/bsd/netbsd/6.0/x64"
     ldflags_make_defaults="LDFLAGS=\"-L${ROOT}/usr/lib -Wl,-rpath=${ROOT}/usr/lib -L${ROOT}/lib -Wl,-rpath=${ROOT}/lib\""
@@ -32,24 +34,37 @@ We have to edit ''bootstrap-prefix.sh'' to add support for our profile. Open it 
         CHOST="`uname -p`-pc-netbsdelf"
       ;;
 </pre>}}
-<br />
+
 ''m4'' and ''bison'' must be installed *before* ''bash''. We can just go down the list until we get to ''m4''
 {{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp make
 |./bootstrap-prefix.sh $EPREFIX/tmp wget
 |./bootstrap-prefix.sh $EPREFIX/tmp sed
 |./bootstrap-prefix.sh $EPREFIX/tmp m4}}
-Bootstrapping ''m4'' will probably fail due to problems with ''fseeko.c'' and ''fflush.c''. Download [http://mechalogic.net:8080/public/patch-lib-fflush.c patch-lib-fflush.c] and also [http://mechalogic.net:8080/public/patch-lib-fseeko.c patch-lib-fseeko.c] and put them in your home directory. Because the script will overwrite everything each time its run, we have to patch the source tarball and replace the original.
-{{Cmd|cd $EPREFIX/tmp/usr/portage/distfiles|mkdir tmp|cd tmp|tar zxvf ../m4-1.4.15.tar.gz|
-cd m4-1.4.15/lib|patch fflush.c < ~/patch-lib-fflush.c|patch fseeko.c < ~/patch-lib-fseeko.c}}
-{{Cmd|cd ../..|tar zcvf m4-1.4.15.tar.gz m4-1.4.15/|cd ..|cp tmp/m4-1.4.15.tar.gz .|rm -rf tmp|cd}}
+Bootstrapping ''m4'' will probably fail due to problems with {{Path|fseeko.c}} and {{Path|fflush.c}}. Download [http://mechalogic.net:8080/public/patch-lib-fflush.c patch-lib-fflush.c] and also [http://mechalogic.net:8080/public/patch-lib-fseeko.c patch-lib-fseeko.c] and put them in your home directory. Because the script will overwrite everything each time its run, we have to patch the source tarball and replace the original.
+{{Cmd|cd $EPREFIX/tmp/usr/portage/distfiles
+|mkdir tmp
+|cd tmp
+|tar zxvf ../m4-1.4.15.tar.gz
+|cd m4-1.4.15/lib
+|patch fflush.c < ~/patch-lib-fflush.c
+|patch fseeko.c < ~/patch-lib-fseeko.c
+}}
+{{Cmd|cd ../..
+|tar zcvf m4-1.4.15.tar.gz m4-1.4.15/
+|cd ..
+|cp tmp/m4-1.4.15.tar.gz .
+|rm -rf tmp
+|cd
+}}
 This time it should work with our fixed tarball
 {{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp m4|
 ./bootstrap-prefix.sh $EPREFIX/tmp bison}}
 <br />
 Now we can go ahead and bootstrap ''bash''
-{{Cmd|./bootstrap-bash.sh $EPREFIX/tmp|hash -r}}
-<br />
-Next up... ''coreutils'' which also has ''fflush.c'' and ''fseeko.c''. It will fail but we run it first to download the source.
+{{Cmd|./bootstrap-bash.sh $EPREFIX/tmp
+|hash -r}}
+
+Next up... ''coreutils'' which also has {{Path|fflush.c}} and {{Path|fseeko.c}}. It will fail but we run it first to download the source.
 {{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp coreutils}}
 When it aborts we go ahead and patch the source tarball exactly like we did for ''m4''. Just patch the ''coreutils-8.16'' not both. With luck it will build cleanly and install itself.
 <br />
@@ -57,9 +72,16 @@ We get a breather now, several packages should bootstrap without issues.
 {{Cmd|./bootstrap-prefix.sh $EPREFIX/tmp findutils|./bootstrap-prefix.sh $EPREFIX/tmp tar
 |./bootstrap-prefix.sh $EPREFIX/tmp patch|./bootstrap-prefix.sh $EPREFIX/tmp grep
 |./bootstrap-prefix.sh $EPREFIX/tmp gawk|./bootstrap-prefix.sh $EPREFIX/tmp bash
-|./bootstrap-prefix.sh $EPREFIX/tmp zlib|./bootstrap-prefix.sh $EPREFIX/tmp python}}
-<br />At this point we are going to get the ''tree'' and ''portage''. We will use ''latest_tree'' to hopefully pick up some bug fixes.
-{{Cmd|./bootstrap-prefix.sh $EPREFIX latest_tree|./bootstrap-prefix.sh $EPREFIX portage|hash -r}}
-Soon we will have serious errors with ''libtool'' unless something is done. Edit your ''~/.bashrc'' and insert this:
-<pre>export CONFIG_SHELL="$EPREFIX/bin/bash"
-</pre>
+|./bootstrap-prefix.sh $EPREFIX/tmp zlib|./bootstrap-prefix.sh $EPREFIX/tmp python
+}}
+
+At this point we are going to get the ''tree'' and ''portage''. We will use ''latest_tree'' to hopefully pick up some bug fixes.
+{{Cmd|./bootstrap-prefix.sh $EPREFIX latest_tree
+|./bootstrap-prefix.sh $EPREFIX portage
+|hash -r}}
+Soon we will have serious errors with ''libtool'' unless something is done. Edit your {{Path|~/.bashrc}} and insert this:
+{{File|~/.bashrc||<pre>
+export CONFIG_SHELL="$EPREFIX/bin/bash"
+</pre>}}
+
+[[Category:Core system]]
