@@ -1,0 +1,35 @@
+EAPI=5 introduces two new features related to slots and slot dependencies:  sub-slots and slot-operators.  Slot-operators allow the dependencies of a package to be specified such that slot changes either will (:=) or won't (:*) trigger a rebuild of itself.  Sub-slots allow a package to trigger slot-operator rebuilds without needing to explicitly re-SLOT (and therefore allow concurrent installation of) different versions.  
+
+The practical upshot of these two features is that when used properly, they will allow portage to determine what packages in the system need to be re-emerged when certain libraries or dependencies are upgraded, thus including them in the emerge list when running "emerge -uDNav world", and hopefully eliminating the need for revdep-rebuild and other package-rebuild scripts.
+
+===A Basic example:===
+
+An overlay contains the following packages, all containing "SLOT=0" :
+<pre>dev-libs/libfoo-1.0
+dev-libs/libfoo-2.0
+dev-libs/libbar-1.0
+dev-libs/libbar-2.0
+app-misc/foo-1.0</pre>
+
+app-misc/foo-1.0 contains the following:
+<pre>RDEPEND="
+ dev-libs/foo
+ dev-libs/bar
+"</pre>
+
+and after being built, installs /usr/bin/foo which is linked to 'libfoo.so.1' and 'libbar.so'
+
+Without sub-slots and slot-operators, if libfoo-1.0 was upgraded to libfoo-2.0, then 'foo' would break until re-emerged (ie with revdep-rebuild).  However, we can add slot-opreators to the dependencies within app-misc/foo-1.0:
+<pre>RDEPEND="
+ dev-libs/foo:=
+ dev-libs/bar:*
+"</pre>
+
+...and sub-slots to the libraries:
+<pre>dev-libs/libfoo-1.0: SLOT="0/1"
+dev-libs/libfoo-2.0: SLOT="0/2"
+dev-libs/libbar-1.0: SLOT="0/1"
+dev-libs/libbar-2.0: SLOT="0/2"
+</pre>
+
+...would mean that the upgrade of libfoo from 1.0 to 2.0 would automatically trigger a rebuild of package 'foo'.  Also, since foo is linked to any 'libbar', the upgrade of libbar from 1.0 to 2.0 would -not- automatically trigger a needless rebuild of 'foo'.
