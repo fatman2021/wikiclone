@@ -1,0 +1,55 @@
+This article describes the setup of a Gentoo Linux guest using [[KVM]].
+
+== Host ==
+To create a disk image for the virtual machine, run:
+{{Cmd|qemu-img create -f qcow2 GentooVM.img 15G}}
+
+Download a minimal Gentoo LiveCD from [http://get.gentoo.org here].
+
+Since QEMU requires a lot of [[QEMU/Options|options]], it would be a good idea to put them into a shell script, e.g.:
+{{File|GentooVM||<pre>
+#!/bin/sh
+exec qemu-kvm \
+        -cpu host \
+        -drive file=GentooVM.img,if=virtio \
+        -net nic -net user,hostname=gentoovm \
+        -m 256M \
+        -monitor stdio \
+        -name "Gentoo VM" \
+        $@
+</pre>}}
+
+Change the path to your disk image ''GentooVM.img'' in the script. You can additional options when calling the script. To boot the disk image, run:
+{{Cmd|./GentooVM -boot d -cdrom install-amd64-minimal-20120621.iso}}
+
+Install the Gentoo guest. See the [[#Guest|guest section]] for optimum support. After the installation start the script without the additional options.
+
+== Guest ==
+
+=== Kernel ===
+{{Kernel||<pre>
+Processor type and features  --->
+    [*] Paravirtualized guest support  --->
+        [*]   KVM paravirtualized clock
+        [*]   KVM Guest support
+[*] Virtualization  --->
+    <*>   PCI driver for virtio devices
+Device Drivers  --->
+    [*] Block devices  --->
+        <*>   Virtio block driver
+    [*] Network device support  --->
+        <*>   Virtio network driver
+</pre>}}
+
+=== Hard drive ===
+Your VirtIO hard drive is mapped to {{Path|/dev/vda}}.
+
+=== GRUB ===
+To install [[GRUB]] change your {{Path|/boot/grub/device.map}}:
+{{File|/boot/grub/device.map||<pre>
+(hd0) /dev/vda
+</pre>}}
+Also specify the {{Path|device.map}} when setup GRUB to the MBR:
+{{RootCmd|grub-install --device-map{{=}}/boot/grub/device.map /dev/vda}}
+
+[[Category:Virtualization]]
