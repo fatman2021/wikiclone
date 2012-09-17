@@ -1,88 +1,104 @@
-'''KVM''' or the '''Kernel-based Virtual Machine''' is the hardware-assisted virtualization infrastructure provided by the Linux kernel.
+{{InfoBox stack
+|{{InfoBox homepage|http://www.linux-kvm.org|header=true}}
+|{{InfoBox wikipedia|Kernel-based Virtual Machine}}
+}}
+'''KVM''' ('''K'''ernel-based '''V'''irtual '''M'''achine) is the hardware-assisted virtualization infrastructure provided by the Linux kernel. It's using [[QEMU]] for operation system emulation.
 
 == Installation ==
-Emerge the qemu-kvm package:
-{{emerge|app-emulation/qemu-kvm}}
 
-Add your user to the <tt>kvm</tt> group:
-{{rootCmd|gpasswd -a larry kvm}}
+=== BIOS ===
+Check, that your processor's hardware virtualization feature is enabled:
+{{Cmd|egrep --color "vmx{{!}}svm" /proc/cpuinfo}}
 
-Make sure KVM is enabled in the kernel:
-{{Kernel|Host configuration|<pre>
+If not, enable "Intel VT", "AMD-V", etc. in your [[BIOS]].
+
+=== Kernel ===
+You need to activate the following kernel options:
+{{Kernel||<pre>
 [*] Virtualization  --->
     <*>   Kernel-based Virtual Machine (KVM) support
-    < >     KVM for Intel processors support
+
+    If you have an Intel processor:
+    <*>     KVM for Intel processors support
+
+    If you have an AMD processor:
     <*>     KVM for AMD processors support
 
-    Device Drivers  --->
+    Needed for "vhost-net" USE flag:
+    <*>   Host kernel accelerator for virtio net
+</pre>}}
+
+{{Kernel|Optional advanced networking support|<pre>
+Device Drivers  --->
     [*] Network device support  --->
     [*]   Network core driver support
     <*>     Universal TUN/TAP device driver support
 </pre>}}
-{{Note|Be sure to choose support for the correct processor!}}
 
-== Front ends ==
-To make life easier, there are multiple user-friendly front-ends to KVM, such as {{package|app-emulation/aqemu}} or {{package|app-emulation/virt-manager}}. This guide uses just <tt>qemu-kvm</tt>.
+=== Software ===
+Install {{Package|app-emulation/qemu-kvm}}:
 
-== Creating a virtual machine ==
-To create a disk image for the virtual machine, run:
-{{cmd|qemu-img create -f qcow2 fedora.img 15G}}
+{{USEflag|package=app-emulation/qemu-kvm|desc=Hardware flags
+|aio+yes
+|alsa+yes
+|bluetooth+yes
+|brltty
+|fdt
+|opengl+yes
+|pulseaudio
+|rbd
+|smartcard
+|usbredir
+|vhost-net+yes+yes
+}}
 
-Since qemu requires a lot of options, it would be a good idea to put them into a shell script. For instance:
-{{File|kvm-fedora.sh||<pre>#!/bin/sh
-exec qemu-kvm \
-        -drive index=0,media=disk,cache=writeback,if=virtio,file=/path/to/fedora.img \
-        -net nic,vlan=0 -net user,vlan=0,hostname=myfedoravm \
-        -m 1G \
-        -vga std \
-        -monitor stdio \
-        -name "Fedora VM" \
-        $@</pre>}}
+{{USEflag|package=app-emulation/qemu-kvm|desc=Output flags
+|ncurses+yes
+|sdl+yes
+|spice
+}}
 
-This will start a QEMU virtual machine with:
-* Drive set to the one created, using the Virtio disk driver (see below)
-* With a NAT-ed network connection
-* 1 Gigabyte of memory
-* Standard "vga" output (to support multiple resolutions)
-* A monitor interface in the terminal window
-* Titled "Fedora VM"
+{{USEflag|package=app-emulation/qemu-kvm|desc=Misc flags
+|caps+yes
+|curl+yes
+|debug
+|doc
+|python
+|sasl
+|static
+|tci
+|tls
+|vde
+|virtfs
+|xattr
+|xen
+|xfs
+|QEMU_SOFTMMU_TARGETS+++Enable architectures for full system emulation. Enable in your {{Path|make.conf}}.
+|QEMU_USER_TARGETS+++Enable architectures for user space programs emulation. Enable in your {{Path|make.conf}}.
+}}
+{{Emerge|qemu-kvm}}
 
-Additional parameters can be passed to it. To boot the disk image, run:
-{{cmd|./kvm-fedora.sh -boot d -cdrom Fedora-17-x86_64-Live-KDE.iso}}
+=== Frontends ===
+To make life easier, there are multiple user-friendly front-ends to KVM:
+* {{Package|app-emulation/virt-manager}}
+* {{Package|app-emulation/aqemu}}
 
-== Enabling Virtio disk driver ==
-Using the default QEMU disk emulation will result in very poor I/O performance due to the guest not being able to cooperate with the host. The solution is to enable Virtio.
+== Configuration ==
 
-=== Linux ===
-Most recent Linux distributions should be able to support Virtio out-of-the-box. Virtio disks will show up as <tt>/dev/vd*</tt>.
+=== Permissions ===
+Add your user to the ''kvm'' group:
+{{RootCmd|gpasswd -a YOURUSER kvm}}
 
-=== Windows ===
-Windows will not be able to detect Virtio devices by itself. It is best to enable the driver before the installation starts. When installing Windows XP, it briefly displays "Press F6 if you need to install a third pary SCSI or RAID driver" at the beginning, which will allow the Virtio driver to be loaded. You will need a [http://web.archive.org/web/20110501124422/http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/bin/virtio-win-1.1.16.vfd Windows Virtio driver floppy image]:
+== Usage ==
+* See [[QEMU/Options|QEMU options]] page for common options
+* [[QEMU/Linux guest|Setup a Linux guest]]
+* [[QEMU/Windows guest|Setup a Windows guest]]
 
-{{cmd|qemu-kvm [...] -boot d -cdrom windows-xp.iso -fda virtio-win-1.1.16.vfd}}
-
-== Snapshots ==
-=== Temporary ===
-A virtual machine can be started with the <tt>-snapshot</tt> parameter, which will result in all changes to the image to be discarded. (In fact, no changes are actually written to disk.) This could be useful for experimentation.
-{{cmd|qemu-kvm [...] -snapshot}}
-
-=== Disk image overlays ===
-It is also possible to create a "backing file" which acts as an overlay over the original image - any new changes are made are written to that file while the original is kept unmodified, and kept in its initial state.
-{{cmd|qemu-img create -b image-base.img -f qcow2 image-overlay.ovl}}
-{{Note|Make sure to change the command to use the overlay image and ''not'' the original}}
-
-== Comparison with other virtual machines ==
-=== Advantages ===
-* No external modules
-* Does not taint kernel
-=== Disadvantages ===
-* Requires hardware virtualization support
-* The usual limitations of hardware based virtualization .e.g. supports only architectures that guest OS supports, in particular it's not possible to run x86_64 guest on x86 host but vice versa is supported
-* No seamless guest window integration with host GUI unless both host and guest are using new enough SPICE
-* No 3D acceleration
+== See also ==
+* [[Comparison of virtual machines]]
 
 == External resources ==
-* [http://www.linux-kvm.org KVM Wiki]
+* [http://wiki.qemu.org QEMU homepage]
 * [http://en.gentoo-wiki.com/wiki/KVM Community Gentoo Wiki article]
 
 [[Category:Virtualization]]
