@@ -1,13 +1,14 @@
 '''LXC''' (Linux Containers) is a virtualization system that was developed by IBM, making use of the "cgroups" feature that has been available in the mainline Linux kernel since 2.6.$something. It is conceptually similar to Solaris's Zones and FreeBSD's Jails, so to provide more segregation of a simple chroot without having to incur in the penalties of a full virtualisation solution.
 
-==Concepts==
-===Virtualization concepts===
+== Concepts ==
+
+=== Virtualization concepts ===
 This section is a basic overview of how lxc fits in to the virtualization world, the type of approach it uses, and the benefits and limitations thereof.
 If you are trying to figure out if lxc is for you, or it's your first time setting up virtualization under Linux, then you should at least skim this section.
 
 Roughly speaking there are two types of virtualization in use today, container-based virtualization and full virtualization.
 
-====Container-based Virtualization (lxc)====
+==== Container-based Virtualization (lxc) ====
 Container based virtualization is very fast and efficient. It's based on the premise that an OS kernel provides different views of the system to different running processes. This sort of segregation or compartmentalisation (sometimes called "thick sandboxing") can be useful for ensuring guaranteed access to hardware resources such as CPU and IO bandwidth, whilst maintaining security and efficiency.
 
 On the unix family of operating systems, it is said that container based virtualization has its roots in the 1982 release of the [http://en.wikipedia.org/wiki/Chroot ''chroot''] tool, a filesystem subsystem specific container-based virtualization tool that was written by Sun Microsystems founder Bill Joy and published as part of 4.2BSD.
@@ -27,15 +28,15 @@ Conceptually, lxc can be seen as a further development of the existing 'chroot' 
 Some of the most notably differences are: 
 * each container will share the kernel with the host (and other containers). No kernel need to be present and/or mounted on the containers /boot directory;
 * devices and filesystem will be (more or less) 'inherited' from the host, and need not be configured as would apply for a normal installation;
-* if the host is using the openrc system for bootstrapping, such configuration items will "automagically" be omitted (i.e. filesystem mounts from fstab).
+* if the host is using the [[OpenRC]] system for bootstrapping, such configuration items will "automagically" be omitted (i.e. filesystem mounts from fstab).
 
 The last point is important to keep lxc based installation as much as simple and the same as for normal installations (no exceptions).
 
-====Full Virtualization (not lxc)====
+==== Full Virtualization (not lxc) ====
 Full virtualization and paravirtualization solutions aim to simulate the underlying hardware. This type of solution, unlike lxc and other container-based solutions, usually allow you to run any operating system. Whilst this may be useful for the purposes of security and server consolidation, it is hugely inefficient compared to container based solutions. The most popular solutions in this area right now are probably [[VMware]], [[KVM]]/[[QEMU]], [[Xen]], & [[VirtualBox]].
 
-===Limitations of lxc===
-With lxc, you can efficiently manage resource allocation in real time. In addition, you should be able to run different Linux distributions on the same host kernel in different containers (though there may be teething issues with startup and shutdown 'run control' (rc) scripts, and these may need to be modified slightly to make some guests work.  That said, maintainers of tools such as [[OpenRC|openrc]] are increasingly implementing lxc detection to ensure correct behaviour when their code runs within containers.)
+=== Limitations of lxc ===
+With lxc, you can efficiently manage resource allocation in real time. In addition, you should be able to run different Linux distributions on the same host kernel in different containers (though there may be teething issues with startup and shutdown 'run control' (rc) scripts, and these may need to be modified slightly to make some guests work.  That said, maintainers of tools such as OpenRC are increasingly implementing lxc detection to ensure correct behaviour when their code runs within containers.)
 
 Unlike full virtualization solutions, lxc will not let you run other operating systems (such as proprietary operating systems, or other types of unix). 
 
@@ -49,7 +50,7 @@ In short:
 * Many instances
 ... but can co-exist with other virtualization solutions if required.
 
-====MAJOR Temporary Problems with LXC - READ THIS====
+==== MAJOR Temporary Problems with LXC - READ THIS ====
 As documented [https://wiki.ubuntu.com/UserNamespace over here], basically containers are not functional as security containers at present, in that if you have root on a container you have root on the whole box.
 *''root'' in a container has all capabilities
 **Workaround:
@@ -68,10 +69,10 @@ If you are designing a virtualisation solution for the long term and want a time
 
 See also [http://lwn.net/Articles/486306/ CAP_SYS_ADMIN: the new root].
 
-===lxc Components===
+=== lxc Components ===
 lxc uses two new / lesser known kernel features known as 'control groups' and 'POSIX file capabilities'.  It also includes 'template scripts' to setup different guest environments.
 
-====Control Groups====
+==== Control Groups ====
 Control Groups are a multi-hierarchy, multi-subsystem resource management / control framework for the Linux kernel.
 
 In simpler language, what this means is that unlike the old ''chroot'' tool which was limited to the file subsystem, control groups let you define a 'group' encompassing one or more processes (eg: sshd, Apache) and then specify a variety of resource control and accounting options for that control group against multiple subsystems, such as:
@@ -85,27 +86,27 @@ In simpler language, what this means is that unlike the old ''chroot'' tool whic
 
 The user-space access to these new kernel features is a kernel-provided filesystem, known as 'cgroup'.  It is typically mounted at /cgroup and provides files similar to /proc and /sys representing the running environment and various kernel configuration options.
 
-====POSIX File Capabilities====
+==== POSIX File Capabilities ====
 POSIX file capabilities are a way to allocate privileges to a process that allow for more specific security controls than the traditional 'root' vs. 'user' privilege separation on unix family operating systems.
 
-==Host Setup==
+== Host Setup ==
 To get an lxc-capable host system working you will need the following steps.
 
-===Kernel with the appropriate LXC options enabled===
+=== Kernel with the appropriate LXC options enabled ===
 If you are unfamiliar with recompiling kernels, see the copious documentation available on that subject in addition to the notes below.
 
-====Kernel options required====
+==== Kernel options required ====
 The {{Package|app-emulation/lxc}} ebuild will check for the most important options for the kernel that are required to set up a LXC host. This is, though, not a fatal check which means you have to make sure to have the options correctly enabled manually. The package also comes with an upstream-provided ''lxc-checkconfig'' script that should report on the proper options.
 
 {{RootCmd|cd /usr/src/linux
 |lxc-checkconfig
-{{note|write down missing kernel options in output, or leave it open and switch to a new terminal; if lxc-checkconfig complaints about missing "File capabilities" ignore it; the feature is now enabled by default and the setting has been removed.}}
+{{Note|Write down missing kernel options in output, or leave it open and switch to a new terminal; if lxc-checkconfig complaints about missing "File capabilities" ignore it; the feature is now enabled by default and the setting has been removed.}}
 |make menuconfig
-{{note|search for each CONFIG_SOMETHING using '/SOMETHING', enable them one by one, quit & save.}}
+{{Note|Search for each CONFIG_SOMETHING using '/SOMETHING', enable them one by one, quit & save.}}
 |make && make install modules_install}}
 
-=====General Options=====
-{{kernel|3.2.1-gentoo-r2|<pre>
+===== General Options =====
+{{Kernel||<pre>
 General setup  --->
  [*] Control Group support  --->
   [*]   Freezer cgroup subsystem 
@@ -141,7 +142,7 @@ Device Drivers  --->
        [*]   Support multiple instances of devpts
 </pre>}}
 
-{{kernel|namespaces|<pre>
+{{Kernel|namespaces|<pre>
  General Setup 
 -> Namespaces support 
 CONFIG_NAMESPACES / "Namespaces" ('General Setup -> Namespaces support')
@@ -156,20 +157,20 @@ CONFIG_NET_NS / "Network namespace" ('General Setup -> Namespaces Support -> Net
 CONFIG_DEVPTS_MULTIPLE_INSTANCES / "Multiple /dev/pts instances" ('Device Drivers -> Character devices -> Unix98 PTY support -> Support multiple instances of devpts')
 </pre>}}
 
-{{kernel|control groups|<pre>
+{{Kernel|control groups|<pre>
 #  -> General Setup -> Control Group support -> ...
 CONFIG_CGROUPS / "Cgroup" ('General Setup -> Control Group support')
 CONFIG_CGROUP_DEVICE / "Cgroup device" ('General Setup -> Control Group support -> Device controller for cgroups') 
 CONFIG_CPUSETS / "Cgroup cpuset"
 </pre>}}
 
-=====Freezer Support=====
-Freezer support allows you to 'freeze' and 'thaw' a running guest, something like 'suspend' under VMWare products.  It appears to be under heavy development as of October 2010 (LXC list) but is apparently mostly functional.  Please add additional notes on this page if you explore further.
+===== Freezer Support =====
+Freezer support allows you to 'freeze' and 'thaw' a running guest, something like 'suspend' under VMware products.  It appears to be under heavy development as of October 2010 (LXC list) but is apparently mostly functional.  Please add additional notes on this page if you explore further.
 <pre>
 CONFIG_CGROUP_FREEZER / "Freeze/thaw support" ('General Setup -> Control Group support -> Freezer cgroup subsystem')
 </pre>
 
-=====Scheduling Options=====
+===== Scheduling Options =====
 Scheduling allows you to specify how much hardware access (CPU bandwidth, block device bandwidth, etc.) control groups have.
 <pre>
 CONFIG_CGROUP_SCHED / "Cgroup sched" ('General Setup -> Control Group support -> Group CPU scheduler')
@@ -178,7 +179,7 @@ CONFIG_BLK_CGROUP / "Block IO controller" ('General Setup -> Control Group suppo
 CONFIG_CFQ_GROUP_IOSCHED / "CFQ Group Scheduling support" ('Enable the block layer -> IO Schedulers -> CFQ I/O scheduler -> CFQ Group Scheduling support')
 </pre>
 
-=====Resource Counters (Memory/Swap Accounting)=====
+===== Resource Counters (Memory/Swap Accounting) =====
 Resource counters are an 'accounting' feature - they allow you to measure resource utilisation in your guest.  They are also an apparent prerequisite for limiting memory and swap utilisation.
 <pre>
 CONFIG_RESOURCE_COUNTERS / "Resource counters" ('General Setup -> Control Group support -> Resource counters')
@@ -194,13 +195,13 @@ If you want to also count swap utilisation, also select...
 CONFIG_CGROUP_MEM_RES_CTLR_SWAP / "Memory Resource Controller Swap Extension(EXPERIMENTAL)" ('General Setup -> Control Group support -> Resource counters -> Memory Resource Controller for Control Groups -> Memory Resource Controller Swap Extension')
 </pre>
 
-=====CPU Accounting=====
+===== CPU Accounting =====
 This allows you to measure the CPU utilisation of your control groups.
 <pre>
 CONFIG_CGROUP_CPUACCT / "Cgroup cpu account" ('General Setup -> Control Group support -> Simple CPU accounting cgroup subsystem')
 </pre>
 
-=====Networking Options=====
+===== Networking Options =====
 Ethernet bridging, veth, macvlan and vlan (802.1q) support are optional, but you probably want at least one of these:
 
 <pre>
@@ -212,24 +213,13 @@ CONFIG_VLAN_8021Q / "Vlan"
 
 Further details about LXC networking options are available [http://blog.flameeyes.eu/2010/09/linux-containers-and-networking on Flameeyes's Weblog]
 
-===lxc userspace utilities===
-
+=== lxc userspace utilities ===
 Due to LXC's still unstable nature, Gentoo provides ebuilds only for the most recent version available, therefore make sure to update your Portage tree before proceeding:
-
-{{RootCmd|emerge --sync
-|emerge -av app-emulation/lxc|output=<pre>
-These are the packages that would be merged, in order:
-
-Calculating dependencies... done!
-[ebuild  N   ~] app-emulation/lxc-0.8.0_rc2-r1  USE="-examples -vanilla" 0 kB
-
-Total: 1 package (1 new), Size of downloads: 0 kB
-
-Would you like to merge these packages? [Yes/No] 
-</pre>}}
+{{RootCmd|emerge --sync}}
+{{Emerge|app-emulation/lxc}}
 
 === Mounted cgroup filesystem ===
-The 'cgroup' filesystem provides user-space access to the required kernel control group features, and is required by the lxc userspace utilities. Up to kernel 3.1, the filesystem's mountpoint wasn't well defined; nowadays it's defined to be mounted (split) within '''/sys/fs/cgroup'''. Recent [[OpenRC]] versions already mount it during boot, and the {{Package|app-emulation/lxc}} ebuild already depends on a new enough version.
+The 'cgroup' filesystem provides user-space access to the required kernel control group features, and is required by the lxc userspace utilities. Up to kernel 3.1, the filesystem's mountpoint wasn't well defined; nowadays it's defined to be mounted (split) within '''/sys/fs/cgroup'''. Recent OpenRC versions already mount it during boot, and the {{Package|app-emulation/lxc}} ebuild already depends on a new enough version.
 
 You can check it using:
 {{RootCmd|mount \|grep cgroup|output=<pre>
@@ -244,10 +234,8 @@ freezer on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,f
 </pre>}}
 
 == Network configuration ==
-
 There are three main options for giving network access to containers:
-
-* [[Network bridge|network bridges]] (the simplest solution in most cases);
+* [[Network bridge]]s (the simplest solution in most cases);
 * isolated network;
 * MACVLAN.
 
@@ -270,8 +258,9 @@ lxc.network.link = br0
 
 If, like me, you are using dhcp inside the container to get an IP address, then run it once as shown.  LXC will generate a random MAC address for the interface.  To keep your DHCP server from getting confused, you will want to use that MAC address all the time.  So find out what it is, and then uncomment the 'lxc.network.hwaddr' line and specify it there.
 
-==Guest Setup==
-===Template scripts===
+== Guest Setup ==
+
+=== Template scripts ===
 A number of 'template scripts' are distributed with the lxc package.  These scripts assist with generating various guest environments.
 
 Template scripts live in ''/usr/lib(lib64)/lxc/templates/'' but should be executed via the '''lxc-create''' tool as follows:
@@ -310,53 +299,55 @@ The template scripts included in ''app-emulation/lxc-0.8.0-rc1-r1'' are:
 :{{RootCmd|lxc-create -t ubuntu -n ''guest-name''-f ''network-configuration-file''}}
 :It takes a very long time to create a ubuntu guest, please be patient.
 
-===Gentoo===
-====Automatic setup: lxc-gentoo====
+=== Gentoo ===
+
+==== Automatic setup: lxc-gentoo ====
 The '''lxc-gentoo''' tool can download, extract and configure a gentoo guest for you.  It fixes a lot of little issues that you may otherwise find tedious and are not yet outlined in the manual guest configuration section, below.
 
 You can download it here: [http://globalcitizen.github.com/lxc-gentoo/ lxc-gentoo page] 
 
 Additional developers, bug fixes, comments, etc. are welcome.
 
-====Manual Guest Configuration====
+==== Manual Guest Configuration ====
 LXC allows a configuration file for each guest container, specifying name, IP address,  etc.  yu can use lxc-gentoo script to create a gentoo guest:
 
 {{RootCmd|/path/of/lxc-gentoo create -i 192.168.0.6/24 -g 192.168.0.1 -n <''guestname''> -u <''utsname''>}}
 
 After creating the guest you can manage it as usual.
 
-====Option: Shared /usr/portage/distfiles====
+==== Option: Shared /usr/portage/distfiles ====
 If you want to share distfiles from your host, you can set the <tt>PORTAGE_RO_DISTDIRS</tt> variable to a space-separated list of directories to search. Portage will create a symlink in <tt>DISTDIR</tt> to the first matching file found in <tt>PORTAGE_RO_DISTDIRS</tt> if the file does not already exist in <tt>DISTDIR</tt>.
 
 In the latest lxc-gentoo script (comment=269ea1735503cd932421d7c63d729f849279690d), the fstab is hardcoded. Therefore, if you want to mount the shared distfiles, you should add lxc.mount option to '''utsname'''.conf file.
 You can get more information from [http://blog.flameeyes.eu/2010/11/sharing-distfiles-directories-some-lesser-known-tricks flameeyes's blog].
 
-===Other distributions===
-====Busybox====
+=== Other distributions ===
+
+==== Busybox ====
 lxc contains a minimal template script for busybox.  Busybox is basically a base system oriented towards embedded use, where many base utilities exist in an optimized form within one stripped binary to save on memory.  Busybox is installed as part of the base gentoo system, so the script works right away.  Example:
 {{RootCmd|lxc-create -t busybox -n ''guest-name'' -p ''config-file''}}
 
-====Debian====
-You will need to install '''dev-util/debootstrap''' package.
-
-{{RootCmd|emerge dev-util/debootstrap}}
+==== Debian ====
+You will need to install {{Package|dev-util/debootstrap}} package:
+{Emerge|debootstrap}}
 
 You can then use the lxc supplied debian template script to download all required files, generate a configuration file and a root filesystem for your guest.
 
 {{RootCmd|lxc-create -t debian -n ''guest-name'' -p ''configuration-file''}}
 
-====sshd====
+==== sshd ====
 lxc contains a minimal template script for sshd guests. You can create the sshd guest through:
 
 {{RootCmd|lxc-create -t sshd -n ''guest-name'' -p ''configuration-file''}}
 
-====ubuntu====
+==== ubuntu ====
 lxc contains a minimal template script for Ubuntu guests (see [http://www.ubuntu.com/ ubuntu.com]).  Note that in order to use lxc-ubuntu, you must:
-{{RootCmd|emerge dev-util/debootstrap}}
+{{Emerge|debootstrap}}
 {{RootCmd|lxc-create -t ''guest-name'' -n ubuntu -f ''network-configuration-file''}}
 
-==Using the Guest Container==
-===Manual use===
+== Using the Guest Container ==
+
+=== Manual use ===
 To start and stop the guest, simply run:
 {{RootCmd
 |lxc-start -n '''guestname'''
@@ -364,8 +355,7 @@ To start and stop the guest, simply run:
 
 Please be aware, that when you have daemonized the booting process (-d), you will not get any output on screen. This might happen when you conveniently use an alias wich daemonizes by default, and forgot about it. You may get puzzled later by this if there is problem while booting a new the container that has not been configured properly (e.g. network).
 
-===Use from gentoo init system===
-
+=== Use from gentoo init system ===
 Gentoo's ebuild (without the ''vanilla'' USE flag enabled), provides an init script to manage containers and start them at boot time. To make use of the init script you just have to create a symlink in the '''/etc/init.d/''' folder:
 
 {{RootCmd
@@ -378,7 +368,8 @@ Of course, the use of such scripts is primarily intended for booting and stoppin
 
 To enter a (already started) guest directly from the host machine, see the '''lxc-console''' section below.
 
-=== Accessing the guest ===
+== Accessing the guest ==
+
 === lxc-console ===
 Using '''lxc-console''' provides console access to the guest. To use type:
 {{RootCmd|lxc-console -n '''guestname'''}}
@@ -398,9 +389,9 @@ A common technique to allow users direct access into a system container is to ru
 
 If you set up the container with a virtual ethernet interface connected to a bridge on the host, then it can have its own ethernet address on the LAN, and you should be able to connect directly to it without logically involving the host (the host will transparently relay all traffic destined for the container, without the need for any special considerations). You should be able to simply 'ssh <container_ip>'.
 
-{{Note|The above comments of ''Hu'' and ''BoneKracker'' have been taken from <nowiki>http://forums.gentoo.org/viewtopic.php?p=6943426</nowiki> in the [http://forums.gentoo.org/index.php Gentoo Forums]}}
+{{Note|The above comments of ''Hu'' and ''BoneKracker'' have been taken from  the [http://forums.gentoo.org/viewtopic.php?p{{=}}6943426 Gentoo Forums].}}
 
-===Filesystem layout===
+=== Filesystem layout ===
 Some of the lxc tools apparently assume that '''/etc/lxc/<''guestname''>/''' exists. However, you should keep the guests' root filesystems out of /etc since it's not a path that's supposed to store large volumes of binary data. 
 
 The templates of lxc will use the following locations::
