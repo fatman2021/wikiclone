@@ -33,3 +33,45 @@ dev-libs/libbar-2.0: SLOT="0/2"
 </pre>
 
 ...would mean that the upgrade of libfoo from 1.0 to 2.0 would automatically trigger a rebuild of package 'foo'.  Also, since foo is linked to any 'libbar', the upgrade of libbar from 1.0 to 2.0 would -not- automatically trigger a needless rebuild of 'foo'.
+
+===Real-World Examples===
+
+The following are projects that have been test-implemented on axs's developer overlay (layman -a axs).  They are presented here to show possible best practices of implementing sub-slots and slot-operators.
+
+====Making perl-cleaner obsolete====
+When perl is upgraded, perl modules generally need to be reinstalled as they are no longer installed against (or in the right path of) the current version of perl.  Slot-operators and sub-slots can help with this, by triggering rebuilds.  Fortunately, all packages that install perl modules do so via the 'perl-module' eclass, and so implementing this is very straight-forward and requires very few changes.
+
+1.  Ebuilds for dev-lang/perl need to be sub-slotted:
+As only one version of dev-lang/perl can be installed at a time, sub-slots are used to define the actual version of perl while enforcing SLOT="0" behaviour.  Perl-cleaner needs only be run when changing ${major}.${minor} versions, and so we will use this for the sub-slot:
+<pre>dev-lang/perl-5.12.4.ebuild:SLOT="0/5.12"
+</pre>
+Note that a modified ${PV} could have been used instead of an explicit specification.
+
+2. perl-module.eclass needs to be updated:
+In the standard case, perl-module.eclass is in charge of assigning dev-lang/perl to $DEPEND for the ebuilds that inherit it.  As such, change the dev-lang/perl atom so that it includes the ':=' slot operator will automatically trickle down to the perl-module packages.
+<pre>
+                case "${GENTOO_DEPEND_ON_PERL:-yes}" in
+                yes)
++                       case "${EAPI:-0}" in
++                       5)
++                               DEPEND="dev-lang/perl:=[-build]"
++                               ;;
++                       *)
+                                DEPEND="dev-lang/perl[-build]"
++                               ;;
++                       esac
+                        RDEPEND="${DEPEND}"
+                        ;;
+                esac
+</pre>
+
+3. Dependencies need to be updated for optional perl modules:
+Some packages install their modules based on USE="perl", and have GENTOO_DEPEND_ON_PERL=no set in the ebuild.  These packages therefore depend directly on dev-lang/perl and need to have their dependencies updates with the ':=' slot operator.
+<pre>app-misc/g15daemon-1.9.5.3-r5:
+ DEPEND="perl? (
+-               dev-lang/perl
++               dev-lang/perl:=
+                dev-perl/GDGraph
+                >=dev-perl/Inline-0.4
+         )
+</pre>
