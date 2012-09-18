@@ -75,3 +75,65 @@ Some packages install their modules based on USE="perl", and have GENTOO_DEPEND_
                 >=dev-perl/Inline-0.4
          )
 </pre>
+
+====Multiple ABIs for Xorg====
+x11-base/xorg-server provides three ABIs for various modules (like x11-drivers/*) that build against it:  the 'VIDEODRV' abi, the 'XINPUT' abi, and the 'EXTENSION' abi.  Any given version of xorg-server might (or might not) bump any or all of these abis.  There are two ways to handle automatic rebuilding of x11-drivers/* et. al. against an upgraded xorg-server:
+
+The first would follow the dev-lang/perl example above, where xorg-server ebuild would be sub-slotted.  However, the sub-slot would need to change every time any of the ABIs changed.  A value such as:
+<pre>SLOT="0/13.0-18.0-7.0"</pre>
+...would work for this as the sub-slot string is made up of the individual ABI versions in the xorg-server sources.  Unfortunately, though, this means that all installed x11-drivers/* would re-emerge on an xorg-server upgrade, even if the abi relevant to that particular package didn't change.
+
+The second option is to add virtuals for each independent abi.  This has the advantage of being more accurate, since packages can RDEPEND on the particular abi needed from xorg-server, and therefore each driver will only be rebuilt when the appropriate abi is bumped.  However, from a developer's perspective it is significantly more work, as instead of one package to maintain there are four, and both the ABIs themselves as well as the KEYWORDS between them will need to be kept in sync between the xorg-server ebuilds and ebuilds for the relevant virtuals.  Although this process can be scripted to avoid the necessary manual lifting, if things get out of sync the end-user experience will suffer greatly.
+
+For this example, we will assume the tree only contains two versions of xorg-server: 1.12.2 and 1.12.4.
+<pre>xorg-server-1.12.2:  VIDEODRV_ABI = 12.0 ; XINPUT_ABI = 16.0 ; EXTENSION_ABI = 6.0
+xorg-server-1.12.4:  VIDEODRV_ABI = 12.1 ; XINPUT_ABI = 16.0 ; EXTENSION_ABI = 6.0
+</pre>
+
+1. Create virtuals for each provided ABI, and ebuilds for each relevant version of said abi
+<pre>virtual/x-video-abi/x-video-abi-12.0.ebuild
+virtual/x-video-abi/x-video-abi-12.1.ebuild
+virtual/x-input-abi/x-input-abi-16.0.ebuild
+virtual/x-extension-abi/x-extension-abi-6.0.ebuild
+</pre>
+
+2. The ebuild contents of each virtual abi is very simple:
+<pre>virtual/x-video-abi/x-video-abi-12.0.ebuild:
+# Copyright 1999-2012 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: /var/cvsroot/gentoo-x86/virtual/x-video-abi/x-video-abi-0.ebuild,v 1.2 2012/03/07 04:11:36 axs Exp $
+
+EAPI="5_pre2"
+DESCRIPTION="Virtual for indicating the $abi ABI version of xorg-server"
+HOMEPAGE=""
+SRC_URI=""
+LICENSE=""
+SLOT="0/\${PV}"
+KEYWORDS="alpha amd64 arm hppa ia64 ~mips ppc ppc64 sh sparc x86 ~amd64-fbsd ~x86-fbsd"
+IUSE=""
+</pre>
+
+As the abi can be specified as the package version, this eliminates the need to use an explicit sub-slot.  The only difference between each ebuild is the KEYWORDS, as they need to match the xorg-server version in order to keep the virtuals from forcing an upgrade to xorg-server.
+<pre>change to make x-video-abi-12.1.ebuild:
+ SLOT="0/\${PV}"
+-KEYWORDS="alpha amd64 arm hppa ia64 ~mips ppc ppc64 sh sparc x86 ~amd64-fbsd ~x86-fbsd"
++KEYWORDS="~alpha ~amd64 ~arm ~hppa ~ia64 ~mips ~ppc ~ppc64 ~sh ~sparc ~x86 ~amd64-fbsd ~x86-fbsd"
+ IUSE=""
+</pre>
+
+Note that there are no *DEPEND in the virtuals.  This is because xorg-server will use a PDEPEND on the specific virtuals they provide; this matches what already occurs with the 'xorg-drivers' meta package.
+<pre>xorg-sever-1.12.2.ebuild:
+ PDEPEND="
++        ~virtual/x-video-abi-12.0
++        ~virtual/x-input-abi-16.0
++        ~virtual/x-extension-abi-6.0
+         xorg? ( >=x11-base/xorg-drivers-$(get_version_component_range 1-2) )"
+</pre>
+<pre>xorg-sever-1.12.4.ebuild:
+ PDEPEND="
++        ~virtual/x-video-abi-12.1
++        ~virtual/x-input-abi-16.0
++        ~virtual/x-extension-abi-6.0
+         xorg? ( >=x11-base/xorg-drivers-$(get_version_component_range 1-2) )"
+</pre>
+Testing locally by axs has shown that using PDEPEND is the easiest way to ensure that the correct versions of the virtuals are emerged when xorg-server is upgraded or downgraded.  Due to xorg-server generally providing multiple versions pf packages at both stable and ~arch keywords, it is difficult to control versioning with only minimum version dependencies, and exact dependencies would need to be bumped every time a new xorg-server ebuild was added to the tree even though ABIs might not change.  Also there is the issue of keeping the virtuals properly in sync (and the package manager giving relevant warnings) when an end-user is masking, unmasking, or ~arch keywording just the xorg-server ebuild itself.  The PDEPEND method above seems to provide the best overall end-user and developer experience at this juncture.
