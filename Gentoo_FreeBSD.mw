@@ -19,7 +19,8 @@ Since this guide has only minimal information, knowledge of both Gentoo/Linux an
 
 === Preparation ===
 The installation media of FreeBSD 9.0 to which the LiveCD function was added are used for installation.
-Please get the more suitable one of [http://ftp.freebsd.org/pub/FreeBSD/releases/i386/i386/ISO-IMAGES/9.0/ i386] or [http://ftp.freebsd.org/pub/FreeBSD/releases/amd64/amd64/ISO-IMAGES/9.0/ amd64]. Write to a CD or memory stick as necessary. 
+Please get the more suitable one of [http://ftp.freebsd.org/pub/FreeBSD/releases/i386/i386/ISO-IMAGES/9.0/ i386] or [http://ftp.freebsd.org/pub/FreeBSD/releases/amd64/amd64/ISO-IMAGES/9.0/ amd64]. Of course, -bootonly.iso can be used to install Gentoo/FreeBSD.
+Write to a CD or memory stick as necessary. 
 
 Boot the PC using the installation CD.
 Wait a moment while watching the boot process.
@@ -97,7 +98,10 @@ ada0: 12288MB (25165824 512 byte sectors: 16H 63S/T 16383C)
 ada0: Previously was known as ad0
 </pre>}}
 
-===== If you want to use the UFS2 file system =====
+===== If you want to use the UFS2 file system (GPT) =====
+{{Note|GPT partition is the standard FreeBSD 9.0.
+Please read the next MBR section if you want use MBR partition.}}
+
 This example is simple only two partitions.
 If necessary, you can split /, /usr, /var, /tmp, and /home.
 Please set using gpart.
@@ -151,7 +155,33 @@ Results when you create a partition with option -a 4k.
   25165784         7        - free -  (3.5k)
 </pre>}}
 
-===== If you want to use the ZFS file system (experimental) =====
+===== If you want to use the UFS2 file system (MBR) =====
+
+{| class="wikitable"
+! Partition
+! Filesystem
+! Size
+! Description
+|-
+|/dev/ada0s1a
+|UFS2 + SU
+|entire disk - swap space
+|Root partition
+|-
+|/dev/ada0s1b
+|swap
+|Rest of the disk
+|Swap partition
+|}
+
+{{RootCmd| gpart create -s mbr ada0
+| gpart add -t freebsd ada0
+| gpart set -a active -i 1 ada0
+| gpart create -s bsd ada0s1
+| gpart add -s 10G -t freebsd-ufs ada0s1
+| gpart add -t freebsd-swap ada0s1}}
+
+===== If you want to use the ZFS file system (experimental) / (GPT) =====
 {{RootCmd|gpart create -s GPT ada0
 |gpart add -s 64k -t freebsd-boot ada0
 |gpart add -t freebsd-zfs -l zfs-system ada0}}
@@ -160,10 +190,18 @@ Results when you create a partition with option -a 4k.
 ===== If you want to use the UFS2 file system =====
 Please do not forget newfs -L option to label. 
 
+{{Note|Add option -j to newfs if you want to enable soft updates journaling.}}
+
+Your choice GPT)
 {{RootCmd|newfs -L gfbsdroot -U /dev/ada0p2}}
+
+Your choice MBR)
+{{RootCmd|newfs -L gfbsdroot -U /dev/ada0s1a}}
+
 And mount it. 
 {{RootCmd|mount /dev/ufs/gfbsdroot /mnt
-|swapon /dev/gpt/swap}}
+|swapon /dev/gpt/swap (GPT)
+|swapon /dev/ada0s1b (MBR)}}
 
 ===== If you want to use the ZFS file system (experimental) =====
 Load the kernel module in order to enable ZFS.
@@ -218,12 +256,14 @@ Now, Gentoo/FreeBSD 9.0 stage3 is available.
 === Settings and install more in chroot environment ===
 
 ==== The first settings and time zone settings ====
-env-update and time zone settings. Of course, you can modify /etc/make.conf. 
+env-update and time zone settings. Of course, you can modify /etc/portage/make.conf. 
 
 {{RootCmd|env-update && source /etc/profile
 |cp /usr/share/zoneinfo/GMT /etc/localtime (please select your time zone)
-|emerge nano
-|nano -w /etc/make.conf (if necessary)
+|emerge -u sys-apps/portage
+|emerge app-editors/nano
+|mv /etc/make.conf /etc/portage/ (if /etc/make.conf is exist.)
+|nano -w /etc/portage/make.conf (if necessary)
 |prompt=(chroot) root #}}
 
 ==== Bug fixes ====
@@ -254,7 +294,7 @@ Now let's compile the kernel.
 Copy the GENERIC in conf, you can change it by changing the kernel configuration.
 For more information [http://www.freebsd.org/doc/handbook/kernelconfig.html FreeBSD Handbook] please see.
 
-{{RootCmd|emerge flex
+{{RootCmd|emerge -u sys-devel/flex
 |cd /usr/src/sys/i386/conf (case of x86-fbsd)
 |cd /usr/src/sys/amd64/conf (case of amd64-fbsd)
 |cp GENERIC.hints /boot/device.hints
@@ -268,7 +308,17 @@ For more information [http://www.freebsd.org/doc/handbook/kernelconfig.html Free
 Let's install a boot loader to boot the Gentoo/FreeBSD.
 Boot loader configuration is done after exiting the chroot.
 
-{{RootCmd|emerge sys-freebsd/boot0
+{{Note|gcc 4.5.x is required in order to compile boot0. Details, see {{Bug|409815}}
+}}
+
+{{RootCmd|emerge -u '<sys-devel/gcc-4.6'
+|prompt=(chroot) root #}}
+
+{{RootCmd|ls /usr/bin/gcc-4.5*|output=
+/usr/bin/gcc-4.5.4
+|prompt=(chroot) root #}}
+
+{{RootCmd|CC{{=}}gcc-4.5.4 emerge sys-freebsd/boot0
 |prompt=(chroot) root #}}
 
 ==== System setting ====
@@ -279,7 +329,12 @@ If you select UFS2
 {{RootCmd|nano -w /etc/fstab|output=
 <pre># Device	Mountpoint	FStype	Options	Dump	Pass#
 /dev/ufs/gfbsdroot	/		ufs	rw	1	1
-/dev/gpt/swap	none		swap	sw	0	0
+
+#your choice GPT (don't forget comment out)
+#/dev/gpt/swap	none		swap	sw	0	0
+
+#your choice MBR (don't forget comment out)
+#/dev/ada0s1b	none		swap	sw	0	0
 </pre>
 |prompt=(chroot) root #}}
 
@@ -326,7 +381,7 @@ Setting the root password
 
 You can also be configured to run at startup <i>sshd</i>.
 
-{{RootCmd|emerge net-misc/openssh
+{{RootCmd|emerge -u net-misc/openssh
 |rc-update add sshd default
 |prompt=(chroot) root #}}
 
@@ -341,7 +396,7 @@ If you select ZFS file system, the following additional work is required.
 
 ==== Installing the required packages ====
 If dhcpcd is required if you use DHCP.
-{{RootCmd|emerge dhcpcd
+{{RootCmd|emerge net-misc/dhcpcd
 |prompt=(chroot) root #}}
 
 ==== Exit from chroot environment ====
@@ -354,9 +409,13 @@ exit from chroot environment.
 === Writes boot loader and Cleaning up ===
 Do you want to reboot now ? Just a minute. We forgot to setting the boot loader.
 
-If you select UFS2
+If you select UFS2 (GPT)
 {{RootCmd|gpart bootcode -b /mnt/boot/pmbr ada0
 |gpart bootcode -p /mnt/boot/gptboot -i 1 ada0}}
+
+If you select UFS2 (MBR)
+{{RootCmd|gpart bootcode -b /mnt/boot/boot0 ada0
+|gpart bootcode -b /mnt/boot/boot ada0s1}}
 
 If you select ZFS
 {{RootCmd|gpart bootcode -b /mnt/boot/pmbr ada0
@@ -660,14 +719,14 @@ Please use app-misc/tmux instead of app-misc/screen.
 ==== cc: not found ====
 Details, see {{Bug|412319}}
 
-{{RootCmd|emerge >{{=}}sys-devel/gcc-config-1.7.1}}
+{{RootCmd|emerge '>{{=}}sys-devel/gcc-config-1.7.1'}}
 
 ==== Emerge fails sys-freebsd/boot0 using >gcc-4.6 ====
 Details, see {{Bug|409815}}
 
 workaround:
-{{RootCmd|emerge <gcc-4.6
-|CC{{=}}gcc-4.5.3 emerge boot0
+{{RootCmd|emerge -u '<sys-devel/gcc-4.6'
+|CC{{=}}gcc-4.5.4 emerge boot0
 }}
 
 == Contacts ==
@@ -676,5 +735,9 @@ workaround:
 
 == See also ==
 * [http://www.gentoo.org/proj/en/gentoo-alt/bsd/fbsd/ Gentoo/FreeBSD Project page]
+* [http://www.gentoo.org/doc/en/gentoo-freebsd.xml A short guide to Gentoo/FreeBSD]
+* [http://www.gentoo.org/doc/en/handbook/ Gentoo/Linux Handbook]
+* [http://www.freebsd.org/handbook/ FreeBSD Handbook]
+* [http://www.freebsd.org/cgi/man.cgi FreeBSD Man Pages]
 
 [[Category:Core system]]
