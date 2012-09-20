@@ -1,68 +1,74 @@
 {{InfoBox stack
 |{{InfoBox homepage|http://www.netfilter.org|header=true}}
 |{{InfoBox wikipedia|Netfiler#Iptables}}
-}}This article is based on the old wiki ''iptables and stateful firewall'' (see the end of the article) and aims to get you started with {{Package|net-firewall/iptables}} and stateful firewall wishing that it will make you jump to write, maybe your first, stateful firewall rules and why not a complicated set of rules.
-
-First off, you will need to configure your kernel with netfilter support. If you want to be able to add rules based on IP filtering like black listing IP addresses based on a live feed [https://forums.gentoo.org/viewtopic-t-863121.html], do not forget to add [[IPSet]] support to your kernel and merge {{Package|net-firewall/ipset}} package.
+}}
+This article is based on the old wiki ''iptables and stateful firewall'' (see the end of the article) and aims to get you started with {{Package|net-firewall/iptables}} and stateful firewall wishing that it will make you jump to write, maybe your first, stateful firewall rules and why not a complicated set of rules.
 
 == Installation ==
-Then merge the package with the desired USE flags to get you started.
-{{USEflag
-|ipv6
+
+=== Prerequisites ===
+First off, you will need to configure your kernel with netfilter support. If you want to be able to add rules based on IP filtering like black listing IP addresses based on a live feed [https://forums.gentoo.org/viewtopic-t-863121.html], do not forget to add [[IPSet]] support to your kernel and merge {{Package|net-firewall/ipset}} package.
+
+=== Kernel ===
+You need to activate the following kernel options:
+{{Kernel||<pre>
+[*] Networking support  --->
+    Networking options  --->
+        [*] TCP/IP networking
+        [*]   IP: multicasting
+        [*]   IP: advanced router
+        ...
+        [*]   IP: ARP daemon support
+        [*]   IP: TCP syncookie support
+        <M>   IP: AH transformation
+        <M>   IP: ESP transformation
+        <M>   IP: IPComp transformation
+        <M>   IP: IPsec transport mode
+        <M>   IP: IPsec tunnel mode
+        <M>   IP: IPsec BEET mode
+        <*>   Large Receive Offload (ipv4/tcp)
+        <*>   INET: socket monitoring interface
+        <M>     UDP: socket monitoring interface
+        [ ]   TCP: advanced congestion control  --->
+        ...
+        <M>   The IPv6 protocol  --->
+        ...
+        [*] Network packet filtering framework (Netfilter)  --->
+</pre>}}
+
+One can setup IPv6 support category to ''<M>'' to be safe and enable almost all Netfilter sub category as the following. Or else, enable only what you need and leave the other modules unset. You certainly would want almost all ''IP virtual server support'' core components (scheduler are certainly optional), ''IP: Netfilter Configuration'' support, ''IPv6: Netfilter Configuration'' for IPv6 support, ''IP set support'' for IP filtering based on IP, MAC, ports and then pick up what you need in ''Core Netfilter Configuration'' with at least: Netfilter: NFQEUE, LOG; Connection tracking: flow, mark, events, netlink; Netfilter Xtables: NFQEUE, LOG, conn{bytes,mark,state}, state helper with Xtables match: conn{bytes,mark,state}... you get the idea.
+
+{{Kernel||<pre>
+[*] Networking support  --->
+    Networking options  --->
+        [*] Network packet filtering framework (Netfilter)  --->
+            --- Network packet filtering framework (Netfilter)
+            [ ]   Network packet filtering debugging
+            [*]   Advanced netfilter configuration
+            [*]     Bridged IP/ARP packets filtering
+                    Core Netfilter Configuration  --->
+            <M>   IP set support  --->
+            <M>   IP virtual server support  --->
+                  IP: Netfilter Configuration  --->
+                  IPv6: Netfilter Configuration  --->
+                  DECnet: Netfilter Configuration  --->
+            <M>   Ethernet Bridge tables (ebtables) support  --->
+</pre>}}
+
+=== Iptables ===
+Install {{Package|net-firewall/iptables}}:
+{{USEflag|package=net-firewall/iptables
+|ipv6+yes
 |netlink
-|static-libs
+|static-libs++no
 }}
-{{Emerge|net-firewall/iptables}}
 
-== Kernel configuration ==
-So fire up a `make nconfig' in a terminal or a virtual terminal or else a `make menuconfig' for a more graphical output in your linux source directory, usually `/usr/src/linux' if that link point to something.
-
-{{Kernel|Configuring the kernel|<pre>
-                  [*] TCP/IP networking
-                   [*]   IP: multicasting
-                   [*]   IP: advanced router
- [...]
-                   [*]   IP: ARP daemon support
-                   [*]   IP: TCP syncookie support
-                   <M>   IP: AH transformation
-                   <M>   IP: ESP transformation
-                   <M>   IP: IPComp transformation
-                   <M>   IP: IPsec transport mode
-                   <M>   IP: IPsec tunnel mode
-                   <M>   IP: IPsec BEET mode
-                   <*>   Large Receive Offload (ipv4/tcp)
-                   <*>   INET: socket monitoring interface
-                   <M>     UDP: socket monitoring interface
-                   [ ]   TCP: advanced congestion control  --->
-[...]
-                   <M>   The IPv6 protocol  --->
-[...]
-                   [*] Network packet filtering framework (Netfilter)  --->           
-</pre>}}
-
-One can setup IPv6 support category to <M> to be safe and enable almost all Netfilter sub category as the following. Or else, enable only what you need and leave the other modules unset. You certainly would want almost all <i>IP virtual server support</i> core components (scheduler are certainly optional), <i>IP: Netfilter Configuration</i> support, <i>IPv6: Netfilter Configuration</i> for IPv6 support, <i>IP set support</i> for IP filtering based on IP, MAC, ports and then pick up what you need in <i>Core Netfilter Configuration</i> with at least: Netfilter: NFQEUE, LOG; Connection tracking: flow, mark, events, netlink; Netfilter Xtables: NFQEUE, LOG, conn{bytes,mark,state}, state helper with Xtables match: conn{bytes,mark,state}... you get the idea.
-
-{{Kernel|Configuring the kernel|<pre>
-                                  --- Network packet filtering framework (Netfilter)
-                                  [ ]   Network packet filtering debugging
-                                  [*]   Advanced netfilter configuration
-                                  [*]     Bridged IP/ARP packets filtering
-                                        Core Netfilter Configuration  --->
-                                  <M>   IP set support  --->
-                                  <M>   IP virtual server support  --->
-                                        IP: Netfilter Configuration  --->
-                                        IPv6: Netfilter Configuration  --->
-                                        DECnet: Netfilter Configuration  --->
-                                  <M>   Ethernet Bridge tables (ebtables) support  --->
-</pre>}}
-
-Once done, build your kernel and install kernel modules with something like: `make -j2 && make modules_install'.
+{{Emerge|iptables}}
 
 == Firewall ==
 To create firewall rules, we are going to use ipt=$(which iptables) or ipt=$(which ip6tables) for IPv6 support to write down a few rules that will be loaded using `$ipt-restore <$rules' (rules file are usally saved to `/var/lib/$ipt/rules-save' so that whenever your machine is powered on, the rules set will be loaded automatically with `/etc/init.d/$ipt'.
 
 Lets begin with a little example:
-
 {{RootCmd|$ipt -P INPUT DROP}}
 
 If you're looking into the perfect firewall, the previous command will set up the policy for INPUT chain and will satisfy the more paranoids. However, the previous will drop every packet that will be sent to the local host. And that, usually, nobody want it to be a default policy. 
@@ -71,14 +77,12 @@ That example shows how we will be generating firewall rules.
 
 === Stateless firewall ===
 Traditional firewall uses stateless firewall rules like:
-
 {{RootCmd|$ipt -A INPUT --sport 80 -j ACCEPT}}
 
 that just opens unconditional holes without any kind of filtering based on the states of the connection nor the interfaces nor the ports. That rules will just accept any web traffic on port 80 because standard web traffic originate from port 80 (`--sport' switch means source port). This what is avoided by using a stateful firewall approach that filter the in/outbound packets based on the state of the ''connection''.
 
 === Stateful firewall ===
 In a stateful firewall approach, the previous example will be handled like:
-
 {{RootCmd|<pre>
 $ipt -P INPUT                                                                         DROP
 $ipt -A INPUT -i eth0 -p tcp --sport 80 --syn -m state --state NEW                 -j ACCEPT
