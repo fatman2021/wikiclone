@@ -1,10 +1,10 @@
 {{InfoBox stack
 |{{InfoBox homepage|http://linux-nfs.org/|header=true}}
-|{{InfoBox wikipedia|Network_File_System}}
+|{{InfoBox wikipedia|Network File System}}
 }}
 
-== USE flags ==
-The following USE flags are supported by {{Package|net-fs/nfs-utils}} package:
+== Installation ==
+Install {{Package|net-fs/nfs-utils}}:
 {{USEflag
 |package=net-fs/nfs-utils
 |nfsv3
@@ -15,10 +15,9 @@ The following USE flags are supported by {{Package|net-fs/nfs-utils}} package:
 |kerberos
 }}
 
-==Installation==
-{{emerge|net-fs/nfs-utils}}
+{{Emerge|nfs-utils}}
 
-==Configuration ==
+== Configuration ==
 This section explains how to setup a simple NFS server - NFS client configuration. 
 The NFSv4 server configuration is mostly like configuring the version 3, with one major change all NFS shares are exported from one virtual root directory.
 
@@ -27,17 +26,15 @@ The server has 2 NFS shares which are:
 * {{Path|/export/data}} - directory with example data
 
 These 2 shares are mounted on the server system at following points in the tree:
-{{Cmd|<nowiki>df -h | egrep 'File|home|data'</nowiki>
-|output=<pre>
+{{Cmd|df -h {{!}} egrep 'File{{!}}home{{!}}data'|output=<pre>
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/sdb1        20G  977M   19G   5% /home
 /dev/sdc1       200G   91G  110G  46% /data
-</pre>
-}}
+</pre>}}
 
 The client uses now TCP protocol as default, to mount NFS shares. Previous NFS versions use UDP as the default protocol.
 
-===Linux===
+=== Linux ===
 Verify if NFS version 4 is enabled in current running linux kernel, this has to be ensured on the server as well as on the client installations:
 
 {{RootCmd|cd /usr/src/linux}}
@@ -50,14 +47,14 @@ File systems  --->
       [*]     NFS client support for NFS version 4
       <*>   NFS server support
       [*]     NFS server support for NFS version 4 (EXPERIMENTAL)
-</pre>
-}}
+</pre>}}
 
 {{Note|NFS server support is not needed on a NFS client installation, also NFS client support is not necessarily needed on a NFS server.}}
 Optionally NFSv4 support could be build as a kernel module. After NFSv4 support has been enabled, new linux kernel needs to be build, installed and the system has to be restarted.
 
-===Server===
-====/export====
+=== Server ===
+
+==== /export ====
 A virtual NFS root directory needs to be created:
 {{RootCmd|cd /}}
 {{RootCmd|mkdir export}}
@@ -66,7 +63,7 @@ A virtual NFS root directory needs to be created:
 Create 2 directories in the {{Path|/export}} directory for NFS shares:
 {{RootCmd|cd /export && mkdir {home,data} }}
 
-====NFS shares====
+==== NFS shares ====
 Mount the shares to its mount points:
 {{RootCmd|mount --bind /home /export/home && mount --bind /data /export/data}}
 
@@ -76,8 +73,7 @@ Add following 2 lines to {{Path|/etc/fstab}} file, so NFS shares will still be a
 /home    /export/home   none    bind  0  0
 /data    /export/data   none    bind  0  0
 [...]
-</pre>
-}}
+</pre>}}
 
 ====/etc/exports====
 NFS shares are configured in {{Path|/etc/exports}} file. This file has following structure:
@@ -115,11 +111,10 @@ Specify the virtual root {{Path|/export}} as the first entry, then define specif
 /export                 192.168.0.0/24(rw,fsid=0,no_subtree_check)
 /export/home            192.168.0.0/24(rw,nohide,insecure,no_subtree_check)
 /export/data            192.168.0.0/24(rw,nohide,insecure,no_subtree_check)
-</pre>
-}}
+</pre>}}
 {{Note|Substitute the target network used in this example (''192.168.0.0/24'') with your own network}}
 
-====/etc/conf.d/nfs====
+==== /etc/conf.d/nfs ====
 To provide NFSv4 protocol access only, specify which version of the NFS protocol the server has to use ''-V 4'' and which versions are not supported ''-N 3 -N 2''  in the {{Path|/etc/conf.d/nfs}} file
 {{File|/etc/conf.d/nfs||<pre>
 [...]
@@ -127,11 +122,10 @@ To provide NFSv4 protocol access only, specify which version of the NFS protocol
 # ex. OPTS_RPC_MOUNTD="-p 32767"
 OPTS_RPC_MOUNTD="-V 4 -N 3 -N 2"
 [...]
-</pre>
-}}
-{{Important|To provide NFS version 3 support additionally, think of building a linux module}}
+</pre>}}
+{{Important|To provide NFS version 3 support additionally, think of building a linux module.}}
 
-====starting service daemon====
+==== Starting service daemon ====
 Finally start the configured NFS daemon:
 {{RootCmd|/etc/init.d/nfs start
 |output=<pre>
@@ -145,8 +139,7 @@ Finally start the configured NFS daemon:
  * Starting NFS mountd ...                                                                         [ ok ]
  * Starting NFS daemon ...                                                                         [ ok ]
  * Starting NFS smnotify ...                                                                       [ ok ]
-</pre>
-}}
+</pre>}}
 
 As shown many services are started in specific order, ''rpcbind'' is started as the first service. 
 If there is a need to stop the NFS service, the easiest way to stop all NFS services at once is to stop the '''rpcbind''' service itself. 
@@ -158,12 +151,11 @@ Add nfs to a runlevel, to be able to use it after a reboot:
 {{RootCmd|rc-update add nfs default
 |output=<pre>
 * service nfs added to runlevel default
-</pre>
-}}
+</pre>}}
 
-===Client===
+=== Client ===
 
-====Mounting remote directories====
+==== Mounting remote directories ====
 Before mounting remote directories 2 daemons should be be started first:
 * rpcbind
 * rpc.statd
@@ -172,30 +164,27 @@ Before mounting remote directories 2 daemons should be be started first:
 |output=<pre>
  * Starting rpcbind ...                                                   [ ok ]
  * Starting NFS statd ...                                                 [ ok ]
-</pre>
-}}
+</pre>}}
 
 The directories can be mounted with following command:
 {{RootCmd|mount server:/home /home}}
 {{Note|substitute the name ''server'' with the IP address or DNS name of your own NFS server}}
 
-====Mounting at boot time====
+==== Mounting at boot time ====
 Add NFS shares to the {{Path|/etc/fstab}} file. 
 * 1st option is to mount the NFS virtual root including all exported shares at once:
 {{Important|The {{Path|/export}} directory, server exported virtual root is recognized as a root of a file system on the client side, which is simply a "/" in the example below. This is a different approach compared to NFSv3}}
 {{File|/etc/fstab||<pre>
 [...]
 server:/         /mnt     nfs     rw,_netdev,auto   0  0
-</pre>
-}}
+</pre>}}
 
 * or the 2nd option is to define each NFS share individually, to have the ability to mount them to different local mount point:
 {{File|/etc/fstab||<pre>
 [...]
 server:/home      /home     nfs     rw,_netdev,auto   0  0
 server:/data      /data     nfs     rw,_netdev,auto   0  0
-</pre>
-}}
+</pre>}}
 
 Finally start the nfsmount service
 {{RootCmd|/etc/init.d/nfsmount start
@@ -205,14 +194,13 @@ Finally start the nfsmount service
  * Starting idmapd ...                                                    [ ok ]
  * Starting NFS sm-notify ...                                             [ ok ]
  * Mounting NFS filesystems ...                                           [ ok ]
-</pre>
-}}
+</pre>}}
 
 Add nfsmount to the default startup level
 {{RootCmd|rc-update add nfsmount default}}
 
 At this point the NFS shares should be mounted on the client. It can be verified with following command:
-{{Cmd|<nowiki>netstat -tn | egrep '2049|Active|Pro'</nowiki>
+{{Cmd|netstat -tn {{!}} egrep '2049{{!}}Active{{!}}Pro'
 |output=<pre>
 Active Internet connections (w/o servers)
 Proto Recv-Q Send-Q Local Address           Foreign Address         State
@@ -223,11 +211,11 @@ tcp        0      0 192.168.0.10:997        192.168.0.1:2049        ESTABLISHED
 Or run just:
 {{Cmd|df -h}}
 
-==Security==
+== Security ==
 
-==Troubleshooting==
+== Troubleshooting ==
 Verfiying NFS server is running and listening for connections:
-{{RootCmd|<nowiki>netstat -tupan | egrep 'rpc|Active|Proto'</nowiki>
+{{RootCmd|netstat -tupan {{!}} egrep 'rpc{{!}}Active{{!}}Proto'
 |output=<pre>
 Active Internet connections (servers and established)
 Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
@@ -237,8 +225,7 @@ udp        0      0 0.0.0.0:111             0.0.0.0:*                           
 udp        0      0 0.0.0.0:57655           0.0.0.0:*                           1891/rpc.statd
 udp        0      0 0.0.0.0:774             0.0.0.0:*                           1875/rpcbind
 udp        0      0 0.0.0.0:795             0.0.0.0:*                           1891/rpc.statd
-</pre>
-}}
+</pre>}}
 
 Verifying which NFS specific daemons are running:
 {{RootCmd|rpcinfo -p
@@ -264,8 +251,7 @@ Verifying which NFS specific daemons are running:
     100021    1   tcp  44043  nlockmgr
     100021    3   tcp  44043  nlockmgr
     100021    4   tcp  44043  nlockmgr
-</pre>
-}}
+</pre>}}
 
 Showing exported NFS shares on the server side: 
 {{RootCmd|exportfs -v
@@ -273,29 +259,24 @@ Showing exported NFS shares on the server side:
 /export         192.168.0.0/24(rw,wdelay,root_squash,no_subtree_check,fsid=0)
 /export/home    192.168.0.00/24(rw,wdelay,nohide,root_squash,no_subtree_check)
 /export/data    192.168.0.0/24(rw,wdelay,nohide,root_squash,no_subtree_check)
-</pre>
-}}
+</pre>}}
 
 Verfiying current open connections to the NFS server:
-{{Cmd|<nowiki>netstat -tn | egrep '2049|Active|Proto'</nowiki>
+{{Cmd|netstat -tn {{!}} egrep '2049{{!}}Active{{!}}Proto'
 |output=<pre>
 Active Internet connections (w/o servers)
 Proto Recv-Q Send-Q Local Address           Foreign Address         State      
 tcp        0      0 192.168.0.1:2049       192.168.0.10:884        ESTABLISHED
-</pre>
-}}
+</pre>}}
 
 For more specific troubleshooting examples visit following links:
 * http://linux-nfs.org/wiki/index.php/General_troubleshooting_recommendations
 * http://nfs.sourceforge.net/nfs-howto/ar01s07.html
 
-==See also==
-
-==External resources==
-* http://linux-nfs.org/
+== External resources ==
 * http://www.ietf.org/rfc/rfc3530.txt
 * https://help.ubuntu.com/community/NFSv4Howto
 * http://www.gentoo-wiki.info/HOWTO_NFSv4
 
-[[Category:Software]]
+[[Category:Filesystems]]
 [[Category:Daemons]]
