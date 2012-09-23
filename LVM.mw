@@ -1,10 +1,12 @@
 {{InfoBox stack
-|{{InfoBox wikipedia|Logical_Volume_Manager_(Linux)|header=true}}
+|{{InfoBox wikipedia|Logical Volume Manager (Linux)|header=true}}
 }}
 '''LVM''' ('''L'''ogical '''V'''olume '''M'''anager) is a software which uses physical devices abstract as PVs (Physical Volumes) in storage pools called VG (Volume Group). Whereas physical volumes could be a partition, whole SATA hard drives grouped as JBOD ('''J'''ust a '''B'''unch '''O'''f '''D'''isks), RAID systems, iSCSI, Fibre Channel, eSATA etc.
 
 == Installation ==
-First we need to enable the ''device mapper'' in our kernel:
+
+=== Kernel ===
+You need to activate the following kernel options:
 {{Kernel||<pre>
 Device Drivers  --->
    Multiple devices driver support (RAID and LVM)  --->
@@ -16,24 +18,27 @@ Device Drivers  --->
            <M> I/O Path Selector based on the number of in-flight I/Os
            <M> I/O Path Selector based on the service time</pre>}}
 {{Note|You probably don't need everything enabled, but some of the options are needed for [[#LVM2_Snapshots]], [[#LVM2_MIRROR]], [[#LVM2_Stripeset]] and encryption.}}
-{{Package|sys-fs/lvm2}} is available on Gentoo Linux and supports the following useflags:
+
+=== Software ===
+Install {{Package|sys-fs/lvm2}}:
 {{USEflag
 |package=sys-fs/lvm2
 |clvm
 |cman
-|lvm1+yes++
+|lvm1+yes
 |readline
-|selinux++no+
-|static+yes++
-|static-libs+yes++
+|selinux
+|static+yes
+|static-libs+yes
 }}
-You can install LVM2 using the following command:
+
 {{Emerge|lvm2}}
+
 The package comes with a start-stop-daemon, which we start and add to the boot runlevel:
-{{RootCmd|/etc/init.d/lvm start && rc-update add lvm boot}}
-The configuration files are located in
-{{Code|Configuration Files|<pre>
-/etc/lvm/lvm.conf</pre>}}
+{{RootCmd|/etc/init.d/lvm start|
+rc-update add lvm boot}}
+
+The configuration files are located in {{Path|/etc/lvm/lvm.conf}}.
 
 == Usage ==
 LVM organizes storage in three different levels as follows:
@@ -48,7 +53,7 @@ Physical Volumes are the actual hardware or storage system LVM builds up upon.
 The partition type for ''LVM'' is ''8e'' (Linux LVM):
 {{RootCmd|fdisk /dev/sdX}}
 In fdisk, you can create MBR partitions using the '''n''' key and then change the partition type with the '''t''' key to ''8e''. We will end up with one primary partition /dev/sdX1 of partition type ''8e'' (Linux LVM).
-{{Note|this step is not needed, since LVM can initialize whole hard drives as PV. Actual not using partitioning avoids LVM to be restricted to certain limits of MBR or GPT tables}}
+{{Note|This step is not needed, since LVM can initialize whole hard drives as PV. Actual not using partitioning avoids LVM to be restricted to certain limits of MBR or GPT tables.}}
 
 ==== Create PV ====
 The following command creates a Physical Volume (PV) on the two first primary partitions of /dev/sdX and /dev/sdY:
@@ -114,7 +119,7 @@ You can scan for LV in the system, to troubleshoot not properly created or lost 
 With the following command, we can extend the Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 to 500MB:
 {{RootCmd|lvextend -L500M /dev/vg0/lvol1}}
 {{Note|use -L+350M to increase the current size of a LV by 350MB}}
-Once the LV is extended, we need to grow the file system as well (in this example we used ext4 and the LV is mounted to /mnt/data):
+Once the LV is extended, we need to grow the file system as well (in this example we used [[ext4]] and the LV is mounted to /mnt/data):
 {{Note|Some file systems do support online-resizing, like ext4 otherwise you have to umount the file system first}}
 {{RootCmd|resize2fs /mnt/data 500M}}
 
@@ -148,9 +153,10 @@ We can create some scenarios using loopback devices, so no real storage devices 
 First we need to make sure the loopback module is loaded. If you want to play around with partitions, use the following option:
 {{RootCmd|modprobe -r loop && modprobe loop max_part{{=}}63}}
 {{Note|you cannot reload the module, if it is built into the kernel}}
-Now we need to either tell LVM to not use [[udev]] to scan for devices or change the filters in /etc/lvm/lvm.conf. In this case we just temporarely do not use ''udev'':
+Now we need to either tell LVM to not use [[udev]] to scan for devices or change the filters in /etc/lvm/lvm.conf. In this case we just temporarely do not use udev:
 {{File|/etc/lvm/lvm.conf||<pre>
-<nowiki>obtain_device_list_from_udev = 0</nowiki></pre>}}
+obtain_device_list_from_udev = 0
+</pre>}}
 {{Important|this is for testing only, you want to change the setting back when dealing with real devices since it is much faster}}
 We create some image files, that will become our storage devices (uses ~6GB of real hard drive space):
 {{RootCmd|mkdir /var/lib/lvm_img
