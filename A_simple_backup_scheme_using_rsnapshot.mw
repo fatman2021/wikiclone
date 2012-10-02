@@ -1,50 +1,57 @@
+{{InfoBox stack
+|{{InfoBox homepage|http://www.rsnapshot.org|header=true}}
+}}
 These days, with digital storage cheaper than ever, and people accumulating increasing amounts of invaluable digital data (e.g., family videos), there is no excuse not to have a backup regime in case of hardware failure.  
 
-This article describes a simple automated backup scheme using the tool '''[http://www.rsnapshot.org rsnapshot]''', which is based on [http://en.wikipedia.org/wiki/Rsync rsync].  ''rsnapshot'' makes a specified number of incremental backups of specified filetrees, using [http://en.wikipedia.org/wiki/Hard_link hard links] to save space on the backup medium.
+This article describes a simple automated backup scheme using the tool '''rsnapshot''', which is based on [[Wikipedia:Rsync|rsync]]. rsnapshot makes a specified number of incremental backups of specified filetrees, using [[Wikipedia:Hard link|hard links]] to save space on the backup medium.
 
-==Setup==
-===Preliminaries===
-* Install {{package|app-backup/rsnapshot}}
+== Setup ==
 
-* Add an entry like the following in your ''fstab'':
-{{file|/etc/fstab||<pre>/dev/disk/by-label/backup    /mnt/backup    ext4    noatime,noauto    0 0</pre>}}
-In this example, the filesystem is ''ext4'', identified by the label ''backup'', and attaches to a special mount point ''/mnt/backup''.  The ''noauto'' option means that this backup filesystem will not be mounted by default.
+=== Preliminaries ===
+* Install {{Package|app-backup/rsnapshot}}
 
-===Cron scripts===
-Create [http://en.wikipedia.org/wiki/Cron cron] scripts for the different backup intervals:
-{{file|/etc/cron.daily/rsnapshot.daily||<pre>#!/bin/sh
+* Add an entry like the following in your [[[fstab]]:
+{{File|/etc/fstab||<pre>
+/dev/disk/by-label/backup    /mnt/backup    ext4    noatime,noauto    0 0
+</pre>}}
+In this example, the filesystem is [[ext4]], identified by the label ''backup'', and attaches to a special mount point {{Path|/mnt/backup}}. The ''noauto'' option means that this backup filesystem will not be mounted by default.
+
+=== Cron scripts ===
+Create [[Wikipedia:Cron|cron]] scripts for the different backup intervals:
+{{File|/etc/cron.daily/rsnapshot.daily||<pre>
+#!/bin/sh
 
 echo "### RSNAPSHOT DAILY ###"
 mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/daily.conf daily || echo "Backup failure"
 umount /mnt/backup
 echo
-</pre>
-}}
-{{file|/etc/cron.weekly/rsnapshot.weekly||<pre>#!/bin/sh
+</pre>}}
+
+{{File|/etc/cron.weekly/rsnapshot.weekly||<pre>
+#!/bin/sh
 
 echo "### RSNAPSHOT WEEKLY ###"
 mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/weekly.conf daily || echo "Backup failure"
 umount /mnt/backup
 echo
-</pre>
-}}
-{{file|/etc/cron.monthly/rsnapshot.monthly||<pre>#!/bin/sh
+</pre>}}
+
+{{File|/etc/cron.monthly/rsnapshot.monthly||<pre>
+#!/bin/sh
 
 echo "### RSNAPSHOT MONTHLY ###"
 mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/monthly.conf daily || echo "Backup failure"
 umount /mnt/backup
 echo
-</pre>
-}}
-{{note|These scripts must be executable.}}
+</pre>}}
+{{Note|These scripts must be executable.}}
 
-===rsnapshot configuration files===
-Set up the ''rsnapshot'' configuration files referred to in the scripts above.  
-{{Note|''rsnapshot'' configuration files are '''tab delimited'''. Be careful to always use tabs instead of spaces for the options.}}
+=== rsnapshot configuration files ===
+Set up the rsnapshot configuration files referred to in the scripts above.  
+{{Note|rsnapshot configuration files are '''tab delimited'''. Be careful to always use tabs instead of spaces for the options.}}
 {{Note|Filetree specifications are in ''rsync'' format.  See the ''rsync'' [[man page]] for details.}}
 First a base configuration:
-{{file|/etc/rsnapshot.d/base.conf||
-<pre>
+{{File|/etc/rsnapshot.d/base.conf||<pre>
 # Default config version
 config_version	1.2
 
@@ -63,21 +70,18 @@ one_fs			1
 # Store all backups in one directory per machine
 # A useful alternative may be to create a separate directory for each interval
 snapshot_root   /mnt/backup/
-</pre>
-}}
+</pre>}}
+
 Then, here are sample configuration files for daily, weekly and monthly backups:
-{{file|/etc/rsnapshot.d/daily.conf||
-<pre>
+{{File|/etc/rsnapshot.d/daily.conf||<pre>
 include_conf   /etc/rsnapshot.d/base.conf
 
 # Daily (30 increments)
 retain	daily	30
 backup		/home/me/		localhost/
-</pre>
-}}
+</pre>}}
 
-{{file|/etc/rsnapshot.d/weekly.conf||
-<pre>
+{{File|/etc/rsnapshot.d/weekly.conf||<pre>
 include_conf   /etc/rsnapshot.d/base.conf
 
 # Weekly (12 increments)
@@ -85,11 +89,9 @@ retain	weekly	12
 backup		/etc/			localhost/
 backup		/var/db/pkg/world	localhost/
 backup		/boot/			localhost/
-</pre>
-}}
+</pre>}}
 
-{{file|/etc/rsnapshot.d/monthly.conf||
-<pre>
+{{File|/etc/rsnapshot.d/monthly.conf||<pre>
 include_conf   /etc/rsnapshot.d/base.conf
 
 # Monthly (6 increments)
@@ -101,25 +103,22 @@ exclude		/boot/
 exclude		/home/scratch/**
 exclude		/var/tmp/ccache/**
 backup		/			localhost/
-</pre>
-}}
+</pre>}}
+
 In these files, the second argument of ''backup'' specifies a container directory for the backups, usually referring to the machine (in this case, ''localhost'').  This can be changed to any name of your choosing.
 
-==Restoration==
+== Restoration ==
 To restore the ''localhost'' backups specified above, we would use
 {{RootCmd|mount /mnt/backup
 |rsync -a /mnt/backup/localhost/monthly.0/ /mnt/myroot/
 |rsync -a /mnt/backup/localhost/weekly.0/ /mnt/myroot/
 |rsync -a /mnt/backup/localhost/daily.0/ /mnt/myroot/}}
-where ''/mnt/myroot'' is the mount point of the fresh root filesystem. In the paths above ''*.0'' refers to the latest increment.
+where {{Path|/mnt/myroot}} is the mount point of the fresh root filesystem. In the paths above ''*.0'' refers to the latest increment.
 
-==Possible improvements==
-It is also possible to make remote backups via '''[http://en.wikipedia.org/wiki/Rsync rsync]''' or '''[http://en.wikipedia.org/wiki/Secure_Shell SSH]''' -- see the ''rsnapshot'' man page for details.
+== Possible improvements ==
+It is also possible to make remote backups via '''rsync''' or '''[[Wikipedia:Secure Shell|SSH]]''' -- see the ''rsnapshot'' man page for details.
 
 === BTRFS snapshots ===
 If you are crazy enough to use btrfs you can leverage its snapshot feature with rsnapshot. Walter Werther has a guide on this: [http://wwerther.de/2011/10/migrate-rsnapshot-based-backup-to-btrfs-snapshots/]
-
-==External resources==
-* [http://www.rsnapshot.org '''rsnapshot''' homepage]
 
 [[Category:Software]]
