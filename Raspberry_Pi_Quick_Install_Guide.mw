@@ -1,0 +1,120 @@
+
+== Introduction ==
+Installing Gentoo onto a Raspberry Pi is relatively straight forward and in some ways easier because a kernel image is provided by the Raspberry Pi Foundation. This means you can get Gentoo installed quickly onto you Raspberry Pi. 
+
+== Preparing the SD Card ==
+The Raspberry Pi boots off a FAT32 /boot partition, you will also require a root and swap partition. 
+=== Create the Partitions  ===
+Use the fdisk command to create the partitions. 
+{{RootCmd| fdisk /dev/mmcblk0}}
+{{ContentBox|Example partitioning scheme|<pre>
+Disk /dev/mmcblk0: 7948 MB, 7948206080 bytes
+4 heads, 16 sectors/track, 242560 cylinders
+Units = cylinders of 64 * 512 = 32768 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x000635b7
+
+        Device Boot      Start         End      Blocks   Id  System
+/dev/mmcblk0p1               1        3201      102424    c  W95 FAT32 (LBA)
+/dev/mmcblk0p2            3202        7298      131104   82  Linux swap / Solaris
+/dev/mmcblk0p3            7299      242560     7528384   83  Linux
+</pre>}}
+=== Create the File Systems ===
+{{RootCmd| mkfs.vfat -F 16 /dev/mmcblk0p1
+| mkswap /dev/mmcblk0p2
+| mkfs.ext4 /dev/mmcblk0p3
+}}
+
+== Installing onto the SD card ==
+=== Mounting the partitions ===
+{{RootCmd| mkdir /mnt/gentoo
+| mount /dev/mmcblk0p3 /mnt/gentoo
+| mkdir /mnt/gentoo/boot/
+| mount /dev/mmcblk0p1 /mnt/gentoo/boot
+}}
+
+=== Extract Stage 3 Image ===
+{{RootCmd| cd /tmp/
+| wget http://distfiles.gentoo.org/releases/arm/autobuilds/current-stage3-armv6j_hardfp/stage3-armv6j_hardfp-YYYYMMDD.tar.bz2
+| tar xfj stage3-armv6j_hardfp-YYYYMMDD.tar.bz2 -C /mnt/gentoo/
+}}
+=== Install Portage ===
+{{RootCmd| wget http://distfiles.gentoo.org/snapshots/portage-latest.tar.bz2
+| tar xjvpf portage-latest.tar.bz2 -C /mnt/gentoo/usr
+}}
+=== Install kernel and modules ===
+The Raspberry Pi Foundation maintain a branch of the Linux kernel that will run on the Raspberry Pi, including a compiled version which we use here. 
+{{RootCmd| cd /tmp/
+| git clone --depth 1 git://github.com/raspberrypi/firmware/
+| cd firmware/boot
+| cp bootcode.bin start.elf kernel.img /mnt/gentoo/boot/
+| cp -r ../modules /mnt/gentoo/lib/ 
+}}
+
+== Configure the system ==
+=== Edit fstab ===
+Edit the fstab to match your partition scheme. 
+{{RootCmd| vi /mnt/gentoo/etc/fstab/ }}
+{{ContentBox|Example fstab|<pre>
+/dev/mmcblk0p1		/boot		auto		noauto,noatime	1 2
+/dev/mmcblk0p3		/		ext4		noatime		0 1
+/dev/mmcblk0p2		none		swap		sw		0 0
+</pre>}}
+
+=== Set boot options ===
+You need to create a file cmdline.txt in /boot to pass options to the kernel. 
+{{RootCmd| vi /mnt/gentoo/boot/cmdline.txt }}
+{{ContentBox|cmdline.txt|<pre>
+root=/dev/mmcblk0p3 rootdelay=10</pre>}}
+=== Edit make.conf ===
+The default make.conf includes good CFLAGS so should not need to be changed. If you would like to change the settings look at the thread on the Raspberry Pi forum http://www.raspberrypi.org/phpBB3/viewtopic.php?f=54&t=17983
+
+=== Configure timezone ===
+Find your time zone using this command. 
+{{RootCmd| ls /usr/share/zoneinfo }}
+(Suppose you want to use Europe/London)
+{{RootCmd| cp /usr/share/zoneinfo/Europe/London /etc/localtime }}
+(Next set the timezone)
+{{RootCmd| echo "Europe/Brussels" > /etc/timezone }}
+=== Clear root password ===
+As we do not chroot before we boot, you will need to unset the root password. Allowing you to login with a blank password for the root user. 
+{{RootCmd| vi /mnt/gentoo/etc/shadow }}
+Edit the line for root so it looks like the example below. 
+{{ContentBox|/etc/shadow|<pre>
+root:::0:::::</pre>
+}}
+=== Unmount SD and then boot your Raspberry Pi ===
+Unmount the SD card. 
+{{RootCmd| umount /mnt/gentoo/boot
+| umount /mnt/gentoo }}
+Plugin the SD card to your Raspberry Pi, make sure you have a keyboard and monitor also plugged in then connect the power. 
+Hopefully Gentoo will boot giving you a login prompt, login as root and no password. During the first boot you will see a few warnings and errors which we will fix in the next section. 
+
+
+== Post boot configuration ==
+=== Set root password ===
+Immediately set a root password. 
+{{RootCmd| passwd }}
+=== Enabling networking on boot ===
+Assuming you are using DHCP on the eth0. 
+{{RootCmd| cd /etc/init.d/
+| ln -s net.lo net.eth0
+| /etc/init.d/net.eth0 start
+| rc-update add net.eth0 default }}
+=== Select profile ===
+List the available profiles. 
+{{RootCmd| eselect profile list
+}}
+Select the desired profile, for example 25 
+{{RootCmd| # eselect profile set 25  }}
+
+=== Enable software clock ===
+The Raspberry Pi does not have a hardware clock, so you need to disable the hwclock daemon and enable swclock.
+{{RootCmd| rc-update add swclock boot
+| rc-update del hwclock boot}}
+To set the time correctly use ntp to set the clock at boot up. 
+{{RootCmd| emerge ntp
+| rc-update add ntp-client default }}
+
+=== Overclocking ===
