@@ -1,8 +1,8 @@
-== Introduction ==
 Installing Gentoo onto a Raspberry Pi is relatively straight forward and in some ways easier because a kernel image is provided by the Raspberry Pi Foundation. This means you can get Gentoo installed quickly onto you Raspberry Pi. 
 
 == Preparing the SD Card ==
 The Raspberry Pi boots off a FAT32 /boot partition, you will also require a root and swap partition. 
+
 === Create the Partitions  ===
 Use the fdisk command to create the partitions. 
 {{RootCmd| fdisk /dev/mmcblk0}}
@@ -19,6 +19,7 @@ Disk identifier: 0x000635b7
 /dev/mmcblk0p2            3202        7298      131104   82  Linux swap / Solaris
 /dev/mmcblk0p3            7299      242560     7528384   83  Linux
 </pre>}}
+
 === Create the File Systems ===
 {{RootCmd| mkfs.vfat -F 16 /dev/mmcblk0p1
 | mkswap /dev/mmcblk0p2
@@ -26,6 +27,7 @@ Disk identifier: 0x000635b7
 }}
 
 == Installing onto the SD card ==
+
 === Mounting the partitions ===
 {{RootCmd| mkdir /mnt/gentoo
 | mount /dev/mmcblk0p3 /mnt/gentoo
@@ -43,6 +45,7 @@ Disk identifier: 0x000635b7
 {{RootCmd| wget http://distfiles.gentoo.org/snapshots/portage-latest.tar.bz2
 | tar xjvpf portage-latest.tar.bz2 -C /mnt/gentoo/usr
 }}
+
 === Install kernel and modules ===
 The Raspberry Pi Foundation maintain a branch of the Linux kernel that will run on the Raspberry Pi, including a compiled version which we use here. 
 {{RootCmd| cd /tmp/
@@ -53,10 +56,11 @@ The Raspberry Pi Foundation maintain a branch of the Linux kernel that will run 
 }}
 
 == Configure the system ==
+
 === Edit fstab ===
 Edit the fstab to match your partition scheme. 
 {{RootCmd| nano /mnt/gentoo/etc/fstab/ }}
-{{ContentBox|Example fstab|<pre>
+{{File|/etc/fstab|Example|<pre>
 /dev/mmcblk0p1		/boot		auto		noauto,noatime	1 2
 /dev/mmcblk0p3		/		ext4		noatime		0 1
 /dev/mmcblk0p2		none		swap		sw		0 0
@@ -65,10 +69,12 @@ Edit the fstab to match your partition scheme.
 === Set boot options ===
 You need to create a file cmdline.txt in /boot to pass options to the kernel. 
 {{RootCmd| nano /mnt/gentoo/boot/cmdline.txt }}
-{{ContentBox|cmdline.txt|<pre>
-root=/dev/mmcblk0p3 rootdelay=10</pre>}}
+{{File|/boot/cmdline.txt||<pre>
+root=/dev/mmcblk0p3 rootdelay=10
+</pre>}}
+
 === Edit make.conf ===
-The default make.conf includes basic CFLAGS. If you would like to change the settings to something more 'optimal' for the Pi look at the details on the [http://wiki.gentoo.org/wiki/Raspberry_Pi relevant wiki page] 
+The default make.conf includes basic CFLAGS. If you would like to change the settings to something more 'optimal' for the Pi look at the details on the [[Raspberry Pi|relevant wiki page]].
 
 === Configure timezone ===
 Find your time zone using this command. 
@@ -82,10 +88,9 @@ Find your time zone using this command.
 As we do not chroot before we boot, you will need to unset the root password. Allowing you to login with a blank password for the root user. 
 {{RootCmd| nano /mnt/gentoo/etc/shadow }}
 Edit the line for root so it looks like the example below. 
-{{ContentBox|/etc/shadow|<pre>
+{{File|/etc/shadow||<pre>
 root::10770:0:::::
-</pre>
-}}
+</pre>}}
 
 === Unmount SD and then boot your Raspberry Pi ===
 Unmount the SD card. 
@@ -94,41 +99,40 @@ Unmount the SD card.
 Plugin the SD card to your Raspberry Pi, make sure you have a keyboard and monitor also plugged in then connect the power. 
 Hopefully Gentoo will boot giving you a login prompt, login as root and no password. During the first boot you will see a few warnings and errors which we will fix in the next section. 
 
-
 == Post boot configuration ==
+
 === Set root password ===
 Immediately set a root password. 
 {{RootCmd| passwd }}
+
 === Enabling networking on boot ===
 Assuming you are using DHCP on the eth0. 
 {{RootCmd| cd /etc/init.d/
 | ln -s net.lo net.eth0
 | /etc/init.d/net.eth0 start
 | rc-update add net.eth0 default }}
+
 === Select profile ===
 List the available profiles. 
 {{RootCmd| eselect profile list
 }}
 Select the desired profile, for example 25 
-{{RootCmd| # eselect profile set 25  }}
+{{RootCmd| eselect profile set 25 }}
 
 === Configuring inittab and rc.conf ===
 Uncomment the linux specific rc.conf rc_sys value, to stop warning in boot up. 
 {{RootCmd| nano /etc/rc.conf }}
-{{ContentBox|/etc/rc.conf|<pre>
+{{File|/etc/rc.conf||<pre>
 rc_sys=""
-</pre>
-}}
+</pre>}}
 
 Comment out the s0 Serial console to stop "INIT: Id "s0" respawning too fast" messages on the console.
 {{RootCmd| nano /etc/inittab }}
-{{ContentBox|/etc/inittab|<pre>
+{{File|/etc/inittab||<pre>
 # SERIAL CONSOLES
 #s0:12345:respawn:/sbin/agetty 9600 ttyS0 vt100
 #s1:12345:respawn:/sbin/agetty 9600 ttyS1 vt100
-</pre>
-}}
- 
+</pre>}}
 
 === Enable software clock ===
 The Raspberry Pi does not have a hardware clock, so you need to disable the hwclock daemon and enable swclock.
@@ -151,12 +155,13 @@ It is very easy to overclock a Raspberry Pi up to 1000MHz without affecting your
 #“High” “950MHz ARM, 450MHz core, 450MHz SDRAM, 6 overvolt”
 #“Turbo” “1000MHz ARM, 500MHz core, 500MHz SDRAM, 6 overvolt”
 </pre>}}
+
 === Enabling Overclocking ===
 To enable overclocking select one of the suggest modes from the list above, "Medium" is generally a good starting point. 
 Edit the /boot/config.txt, add the appropriate values and reboot the Raspberry Pi for changes to take effect. 
 {{RootCmd| mount /boot/
 | nano /boot/config.txt }}
-{{ContentBox|Example config.txt with Medium overclocking |<pre>
+{{File|/boot/config.txt|Example with Medium overclocking|<pre>
 arm_freq=900
 core_freq=333
 sdram_freq=450
@@ -167,10 +172,15 @@ over_voltage=2
 The force turbo option turns off the dynamic clocks and runs the Raspberry Pi constantly at the highest arm_freq. [http://elinux.org/RPi_config.txt#force_turbo_mode]
 Edit the /boot/config.txt, add force_turbo=1 then reboot the Raspberry Pi for changes to take effect.
 {{RootCmd|nano /boot/config.txt }}
-{{ContentBox|Example config.txt with Medium overclocking and force turbo |<pre>
+{{File|/boot/config.txt|Example with Medium overclocking and force turbo|<pre>
 arm_freq=900
 core_freq=333
 sdram_freq=450
 over_voltage=2
 force_turbo=1
 </pre>}}
+
+== See also ==
+* [[Raspberry Pi]]
+
+[[Category:Computers]]
