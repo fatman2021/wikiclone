@@ -1,32 +1,31 @@
-This page documents a tutorial for setting up complicated networking with the help of stacked runlevel. Along the tutorial other tricked for OpenRC are also expected.
+This page documents a tutorial for setting up complicated networking with the help of stacked runlevel. Along the tutorial other tricked for [[OpenRC]] are also expected.
 
 The short version is that
-
 {{File|rc-update manpage|stack runlevel|<pre>
 If the -s, --stack option is given then we either add or remove the runlevel from the runlevel. 
 This allows inheritance of run‐levels.
 </pre>}}
 
-= scenario =
+== Scenario ==
 We have a university library providing wireless network, with the following steps to use:
 # associate with the AP with no authentication
-# setup a [http://en.wikipedia.org/wiki/Pptp PPTP] VPN through NAT against an internal server
-# using an [http://en.wikipedia.org/wiki/Http_proxy HTTP proxy] to access the websites
+# setup a [[Wikipedia:Point-to-Point Tunneling Protocol|PPTP]] VPN through NAT against an internal server
+# using an [[Wikipedia:Proxy server|HTTP proxy]] to access the websites
 
 There are big disadvantages:
-* [http://en.wikipedia.org/wiki/Generic_Routing_Encapsulation GRE] protocol used by [http://en.wikipedia.org/wiki/Pptp PPTP] uses source ip to identify client, thus do not support tunneling through NAT. There is enhanced GRE for such perpose, but routers has different implementations and only considered PPTP clients for Microsoft Windows and Apple Mac OS X, not for Linux[http://article.gmane.org/gmane.comp.misc.pptpclient.devel/2934].
-* The author, as a server administratior, need ssh at least. http proxy, a limit gateway to the internet, sucks.
+* [[Wikipedia:Generic Routing Encapsulation|GRE]] protocol used by PPTP uses source IP to identify client, thus do not support tunneling through NAT. There is enhanced GRE for such purpose, but routers has different implementations and only considered PPTP clients for Microsoft Windows and Apple Mac OS X, not for Linux [http://article.gmane.org/gmane.comp.misc.pptpclient.devel/2934].
+* The author, as a server administrator, need ssh at least. HTTP proxy, a limit gateway to the internet, sucks.
 
 Besides complaining to library manager and network technician, then waiting forever, we can hack our own reliable way out.
 
-= solution =
+== Solution ==
 * For Linux box not being able to use PPTP VPN through NAT, the author selected his phone to do the job. Apple's Iphone has Mac OS X, and it's PPTP client happens to work with the router in the library.
 
-:Actually we can also use a virtual machine running Windows for the PPTP connection. That would be another story. The author's laptop is too weak to have virtual machine running smoothly.
+: Actually we can also use a virtual machine running Windows for the PPTP connection. That would be another story. The author's laptop is too weak to have virtual machine running smoothly.
 
 * For pushing the limit of http proxy, the author selected [http://www.tinc-vpn.org tinc] to connect to his home router as the full functioned gateway.
 
-= tutorial =
+== Tutorial ==
 The solution is there. The procedures are complex and very boring and error-prone to set it up manually. OpenRC's stacked runlevel comes as a rescue.
 
 We can make a new runlevel right away for the remaining tutorial:
@@ -35,18 +34,18 @@ We can make a new runlevel right away for the remaining tutorial:
 Add our default runlevel into it:
 {{RootCmd|rc-update -s add default lwifi}}
 
-== iphone tethering ==
-Documented at [[Iphone_USB_Tethering]] and we use static configuration instead of dhcp.
+=== iPhone tethering ===
+Documented at [[Iphone USB Tethering]] and we use static configuration instead of dhcp.
 {{File|/etc/conf.d/net|static config eth1|<pre>
 config_eth1="172.20.10.2/28"
 routes_eth1="zzz.xxx.xxx.xxx/yy via 172.20.10.1"
 dns_servers_eth1="zzz.xxx.xxx.xxx zzz.xxx.xxx.xxx"
 </pre>}}
-the entry in '''routes_eth1''' is the network of cellular mobile, which can be identified by [[whois]] containing '''dns_servers_eth1'''. We set this up because there is no other easily reachable DNS server. Tinc, in later step, needs DNS to query IP address of its entry node.
+The entry in '''routes_eth1''' is the network of cellular mobile, which can be identified by [[whois]] containing '''dns_servers_eth1'''. We set this up because there is no other easily reachable DNS server. Tinc, in later step, needs DNS to query IP address of its entry node.
 
 Now associate the library wifi with iPhone, and dail PPTP VPN. Consult your iPhone manual for details.
 
-== socks proxy on iPhone ==
+=== socks proxy on iPhone ===
 iPhone has an ill design: during tethering, packets can only be routed to cellular mobile network, even if you set up a wifi connection. Therefore we cannot just access the http proxy directly through eth1, a socks proxy server is needed to transmit it.
 
 There are many methods to set up a socks proxy in iPhone. One way to achieve is by sshd. 
@@ -85,7 +84,7 @@ stop() {
 and add it to our runlevel
 {{RootCmd|rc-update add socksIphone lwifi}}
 
-== proxychains ==
+=== proxychains ===
 We are in an interesting realm: an http proxy is behind a socks proxy. Hopefully, {{Package|net-misc/proxychains}} can carry us out.
 
 {{Emerge|net-misc/proxychains}}
@@ -134,7 +133,7 @@ http    172.24.30.15    8080
 </pre>}}
 In the ProxyList, the first one is our socks proxy in the previous section, the second one happens to be http proxy provided by the library.
 
-== tinc initscript ==
+=== tinc initscript ===
 We need to adjust tinc initscript to make use of proxychains.
 {{File|/etc/init.d/tincd.manifold-lwifi|tinc initscript with proxychains|<pre>
 #!/sbin/runscript
@@ -183,13 +182,13 @@ Add this one into our runlevel.
 {{RootCmd|rc-update add tincd.manifold-lwifi}}
 {{Note|Remember to remove other tincd services in default runlevel. Add it to another runlevel which inherits default like lwifi, if necessary}}
 
-=== set up tinc ===
+==== set up tinc ====
 Notice that the http proxy only allows CONNECT to port 443 (https protocol), our first hop node should have tinc listening on port 443.
 
 For how to configure and use tinc, refer to [[tinc]][http://www.tinc-vpn.org/]
 
-= test this all out =
-{{RootCmd|<nowiki>rc-update | grep lwifi</nowiki>|output=<pre>
+== test this all out ==
+{{RootCmd|rc-update {{!}} grep lwifi|output=<pre>
              net.eth1 |                    lwifi                 
           socksIphone |                    lwifi                 
  tincd.manifold-lwifi |                    lwifi 
@@ -199,3 +198,5 @@ Pluggin the phone and fire it up.
 {{RootCmd|rc lwifi}}
 
 Now that we have access to our own VPN, we can access any host inside and use any node as our gateway. The possibility is limitless. From now on the library becomes our second home ;-)
+
+[[Category:Init systems]]
