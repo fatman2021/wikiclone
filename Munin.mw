@@ -1,9 +1,12 @@
-Munin is a networked resource monitoring tool that can help analyze resource trends and "what just happened to kill our performance?" problems.
+{{InfoBox stack
+|{{InfoBox homepage|http://www.munin-monitoring.org|header=true}}
+|{{InfoBox wikipedia|Munin (network monitoring application)}}
+}}
+'''Munin''' is a networked resource monitoring tool that can help analyze resource trends and "what just happened to kill our performance?" problems.
 
 Munin implements a master and slave node structure; one master node with many slave nodes. The master node gathers data from the slave nodes, and produces HTML output. Generally these will be placed in the directory accessible via a web server, and can be viewed with a web browser.
 
 == USE flags ==
-
 The USE flags for Munin are handled in a peculiar way: most of the flags are related to the node, rather than the master (with a few, more or less obvious, exceptions), and are designed to bring in the required dependencies. When the flags are disabled, the plugins are '''not''' removed from the package, which means that it's sufficient to just merge the dependencies to get them working, instead of rebuilding Munin. This has been decided because the plugins are generally static, for what concern dependencies.
 
 A notable exception is the '''java''' USE flag that actually does remove some plugins. The reason is simply that for the plugins to work, you need a JAR library that is part of Munin, and is thus only built with the flag enabled, so you'd still be rebuilding the package to enable or disable it.
@@ -23,17 +26,15 @@ A notable exception is the '''java''' USE flag that actually does remove some pl
 }}
 
 == Installation and setup ==
-
 The installation of Munin is easy enough, as it only requires to install the one package {{Package|net-analyzer/munin}}, and contains no extra plugins or anything, by default.
 
-{{Emerge|params=--ask --verbose| net-analyzer/munin}}
+{{Emerge|munin}}
 
 But since Munin is fundamentally made of two components – the ''node'' and the ''master'' – you should first decide which of the two configurations you want to set up for any given box.
 
 Note: some of the configuration coming up is going to use the '''sudo'' command. This is required because by default the plugins and the master scripts are executed as the munin user. If you prefer you can easily perform the actions using '''su''' instead.
 
 === Node (client) ===
-
 Munin nodes have the task of reporting the results of a series of scripts (called plugins), which report data in a structured format so that the master can log the values and generate a report. Usually you set up one node for each box you intend to monitor, including the master.
 
 To set up a simple node, which only has to gather data and does not have to produce the reports, you're recommended to enable the '''minimal''' USE flag — by doing so, you're avoiding a number of extra dependencies that only involve the master, namely {{Package|net-analyzer/rrdtool}}. Disabling '''minimal''' it's also necessary to disable '''cgi''' which is a default starting from version 2.0.2.
@@ -45,14 +46,13 @@ net-analyzer/munin minimal -cgi
 The nodes shouldn't in general need any particular configuration specific to Gentoo, so you can follow the upstream manual just fine. In general you can use the '''munin-node-configure''' command to enable all the plugins that can be used on a system; this is not recommended though, simply because some of the data might not be of interest and would simply add load to the system when executed.
 
 You can use the following command to identify which plugins would be enabled:
-
 {{RootCmd|sudo -u munin munin-node-configure --shell}}
 
 '''Some of the plugins that are installed might not be functional due to missing dependencies; check [[Munin#USE_Flags|the USE flags description]] for further information.'''
 
 If the selection sounds correct, you can execute the script by using the following command, or simply manually link the plugins you're interested in.
 
-{{RootCmd|sudo -u munin munin-node-configure --shell <nowiki>|</nowiki> /bin/bash}}
+{{RootCmd|sudo -u munin munin-node-configure --shell {{!}} /bin/bash}}
 
 Finally you have to start up the service and set it for automatic start.
 
@@ -62,7 +62,6 @@ Finally you have to start up the service and set it for automatic start.
 }}
 
 === Master ===
-
 The Munin master has the task of fetching the values reported by the nodes and producing a report, composed of HTML pages and PNG graphs. This can be done either within the cron job (so that the pages are generated statically) or via the CGI scripts that come installed by default. In either case you're likely going to need a web server, such as [[Apache2]], [[Lighttpd]], or [[nginx]], to display the reports.
 
 When setting up a Munin master you have to make sure the '''minimal''' USE flag is not enabled.
@@ -72,7 +71,6 @@ net-analyzer/munin -minimal
 </pre>}}
 
 ==== '''cron''' configuration ====
-
 The Munin master needs to executed periodically a script that gathers the data from the configured nodes; this can be set up in cron by simply using the following command:
 
 {{Emerge|params=--config| net-analyzer/munin}}
@@ -80,7 +78,6 @@ The Munin master needs to executed periodically a script that gathers the data f
 This will set up a cron job for the '''munin''' user to execute every five minutes. It is designed to work with [[vixie-cron]], [[dcron]] and [[fcron]] (as of version 2.0.3). The user should already be listed in the '''cron''' group required to use the service.
 
 ==== Generating reports ====
-
 Starting from version 2, it's possible to have both the HTML pages and the graph images generated by CGI scripts. These have been enabled by default by upstream up to version 2.0.5, but due to a number of bugs, including security bugs, these have been disabled by default for both Gentoo and Debian. Upstream is considering disabling CGI by default as well.
 
 For this reason, while the '''cgi''' USE flag is present, it's recommended to keep it disabled, and proceed with static genereation of reports, which is equivalent to what was supported in the previous 1.4.x series:
@@ -89,7 +86,7 @@ For this reason, while the '''cgi''' USE flag is present, it's recommended to ke
 net-analyzer/munin -minimal -cgi
 </pre>}}
 
-The default configuration will put the generated files in '''/var/www/localhost/htdocs/munin''' which makes it work out of the box with Apache2 and lighttpd as http://localhost/munin/ — but this might not be suitable or desirable for your setup. If you want to change the path where the files are placed, either to change it to a different virtual host or to a different path, you just have to edit '''/etc/munin/munin.conf''':
+The default configuration will put the generated files in {{Path|/var/www/localhost/htdocs/munin}} which makes it work out of the box with Apache2 and lighttpd as http://localhost/munin/ — but this might not be suitable or desirable for your setup. If you want to change the path where the files are placed, either to change it to a different virtual host or to a different path, you just have to edit {{Path|/etc/munin/munin.conf}}:
 
 {{File|/etc/munin/munin.conf||<pre>
 # we want to use http://localhost/monitor/ to access the report
@@ -97,20 +94,18 @@ htmldir /var/www/localhost/htdocs/monitor
 </pre>}}
 
 == SSH Transport and Munin Async ==
-
 Starting from version 2, Munin supports a direct implementation of SSH transport, which allows to gather data from remote nodes that only allow SSH access.
 
-This is implemented by generating SSH keypairs for the '''munin''' user on the master, and accepting them on the nodes for a compatible user. Since the '''munin''' user should not be allowed to log-in, as this can induce security issues, it's important to choose a different user to connect to, such as '''scponly'''. This user has to be able to execute the command configured on the master; by default this is '''/usr/bin/nc''' so that it can forward the socket to the Munin node running on the box (or to a different one if needed).
+This is implemented by generating SSH keypairs for the '''munin''' user on the master, and accepting them on the nodes for a compatible user. Since the '''munin''' user should not be allowed to log-in, as this can induce security issues, it's important to choose a different user to connect to, such as '''scponly'''. This user has to be able to execute the command configured on the master; by default this is {{Path|/usr/bin/nc}} so that it can forward the socket to the Munin node running on the box (or to a different one if needed).
 
-Alternatively it's possible (and suggested) to use Munin Async, which is implemented as a daemon that polls the local node repeatedly, spooling the content so that the master receives the data immediately. This is extremely useful if you have plugins that take more than the 10 seconds timeout to run, or if they have to fetch from multiple sources such as SNMP and IPMI. Both the daemon and the client connection use the '''munin-async''' user.
+Alternatively it's possible (and suggested) to use Munin Async, which is implemented as a daemon that polls the local node repeatedly, spooling the content so that the master receives the data immediately. This is extremely useful if you have plugins that take more than the 10 seconds timeout to run, or if they have to fetch from multiple sources such as [[SNMP]] and IPMI. Both the daemon and the client connection use the '''munin-async''' user.
 
-To allow access to '''munin-async''' you simply have to add the public keys generated on the master instance to '''/var/lib/munin-async/.ssh/authorized_keys''', then use '''/usr/libexec/munin/munin-async''' as configured command in '''munin.conf'''.
+To allow access to '''munin-async''' you simply have to add the public keys generated on the master instance to {{Path|/var/lib/munin-async/.ssh/authorized_keys}}, then use {{Path|/usr/libexec/munin/munin-async}} as configured command in {{Path|munin.conf}}.
 
 == Gentoo Linux exclusives ==
-
 There are a few things in Munin that are only available with the Gentoo Linux ebuilds, either because they fit better our design or because upstream is not ready (yet) for them.
 
-In particular as of August 2012, the IPMI plugin shipping with Munin 2.0 and later is not the official one shipped by upstream, but a new one, developed by [User:Flameeyes Flameeyes] and based off FreeIPMI. The reason of this change is that the previous plugin, using ipmitool, would time out on most HP and SuperMicro servers when fetching sensors' data.
+In particular as of August 2012, the IPMI plugin shipping with Munin 2.0 and later is not the official one shipped by upstream, but a new one, developed by [[User:Flameeyes|Flameeyes]] and based off FreeIPMI. The reason of this change is that the previous plugin, using ipmitool, would time out on most HP and SuperMicro servers when fetching sensors' data.
 
 The new plugin is not available in the official Munin package because it requires a fairly recent FreeIPMI version (much newer than the latest available for Debian and Fedora) even to get near the feature list of the original plugin, while it requires an unreleased, or patched, version to surpass the original plugin. In Portage this is mandated by depending on version 1.1.6-r1 or later (which has been patched to support outputting thresholds, otherwise available only on 1.2.x series).
 
@@ -124,11 +119,9 @@ Check for problems by executing <code>/usr/bin/munin-cron</code>
 Common errors include not restarting <code>munin-node</code> after adding plugins.
 
 == See Also ==
-
-* [[Munin maintenance]] notes from the Munin maintainers for Gentoo Linux.
+* [[Munin maintenance]] - Notes from the Munin maintainers for Gentoo Linux.
 
 == External resources ==
-* [http://www.munin-monitoring.org/ Munin Homepage]
 * [http://munin-monitoring.org/wiki/FAQ_no_graphs Missing graphs]
 
 [[Category:Software]]
