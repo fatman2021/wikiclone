@@ -4,7 +4,9 @@ So you have gentoo and windows 7 installed on your box. You come across this bio
 
 ===Preparing the change===
 
-To prepare the switch to raid in bios, you have to make a backup of every valuable data on the box. This is the most time consuming part. And if the bios lets you only switch the first 4 sata ports as a unit from ahci to raid, you have to use external usb drives for backup. You don't want to install gentoo from scratch, so you make one of the USB Disk bootable. Have a look at [[GRUB]] to get an idea. Now you boot the usb disk, mount your gentoo on /mnt/gentoo and make a system backup with<br />
+To prepare the switch to raid in bios, you have to make a backup of every valuable data on the box. This is the most time consuming part. And if the bios lets you only switch the first 4 sata ports as a unit from ahci to raid, you have to use external usb drives for backup. 
+
+You don't want to install gentoo from scratch, so you make one of the USB Disk bootable. Have a look at [[GRUB]] to get an idea. Now you boot the usb disk, mount your gentoo on /mnt/gentoo and make a system backup with<br />
 
 <code>
 cd /mnt/gentoo<br />
@@ -13,7 +15,7 @@ cd<br />
 umount /mnt/gentoo<br />
 </code>
 
-and exclude ''lost+found''. You have everyhting you need to setup the box again.
+The term ''[a-k]* lib* [m-z]*'' is used to exclude ''lost+found''. You have everyhting you need to setup the box again.
 
 If you want to give dmraid a try, which has support for bios powered software raid, then you should zero out the disks with
 
@@ -25,11 +27,11 @@ dd if=/dev/zero of=/dev/sdc bs=4k<br />
 
 I assume, you have 3 internal drives. Start this in 3 terminals at the same time. I did notice a perfomance penalty using a smaller blocksize, but using a bigger one doesn't make a difference on my box. With 3 2TB consumer disks this runs about 6 hours.
 
-You do this, to give dmraid a better chance to identify the metadata written by this bios raid. dmraid search the disks and if there is other metadata (maybe from using software raid some time ago), it can get confused.
+You do this, to give dmraid a better chance to identify the metadata written by this bios raid. dmraid searches the disks and if there is other metadata (maybe from using software raid some time ago), it can get confused.
 
 ===Switch to raid and create the logical drives===
 
-Now reboot your box, go into the bios, and switch the sata ahci setting to raid. If you have a DVD writer on sata port 5 or 6, maybe you have to set these ports to IDE. ''Save changes and exit'' lets the box reboot again and this time some raid screen shows up You can enter the raid setup by pressing the advertized key combination. Create a 4TB logical disk with raid 0 and then a 2TB logical disk with raid 0, which you label ''windows''. Now delete the 4 TB logical drive, it was only created to get the windows disk on the last part of the physical disks. Now create from the first 2 drives a raid 1 logical drive and label it ''linux''. Save it, got to the bios setup and choose windows as the boot disk.
+Now reboot your box, go into the bios, and switch the sata ahci setting to raid. If you have a DVD writer on sata port 5 or 6, maybe you have to set these ports to IDE. ''Save changes and exit'' lets the box reboot again and this time some raid screen shows up. You can enter the raid setup by pressing the advertized key combination. Create a 4TB logical disk with raid 0 and then a 2TB logical disk with raid 0, which you label ''windows''. Now delete the 4 TB logical drive. It was only created to get the windows disk on the last part of the physical disks. Now create from the first 2 drives a raid 1 logical drive and label it ''linux''. Save it, got to the bios setup and choose windows as the boot disk.
 
 ;Why put the windows disk at the end?
 : Because your bios raid may not be supported by dmraid, and then you need the starting of the physical disks to setup the partition tables for linux.
@@ -38,23 +40,55 @@ Now reboot your box, go into the bios, and switch the sata ahci setting to raid.
 ;Why choose a raid 1 with two drives for the linux disk?
 : You have to choose a raid level, which is identical regarding size to non raid, so that you can share the partition table accross windows and linux. And if you have to specify at least 2 drives for a raid level, then raid 1 is the only option.
 ;Why not choose raid 5 for windows?
-: In fact, this was my first choice for windows. But i didn't notice a perfomance benefit regarding the non-raid setup. And because it is software raid, the data of the disks is accessible in non-raid mode from linux. This introduces a new kind of risk. Apart from the failing of one disk, which raid 5 should handle (test it, don't just believe it does), it could be that no disk fails, but the data get inkonsistent. Meaning that the 2 data chunks and the checksum chunk doesn't fit together any more. This can't be handled by raid 5, so it would give a false idea of security.
+: In fact this was my first choice for windows. But i didn't notice a perfomance benefit regarding the non-raid setup. And because it is software raid, the data on the disks is accessible in non-raid mode from linux. This introduces a new kind of risk. Apart from the failing of one disk, which raid 5 should handle (test it, don't just believe it does), it could be that no disk fails, but the data gets inconsistent. Meaning that the 2 data chunks and the checksum chunk doesn't fit together any more. This can't be handled by raid 5, so it would give a false idea of security.
 ;Which stripe size to choose?
-: If you have consumer disks, the part of postitioning the head of the disks is the most time consuming part to access the data. So choose the biggest size your raid bios offers. My raid bios only let me choose betweeen 64K and 128K.
+: If you have consumer disks, the part of postitioning the head of the disks is the most time consuming part to access the data. So choose the biggest size your raid bios offers. My raid bios only let me choose betweeen 64K and 128K. My Linux runs on md software raid with 512K, and it seems to me that it runs much faster.
 ;Why not choose more the 2TB for windows?
-: Windows 7 can only be installed on a disk with less than 2TiB. Yes the disk size matters, not the partition size. And even if it has support for data partitions on disks bigger than 2TiB, you should not use that either. I was not able to choose a data partition less than 2 TB on a disk bigger than 2TiB as a backup partition. The backup always canceled with an error code. GPT partition table didn't make a difference. So if you don't need the space, avoid disks bigger than 2 TiB for windows.
+: Windows 7 can only be installed on a disk with less than 2TiB. Yes the disk size matters, not the partition size. And even if it has support for data partitions on disks bigger than 2TiB, you should not use that either. I was not able to choose a data partition less than 2 TB on such a disk as a backup partition. The backup always canceled with an error code. GPT partition table didn't make a difference. So if you don't need the space, avoid disks bigger than 2 TiB for windows.
 
 ===Installation===
 
-Put on the windows DVD and install it. Since the windows disk is setup as the boot disk, there shouldn't be any kind of trouble. If you can't see any drives to install, get the support DVD of your motherboard and load the raid driver. After finishing (including several reboots), create a partition on the linux disk from windows. It should countain the whole disk, leaving no free space. Don't format it, don't assign it a drive letter.
+Put on the windows DVD and install it. Since the windows disk is setup as the boot disk after your DVD, there shouldn't be any kind of trouble. If you can't see any drives to install, get the support DVD of your motherboard and load the raid driver. After finishing (including several reboots), create a partition on the linux disk from windows. It should contain the whole disk, leaving no free space. Don't format it, don't assign it a drive letter.
 
-Now plug in your bootable usb disk, reboot the computer and boot from it. If dmraid does not list any raid devices, list one with a strange stripe size (this happens on my box) or you don't want to use it, then you can't see the windows disk. You just see 3 internal disks, /dev/sda /dev/sdb /dev/sdc. Start fdisk on /dev/sda. Here you see the partion, you created under windows on the linux disk. Copy the end sector of that partition to a text file or open another terminal where you execute a fdisk -l on the disk, to have it handy for later use. Now delete that partition and create new ones for your linux. Only use primary partitions, no extended. If you use an extended, fdisk might complain about a partition 5 with an invalid signature, it will correct, when writing. Set the last sector of the last primary partition to the sector of the deleted partition. Make the partition, you want to boot linux from, active. Write it to disk and leave fdisk. Cat mbr.bin from the syslinux package to the disk. To make bios and windows happy, just copy the mbr to the second disk afterwards.
+Now plug in your bootable usb disk, reboot the computer and boot from it. If dmraid does not list any raid devices, list one with a strange stripe size (this happens on my box) or you don't want to use it, then you can't see the windows disk. You just see 3 internal disks, /dev/sda /dev/sdb /dev/sdc.
+
+Start fdisk on /dev/sda. Here you see the partion you created under windows on the linux disk. Copy the end sector of that partition to a text file or open another terminal where you execute a fdisk -l on the disk, to have it handy for later use. Now delete that partition and create new ones for your linux. Only use primary partitions, no extended. If you use an extended, fdisk might complain about a partition 5 with an invalid signature and that it will correct it, when writing the partition table. Set the last sector of the last primary partition to the sector of the deleted partition. Make the partition you want to boot linux from, active. Write it to disk and leave fdisk. Cat mbr.bin from the syslinux package to the disk. To make bios and windows happy, just copy the mbr to the second disk afterwards.
 
 <code>
 cat /usr/share/syslinux/mbr.bin > /dev/sda<br />
 dd if=/dev/sda of=/dev/sdb bs=512 count=1<br />
 </code>
-<br />
-(to be continued ...)
+
+Now you are allmost done. Issue a ''partprobe'' to inform the kernel about the new partition table on /dev/sdb. Create your preferred filesystem on the partition, mount it on /mnt/gentoo and restore your gentoo with
+
+<code>
+cd /mnt/gentoo<br />
+zcat /mnt/part3/gentoo.tar.gz |tar -pvx<br />
+</code>
+
+Ajust fstab and grub.conf and setup grub on the partition you marked active in fdisk. To chainload windows, add the following lines to grub.conf:
+
+<code>
+title Windows<br />
+map (hd0) (hd1)<br />
+map (hd1) (hd0)<br />
+rootnoverify (hd1,0)<br />
+chainloader +1<br />
+</code>
+
+Reboot, go into the bios and choose linux as your boot device.
+That's it, you are done.
+
+Maybe now you want to setup Linux md software raid for your gentoo.
+You certanly want to setup a regular backup scheme for your data.
+
+===Conclusion===
+
+It was fun to do it, but the performance gain for windows wasn't worth it. The performance counter for the harddisk stays with 5.9 as it was before. The booting doesn't realy speed up a lot. And if you trigger I/O load by doing something like a complete virus scan, you can't observe the benefit, because the ressource monitor now says ''not responding''.
+
+In contrast, setting up md raid 0 on gentoo for the root partition does make a noticeable perfomance gain when booting.
+
+Some may say that choosing raid 0 does introduce a greater risk for your data. I disagree. If you have 3 disks, you will use them. With or without raid 0. If one of them fails, then the data on that disk is lost. The only way to prevent that, is to do regular backups. And if you have backups, then it doesn't matter, if the data on one or all three disks is lost.
+
 
 [[Category:Core system]]
