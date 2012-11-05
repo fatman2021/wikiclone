@@ -195,6 +195,52 @@ Please note that there are ''three'' slashes after the protocol definition, beca
 == Integration with Nagios or Icinga ==
 While Munin already provides some degree of warning notification when the nodes' data reaches given thresholds, it doesn't even come near the flexibility of dedicated software such as Nagios or Icinga. Luckily, instead of having to set up the tests twice to provide the data to the two of them, it's possible to make the Munin master forward the problem statuses to Nagios or Icinga through the NSCA software available in {{Package|net-analyzer/nsca}}.
 
+The ''nsca'' package needs to be installed on both the Munin master, which will send the data for the passive check, and on the Nagios host (which will receive it). If they are both on the same system, that simplifies it just a little. For split systems, it's possible to enable the '''minimal''' USE flag for {{Package|net-analyzer/nsca}} on Munin master, to only get the {{Path|send_nsca}} command.
+
+=== Nagios/Icinga host side ===
+
+Make sure that ''nsca'' is installed in full:
+
+{{File|/etc/portage/package.use||<pre>
+net-analyzer/nsca -minimal
+</pre>}}
+
+The package will install configuration files for both Nagios and Icinga, with the default users and paths as the two packages install by default. To select one or the other, you have to change {{Path|/etc/conf.d/nsca}}. The default configurations should be fine for everybody, with the exception at most of the server address.
+
+{{File|/etc/conf.d/nsca||<pre>
+CFGFILE=/etc/icinga/nsca.cfg
+# CFGFILE=/etc/nagios/nsca.cfg
+</pre>}}
+
+On the Nagios/Icinga side itself, your configuration will depend on the title of the graph that Munin exports; for instance if you're receiving a warning from the '''df''' plugin, you should pick up as title ''Disk usage in percent''. (There were some titles that are not valid check names for Nagios, but as of {{Package|net-analyzer/munin-2.0.7-r5}} all the default plugins' titles are cleaned up.) Then you need to create a passive service check for it in your configuration, similar to this:
+
+{{File|||<pre>
+define service{
+  use local-service
+  name munin-service
+  register 0
+  active_checks_enabled 0
+  passive_checks_enabled 1
+  parallelize_check 1
+  event_handler_enabled 1
+  is_volatile 1
+  check_command check_dummy!0
+}
+
+define service {
+  use munin-service
+  name munin-diskusage
+  register 0
+  service_description Disk usage in percent
+}
+</pre>}}
+
+(This is a template-based service, which makes it very simple to add further service checks using Munin's alerts.)
+
+=== Munin master side ===
+
+TBW
+
 == Gentoo Linux exclusives ==
 There are a few things in Munin that are only available with the Gentoo Linux ebuilds, either because they fit better our design or because upstream is not ready (yet) for them.
 
