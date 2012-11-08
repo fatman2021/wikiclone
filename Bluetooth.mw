@@ -88,32 +88,49 @@ Before a device can be used, it must be attached (''paired'' in Bluetooth-lingo)
 In order to pair, you must first have the interaction agent active. Most desktop environments have bluetooth integration so will automatically support the interaction agent. For example, KDE has {{Package|net-wireless/bluedevil}}. 
 
 === Using the simple-agent ===
-To help debugging bluetooth interaction (without the overhead of desktop environment libraries), the bluez package provides the '''simple-agent''' application. It is installed if the ''test-programs'' USE flag is set.
+Configuration can either be performed using the BlueZ test programs (available if you enable the test-programs USE flag for bluez), or by using the D-Bus API. The first way is described here.
 
-{{RootCmd|simple-agent|output=<pre>
-Agent registered
+The first step to do is to retrieve the address of the mouse. Most of the devices need you to press a special button, possibly for several seconds, to render them discoverable. 
+{{RootCmd|hcitool scan|output=<pre>
+Scanning ...
+	00:1F:20:1D:1B:4B	Bluetooth Laser Travel Mouse
 </pre>}}
+Where 00:1F:20:1D:1B:4B is the MAC address for your device.
+
+
+The second step to do is to pair the device:
+{{RootCmd|simple-agent hci0 00:1F:20:1D:1B:4B|output=<pre>
+RequestPinCode (/org/bluez/1664/hci0/dev_00_1F_20_1D_1B_4B)
+Enter PIN Code: 0000
+Release
+New device (/org/bluez/1664/hci0/dev_00_1F_20_1D_1B_4B)
+</pre>}}
+Enter a PIN and press {{Key|Enter}}, then enter the same PIN at the device. If you don't know the PIN, then it is probably 0000. It could be 1234.
 
 If you get the following output, it means that you already have an interaction agent running on your system:
 {{RootCmd|simple-agent|output=<pre>
 dbus.exceptions.DBusException: org.bluez.Error.AlreadyExists: Already Exists
 </pre>}}
 
-To scan for devices, use the '''hcitool''':
-{{RootCmd|hcitool scan|output=<pre>
-Scanning ...
-        00:24:7C:2F:92:7C       orange Nokia E71
-</pre>}}
 
-The '''hcitool''' can also be used to attach a device:
-{{RootCmd|hcitool cc 00:24:7C:2F:92:7C && hcitool auth 00:24:7C:2F:92:7C}}
 
-Any interaction requirement is handled through the '''simple-agent''' application (or the interaction agent of your preferred desktop environment).
-{{RootCmd|simple-agent|output=<pre>
-RequestPinCode (/org/bluez/13983/hci0/dev_00_24_7C_2F_92_7C)
- Enter PIN Code: 1234
+The third step is to mark the device as trusted so it can connect automatically: 
+{{RootCmd|bluez-test-device trusted 00:1F:20:1D:1B:4B yes|output=<pre>
+
 </pre>}}
-Enter a PIN and press {{Key|Enter}}, then enter the same PIN at the device.
+That should return you to a prompt with no output. To test if it's trusted issue "bluez-test-device trusted 00:1F:20:1D:1B:4B" without yes:
+{{RootCmd|bluez-test-device trusted 00:1F:20:1D:1B:4B|output=<pre>
+1
+</pre>}}
+If you get 1 then it is trusted. 0 is the default value (not trusted) - you want that to change to 1 (trusted).
+
+
+
+The fourth step is to connect the device (this only needs to be done once, it will be done automatically after that): 
+{{RootCmd|bluez-test-input connect 00:1F:20:1D:1B:4B|output=<pre>
+
+</pre>}}
+This should also return you to a prompt, and the device should now be paired and working.
 
 You are now ready to proceed.
 
