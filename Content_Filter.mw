@@ -134,7 +134,79 @@ DansGuardian answers this question with filter groups. With filter groups you'll
 As you read this guide pay special attention to the default group information located under the Filter Group section. It is a powerful tool that catches everyone who hasn't authenticated.
 
 === Installing and Configuring Squid ===
+Make sure that the '''tproxy''' USE flag is '''not''' set.<br />
+You may wish to conciser setting these USE flags:
+* logrotate - if you are already using logrotate to clean up old logs, you can include Squid's logs in the process via USE flag
+* kerberos, ldap, nis, radius, samba, and sasl - these flags make integrating Squid with existing authentication schemes a little easier, not all are required
+<br /> 
+To install Squid, execute this command:
+{{Emerge| squid}}
+The Squid config is just as (if not more so) big and scary as the DansGuardian config. Each network has its own set of needs and generalizing all of those into one perfect configuration is impossible. Instead, this configuration is meant to give you the most basic set up to get you running while explaining some core Squid configuration topics. Fine tuning the Squid configuration to suit a specific requirement is up to the individual administrator. For a much closer look at all the configuration parameters that Squid accepts have a look at [http://www.squid-cache.org/Doc/config/ the official documentation] and for some (probably more helpful then raw configuration parameters) example configs check out the [http://wiki.squid-cache.org/ConfigExamples Squid wiki].
+<br />
+As per usual, lets back up the default configuration, lest we find ourselves in need of it.
+{{RootCmd| mv /etc/squid/squid.conf /etc/squid/squid.conf.vanilla}}
+Keep in mind, this is a very minimal config to get you started:
+{{File|/etc/squid/squid.conf||<pre>
+# this is the port and interface Squid listens on
+http_port 172.16.0.5:3128
+# if you'd rather Squid listen on all interfaces try this instead
+http_port 3128
 
+# this option forces the location of the cache log
+# the cache log is a kind of general information and error log
+# if Squid has trouble running, this should be one of the first places you look
+cache_log /var/log/squid/cache.log
+
+# this option forces the location of the access log
+# it keeps track of every client request
+# if you'd rather not have this be logged change the path to /dev/null
+cache_access_log /var/log/squid/access.log
+
+# Squid keeps a cache of requested objects
+# this option forces the location of the store log
+# which keeps track of what enters and exits the cache
+# if you'd rather not log that make the path none as I've done below
+cache_store_log none
+
+# strictly speaking this is typically an optional parameter
+# it explicitly states what the hostname of the server is to Squid
+# at the very least this will help logs be easier to read
+visible_hostname squid.mydomain.net
+
+# some common ports that are used, we'll allow these to talk to our Squid
+acl Safe_ports port 80 21 443 563 70 210 280 488 591 777 1024-65535
+
+# SSL ports, its nice to have a seporate ACL for them
+acl SSL_ports port 443 563
+
+# we'll also make a separate ACL for all traffic over the local loopback interface
+acl localhost  src 127.0.0.0/8
+
+# here we'll group all traffic that is trying to connect to our Squid proxy into its own ACL, usually only SSL needs to do this
+acl CONNECT method CONNECT
+
+# this is the IP of the server running DansGuardian
+acl DansGuardian src 172.16.0.6
+
+# here we catch all other hosts not listed above, yes we want any client IP address to fall into this ACL as well
+# we'll create a default block rule that will prevent users from bypassing the filter and directly asking Squid to process their request
+# you should enforce this with firewall policy too
+acl ALL src all
+
+# block access if the destination port doesn't match our Safe_port ACL
+http_access deny !Safe_port
+
+# long story short, protocols like SSL need to issue a HTTP CONNECT to be able to tunnel other protocols
+# here we're denying HTTP CONNECT to our Squid proxy except for ports we've identified as OK, namely the common SSL ports
+http_access deny CONNECT !SSL_port
+
+# since DansGuardian will need to use Squid, we'll let it
+http_access allow DansGuardian
+
+# here we catch everything else and deny them access, remember if users directly connect to Squid they'll bypass the DansGuardian content filter
+# you really should have firewall rules also enforcing this, but in the event something slips past your firewall, hopefully this stops the access instead
+http_access deny ALL
+</pre>}}
 === Tweaking DansGuardian For Heavier Use ===
 
 ==== Authentication and Authorization ====
