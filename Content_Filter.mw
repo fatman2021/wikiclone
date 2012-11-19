@@ -54,8 +54,64 @@ ConnectPort 563 # TLS
 </pre>}}
 
 === Installing and Configuring DansGuardian ===
-Todo
+One thing you need to understand about DansGuardian is that it supports multiple filter groups, read more about them in the large network section below. For the single machine or small network we'll set up a single filter group that everyone will be a member of.<br />
+First lets install DansGuardian:
+{{Emerge|dansguardian}}
+You may want/need to enable the pcre USE flag, this enables Perl Compatible Regular Expressions.<br />
+First, lets back up the default configuration, just to be safe:
+{{RootCmd|cp /etc/dansguardian/dansguardian.conf /etc/dansguardian/dansguardian.conf.vanilla}}
+Now lets start configuring the global settings, for now just change the parameters here, leave everything else, it's a big file:
+{{File|/etc/dansguardian/dansguardian.conf||<pre>
+# this only logs denied requests to cut back on a large log file
+# though you may want to set this parameter to 3 while troubleshooting, to log everything
+loglevel = 1
 
+# unless you want to use syslog you probably are better off letting DansGuardian's internal logger
+loglocation = '/var/log/dansguardian/access.log'
+
+# DansGuardian listen port
+filterport = 8080
+
+# if this is a single machine, and DansGuardian is installed on the same machine as Tinyproxy use this IP
+# otherwise place the IP address of the proxy server in place of 127.0.0.1
+proxyip = 127.0.0.1
+
+# this is the port that the proxy server is listening on
+# earlier in the Tinyproxy setting we chose port 3128
+proxyport = 3128
+
+# if you have a single machine or a small network you will almost certainly need this set to off
+originalip = off
+
+# Portage should have already created a dansguardian user and group
+# if not, you should make one, so that DansGuardian can run with its own set of permissions
+# for security reasons mainly
+daemonuser = 'dansguardian'
+daemongroup = 'dansguardian'
+</pre>}}
+Now that the global configuration has been taken care of, lets configure the per-group settings. If there is a conflict between per-group and global settings, per-group settings will always win; just keep that in mind while configuring and troubleshooting.<br />
+Again, lets make a backup of the defaults, just in case:
+{{RootCmd|cp /etc/dansguardian/dansguardianf1.conf /etc/dansguardian/dansguardianf1.conf.vanilla}}
+Lets configure the first filter group. Again, this is a big file with lots going on, if a parameter isn't mentioned in this outline, usually its ok to leave it at default settings:
+{{File|/etc/dansguardian/dansguardianf1.conf||<pre>
+groupmode = 1
+
+# this just helps log files parse easier
+groupname = 'group_one'
+
+# I found 50 to block far to much, where as 100 would still block adult sites but
+# allow for example, the wiki on breast cancer
+# this is something you'll need to tweak based on your own needs, the lower the number the more it blocks
+naughtynesslimit = 100
+
+# this defaults to 0 or off, I wanted to bring it up anyways though
+# if you think you'll need a temporary bypass for whatever reason
+# that feature is available
+bypass = 0
+</pre>}}
+
+Finally, add DansGuardian to the start up list:
+{{RootCmd| rc-update add dansguardian default}}
 == Large Networks ==
 Todo
 
