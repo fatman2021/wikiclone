@@ -6,13 +6,9 @@
 
 == Installation  ==
 Recommended are the following local USE flags as sane default to be able to auto mount removable devices, etc.:
-{{File|/etc/portage/package.use||<pre>
-media-libs/evas fontconfig fbcon
-dev-libs/ecore evas fbcon curl
-media-libs/edje cache vim-syntax
-x11-wm/enlightenment udev ukit
-x11-libs/elementary -quicklaunch thumbnails weather xdg
-x11-themes/efennhit gtk
+{{File|/etc/portage/make.conf||<pre>
+USE=" $USE fontconfig fbcon curl gtk opengl -quicklaunch udev ukit vim-syntax xdg"
+ENLIGHTENMENT_MODULES="backlight battery clock comp conf-applications conf-dialogs ..."
 </pre>}}
 
 If you don't want to undergo the painful manual installation of each package, you'd better use sets. One can add these two sets to {{Path|/etc/portage/sets/}} to ease merging and rebuilding the packages:
@@ -20,38 +16,35 @@ If you don't want to undergo the painful manual installation of each package, yo
 dev-libs/eina
 dev-libs/eet
 media-libs/evas
+media-libs/evas_generic_loaders
 dev-libs/ecore
 dev-libs/efreet
 dev-libs/embryo
 media-libs/edje
 dev-libs/e_dbus
 dev-libs/eeze
-x11-wm/enlightenment
+x11-wm/enlightenment:0.17
 </pre>}}
 
 {{File|/etc/portage/sets/e-xtra||<pre>
+media-libs/elementary
+x11-plugins/ecomorph
+x11-wm/ecomp
+x11-terms/terminology
+dev-util/editje
 dev-python/python-ecore
 dev-python/python-edje
 dev-python/python-elementary
 dev-python/python-evas
-media-plugins/evas_generic_loaders
 net-libs/libeweather
-x11-libs/elementary
-x11-plugins/ecomorph
-x11-wm/ecomp
-x11-plugins/e_modules-cpu
-x11-plugins/e_modules-deskshow
-x11-plugins/e_modules-diskio
+media-libs/emotion
+media-libs/ethumb
 x11-plugins/e_modules-engage
 x11-plugins/e_modules-eweather
-x11-plugins/e_modules-everything-mpris
-x11-plugins/e_modules-everything-wallpaper
-x11-plugins/e_modules-everything-websearch
-x11-plugins/e_modules-screenshot
-x11-plugins/e_modules-taskbar
-x11-plugins/e_modules-tclock
-x11-plugins/e_modules-winselector
-x11-terms/terminology
+x11-themes/efenniht
+x11-misc/emprint
+x11-plugins/ekbd
+x11-plugins/entranc
 </pre>}}
 
 And now one can finish the installation with:
@@ -64,17 +57,12 @@ There are two sets to avoid unnecessary issues implied by the order of merging. 
 Or else, one can use simple ~/.{xinitrc,bash_log{in,out}} or [[zsh]] version `~/.zlog{in,out}' scheme to avoid unnecessary extra packages to just be able to log into your session. And do not forget to install [[NetworkManager]] and {{Package|gnome-extra/nm-applet}} to be able to switch to different networks easily because, last time I've checked, {{Package|net-misc/connman}} did not work at all despite that there's a E17 module for it.
 
 {{File|[https://github.com/tokiclover/dotfiles/blob/master/.xinitrc ~/.xinitrc]||<pre>
-# $Id: ~/.xinitrc, 2012/07/20 13:16:30 -tclover Exp $
-eval $(gnome-keyring-daemon --components=pkcs11,secrets,ssh,gpg)
-export GNOME_KEYRING_PID
-export GNOME_KEYRING_SOCKET
-export SSH_AUTH_SOCK
-export GPG_AGENT_INFO
-dbus-launch nm-applet --sm-disable &
-dbus-launch gcm-session &
-/usr/libexec/polkit-gnome-authentication-agent-1 &
-#xcalib -gc 1.0 -b 0.0 -co 100.0 ~/.icc/sRGB_v4_ICC_preference.icc &
-laditray 1>/dev/null 2>&1 &
+# $Id: ~/.xinitrc, 2012/11/22 09:48:07 -tclover Exp $
+#dbus-launch --sh-syntax --exit-with-session nm-applet --sm-disable &
+#dbus-launch --sh-syntax --exit-with-session gcm-session &
+#xcalib -gc 1.0 -b 0.0 -co 100.0 ~/.icc/sRGB_v4_ICC_preference.icc
+#/usr/libexec/polkit-gnome-authentication-agent-1 &
+ladi-system-tray 1>/dev/null 2>&1 &
 unclutter -idle 8 -noevents &
 [[ -f ~/.Xmodmap ]] && xmodmap ~/.Xmodmap
 xset s off
@@ -84,47 +72,64 @@ xset fp+ /usr/share/fonts/artwiz-aleczapka-en
 xset fp+ /usr/share/fonts/terminus
 xset fp rehash
 xrdb -load ~/.Xresources
+setxkbmap fr 
 #xrdb -merge ~/.Xdefaults
 #[[ -f ~/.xcolors/sj-bright ]] && xrdb -merge ~/.xcolors/sj-bright
 urxvtd -q -o -f &
 case $(tty | cut -b9-) in
-    1) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session enlightenment_start.sh;;
-    2) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session lxsession             ;;
-    3) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session openbox-session       ;;
-    4) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session razor-session       ;;
+	1) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session enlightenment_start;;
+	2) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session lxsession          ;;
+	3) exec ck-launch-session dbus-launch --sh-syntax --exit-with-session openbox-session    ;;
 esac
 # vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{Note|Notice that the E17 session uses ecomp+ecomorph combination, edit `~/.xinitrc' by removing the `.sh' suffix accordingly if not using it.}} 
 {{File|[https://github.com/tokiclover/dotfiles/blob/master/.bash_login ~/.bash_login]||<pre>
-# $Id: ~/.bash_login, 2012/07/20 13:22:56 -tclover Exp $
+# $Id: ~/.bash_login, 2012/11/22 10:15:47 -tclover Exp $
 # auto startx depending on the tty
 [[ -z $DISPLAY ]] && [[ $UID != 0 ]] && [[ $(tty | cut -c9) -le 3 ]] &&
     startx 1>~/.xsession-errors 2>&1 &
 # start gnome-keyring
-[[ -n $DISPLAY ]] && [[ -z $GNOME_KEYRING_PID ]] && {
-    eval $(gnome-keyring-daemon)
-    export GNOME_KEYRING_PID
-    export GNOME_KEYRING_SOCKET
-    export SSH_AUTH_SOCK
-    export GPG_AGENT_INFO
+[[ -f /tmp/.private/$USER/keyring ]] && {
+    while read line; do
+        export $line
+    done </tmp/.private/$USER/keyring
+    [[ "$(ps aux|grep $GNOME_KEYRING_PID|head -n1|awk '{print $1}')" != $USER ]] &&
+        unset GNOME_KEYRING_PID
+}
+[[ -z $GNOME_KEYRING_PID ]] && {
+    eval $(gnome-keyring-daemon --daemonize --components=pkcs11,secrets,ssh,gpg)
+    echo GNOME_KEYRING_PID=$GNOME_KEYRING_PID >/tmp/.private/$USER/keyring
+    echo GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL >>/tmp/.private/$USER/keyring
+    echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK >>/tmp/.private/$USER/keyring
+    echo GPG_AGENT_INFO=$GPG_AGENT_INFO >>/tmp/.private/$USER/keyring
+    export GNOME_KEYRING_PID GNOME_KEYRING_CONTROL SSH_AUTH_SOCK GPG_AGENT_INFO
 }
 # vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 A zsh version could be used instead.
 {{File|[https://github.com/tokiclover/dotfiles/blob/master/.zlogin ~/.zlogin]||<pre>
-# $Id: ~/.zlogin, 2012/07/20 13:22:07 -tclover Exp $
+# $Id: ~/.zlogin, 2012/11/22 08:40:49 -tclover Exp $
 # auto startx depending on the tty
-if [[ -z $DISPLAY ]] && [[ $EUID != 0 ]] && [[ ${$(tty)#*tty} -le 3 ]] { 
-	startx 1>~/.xsession-errors 2>&1 &
+if [[ -z $DISPLAY ]] && [[ $EUID != 0 ]] && [[ ${$(tty)#*tty} -le 3 ]] {
+    startx 1>~/.xsession-errors 2>&1 &
 }
 # start gnome-keyring
-if [[ -n $DISPLAY ]] && [[ -z $GNOME_KEYRING_PID ]] {
-	eval $(gnome-keyring-daemon)
-	export GNOME_KEYRING_PID
-	export GNOME_KEYRING_SOCKET
-	export SSH_AUTH_SOCK
-	export GPG_AGENT_INFO
+if [[ -f /tmp/.private/$USER/keyring ]] {
+    while read line; do
+        export $line
+    done </tmp/.private/$USER/keyring
+    if [[ "$(ps aux|grep $GNOME_KEYRING_PID|head -n1|awk '{print $1}')" != $USER ]] {
+        unset GNOME_KEYRING_PID
+    }
 }
-# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+if [[ -z $GNOME_KEYRING_PID ]] {
+    eval $(gnome-keyring-daemon --daemonize --components=pkcs11,secrets,ssh,gpg)
+    echo GNOME_KEYRING_PID=$GNOME_KEYRING_PID >/tmp/.private/$USER/keyring
+    echo GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL >>/tmp/.private/$USER/keyring
+    echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK >>/tmp/.private/$USER/keyring
+    echo GPG_AGENT_INFO=$GPG_AGENT_INFO >>/tmp/.private/$USER/keyring
+    export GNOME_KEYRING_PID GNOME_KEYRING_CONTROL SSH_AUTH_SOCK GPG_AGENT_INFO
+}
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4</pre>}}
 {{File|[https://github.com/tokiclover/dotfiles/blob/master/.bash_logout ~/.bash_logout]||<pre>
 # $Id: ~/.bash_logout, 2012/07/20 13:28:32 -tclover Exp $
 [[ -n $GNOME_KEYRING_PID ]] && kill -TERM $GNOME_KEYRING_PID
