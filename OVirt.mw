@@ -22,7 +22,7 @@ This article will try to explain how to install oVirt on Gentoo system, more spe
 {{Note|This manual is what I did on my Gentoo server. If you have different install, which you probably do, you might not strictly do copy/paste and some additional steps might be necessary. I will specify every error I encountered and a solution to it at the end of the document. Feel free to add any problem not noted}}
 
 == Install Java runtime ==
-Ovirt manual is suggesting installing openJDK. My server has sun-jdk already set so I will point you to [http://www.gentoo.org/doc/en/java.xml Gentoo Java guide] for setting java environment. '''Make sure you are setting jdk version 1.6!!!'''
+Ovirt manual is suggesting installing openJDK. My server has sun-jdk already set so I will point you to [http://www.gentoo.org/doc/en/java.xml Gentoo Java guide] for setting java environment. '''Make sure you are setting jdk version 1.6 or 1.7'''
 
 == Install Java application server – JBoss ==
 oVirt runs on JBoss application server, here is a quick guide to set up jboss for our needs. The plan is to have JBoss under /opt, make a jboss user and set the installation dir as the user's home dir (I did this because I wanted to have everything on a single place for portability and because it makes things easier with permissions etc). Then we 'll put ovirt inside this directory and set it up.
@@ -31,19 +31,19 @@ oVirt runs on JBoss application server, here is a quick guide to set up jboss fo
 {{RootCmd|cd /opt}}
 
 * Download latest JBoss version 7
-{{RootCmd|wget http://download.jboss.org/jbossas/7.1/jboss-as-7.1.0.CR1b/jboss-as-7.1.0.CR1b.tar.gz}}
+{{RootCmd|wget http://download.jboss.org/jbossas/7.1/jboss-as-7.1.1.Final/jboss-as-7.1.1.Final.tar.gz}}
 
 * Untar the archive
-{{RootCmd|tar xvzf jboss-as-7.1.0.CR1b.tar.gz}}
+{{RootCmd|tar xvzf jboss-as-7.1.1.Final.tar.gz}}
 
 * Create the jboss user {{Note|For compatibility with Fedora we use uid/gid 36, on gentoo this one is used for the "games" user/group so make sure you change uid/gids inside /etc/passwd and /etc/group and reset permissions on /usr/games, without it we'll have some trouble setting up NFS storage domains later. Also the -Z option is there in case you are on the ''seLinux'' [[profile]], if not ignore it}}
-{{RootCmd|useradd -d /opt/jboss-as-7.1.0.CR1b -u 36 -g 36 -r jboss -Z user_u}}
+{{RootCmd|useradd -d /opt/7.1.1.Final -u 36 -g 36 -r jboss -Z user_u}}
 
 * Now set permissions for jboss's home dir
-{{RootCmd|chown -R ''jboss'':''jboss'' /opt/jboss-as-7.1.0.CR1b}}
+{{RootCmd|chown -R ''jboss'':''jboss'' /opt/jboss-as-7.1.1.Final}}
 
-* Test that JBoss is working by	starting the server as jboss user ('''-b 0.0.0.0''' option makes server bind to all IP addresses)
-{{RootCmd|su jboss|}}{{cmd|cd ~|bin/standalone.sh -b 0.0.0.0}}
+* Test that JBoss is working by	starting the server as jboss user
+{{RootCmd|su jboss|}}{{cmd|cd ~|bin/standalone.sh}}
 * Now open a browser to your server's hostname (let's assume it's "engine-dev") and check out http://engine-dev:8080 you should see JBoss's welcome screen.
 
 === Troubleshooting JBoss ===
@@ -86,7 +86,7 @@ allow java_t node_t:tcp_socket node_bind;
 </pre>}}
 
 * Used TCP ports: 8080/8443/8083/1090/4457
-** These ports may be used by other applications. Either close other application or change JBoss configuration (/opt/jboss-as-7.1.0.CR1b/standalone/configuration/standalone.xml)
+** These ports may be used by other applications. Either close other application or change JBoss configuration (/opt/jboss-as-7.1.1.Final/standalone/configuration/standalone.xml)
 ** Since JBoss binds to the hostname, your hostname should be resolvable, or you may add it to /etc/hosts for local resolution.
  127.0.0.1 localhost engine-dev
 
@@ -94,7 +94,7 @@ allow java_t node_t:tcp_socket node_bind;
 {{Cmd|export JAVA_OPTS{{=}}"-Xmx2048m"}}
 
 == Installing PostgreSQL ==
-Ovirt Engine works with postgresql 8.4.x or 9.1.x 
+oVirt Engine works with postgresql 9.1.x 
 
 If you didn't already, specify default locale for your server ('''as root'''):
 * Check /etc/locale.gen, e.g.:
@@ -132,14 +132,18 @@ Now lets install PostgreSQL...
 == Installing oVirt Engine Core ==
 Now that our needed components are in place it's time to download and build the engine core. Sticking to the plan lets get ovirt engine's source code and place it inside ~jboss/ We 'll do the whole process as user jboss
 
-{{RootCmd|su jboss}}{{Cmd|cd ~|wget http://www.ovirt.org/releases/stable/src/ovirt-engine-3.0.0_0001.tar.gz|
-|mkdir ovirt-engine|tar xvzf ovirt-engine-3.0.0_0001.tar.gz -C ovirt-engine}}
+{{RootCmd|su jboss}}{{Cmd|cd ~|wget http://www.ovirt.org/releases/stable/src/ovirt-engine-3.1.0.tar.gz|
+|mkdir ovirt-engine|tar xvzf ovirt-engine-3.1.0.tar.gz -C ovirt-engine}}
 
 === Install maven ===
-* Install dev-java/maven-bin. '''It is a must to build version 2 of maven. Version 3 is not supported!!!''' As of time of writing, stable version in portage is 2.2.1 so it is safe to just emerge it:
+* Install dev-java/maven-bin. '''It is no longer a must to build version 2 of maven. Version 3 is supported.''' As of time of writing, stable version in portage is 2.2.1 so it is safe to just emerge it. Alternatively you may add it to your keywords file:
+{{RootCmd|echo "dev-java/maven-bin:3.0 ~amd64" >> /etc/portage/package.keywords}}
+* Next:
 {{Emerge|dev-java/maven-bin}}
 * If unsure, emerge strict version:
 {{RootCmd|emerge -DuNavt {{=}}dev-java/maven-bin-2.2.1}}
+* or
+{{RootCmd|emerge -DuNavt {{=}}dev-java/maven-bin:3.0}}
 * Set up the needed repositories for Maven. To create default repository directory, run maven as non-privileged user. DO NOT use root user.
 {{Cmd|mvn-2.2}}
 * This command will create .m2 directory in jboss user's HOME directory.
@@ -161,7 +165,7 @@ Now that our needed components are in place it's time to download and build the 
                 <profile>
                         <id>oVirtEnvSettings</id>
                         <properties>
-                                <jbossHome>/opt/jboss-as-7.1.0.CR1b</jbossHome>
+                                <jbossHome>/opt/7.1.1.Final</jbossHome>
                                 <JAVA_1_6_HOME>/opt/sun-jdk-1.6.0.26</JAVA_1_6_HOME>
                                 <forkTests>always</forkTests>
                         </properties>
@@ -276,7 +280,7 @@ Time to add our new CA to the database, this script will do the trick...
 {{file|ca_db.sh||<pre>
 #!/bin/bash
 
-CA_DIR=/opt/jboss-as-7.1.0.CR1b/pki/vps-ca/ca
+CA_DIR=/opt/7.1.1.Final/pki/vps-ca/ca
 
 psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/certs/engine.cer' where option_name = 'CertificateFileName';"
 psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/.keystore' where option_name = 'TruststoreUrl';"
@@ -354,5 +358,6 @@ psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/private/
 
 == External resources ==
 * [http://www.ovirt.org/wiki/Workshop_November_2011 Additional information (including presentations)]
+* Users list: users@ovirt.org
 
 [[Category:Virtualization]]
