@@ -7,7 +7,40 @@
 '''PHP''' is a general-purpose server-side scripting language to produce dynamic Web pages.
 
 == Installation ==
-The [http://www.gentoo.org/proj/en/php/php-installing.xml installation guide] of PHP on Gentoo written by the PHP herd covers how to install PHP on your Gentoo system.
+
+=== dev-lang/php ===
+Portage knows the global USE flag ''php'' for enabling support for PHP in other packages. Enabling this USE flag will pull in {{Package|dev-lang/php}} automatically:
+{{File|/etc/portage/make.conf||<pre>
+USE="... php ..."
+</pre>}}
+The most important USE flags of php, the SAPI (Server API) USE flags, are:
+{{USEflag|package=dev-lang/php|desc=SAPIs
+|apache2
+|cgi
+|cli+yes
+|embed
+|fpm
+}}
+Also check the other USE flags.
+
+By default the ebuild installs the development {{Path|php.ini}} version. If you want to install the production version add the following to your {{Path|make.conf}}:
+{{File|/etc/portage/make.conf||<pre>
+PHP_INI_VERSION="production"
+</pre>}}
+Both versions of {{Path|php.ini}} can be found in {{Path|/usr/share/doc/php-*}}.
+
+After setting this you want to update your system so the changes take effect:
+{{Emerge|params+=--changed-use --deep|@world}}
+
+=== Extensions ===
+If you want to install extensions, you can decide which versions of PHP you want extensions compiled for. This is done by setting the ''PHP_TARGETS'' variable:
+{{File|/etc/portage/make.conf||<pre>
+PHP_TARGETS="php-5-4"
+</pre>}}
+You can also set more than one. Note that the php slot is named "5.4" and the corresponding PHP_TARGETS setting is php5-4. This is due to current restrictions on USE names.
+
+After setting this you want to update your system so the changes take effect:
+{{Emerge|params+=--changed-use --deep|@world}}
 
 == Running multiple versions of PHP ==
 One of the great advantages of using Gentoo for PHP development is the version slotting. It is very simple to swap between multiple versions of PHP as well as run multiple versions simultaneously. This is all done with the eselect command provided by the {{Package|app-admin/eselect-php}} package which should get pulled in automatically with your installation. This allows you to run, for example, PHP 5.3 for your ''cli'' SAPI but PHP 5.4 on your web server. It also allows you to quickly test your application on different versions of PHP.
@@ -28,54 +61,10 @@ You are now running PHP 5.3 on command line.
 {{RootCmd|php -v|output=<pre>
 PHP 5.3.9-pl0-gentoo (cli) (built: Jan 30 2012 13:21:46)
 </pre>}}
-  
-Now, lets say you want to run two php-fpm servers, with two different versions, for two different websites. There is a nifty feature in the php-fpm init script which will do this for you. Symlink the global php-fpm script to all the versions you would like to run simultaneously. So if I wanted to run both PHP 5.3 and PHP 5.4 I would do this. {{RootCmd|ln -s /etc/init.d/php-fpm /etc/init.d/php-fpm-php5.3
-|ln -s /etc/init.d/php-fpm /etc/init.d/php-fpm-php5.4}}
 
-Now, I will need to stop any running instances on the global PHP as we don't want the global and slotted version fighting for the same port.
-{{RootCmd|/etc/init.d/php-fpm stop}}
-{{Note|Don't try to use the global php-fpm script at the same time as slotted init scripts.}}
+== Configuration ==
+The PHP configuration is in {{Path|/etc/php}}, which contains one subdirectory for each SAPI for each PHP version, e.g. configuration files for the PHP-5.4 apache2 SAPI are installed in {{Path|/etc/php/apache2-php5.4}}.
 
-Also, because php-fpm binds itself to a port we need our two versions to use two separate ports so let's update the 5.4 config.
-
-{{File|/etc/php/fpm-php5.4/php-fpm.conf||<pre>
-listen = 127.0.0.1:9001
-</pre>}}
-
-I can now use my new slotted init scripts to launch the different versions.
-{{RootCmd|/etc/init.d/php-fpm-php5.3 start
-|/etc/init.d/php-fpm-php5.4 start}}
-
-From here you just need to adjust the port setting in your web server configuration ([[Apache]], [[lighttpd]], nginx, etc.) to use the port of the version you are interested in for each of your server's virtual hosts.
-
-== Apache Web Service Configuration ==
-Allowing Apache to use PHP, you need to enable the PHP module by adding "-D PHP{version}". (ie. "-D PHP5"; Note the suffixed version number is appended to the module name.)
-{{File|/etc/conf.d/apache2||<pre>
-APACHE2_OPTS="-D DEFAULT_VHOST -D INFO -D SSL -D SSL_DEFAULT_VHOST -D LANGUAGE -D PHP5"
-</pre>}}
-
-Create a PHP test page file for testing PHP.
-{{File|/var/www/localhost/htdocs/index.php||<pre>
-<html>
-<head>
-<title>PHP Test</title>
-</head>
-<body>
-<?php phpinfo(); ?>
-</body>
-</html>
-</pre>}}
-
-Allow other users to access the index.php file.
-{{RootCmd|chmod a+r /var/www/localhost/htdocs/index.php}}
-
-Restart the Apache service.
-{{RootCmd|rc-service apache restart}}
-
-
-
-== See also ==
-* [http://www.gentoo.org/proj/en/php/php-installing.xml PHP Install guide]
-* [http://www.gentoo.org/proj/en/php/php-upgrading.xml PHP Upgrade guide (and useful information on slotting)]
+To setup Apache to use PHP, see the [[Apache#PHP support|Apache]] article.
 
 [[Category:Server]]
