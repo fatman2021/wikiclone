@@ -84,23 +84,31 @@ Note: if you want to remove a setenv line, just call setenv with the variable, b
 
 == Kernel ==
 
-=== Option 1: Updating u-boot ===
-(At least in theory) since 3.4 the vanilla kernel (and therefore gentoo-sources) should support DreamPlug, but you need to use dev-embedded/u-boot-tools-2012.10 or newer to create the uImage.
+=== Roll your own ===
+The stock version of U-Boot that ships with the DreamPlug does not pass a device tree as required by newer kernels. Flashing a newer version of U-Boot is an option but due to the way the hardware initializes, this is extremely tedious to do, if not almost impossible. [[User:Chewi|This poor user]] tried unsuccessfully for two days. Alternatively, newer kernels (3.2+) support appending the device tree to the kernel image manually. Give yourself an easy life with the following steps.
 
-First, we need the following packages for compiling our own kernel:
-
-=== Option 2: Without updating u-boot ===
-Apparently this is an easier alternative.
-
+==== Manually appending the device tree ====
 # emerge dev-embedded/u-boot-tools
-# build the kernel with CONFIG_ARM_APPENDED_DTB enabled
-# after the kernel is built, run make kirkwood-dreamplug.dtb
-# cat arm/boot/dts/kirkwood-dreamplug.dtb >> arch/arm/boot/zImage
-# make uImage
+# Configure and build the kernel as usual with CONFIG_ARM_APPENDED_DTB enabled.
+## make kirkwood-dreamplug.dtb
+## cat arch/arm/boot/dts/kirkwood-dreamplug.dtb >> arch/arm/boot/zImage
+## make uImage
+# Copy arch/arm/boot/uImage to the device. Don't forget the modules!
 
-=== Option 3: Pre-built kernel images ===
+==== Cross-compiling ====
+The DreamPlug is not very fast. Save some time and build the kernel on another machine. Only a stage 1 toolchain is required for building a kernel.
+# emerge sys-devel/crossdev
+# crossdev -s1 -t arm-none-eabi
+# Append '''ARCH=arm CROSS_COMPILE=arm-none-eabi-''' to all invocations of make.
 
-You can still use a pre-built kernel image, like the ones available on [http://www.plugcomputer.org/plugforum/index.php?board=2.0 PlugComputer Forums] …but then again, what’s the fun in that? ;)
+==== Built-in vs modular drivers ====
+Be aware that building the SATA driver (sata_mv) into the kernel will result in any drives attached to the DreamPlug at boot time taking priority over any SD cards. In other words, /dev/sda will be a SATA drive, not an SD card. This will most likely cause a boot failure. The simplest option is to build the driver as a module. Another option is to use an initrd. If neither of these appeal, there is a third option as of 3.7. You can now specify the root device in the form '''root=PARTUUID=XXXXXXXX-XX''' with an NT disk signature and partition number. This has been verified to work on the DreamPlug.
+
+==== Kernel configuration ====
+A minimal(ish) kernel configuration for 3.6.5 can be found [http://dev.gentooexperimental.org/~chewi/dreamplug-kernel-config.txt here]. Only DreamPlug hardware drivers have been enabled, except for wireless and Bluetooth, which have been left disabled for security reasons.
+
+=== Pre-built images ===
+You can still use a pre-built kernel image, like the ones available on [http://www.plugcomputer.org/plugforum/index.php?board=2.0 PlugComputer Forums] …but where's the fun in that? ;)
 
 [[Category:Computers]]
 
