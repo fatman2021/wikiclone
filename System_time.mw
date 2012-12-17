@@ -1,0 +1,108 @@
+{{InfoBox stack
+|{{InfoBox wikipedia|text=Wikipedia (System time)|header=true}}
+|{{InfoBox wikipedia|Real-time clock|text=Wikipedia (Real-time clock)}}
+|{{InfoBox wikipedia|Time zone|text=Wikipedia (Time zone)}}
+}}
+The '''system time''' backed by the system clock is used in Unix systems to keep track of time.
+It can be set by a hardware clock or by an external time server.
+
+== Preface ==
+
+=== Software clock vs Hardware clock ===
+The system clock, provided by the kernel, is implemented as a simple count of the number of ticks that have transpired since the 1 January 1970 00:00:00 UT. This is called [[Wikipedia:Unix time|Unix time]].
+
+The hardware clock (also known as real-time clock (RTC)) is typically a component on the mainboard. It runs independent of the state of the operating system all the time, also when the computer is shutdown.
+
+=== UTC time vs localtime ===
+You can decide, which time standard the hardware clock is representing: localtime or [[Wikipedia:Coordinated Universal Time|UTC time]]. The localtime is the real time of your time zone including [[Wikipedia:Daylight saving time|DST]]. Preferred is UTC time, because the system time gets computed by adding the time zone difference and DST. So daylight saving changes get automatically applied and changing the time zone are possible without changing the hardware clock. The exception can be, if you have a dual-boot system, and the other operating system does not support or is not configured for an UTC hardware clock (by default, Windows uses localtime).
+
+== Time zone ==
+In order to keep time properly, you need to select your time zone so that your system knows where it is located.
+
+=== OpenRC ===
+Look for your time zone in {{Path|/usr/share/zoneinfo}}. Please avoid the {{Path|/usr/share/zoneinfo/Etc/GMT*}} time zones as their names do not indicate the expected zones. For instance, GMT-8 is in fact GMT+8.
+
+You then set your time zone in {{Path|/etc/timezone}}, e.g. for Germany:
+{{File|/etc/timezone||<pre>
+Europe/Berlin
+</pre>}}
+The information in this file is used by {{Package|sys-libs/timezone-data}} on each package update to copy the chosen zoneinfo file to {{Path|/etc/localtime}}. To setup this file out of order, run:
+{{Emerge|params=--config|timezone-data}}
+
+=== systemd ===
+[[systemd]] comes with '''timedatectl''' to manage your time zone:
+
+* To check the current zone:
+: {{Cmd|timedatectl}}
+
+* To list available zones:
+: {{Cmd|timedatectl list-timezones}}
+
+* To change your time zone, e.g. for Germany:
+: {{RootCmd|timedatectl set-timezone Europe/Berlin}}
+
+== System clock ==
+Typically the system clock time is setup by the hardware clock on boot. Alternatively use can manually set the system clock or use a time server.
+
+With '''date''' you manage your system clock time:
+
+* To check the current software clock time:
+: {{Cmd|date}}
+
+* To set the system clock, e.g. 12:30, Dec. 17, 2012:
+: {{RootCmd|date 231712302012}}
+
+=== Time server ===
+See the [[NTP]] article.
+
+=== systemd ===
+systemd comes with '''timedatectl''' to manage your system clock time:
+
+* To check the current software clock time:
+: {{Cmd|timedatectl}}
+
+* To set the system clock:
+: {{RootCmd|timedatectl set-time "2012-12-17 12:30:59"}}
+
+== Hardware clock ==
+Typically the hardware clock is used to setup the system clock on boot. This can be done by the kernel itself or by a boot service. On shutdown a service can sync the hardware clock with the 
+software clock.
+
+At runtime, to check the current hardware clock time:
+{RootCmd|hwclock --show}}
+
+To set the hardware clock to the current system clock:
+{{RootCmd|hwclock --systohc}}
+
+=== Kernel ===
+The kernel can setup the system clock on boot. You need to activate the following kernel options:
+{{Kernel||<pre>
+Device Drivers  --->
+    [*] Real Time Clock  --->
+        [*]   /sys/class/rtc/rtcN (sysfs)
+        [*]   /proc/driver/rtc (procfs for rtc0)
+        [*]   /dev/rtcN (character devices)
+
+        <*>   PC-style 'CMOS'
+</pre>}}
+
+=== OpenRC ===
+The service ''hwclock'' setup the system clock on boot and sync the hardware clock on shutdown. The service is enabled by default.
+
+By default the service is configured for UTC time standard. To change to localtime edit your {{Path|/etc/conf.d/hwclock}}:
+{{File|/etc/conf.d/hwclock||<pre>
+clock="local"
+</pre>}}
+
+=== systemd ===
+sytemd setup the system clock on boot. Also you can use '''timedatectl''' to manage the hardware clock:
+* To check the current hardware clock time:
+: {{Cmd|timedatectl {{!}} grep "RTC time"}}
+
+* To set the hardware clock to the current system clock (UTC time standard):
+: {{RootCmd|timedatectl set-local-rtc 0}}
+
+* To set the hardware clock to the current system clock (localtime time standard):
+: {{RootCmd|timedatectl set-local-rtc 1}}
+
+[[Category:Core system]]
