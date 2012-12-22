@@ -1,22 +1,31 @@
 {{InfoBox stack
-|{{InfoBox wikipedia|header=true}}
+|{{InfoBox homepage|http://www.syslinux.org|header=true}}
+|{{InfoBox wikipedia|SYSLINUX}}
 |{{InfoBox ohloh}}
 }}
-{{Package|sys-boot/syslinux}} is a package that contains a family of bootloaders, that are a good replacement to other "advanced" [[:Category:Bootloaders|bootloaders]] such as [[GRUB]]. The syslinux package includes:
-* syslinux - FAT filesystem bootloader
-* extlinux - ext2/3/4 and btrfs filesystem bootloader
-* pxelinux - network pxe bootloader
-* isolinux - ISO-9660 (cdrom) bootloader
+'''Syslinux''' is a package that contains a family of bootloaders, that are a good replacement to other "advanced" [[:Category:Bootloaders|bootloaders]] such as [[GRUB]]. The syslinux package includes:
+* SYSLINUX - FAT filesystem bootloader
+* EXTLINUX - [[ext4|ext2/3/4]] and btrfs filesystem bootloader
+* PXELINUX - Network PXE bootloader
+* ISOLINUX - ISO-9660 (CDROM) bootloader
 
 == Installation ==
-{{Emerge|sys-boot/syslinux}}
+Install {{Package|sys-boot/syslinux}}:
+{{USEflag
+|custom-cflags++no
+}}
 
-{{Warning|Assuming /dev/sda1 is the boot partition, if not: make adjustments!}}
+{{Emerge|syslinux}}
+
+== Setup ==
+
+=== MBR setup ===
+{{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
 
 Install MBR:
 {{RootCmd|cat /usr/share/syslinux/mbr.bin > /dev/sda}}
 
-Set boot partition as active:
+Set the boot partition as active:
 {{RootCmd|fdisk /dev/sda|output=<pre>
 Command (m for help): a
 Partition number (1-4): 1
@@ -31,7 +40,7 @@ Command (m for help): w
  ...
 </pre>}}
 
-=== extlinux bootloader installation ===
+=== EXTLINUX setup ===
 {{RootCmd
 |mount /dev/sda1 /boot #If necessary
 |mkdir /boot/extlinux
@@ -40,27 +49,25 @@ Command (m for help): w
 |ln -s . boot
 }}
 
-{{Note|The "boot -> ." symlink is not necessary ''per se'', but for the sake of consistency, it's made so the example configurations are the same for users with /boot on same partition and those with separate partitions.}}
+{{Note|The "boot -> ." symlink is not necessary ''per se'', but for the sake of consistency, it's made so the example configurations are the same for users with {{Path|/boot}} on same partition and those with separate partitions.}}
 
-=== syslinux bootloader installation ===
-{{Note|Most probably you don't need to use FAT filesystem these days, consider ext2 filesystem for your boot partition}}
-
+=== SYSLINUX setup ===
 {{RootCmd
-|mount /dev/sda1 /boot
+|mount /dev/sda1 /boot #If necessary
 |syslinux --install /dev/sda1
 |umount /boot
 }}
 
-=== pxelinux bootloader installation ===
-With pxelinux is possible to netboot using images that are shared through a TFTP server. This manual will assume there is a TFTP server installed, and it's TFTP root directory is in /var/lib/tftpboot. With this setup, copy the pxelinux loader to the TFTP boot dir and create a config dir.
+=== PXELINUX setup ===
+With PXELINUX is possible to netboot using images that are shared through a TFTP server. This article will assume there is a TFTP server installed, and it's TFTP root directory is in {{Path|/var/lib/tftpboot}}. With this setup, copy the PXELINUX loader to the TFTP boot dir and create a config dir.
 
 {{RootCmd|cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/pxelinux.0
 |mkdir /var/lib/tftpboot/pxelinux.cfg}}
 
-The config dir can be used to store different configurations for your netbooted clients. When a client tries to boot, the mac adress or the ip adress is used to determine the appropriate client config file. First it tries to look for the mac adress, followed by a try on the hexadecimal representation of the client ip. Next, a character is stripped from the end of this value, until no more characters are left, or until a config file is found. If none of the tries match, the ''default'' config file is used. 
+The config dir can be used to store different configurations for your netbooted clients. When a client tries to boot, the MAC address or the IP address is used to determine the appropriate client config file. First it tries to look for the MAC address, followed by a try on the hexadecimal representation of the client IP. Next, a character is stripped from the end of this value, until no more characters are left, or until a config file is found. If none of the tries match, the ''default'' config file is used. 
 
-The hexadecimal representation of an ip can be found with the following command:
-{{Cmd|gethostip -x <ip>}}
+The hexadecimal representation of an IP can be found with the following command:
+{{Cmd|gethostip -x YOUR_IP}}
 
 An example config file matching occurs as follows:
 {{Code||<pre>
@@ -75,13 +82,13 @@ C0
 C
 default
 </pre>}}
-{{Note|For easy maintenance, create config files by hostname and symlink to the ip representation. If you want a default netboot, just delete the symlink.}}
+{{Note|For easy maintenance, create config files by hostname and symlink to the IP representation. If you want a default netboot, just delete the symlink.}}
 
 == Configuration ==
 Configuration file varies between bootloaders:
-* syslinux - syslinux.cfg
-* extlinux - extlinux.conf
-* isolinux - isolinux.cfg
+* SYSLINUX: {{Path|syslinux.cfg}}
+* EXTLINUX: {{Path|extlinux.conf}}
+* ISOLINUX: {{Path|isolinux.cfg}}
 
 The configuration format is the same.
 
@@ -92,9 +99,7 @@ This will give you a simple "<tt>boot:</tt>" prompt, similar to the one in Gento
 DEFAULT gentoo
 
 LABEL gentoo
-      KERNEL /boot/kernel-x86_64-3.1.0-gentoo-r1
-      INITRD /boot/initramfs-x86_64-3.1.0-gentoo-r1
-      APPEND real_root=/dev/sda3
+      KERNEL /boot/kernel-3.6.11-gentoo
 </pre>}}
 
 === Menu configuration ===
@@ -102,7 +107,7 @@ The following configuration provides a simple text menu example.
 
 This is done via the vesamenu module, in some cases where vesa is not compatible, the simpler menu module will work.
 
-Copy the VESA menu module into the boot filesystem.
+Copy the VESA menu module into the boot filesystem:
 {{RootCmd|cp /usr/share/syslinux/vesamenu.c32 /boot/extlinux/}}
 
 {{File|/boot/extlinux/extlinux.conf||<pre>
@@ -114,16 +119,11 @@ MENU TITLE Boot
 
 LABEL gentoo
       MENU LABEL Gentoo Linux
-      KERNEL /boot/kernel-x86_64-3.1.0-gentoo-r1
-      INITRD /boot/initramfs-x86_64-3.1.0-gentoo-r1
-      APPEND real_root=/dev/sda3
+      KERNEL /boot/kernel-3.6.11-gentoo
 
 LABEL gentoo-old
       MENU LABEL Gentoo Linux (previous kernel)
-      KERNEL /boot/kernel-x86_64-3.1.0-gentoo
-      INITRD /boot/initramfs-x86_64-3.1.0-gentoo
-      APPEND real_root=/dev/sda3
+      KERNEL /boot/kernel-3.5.7-gentoo
 </pre>}}
 
 [[Category:Bootloaders]]
-[[Category:Software]]
