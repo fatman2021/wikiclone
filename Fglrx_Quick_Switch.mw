@@ -1,0 +1,111 @@
+''Originally authored by [[User:Chewi|Chewi]].''
+
+== Rationale ==
+
+Unlike other distributions, Gentoo can install the [[fglrx]] and open [[Radeon]] drivers alongside each other, thanks to '''eselect opengl''', but obviously you can only use one at a time. To make matters worse, fglrx can't be used while the open kernel modules are loaded, and older devices only support older versions of xorg-server.
+
+I didn't want to be forced to downgrade xorg-server and as I'm usually short on time, if it was too fiddly to switch between the two, I knew I'd never bother doing it in practise. I set out to find an optimal way.
+
+== Research ==
+
+I experimented with disabling the framebuffer under the running kernel, unloading the modules, resetting the adapter's state with vbetool, and also faster reboots with kexec. While all of these worked by themselves, starting X with fglrx always caused a freeze or crash of some kind. Sadly it seems that a proper reboot is still necessary.
+
+== Procedure ==
+
+Here's what I came up with. This assumes that you're already using the open driver.
+
+=== If you have an older device... ===
+
+The legacy driver for HD2000, HD3000 and HD4000 devices is currently in the tree as x11-drivers/ati-drivers-12.6_beta_pre897. This is not really a beta and I think it is only versioned like this to differentiate it from the non-legacy 12.6 driver. It has been patched to work with Linux 3.7. Start by masking any newer versions.
+
+===== /etc/portage/package.mask =====
+ >=x11-drivers/ati-drivers-12.6
+
+If you try to emerge ati-drivers like this, it will downgrade xorg-server to 1.12.4. We can install this version to a separate root instead and then fool the regular system into thinking we also have this version. This assumes that you use xf86-input-evdev for input.
+
+ ROOT="/mnt/fglrx" CPPFLAGS="-I/mnt/fglrx/usr/include/xorg" emerge --nodeps =x11-base/xorg-server-1.12.4 x11-drivers/xf86-input-evdev
+
+===== /etc/portage/profile/package.provided =====
+ x11-base/xorg-server-1.12.4
+
+=== Everyone can continue from here... ===
+
+Now you can emerge ati-drivers.
+
+ emerge ati-drivers
+
+Generate a xorg-server configuration file for fglrx with aticonfig. Set any additional options you require.
+
+ /opt/bin/aticonfig -i /dev/null -o /etc/X11/fglrx.conf --initial
+
+If you're using an old device, you need to manually set the module path in the configuration file that was just generated. Add the following to the start of the file. If you're not using an old device, just skip this step.
+
+===== /etc/X11/fglrx.conf =====
+ Section "Files"
+ 	ModulePath "/mnt/fglrx/usr/lib/xorg/modules"
+ 	ModulePath "/usr/lib/xorg/modules"
+ EndSection
+ 
+ ...
+
+To save ourselves from having to swap configuration files around all the time, we can edit the script that is usually used to start the X server so that it uses the right server and configuration file automatically. It'll also ensure that we're using the correct OpenGL driver, which is important because trying to use fglrx with the wrong OpenGL driver will lock up your machine. Replace all the contents of the existing file below. Change '''/mnt/fglrx/usr/bin/X''' to just '''/usr/bin/X''' if you don't have an older device.
+
+===== /etc/X11/xinit/xserverrc =====
+ #!/bin/sh
+ 
+ if `lsmod | grep -q "^drm\b"`; then
+ 	eselect opengl set xorg-x11
+ 	exec /usr/bin/X -nolisten tcp "$@"
+ else
+ 	eselect opengl set ati
+ 	exec /mnt/fglrx/usr/bin/X -config fglrx.conf -nolisten tcp "$@"
+ fi
+
+This should be enough for startx. lightdm needs the following adjustment. I'm afraid I don't know about other display managers. They may just work.
+
+===== /etc/lightdm/lightdm.conf =====
+ ...
+ 
+ [SeatDefaults]
+ xserver-command=/etc/X11/xinit/xserverrc
+ 
+ ...
+
+If you haven't already done so, you now need to have the '''radeon''' and '''drm''' drivers built as modules rather than built into the kernel. These are the '''CONFIG_DRM_RADEON''' and '''CONFIG_DRM''' options respectively. The framebuffer drivers can remain built in.
+
+Now we need to control which kernel modules are loaded. The good news is that this can be done from the kernel command line. The bad news is that GRUB 2 doesn't support complex configurations out of the box with grub2-mkconfig. The other good news is that we can still easily hack it for our needs. Apply this patch or manually apply the changes.
+
+<pre>--- /etc/config-archive/etc/grub.d/10_linux.dist	2012-12-26 16:17:08.000000000 +0000
++++ /etc/grub.d/10_linux	2012-12-26 12:42:28.501458324 +0000
+@@ -228,7 +228,7 @@
+ 
+   if [ "x$is_first_entry" = xtrue ]; then
+     linux_entry "${OS}" "${version}" simple \
+-    "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
++    "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} modprobe.blacklist=fglrx"
+ 
+     submenu_indentation="\t"
+     
+@@ -240,11 +240,13 @@
+   fi
+ 
+   linux_entry "${OS}" "${version}" advanced \
+-              "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
++              "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} modprobe.blacklist=fglrx"
+   if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+     linux_entry "${OS}" "${version}" recovery \
+-                "single ${GRUB_CMDLINE_LINUX}"
++                "single ${GRUB_CMDLINE_LINUX} modprobe.blacklist=fglrx"
+   fi
++  linux_entry "${OS}" "${version} (fglrx)" advanced \
++              "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} modprobe.blacklist=drm,radeon"
+ 
+   list=`echo $list | tr ' ' '\n' | grep -vx $linux | tr '\n' ' '`
+   is_first_entry=false</pre>
+
+Now run grub2-mkconfig as normal. It will create an additional fglrx entry under the advanced menu alongside the usual entries.
+
+ mount /boot
+ grub2-mkconfig --output /boot/grub2/grub.cfg
+
+Now reboot and enjoy!
