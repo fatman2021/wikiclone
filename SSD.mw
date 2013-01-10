@@ -1,20 +1,29 @@
+{{InfoBox stack
+|{{InfoBox wikify|header=true}}
+}}
 How to set up SSDs on Gentoo Linux.
 This article assumes you know how to set up, partition, and format a mechanical hard drive.
 
-= Considerations =
-==rootfs==
+== Considerations ==
+
+=== rootfs ===
 You don't want to use -odiscard on a rootfs mount. discard is the "TRIM" command that tells the SSD to do its magic. Having this running potentially constantly may cause performance degredation, and there are articles to suggest this all over the web. Rather, you want to use:
-   fstrim -v /
+{{RootCmd|fstrim -v /}}
 on a command line, as root. You can set this up as a cron (see below) to run twice a day, which should suffice for rootfs.
-==mountpoint==
+
+=== mountpoint===
 If you're going to have a low write directory mounted on SSD, using "discard" option will be fine in fstab. See below. If you're going to mount a database to an SSD, you probably want timed TRIM commands rather than the discard option. 
-= After hardware installation =
-==partitioning==
+
+== After hardware installation ==
+
+=== Partitioning ===
 STUB: No parted/gparted (see comments)
-=== LVM(2) ===
+
+==== LVM ====
 STUB:
 enable issue_discards option in /etc/lvm/lvm.conf
-=== fdisk ===
+
+==== fdisk ====
    #assuming /dev/sda is the SSD
    #Per OCZ.
 
@@ -25,17 +34,18 @@ Set up the first partition to start on the second 512-cylinder unit:
    /dev/sda2             130    31457279    15662080   83  Linux
 ''so long as the first start number is 2 the rest will fall in line if you use size parameters rather than sector paramters (e.g start <enter> end <+4GB>)''
 
-== Formatting ==
+=== Formatting ===
 If you can find your erase block size, you can add some extended attributes that may help performance.
 For software raid, you really should know the erase block size. Consider this information when making your purchase.
 Regardless of whether you're using RAID or not, setting extended values is known to be beneficial. https://raid.wiki.kernel.org/index.php/RAID_setup#ext2.2C_ext3.2C_and_ext4
 http://blog.nuclex-games.com/2009/12/aligning-an-ssd-on-linux/
-===without knowing the erase block size===
+
+==== Without knowing the erase block size ====
    #Formatting the rootfs partition /dev/sda2:
    #Using 4096 byte blocks aligns the SSD for writes:
 
    mkfs -t ext4 -b 4096 /dev/sda2
-===with knowing the erase block size===
+==== With knowing the erase block size ====
    #Formatting the rootfs partition /dev/sda2:
    #Using 4096 byte blocks aligns the SSD for writes;
    #Using ERASE_BLOCK_SIZE / 4 as the stride and stripe width size;
@@ -43,7 +53,8 @@ http://blog.nuclex-games.com/2009/12/aligning-an-ssd-on-linux/
    #Erase Block size, therefore stride/stripe-width = 512/4 = 128:
 
    mkfs -t ext4 -b 4096 -E stride=128,stripe-width=128 /dev/sda2
-==Mounting==
+
+=== Mounting ===
 Given the considerations above, either add something similar to this:
    /dev/sda2          /          ext4          defaults,relatime,discard          0 1
 Or this:
@@ -53,13 +64,15 @@ If you choose the latter, see the section on the cronjob needed if you don't wan
 Once you've set up /etc/fstab you can run the following command to have the drive mounted:
    mount -a
 
-= Notes =
-==cron==
+== Notes ==
+
+=== cron ===
 Run fstrim -v / from cron twice a day to automatically do "discard":
 #this is probably the wrong syntax. Feel free to edit it to actually work.
    15 1,13 * * * /sbin/fstrim -v /
-==tmpfs==
-When using an SSD, admins generally want to reduce the amount of writes performed. On gentoo, portage is a huge source of writes, and putting these writes into system memory rather than a disk is beneficial.
+
+=== tmpfs ===
+When using an SSD, admins generally want to reduce the amount of writes performed. On Gentoo, portage is a huge source of writes, and putting these writes into system memory rather than a disk is beneficial.
 If you have more than 8gb of ram you may want to consider using tmpfs, which is a way to dedicate some system memory to storage on a temporary basis.
 It's generally advised to not use more than 1/2 of your available system memory for tmpfs unless you know what you're doing. So let's assume you have 12GB of memory and want to allow up to 6 gigs of tmpfs. Edit /etc/fstab and add:
    tmpfs			/tmp		tmpfs		noatime,nodiratime,size=6G 	0 0
@@ -67,3 +80,5 @@ You can then tell portage to use this as it's compile scratch space in /etc/port
    PORTAGE_TMPDIR="/tmp"
 #this may fail on large compiles unless you have >20GB of system memory. scratch space for libreoffice can exceed 8GB, and the entire compile will fail if it runs out of space.
 #Ram used by TMPFS is freed back to the pool when it is no longer in use, so when using portage or other software that uses /tmp you will notice a huge performance gain.
+
+[[Category:Storage devices]]
