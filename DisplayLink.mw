@@ -2,55 +2,53 @@
 |{{InfoBox wikipedia|Displaylink#Technology|header=true}}
 |{{InfoBox todo|[[#One X-Server|One X-Server]]|header=true}}
 }}
-'''DisplayLink''' is a technology that enables monitors to work via USB.
+'''DisplayLink''' is a technology that enables monitors to work via [[USB]].
 
 == Installation ==
 
 === Kernel ===
-There are two drivers that could be used (as of Linux kernel 3.4) [http://plugable.com/2012/06/21/displaylink-usb-devices-on-linux-kernel-3-4-0/ ]:
-: ''udl'' - is newer and working on 3D acceleration
-: ''udlfb'' - the original driver with working 2D support
-Enable the DisplayLink ''framebuffer device'' in your kernel:
-{{Kernel||<pre>Device Drivers --->
+You need to activate the following kernel options::
+{{Kernel||<pre>
+Device Drivers --->
     Graphics support --->
-        <M> Support for frame buffer devices --->
-            <M> Displaylink USB Framebuffer support</pre>}}
-After booting into the new kernel the external monitor should show a green background image. That means the kernel module is loaded and the device works, it also creates the device in /dev/fb0.
-{{Note|if you have already other framebuffer devices with your AMD driver, it will be /dev/fb1...}}
+        <*> Direct Rendering Manager (XFree86 4.1.0 and higher DRI support)  --->
+            <*>   DisplayLink
+        <*> Support for frame buffer devices --->
+            <*> Displaylink USB Framebuffer support
+</pre>}}
+After booting into the new kernel the external monitor should show a green background image. That means the kernel module is loaded and the device works, it also creates the device in {{Path|/dev/fb0}}.
+{{Note|If you have already other framebuffer devices with your AMD driver, it will be {{Path|/dev/fb1}}, ...}}
 
-To check which driver is loaded (udl or udlfb):
-{{RootCmd|lsmod {{!}} grep udl}}
-
-If you do not want to use the newer one or have problems, prevent it from loading:
-{{RootCmd|echo "blacklist udl" {{!}} sudo tee --append /etc/modprobe.d/udlfb.conf}}
-
-=== X11 Driver ===
-For X11 drivers, you can use {{Package|x11-drivers/xf86-video-fbdev}} or '''x11-drivers/xf86-video-displaylink''' from the x11 overlay (needs [[Layman]] installed).
+=== X driver ===
+For X11 drivers, you can use {{Package|x11-drivers/xf86-video-fbdev}} or '''x11-drivers/xf86-video-displaylink''' from the [[X server#x11 overlay|x11 overlay]].
 * xf86-video-fbdev
-{{VIDEO_CARDS|fbdev}}
-* xf86-video-displaylink
-{{RootCmd|layman -a x11}}
-{{Emerge|x11-drivers/xf86-video-displaylink}}
+: {{VIDEO_CARDS|fbdev}}
 
-== One X-Server ==
+* xf86-video-displaylink
+: {{Emerge|xf86-video-displaylink}}
+
+== One X server ==
 TODO
 
-== Two X-Server ==
-This method is failsafe and should work with any graphics card installed. We start two instances of X-Server for each device and then use a software called ''x2x'' to move the input devices between them.
+== Two X server ==
+This method is failsafe and should work with any graphics card installed. We start two instances of [[X server]] for each device and then use a software called '''x2x''' to move the input devices between them.
 * two independent instances and desktops
 * Input devices follow the mouse pointer
 
 === Software ===
 For this method, we need another input device driver called {{Package|x11-drivers/xf86-input-void}}:
 {{File|/etc/portage/make.conf||<pre>
-INPUT_DEVICES="... void ..."</pre>}}
-{{Note|check if it pulls the X driver with ''emerge -uND @world'', if not install it manually}}
-The program {{Package|x11-misc/x2x}} is available in portage and can be installed via:
-{{RootCmd|emerge -av x11-misc/x2x}}
+INPUT_DEVICES="... void ..."
+</pre>}}
+{{Emerge|params+=--changed-use --deep|@world}}
+
+Also install {{Package|x11-misc/x2x}}:
+{{Emerge|x2x}}
 
 === xorg.conf.DL ===
-We configure two independent /etc/X11/xorg.conf for each device and initialize the desktop using ~/.xinitrc scripts.<br/>
-Create this file in /etc/X11/ and name it xorg.conf.DL:
+We configure two independent [[xorg.conf]]s for each device and initialize the desktop using {{Path|~/.xinitrc}} scripts.
+
+Create the file {{Path|/etc/X11/xorg.conf.DL}}:
 {{File|/etc/X11/xorg.conf.DL||<pre>
 Section "Device"
     Identifier "DisplayLinkDevice"
@@ -94,11 +92,12 @@ EndSection
 Section "InputDevice"
     Identifier "Mouse0"
     Driver "void"
-EndSection</pre>}}
+EndSection
+</pre>}}
 
 === .xinitrc2 ===
-Next we create the ~/.xinitrc2 for our external display. Create and customize the file to your needs, here is an example:
-{{Note|DPMS is turned off, because I once had trouble to wake up the monitor again}}
+Next we create the {{Path|~/.xinitrc2}} for your external display. Create and customize the file to your needs, here is an example:
+{{Note|DPMS is turned off, because I once had trouble to wake up the monitor again.}}
 {{File|~/.xinitrc2||<pre>
 # DPMS stuff
 ## turn on monitor
@@ -124,17 +123,18 @@ xcompmgr -c -t-5 -l-5 -r4.2 -o.55 &
 wicd-client &
 mrxvt &
 # start the actual window manager
-exec /usr/bin/awesome</pre>}}
+exec /usr/bin/awesome
+</pre>}}
 
 === displaylink.sh ===
-This is the actual script that starts the second instance of xorg-server. Make it executeable and save it somewhere in your home folder, in this example we save it to ~/.displaylink.sh
+This is the actual script that starts the second instance of X server. Make it executable and save it somewhere in your home folder, in this example we save it to {{Path|~/.displaylink.sh}}:
 {{File|~/.displaylink.sh||<pre>
 #!/bin/sh
 xinit ~/.xinitrc2 -- /usr/bin/X :1 -xf86config xorg.conf.DL -novtswitch -sharevts -audit 0 vt12 &
 sleep 5
 x2x -west -from :0 -to :1 &
 </pre>}}
-{{Note|If you add this script to your actual ~/.xinitrc (which is executed on every start of X) or add it to GNOME/KDE etc. autostart, it will automatically initialize the second desktop for you. If the second screen is not attached, it just fails to do so.}}
+{{Note|If you call this script to your actual {{Path|~/.xinitrc}} (which is executed on every start of X) or add it to [[GNOME]], [[KDE]], etc. autostart, it will automatically initialize the second desktop for you. If the second screen is not attached, it just fails to do so.}}
 
 == External resources ==
 * [http://libdlo.freedesktop.org/wiki/ libdlo freedesktop.org]
