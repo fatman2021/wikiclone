@@ -7,41 +7,36 @@ This is an initial introduction to installing gentoo on the Asus Transformer Pri
 The basic steps are as follows:
 
 ===== CREATE A CHROOT =====
-(You can also do a cross-compile installation on some other box.)
-Follow the standard gentoo installation guide.
-You should use the [http://distfiles.gentoo.org/releases/arm/autobuilds/current-stage3-armv7a_hardfp/ armv7a-hardfp] stage3.  Special steps:
-# Download the [https://github.com/tux-mind/tf201-dev/blob/master/root_patch.tar.gz root_patch.tar.gz] into /tmp of your chroot
-# Change directory to / ( always of your chroot )
-# Extract the root_patch as follow: tar -xzf /tmp/root_patch.tar.gz
-# Remove the archive from /tmp
-# NB: I found that mount /dev/pts /data/gentoo/dev/pts allows tmux to work.  (Run this outside chroot before you chroot, with the other mount --rbind commands)
-# NB: I also found that added -userfetch to /etc/make.conf FEATURES fixes an emerge error about being unable to fetch packages.
+The first step is to install gentoo on the TFP inside a chroot environment.  You can follow the standard Gentoo Installation Guide here, with the following exceptions.  You can also do a cross-compile installation on some other box, and simply rsync the files to your TFP.  In what follows we assume you will be placing your gentoo installation in the TFP directory /sdcard/gentoo.  I found it easiest to install gentoo on the microSD card (mmcblk1p1) and mount that card in /sdcard/gentoo.  
+
+# You should use the [http://distfiles.gentoo.org/releases/arm/autobuilds/current-stage3-armv7a_hardfp/ armv7a-hardfp] stage3.
+# Download and extract [https://github.com/tux-mind/tf201-dev/blob/master/root_patch.tar.gz root_patch.tar.gz] inside your chroot.  This will install some configuration files and the kernel modules and the (binary) firmware.
+# NB: I found that mounting /dev/pts to /data/gentoo/dev/pts before you chroot allows tmux to work.  
+# NB: I also found that adding -userfetch to /etc/make.conf FEATURES fixes an emerge error about being unable to fetch packages.
 # NB: You will also need to establish /etc/resolv.conf by hand, by adding "nameserver x.x.x.x" to it inside the chroot.  You can get the nameserver in Android by running getprop.
+# NB: You must install wpa_supplicant, dhcpcd, and sshd and add them to the default run-level.
+# NB: It would be easiest to disable qt4 USE flag with respect to wpa_supplicant (for now).
+# NB: If you get a "sandbox violation" error while emerging, you have to emerge the single package that cause you this as follows:
+  FEATURES="-sandbox" emerge -1 packagename
 
 ===== FLASHING THE BOOT IMAGE =====
-Download [https://github.com/tux-mind/tf201-dev/blob/master/test/test.blob test.blob] boot image onto your computer (not the TFP).
-I assume that you downloaded it into your /tmp folder.  You will flash this blob using the 'fastboot' utility.
-In order to put the TFP into fastboot mode:
-# Connect the TFP to the computer via the usb cable.
-# install the ClockwordModRecovery utility on the tablet.
-# reboot the tablet.
-# hold down power+volumedown upon reboot.
-# select the 'usb icon' pressing the voldown key.
-# press the volup key to select it.
-Now, on your computer, run:
-fastboot -i 0x0b05 flash boot /tmp/test.blob.  (NB: flashboot devices will claim there is no device.  But it is there.  Proof that it worked: a blue bar will show up on the tablet.)  Once this is finished, you should be able to reboot the TFP and it'll boot up Android (not Linux). Don't worry it's right.  We need to configure the bootchooser in order to get it to boot into Linux.
+Download [https://github.com/tux-mind/tf201-dev/blob/master/test/test.blob test.blob] onto your computer (not the TFP), and flash it onto the TFP using the 'fastboot' utility.  In order to do this, do the following:
 
-===== CONFIGURE BOOT_CHOOSER OPTIONS =====
-First of all i have to explain you how our new bootchooser program works!
+# Put the TFP in 'fastboot' mode: connect it to the computer via a usb cable, install ClockworkModRecovery app on the TFP, reboot the TFP and hold down VOLUMEDOWN upon reboot; once in fastboot mode, select the USB ICON (VOLUMEDOWN to move, VOLUMEUP to select).
+# Flash the blob to your TFP: fastboot -i 0x0b05 flash boot test.blob.
+# NB: 'flashboot devices' will claim there is no device.  But it is there.  
+# NB: Proof that it all worked: a blue bar will show up on the tablet once you run the 'fastboot flash' command.  
 
-  The first program that the kernel execute it's the /init program
-  In the boot image (test.blob) that you flashed a minute ago, there is a program called [https://github.com/tux-mind/tf201-dev/tree/master/boot_chooser boot_chooser2].
-  It will mount the 8th partition of your eMMC and read the first line of the root-level file ".boot".
-  The first line of the file will be parsed as "device:directory:init" where:
-    'device' is the block device where you put your gentoo system. [ e.g. /dev/mmcblk0p8 or /dev/sda1]
+Once you have finished flashing the blob, you should be able to reboot the TFP and it will boot into Android (not Linux).  In order to have it boot into Linux, head to the next section.
+
+===== CONFIGURE BOOT_CHOOSER2 =====
+
+The blob we provided (the source of which will be linked below) executes a program called init which in turn calls a program called [https://github.com/tux-mind/tf201-dev/tree/master/boot_chooser boot_chooser2].  Boot_chooser2 will mount the 8th partition of your eMMC, and read the first line of the root-level file '.blob'.  The first line of the file will be parsed as "device:directory:init" where:
+    'device' is the block device where you put your gentoo system. [ e.g. /dev/mmcblk0p8 or /dev/sda1 ]
     'directory' is the directory inside the previous device where your gentoo lives. [ e.g. gentoo ]
     'init' is the init script location in your gentoo root, usually /sbin/init.
-  If anything goes wrong the bootchooser program will boot into Android. ( TODO: check for init existence before chrooting )
+If anything goes wrong the boot_chooser2 program will just boot into Android. 
+# TODO: check for init existence before chrooting 
 
 So, if you have your chroot under /data/gentoo your /data/.boot file will look like:
   /dev/mmcblk0p8:/gentoo:/sbin/init
@@ -49,25 +44,6 @@ If you bootup from a USB stick:
   /dev/sda1:/:/sbin/init
 If you bootup from microSD:
   /dev/mmcblk1p1:/:/sbin/init
-
-===== CONFIGURE NETWORK, SSHD AND X =====
-One big problem that we are going to solve is that if you boot without xdm in default runlevel you keep seeing the asus logo,
-even if gentoo is running...<br />
-So, my suggestion is to have a sshd daemon in order to access our gentoo-box even if we cannot see it.<br />
-You need to install wpa-supplicant and sshd in your chroot (of course).<br />
-If you get a "sandbox violation" while emerging you have to emerge the single package that cause you this as follows:
-  # FEATURES="-sandbox" emerge -1 that_package
-For the installation and the configuration of these two daemons follow this guide: [[Wpa supplicant|wpa_supplicant]] [[SSH|sshd]]
-<br />
-Let me advise you that you may want to disable the qt4 flag of wpa_supplicant package.<br />
-Add wpa_supplicant, dhcpcd ( if you need it ) and sshd to default runlevel.
-
-Reboot your TFP in order to boot up gentoo.<br />
-Access via ssh.<br />
-Choose your preferred DE and start to emerge all its stuff.<br />
-Setting up /etc/conf.c/xdm according to your DE.<br />
-Add xdm to the default runlevel.<br />
-Keep your fingers crossed and /etc/init.d/xdm start
 
 ==== KNOWN BUGS ====
 
