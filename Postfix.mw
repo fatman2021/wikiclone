@@ -1,41 +1,46 @@
-Over the years, Postfix has become the new de facto standard amongst ''Mail Transfer Agents'' (MTA). It has beaten qmail which in turn had taken down sendmail from the throne. This document describes how to setup and test a basic Postfix server.
+Over the years, Postfix has become the new de facto standard amongst ''Mail Transfer Agents'' (MTA). It has beaten [[netqmail|qmail]] which in turn had taken down sendmail from the throne. This document describes how to setup and test a basic Postfix server.
 
 == Pre-installation ==
 As only one MTA can be installed at the same time on a system, you might be required to unmerge all other installed MTAs like {{Package|mail-mta/ssmtp}}, {{Package|mail-mta/exim}}, {{Package|mail-mta/sendmail}}, or any of the <tt>qmail</tt> packages.
 The package manager will report a block when another MTA is still installed. You can resolve this block by manually unmerging the old mail server. For example you can remove <tt>ssmtp</tt> (which might have been installed as the default when a program requested a mail server to be installed) with this command:
-{{RootCmd|emerge -C ssmtp}}
+{{Emerge|params+=-C|ssmtp}}
 
 == Installation ==
-Postfix has several USE flags that may be desired for certain bigger setups. As this article aims at installing and configuring a ''basic'' Postfix setup, none of them will be required initially.
-
+{{Package|mail-mta/postfix}} has several USE flags that may be desired for certain bigger setups. As this article aims at installing and configuring a ''basic'' Postfix setup, none of them will be required initially.
 {{USEflag|package=mail-mta/postfix
-|hardened++yes
-|ipv6++yes
-|ldap
-|ldap-bind
-|pam
-|postgres++yes
-|sasl++yes
-|sqlite
-|ssl++yes
-|vda++yes
+|berkdb+yes
 |cdb
 |doc
 |dovecot-sasl
+|hardened++yes
+|ldap+yes
+|ldap-bind
 |mbox
+|memcached
 |mysql
 |nis
+|pam
+|postgres++yes
+|sasl++yes
+|selinux
+|sqlite
+|ssl+yes
+|vda++yes
 }}
 
-{{Emerge|mail-mta/postfix}}
+{{Emerge|postfix}}
 
 == Configuration ==
+
 === Fully Qualified Domain Name (FQDN) ===
 Though not entirely related, for a MTA to function properly, it is imperative that its hostname is set up correctly. Under Gentoo '''/etc/conf.d/hostname''' and '''/etc/conf.d/net''' are the files responsible for this. In this example, the mail server is named <tt>foo</tt> on the domain <tt>example.com</tt>.
 
-{{File|/etc/conf.d/net|Setup domain name|<pre>dns_domain_lo="example.com"</pre>}}
-{{File|/etc/conf.d/hostname|Setup hostname|<pre>HOSTNAME="foo"</pre>}}
-
+{{File|/etc/conf.d/net|Setup domain name|<pre>
+dns_domain_lo="example.com"
+</pre>}}
+{{File|/etc/conf.d/hostname|Setup hostname|<pre>
+HOSTNAME="foo"
+</pre>}}
 {{Note|Do not use <tt>mail.example.com</tt> just because it may be externally known as such. Use the actual name of the system.}}
 
 Verifying that the FQDN is setup properly for the domain.
@@ -72,6 +77,7 @@ recipient_delimiter = +
 The way this works is, when trying to deliver a message to <tt>testuser+spam@example.com</tt>, Postfix will try to deliver the message to <tt>testuser+spam</tt> first, if no such user is found, it will be delivered to <tt>testuser</tt>, the part of the email address before the delimiter. This feature can be quite useful for sites that require email address registration. Signing up with <tt>testuser+somesite@example.com</tt> allows to easily filter and trace where a message originated from. If for example some unsolicited mail was delivered to that address, it likely comes from ''somesite''. Even better filtering of unsolicited email can be achieved by using Spamassassin or AMaViS.
 
 === Miscellaneous configuration ===
+
 ==== maildir ====
 When Postfix completes merging and the <tt>mailbox</tt> USE flag is set, a <tt>home_mailbox</tt>  directive is added at the bottom of the file. To make future updates easier, it's a good idea to move the <tt>home_mailbox = .maildir/</tt> to its appropriate location in the file.
 
@@ -79,7 +85,9 @@ For testing purposes, the following two features can be temporarily enabled:
 
 ==== Soft bounce ====
 Soft bounce decreases the chances of endless bounce loops caused by an invalid email setup. To enable soft bouncing, add this to your <tt>main.cf</tt>:
-{{File|/etc/postfix/main.cf|Soft Bounce|<pre>soft_bounce = yes</pre>}}
+{{File|/etc/postfix/main.cf|Soft Bounce|<pre>
+soft_bounce = yes
+</pre>}}
 
 ==== Verbose SMTP ====
 Before testing the basic mail server setup, the verbose flag of the smtp server should be enabled by adding a <tt>-v</tt> to the smtp daemon invocation in <tt>master.cf</tt>:
