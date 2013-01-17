@@ -1,6 +1,6 @@
 '''Installing Gentoo on the Asus Transformer Prime (TF201)'''
 
-This is an initial introduction to installing gentoo on the Asus Transformer Prime (TF201).  At the moment, I can get it to boot and launch X, but there are quite a few problems.  Hopefully, this site will invite others to share their own experiences, and maybe even generate some solutions to these problems.
+This is an initial introduction to installing gentoo on the Asus Transformer Prime (TF201).  At the moment, we can get it to boot and launch X, but there are quite a few problems.  Hopefully, this site will invite others to share their own experiences, and maybe even generate some solutions to these problems.
 
 ==== INSTRUCTIONS ====
 
@@ -14,74 +14,60 @@ You should use the [http://distfiles.gentoo.org/releases/arm/autobuilds/current-
 # Change directory to / ( always of your chroot )
 # Extract the root_patch as follow: tar -xzf /tmp/root_patch.tar.gz
 # Remove the archive from /tmp
+# NB: I found that mount /dev/pts /data/gentoo/dev/pts allows tmux to work.  (Run this outside chroot before you chroot, with the other mount --rbind commands)
+# NB: I also found that added -userfetch to /etc/make.conf FEATURES fixes an emerge error about being unable to fetch packages.
+# NB: You will also need to establish /etc/resolv.conf by hand, by adding "nameserver x.x.x.x" to it inside the chroot.  You can get the nameserver in Android by running getprop.
 
 ===== FLASHING THE BOOT IMAGE =====
-Download [https://github.com/tux-mind/tf201-dev/blob/master/test/test.blob test.blob] boot image.
-I asume that you downloaded it into your /tmp folder.
-For put the TFP into fastboot mode:
+Download [https://github.com/tux-mind/tf201-dev/blob/master/test/test.blob test.blob] boot image onto your computer (not the TFP).
+I assume that you downloaded it into your /tmp folder.  You will flash this blob using the 'fastboot' utility.
+In order to put the TFP into fastboot mode:
 # Connect the TFP to the computer via the usb cable.
 # install the ClockwordModRecovery utility on the tablet.
 # reboot the tablet.
-# hold down power+volumedown.
+# hold down power+volumedown upon reboot.
 # select the 'usb icon' pressing the voldown key.
-# press the volup key.
+# press the volup key to select it.
 Now, on your computer, run:
-fastboot -i 0x0b05 flash boot /tmp/test.blob.  (NB: flashboot devices will claim there is no device.  But it is there.  Proof that it worked: a blue bar will show up on the tablet.)  Once this is finished, you should be able to reboot the TFP and  it'll boot up android. don't worry it's right!
+fastboot -i 0x0b05 flash boot /tmp/test.blob.  (NB: flashboot devices will claim there is no device.  But it is there.  Proof that it worked: a blue bar will show up on the tablet.)  Once this is finished, you should be able to reboot the TFP and it'll boot up Android (not Linux). Don't worry it's right.  We need to configure the bootchooser in order to get it to boot into Linux.
 
 ===== CONFIGURE BOOT_CHOOSER OPTIONS =====
-first of all i have to explain you how your new super-init works! :)
+First of all i have to explain you how our new bootchooser program works!
 
-  the first program that the kernel execute it's the /init program
-  in the boot image that you flashed a minute ago this program is the [https://github.com/tux-mind/tf201-dev/tree/master/boot_chooser boot_chooser2] program.
-  it mount the 8th partition of your eMMC and read the first line of the root-level file ".boot".
-  the input will be parsed as "device:directory:init" where:
-    device is the block device where you put your gentoo system. [ e.g. /dev/mmcblk0p8 or /dev/sda1 ]
-    directory is the directory inside the previous device where your gentoo lives. [ e.g. gentoo ]
-    init is the init script location in your gentoo root, usually /sbin/init.
-  if anything goes wrong the boot_chooser program will boot up android. ( TODO: check for init existence before chrooting )
+  The first program that the kernel execute it's the /init program
+  In the boot image (test.blob) that you flashed a minute ago, there is a program called [https://github.com/tux-mind/tf201-dev/tree/master/boot_chooser boot_chooser2].
+  It will mount the 8th partition of your eMMC and read the first line of the root-level file ".boot".
+  The first line of the file will be parsed as "device:directory:init" where:
+    'device' is the block device where you put your gentoo system. [ e.g. /dev/mmcblk0p8 or /dev/sda1]
+    'directory' is the directory inside the previous device where your gentoo lives. [ e.g. gentoo ]
+    'init' is the init script location in your gentoo root, usually /sbin/init.
+  If anything goes wrong the bootchooser program will boot into Android. ( TODO: check for init existence before chrooting )
 
-so, if you have your chroot under /data/gentoo while android is running your /data/.boot file will look like:
+So, if you have your chroot under /data/gentoo your /data/.boot file will look like:
   /dev/mmcblk0p8:/gentoo:/sbin/init
-if you bootup from a USB stick:
+If you bootup from a USB stick:
   /dev/sda1:/:/sbin/init
-if you bootup from microSD:
+If you bootup from microSD:
   /dev/mmcblk1p1:/:/sbin/init
 
-clear? ;)
-
 ===== CONFIGURE NETWORK, SSHD AND X =====
-one big problem that we are going to solve is that if you boot without xdm in default runlevel you keep seeing the asus logo,
-even if gentoo it's running...<br />
-so, my suggestion it's to have a sshd daemon in order to use it for access to our gentoo-box even if we cannot see it.<br />
-you need to install wpa-supplicant and sshd into you chroot from android though a terminal emulator.<br />
-if you get a "sandbox violation" while emerging you have to emerge the single package that cause you this as follows:
+One big problem that we are going to solve is that if you boot without xdm in default runlevel you keep seeing the asus logo,
+even if gentoo is running...<br />
+So, my suggestion is to have a sshd daemon in order to access our gentoo-box even if we cannot see it.<br />
+You need to install wpa-supplicant and sshd in your chroot (of course).<br />
+If you get a "sandbox violation" while emerging you have to emerge the single package that cause you this as follows:
   # FEATURES="-sandbox" emerge -1 that_package
-for the installation and the configuration of this 2 daemons follow this guides: [[Wpa supplicant|wpa_supplicant]] [[SSH|sshd]]
+For the installation and the configuration of these two daemons follow this guide: [[Wpa supplicant|wpa_supplicant]] [[SSH|sshd]]
 <br />
-let me advise you that you may want to disable the qt4 flag of wpa_supplicant package.<br />
-add wpa_supplicant, dhcpcd ( if you need it ) and sshd to default runlevel.
+Let me advise you that you may want to disable the qt4 flag of wpa_supplicant package.<br />
+Add wpa_supplicant, dhcpcd ( if you need it ) and sshd to default runlevel.
 
-reboot your TFP in order to boot up gentoo.<br />
-access via ssh.<br />
-choose your preferred DE and start to emerge all it's stuff.<br />
-setting up /etc/conf.c/xdm according to your DE.<br />
-add xdm to the default runlevel.<br />
-keep your fingers crossed and /etc/init.d/xdm start
-
-==== GETTING X TO WORK (OPTION 1) ====
-
-If you use the prime-sdlinux.blob, then you will have a 2.6.x kernel.  Hence, you can't use the new tegra drivers (v. 15beta) but will have to use the old ones (v. 12).  These are the drivers you copied from the ubuntu image above.  You can also download them from nvidia's L4T website.  However, you will also need to patch evdev to work with the atmel-maxtouch.  But this will require that you patch inputproto and glib.  To cut things short, follow the instructions here:
-{{Bug|415089}}
-
-==== PROBLEMS WITH X (OPTION 1) ====
-
-* The cursor doesn't redraw
-
-* xinput (to readjust the mouse coordinates after an xrandr), while claiming to update, but won't.  Hence, rotation is pretty broken. 
-
-==== GETTING X TO WORK (OPTION 2 [UNDER DEVELOPMENT]) ====
-
-Hence, the better solution is to use the new xorg-server which requires the new tegra drivers (v. 15beta).  This requires a 3.x kernel.  I am still in the progress of getting the 3.x kernel to work.  Check back in in a few weeks.
+Reboot your TFP in order to boot up gentoo.<br />
+Access via ssh.<br />
+Choose your preferred DE and start to emerge all its stuff.<br />
+Setting up /etc/conf.c/xdm according to your DE.<br />
+Add xdm to the default runlevel.<br />
+Keep your fingers crossed and /etc/init.d/xdm start
 
 ==== KNOWN BUGS ====
 
