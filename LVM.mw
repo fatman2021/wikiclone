@@ -11,34 +11,39 @@ You need to activate the following kernel options:
 Device Drivers  --->
    Multiple devices driver support (RAID and LVM)  --->
        <*> Device mapper support
-           <M> Crypt target support
-           <M> Snapshot target
-           <M> Mirror target
-       <M> Multipath target
-           <M> I/O Path Selector based on the number of in-flight I/Os
-           <M> I/O Path Selector based on the service time</pre>}}
+           <*> Crypt target support
+           <*> Snapshot target
+           <*> Mirror target
+       <*> Multipath target
+           <*> I/O Path Selector based on the number of in-flight I/Os
+           <*> I/O Path Selector based on the service time
+</pre>}}
 {{Note|You probably don't need everything enabled, but some of the options are needed for [[#LVM2_Snapshots]], [[#LVM2_MIRROR]], [[#LVM2_Stripeset]] and encryption.}}
 
 === Software ===
 Install {{Package|sys-fs/lvm2}}:
-{{USEflag
-|package=sys-fs/lvm2
+{{USEflag|package=sys-fs/lvm2
 |clvm
 |cman
 |lvm1+yes
-|readline
-|selinux
-|static+yes
-|static-libs+yes
+|readline+yes
+|selinux++no
+|static
+|static-libs
+|thin+yes
+|udev+yes
 }}
 
 {{Emerge|lvm2}}
 
-The package comes with a start-stop-daemon, which we start and add to the boot runlevel:
-{{RootCmd|/etc/init.d/lvm start|
-rc-update add lvm boot}}
+== Configuration ==
+The configuration file is {{Path|/etc/lvm/lvm.conf}}
 
-The configuration files are located in {{Path|/etc/lvm/lvm.conf}}.
+=== Boot service ===
+You can now start LVM:
+{{RootCmd|/etc/init.d/lvm start}}
+To start LVM at boot time, add it your boot runlevel:
+{{RootCmd|rc-update add lvm boot}}
 
 == Usage ==
 LVM organizes storage in three different levels as follows:
@@ -185,7 +190,7 @@ Now we have the capacity of 2GB from each hard drive available in /mnt/data as o
 {{Note|The same applies to RAID systems, if you want to create one VG use /dev/md[X-Y] instead}}
 
 === /etc/fstab ===
-Here is an example of an [[fstab]] entry (using ext4):
+Here is an example of an entry in [[fstab]] (using ext4):
 {{File|/etc/fstab||<pre>
 /dev/vg0/lvol1  /mnt/data  ext4  noatime  0 2
 </pre>}}
@@ -218,7 +223,8 @@ Now we create a snapshot of ''lvol1'' named ''08092011_lvol1'' and give it 10% o
 Mount our snapshot somewhere else:
 {{RootCmd|mkdir /mnt/08092011_data
 |mount /dev/vg0/08092011_lvol1 /mnt/08092011_data}}
-We could now access data in ''lvol1'' from a previous state.<br/>
+We could now access data in ''lvol1'' from a previous state.
+
 LVM2 snapshots are writeable LV, we could use them to let a project go on into two different directions:
 {{RootCmd|lvcreate -l 10%VG -s -n project1_lvol1 /dev/vg0/lvol1
 |lvcreate -l 10%VG -s -n project2_lvol1 /dev/vg0/lvol1
