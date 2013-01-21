@@ -1,6 +1,6 @@
 '''Installing Gentoo on the Asus Transformer Prime (TF201)'''
 
-This is an initial introduction to installing gentoo on the Asus Transformer Prime (TF201).  At the moment, we can get it to boot and launch X, but there are quite a few problems.  Hopefully, this site will invite others to share their own experiences, and maybe even generate some solutions to these problems.
+This is an introduction to installing gentoo on the Asus Transformer Prime (TF201).  At the moment, we can get it to boot and launch X, but there are quite a few problems.  Hopefully, this site will invite others to share their own experiences, and maybe even generate some solutions to these problems.
 
 ==== INSTRUCTIONS ====
 
@@ -8,71 +8,77 @@ The basic steps are as follows:
 
 ===== PRELIMINARIES =====
 
-This guide assumes that you have installed the Jelly Bean update from ASUS.  
+This guide assumes that you have installed the Jelly Bean update from ASUS.    
 
 ===== CREATE A CHROOT =====
-(Alternatively, you can do a cross-compile installation on some other box and use rsync to copy the resultant files over to the TFP.  You will still need to extract our root_patch.tar.gz.)
 
-The first step is to install gentoo on the TFP inside a chroot environment.  You can follow the standard Gentoo Installation Guide here, with the following exceptions.  In what follows we assume you will be placing your gentoo installation in the TFP directory /sdcard/gentoo.  I found it easiest to install gentoo on the microSD card (mmcblk1p1) and mount that card in /sdcard/gentoo.  
+The first thing you'll want to do is generate a gentoo "rootFS".  You can either do this by setting up using [http://www.gentoo.org/proj/en/base/embedded/handbook/ cross-compiler] on another computer or on the TFP within
+a chroot environment.  This guide assumes that you are doing the latter.  It further assumes that you will be installing the rootFS on the microSD card (mmcblk1p1) which you have mounted on the TFP in the directory /sdcard/gentoo.
 
 # You should use the [http://distfiles.gentoo.org/releases/arm/autobuilds/current-stage3-armv7a_hardfp/ armv7a-hardfp] stage3.
 # Download and extract [https://github.com/tux-mind/tf201-dev/blob/master/root_patch.tar.gz root_patch.tar.gz] inside your chroot.  This will install some configuration files and the kernel modules and the (binary) firmware.
   If you don't trust us, then run:
   # emerge linux-firmware (or just mkdir /lib/firmware)
   # mkdir /system && ln -s /lib /system/vendor && ln -s /lib/firmware /system/etc
-  # (outside chroot) cp -R /system/vendor/firmware/* /system/etc/*.txt /sdcard/gentoo/lib/firmware
+  # (outside chroot) cp -R /system/vendor/firmware/* /system/etc/*.txt /sdcard/gentoo/lib/firmware (TODO: Not all of these files are necessary.  We should weed out the ones that aren't.  AFAIK, just the bcm4329 firmware is required.  See make menuconfig for more information.)
   # Also add to /etc/conf.d/modules:
   modules="bcm4329"
   module_bcm4329_args="iface_name=wlan0"
   # Compile your own kernel (see below) to populate /lib/modules.
 # NB: I found that mounting /dev/pts to /sdcard/gentoo/dev/pts before you chroot allows tmux to work.  
-# NB: I also found that adding -userfetch to make.conf FEATURES fixes an emerge error about being unable to fetch packages, or ( thanks to [https://github.com/keesj/gomo/wiki/AndroidSecurityUserAndGroups AndroidSecurityUserAndGroups] ) groupadd -g 3003 aid_inet && usermod -aG aid_inet portage
-# NB: You will also need to establish /etc/resolv.conf by hand, by adding "nameserver x.x.x.x" to it inside the chroot.  You can get the nameserver in Android by running getprop.
+# NB: You can either add -userfetch to make.conf FEATURES (to fix an emerge error about the user being unable to fetch packages) or add the portage user to the 3003 group.  See [https://github.com/keesj/gomo/wiki/AndroidSecurityUserAndGroups AndroidSecurityUserAndGroups].  See also CONFIG_ANDROID_PARANOID_NETWORK=y.
+# NB: You will also need to establish /etc/resolv.conf by hand, by adding "nameserver x.x.x.x" to it inside the chroot.  You can get the  in Android by running getprop.
 # NB: You must install wpa_supplicant, dhcpcd, and sshd and add them to the default run-level.
 # NB: It would be easiest to disable qt4 USE flag with respect to wpa_supplicant (for now).
-# NB: If you get a "sandbox violation" error while emerging, you have to emerge the single package that cause you this as follows:
+# NB: If you get a "sandbox violation" error while emerging, you have to emerge the single package that cause you this as follows (ideally, these should be reported as bug reports to bugs.gentoo.org):
   FEATURES="-sandbox" emerge -1 packagename
 
-===== FLASHING THE BOOT IMAGE =====
-Download [https://github.com/tux-mind/tf201-dev/blob/master/test/test.blob test.blob] or [https://github.com/tux-mind/tf201-dev/blob/master/test/test.LNX test.LNX] onto your computer (not the TFP), and flash it onto the TFP either using the 'fastboot' utility or using 'nvflash'. For instructions on how to re-generate a test.blob, see below. 
-Once you have finished flashing the blob, you should be able to reboot the TFP and it will boot into Android (not Linux).  In order to have it boot into Linux, head to the next section.
+===== INSTALLING THE KERNEL =====
+
+There are at present two ways to install the kernel on the TFP: nvflash or fastboot.  Once you have installed the kernel on the TFP and reboot, your machine should boot into Android (not Linux).  In order to have it boot into Linux, you need to configure the bootchooser.  See the next section.  Instructions on how to regenerate a kernel, blob, and LNX file are given further below.
 
 ====== FASTBOOT METHOD ======
 
 In order to do fastboot, do the following:
 # WARNING: AS USUAL, FASTBOOT AND THE TFP ARE CRANKY AND SO WHAT FOLLOWS MIGHT "BRICK" YOUR DEVICE.  PLEASE RESEARCH THE FASTBOOT UTILITY BEFOREHAND.
-# Add 28 bytes to the front of the test.blob by doing the following: dd if=/dev/zero bs=28 count=1 of=newtest.blob && dd if=test.blob of=newtest.blob oflag=append conv=notrunc
+# Download the blob file to your computer: [https://github.com/tux-mind/tf201-dev/blob/master/test/test.blob test.blob]
+# Add 28 bytes to the front of the blob file:
+  dd if=/dev/zero bs=28 count=1 of=newtest.blob && dd if=test.blob of=newtest.blob oflag=append conv=notrunc
 # Put the TFP in 'fastboot' mode: connect it to the computer via a usb cable, install ClockworkModRecovery app on the TFP, reboot the TFP and hold down VOLUMEDOWN upon reboot until some text shows up about going into recovery.  Release VOLUMEDOWN and wait, then select the USB ICON (VOLUMEDOWN to move, VOLUMEUP to select).  This is all standard, and documented elsewhere.
-# Flash the blob to your TFP: fastboot -i 0x0b05 flash boot newtest.blob.
+# Flash the blob to your TFP: 
+  fastboot -i 0x0b05 flash boot newtest.blob.
 # NB: 'flashboot devices' will claim there is no device.  But it is there.
 
 ====== NVFLASH METHOD ======
 
-IN order to do the nvflash method, do the following:
+In order to do the nvflash method, do the following:
 # WARNING: AS USUAL, NVFLASH AND THE TFP ARE CRANKY.  IT MIGHT "BRICK" YOUR DEVICE.  PLEASE RESEARCH WHEELIE AND NVFLASH BEFOREHAND.
 # WARNING (2): wheelie is a binary with no open source (yet), and as with any binary you should be worried.
-# Reboot into Wheelie mode (REBOOT + VOLUMEUP = blank screen, but dmesg will state the device is there)
-# wheelie --blob mysecret.blob
-# nvflash -r --download 6 test.LNX
+# Download the LNX file: [https://github.com/tux-mind/tf201-dev/blob/master/test/test.LNX test.LNX]
+# Put the TFP in nvflash APX mode (reboot + VOLUMEUMP; this will yield a blank screen, but check dmesg to see that it is in APX mode).
+# Run wheelie:
+  wheelie --blob mysecret.blob (mysecret.blob is the blob you created when you installed wheelie).
+# Flash the LNX file to your TFP:
+  nvflash -r --download 6 test.LNX
+# Reboot the TFP:
+  nvflash -r --go (this sometimes won't reboot the machine)
 
 ===== CONFIGURE BOOT_CHOOSER2 =====
 
-The blob we provided (the source of which will be linked below) includes a modifies initrd.img, which has instead of init a program called
-[https://github.com/tux-mind/tf201-dev/tree/master/boot_chooser boot_chooser2], renamed 'init'.  Boot_chooser2 will mount the 8th partition of your eMMC, and read the first line of the root-level file '.blob'.  The first line of the file will be parsed as "device:directory:init" where:
-    'device' is the block device where you put your gentoo system. [ e.g. /dev/mmcblk0p8 or /dev/sda1 ]
-    'directory' is the directory inside the previous device where your gentoo lives. [ e.g. gentoo ]
+The blob and LNX files we provide in git include a modified initrd.  What we did is overwrite 'init' with [https://github.com/tux-mind/tf201-dev/tree/master/boot_chooser bootchooser].  Bootchooser will mount the 8th partition of your eMMC, read the first line of the root-level file '.blob', which will be parsed as "device:directory:init" where:
+    'device' is the block device where you put your gentoo system, e.g. /dev/mmcblk0p8, /dev/mmcblk1p1, or /dev/sda1.
+    'directory' is the directory inside the previous device where your gentoo lives, e.g. /gentoo or /.
     'init' is the init script location in your gentoo root, usually /sbin/init.
-If anything goes wrong the boot_chooser2 program will just boot into Android. 
-# TODO: check for init existence before chrooting 
+If anything goes wrong, bootchooser will boot into Android.
 
-So, if you have your chroot under /data/gentoo your /data/.boot file will look like:
-  /dev/mmcblk0p8:/gentoo:/sbin/init
-If you bootup from a USB stick:
-  /dev/sda1:/:/sbin/init
-If you bootup from microSD:
+Hence, if you have gentoo on the microSD card, .boot will be:
   /dev/mmcblk1p1:/:/sbin/init
+If it is on /data/gentoo, then:
+  /dev/mmcblk0p8:/gentoo:/sbin/init
+If on the usb stick:
+  /dev/sda1:/:/sbin/init
 
-Once you have created this file, reboot and it should boot into Linux.  However, unless you have configured your gentoo to automatically start Xorg, you will see nothing but the ASUS logo.  In order to verify that it worked, check /sdcard/gentoo/var/log/messages.  You can debug problems by checking boot_chooser.log which is generated in the root of the Android filesystem.
+Once you have created this file, reboot and it should boot into Linux.  However, unless you have configured your gentoo to automatically start Xorg, you will see nothing but the ASUS logo.  In order to verify that it worked, either ssh in or reboot back into Android and check /sdcard/gentoo/var/log/messages.  You can debug problems by checking boot_chooser.log which is generated in the root of the Android filesystem (i.e. /data/boot_chooser.log).
 
 ==== GENERATE A TEST.BLOB / MODIFY INITRD / COMPILE THE KERNEL ====
 
@@ -100,6 +106,21 @@ The are not steps, but pointers:
 * Problem: With Tegra Drivers (RC16.2) installed, xinput set-int-prop 8 "Evdev Axes Swap" 8 1 and xinput set-int-prop 8 "Evdev Axis Inversion" 8 1 0 get registered in, e.g., xinput list-props but fail to have an actual effect on the input x/y coordinates.
   Solution: None yet.
 
+* My messages is spammed up with asusdec_kp_key and asusdec_keypad_processing debugging statements in /var/log/messages.
+  Solution: None yet.
+
+* With Tegra Drivers (RC16.2) installed, I also get some further cpu spam messages.
+  Solution: None yet.
+
+* The touchpad (on the ASUS Keyboard Dock) doesn't work.
+  Solution: None yet.
+
+* Sound doesn't work.
+  Solution: None yet.
+
+* Compositing doesn't work due to unavailable graphics shared memory.
+  Solution: (tmux_mind: Did wart's tegra_drv installation fix this?  wart doesn't use compositing.)
+
 ==== TIPS ====
 
 Here are some tips:
@@ -109,14 +130,7 @@ Here are some tips:
 # sudo -u yourusername startx in /etc/local.d/mystuff.start for a quick and dirty test
 # cpufreq-set -c 0 -g performance|powersave (do this for 0-3)
   (For some reason, placing /etc/init/nv.conf contents in lcoal.d/start.start causes cpufreq-set to stop working,s o whatever those things do, they broke this.)
-# In order to get your user to have access to the internet, add a group called "inet" group id of 3003 and add the user to that group.  This is because of CONFIG_ANDROID_PARANOID_NETWORK=y
-
-==== TODO ====
-
-# Disable the asusdec_kp_key and asusdec_keypad_processing debugging statements in /var/log/messages
-# Touchpad (on the ASUS Keyboard Dock) doesn't work
-# Sound doesn't work
-# Compositing doesn't work due to unavailable graphics shared memory (tmux_mind: Did wart's tegra_drv installation fix this?  wart doesn't use compositing.)
+# In order to get your user to have access to the internet, add a group called "inet" group id of 3003 and add the user to that group.  This is because of 
 
 ==== UNDER DEVELOPMENT (TEGRA XORG DRIVER) ====
 
