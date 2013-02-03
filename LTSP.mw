@@ -129,15 +129,27 @@ The ltsp-server package amongst others ships a command called '''ltsp-build-clie
 {{Note|By default an NFS client is installed, for an NBD client, read the [[#NBD Boot|instructions]].}}
 
 === Configuration ===
-You can invoke the build script with command line arguments or configure the config file in {{Path|/etc/ltsp/ltsp-build-client.conf}}. An example config file was included in the installation of ltsp-server. Commandline options take precedence over config file options. Make sure you check if the video card drivers you need are installed. By default only '''fbdev''' and '''vesa''' are included.
+You can invoke the build script with command line arguments or configure the config file in {{Path|/etc/ltsp/ltsp-build-client.conf}}. During the build, the packaged [[Kicktoo|kicktoo]] profile in /etc/ltsp/profiles/kicktoo.profile is invoked. For both, example config files were included in the installation of ltsp-server, but other profiles can be configured. Commandline options take precedence over config file options.
+
+==== Video Cards ====
+Make sure you check if the video card drivers you need are installed. By default only '''fbdev''' and '''vesa''' are included.
 {{File|/etc/ltsp/ltsp-build-client.conf||<pre>
 VIDEO_CARDS="vesa intel radeon mach64"
 </pre>}}
 
-{{Note|When having to perform ltsp-build-client again, it is recommended to first copy the downloaded stage outside the chroot and point the ltsp-build-client command to it, so it won't have to be downloaded again.}}
+==== Network Cards ====
+If you use Genkernel and non default network cards, add the ''post_install_initramfs_builder()'' function in the kicktoo profile to add Genkernel network modules. This will be included in the next release (5.4.5).
+{{File|/etc/ltsp/profiles/kicktoo.profile||<pre>
+post_install_initramfs_builder() {
+	if [ "${initramfs_builder}" == "genkernel" ]; then
+		# add you're own network drivers if needed
+		# eg. "MODULES_NET=\"\${MODULES_NET}\" via-rhine"
+		echo "MODULES_NET=\"\${MODULES_NET}\"" >> "${chroot_dir}/usr/share/genkernel/arch/${MAIN_ARCH}/modules_load"
+	fi
+}</pre>}}
 
-=== Kernel ===
-A separate section for the client kernel is in order. A standard Genkernel kernel is created during the installation when configuration changes are made. It's advisable to take a closer look at the client's kernel config and use the config during the client install.
+==== Kernel ====
+A separate section for the client kernel is in order. A standard Genkernel kernel is created during the installation when configuration changes are made. It's advisable to take a closer look at the client's kernel config and use the config during the client install. Make sure your network drivers are included as modules.
 
 {{Kernel|LTSP client|<pre>
 General setup  --->
@@ -169,21 +181,11 @@ KERNEL_CONFIG_URI="tftp://192.168.67.1/ltsp/x86/gentoo-sources-2.6.34-r12.config
 </pre>}}
 
 === Building the Client ===
-By default, the packaged [[Kicktoo|kicktoo]] profile in /etc/ltsp/profiles/kicktoo.profile is used with no debug options. Another profile can be selected with command line options. The kernel config you just made can be used in the build process by adding the server vars to ltsp-build-client.conf (See in [[#Configuration|Configuration section]] above).
-
-If you use Genkernel and non default network cards, add the post_install_initramfs_builder() function in the kicktoo profile to add Genkernel network modules. This will be included in the next release (5.4.5).
-{{File|/etc/ltsp/profiles/kicktoo.profile||<pre>
-post_install_initramfs_builder() {
-	if [ "${initramfs_builder}" == "genkernel" ]; then
-		# add you're own network drivers if needed
-		# eg. "MODULES_NET=\"\${MODULES_NET}\" via-rhine"
-		echo "MODULES_NET=\"\${MODULES_NET}\"" >> "${chroot_dir}/usr/share/genkernel/arch/${MAIN_ARCH}/modules_load"
-	fi
-}</pre>}}
-
-{{RootCmd|ltsp-build-client --installer-profile{{=}}/etc/ltsp/profiles/custom-kicktoo.profile --installer-debug --installer-verbose}}
+When all configuration has been done, you can start building the client.
+{{RootCmd|ltsp-build-client --config{{=}}/etc/ltsp/my-ltsp-build-client.conf}}
 
 After invoking the ltsp-build-client command, the environment is preparing. For each architecture the first build takes up the most time because binary packages are created from source in the first run. These binary packages are stored in /usr/portage/packages through a bind mount on your server. Any consequent builds use these packages to speed up the process.
+{{Note|When having to perform ltsp-build-client again, it is recommended to first copy the downloaded stage outside the chroot and point the ltsp-build-client command to it, so it won't have to be downloaded again.}}
 
 === Finishing the Install ===
 Some things still need to be done after building the environment. First up is the kernel, which needs to be put in your tftroot. In the default setup, this is copied from the chroot in /opt/ltsp and copied to the tftproot in an ltsp subdir in /var/lib/tftpboot, /tftpboot or /srv/tftp, if one exists. Calling ltsp-update-kernels with a different tftproot location:
@@ -240,6 +242,7 @@ You have to generate an image with '''ltsp-build-client'''. The resulting image 
 Because Dracut's named export function isn't bugfree yet, export names can't end with a number (like amd64). It is therefore advised to configure the {{Path|/etc/nbd-server/config}} file manually. Look at the example in the [[#NBD|server NBD part]] of the manual for a working example.
 
 === 5.2 Client ===
+{{Warning|This is deprecated.}}
 A 5.2 client is somewhat different from a 5.3 client. The main difference is that a 5.2 client has to be specifically prepared to function as an LTSP client while a 5.3 client takes care of this during the boot init process. In theory ltsp-client-5.3 can be installed on any Gentoo system, allowing it to be booted as an LTSP client.
 
 Starting from ltsp-server-5.3, it's possible to install a 5.2 or a 5.3 client. This can be done by setting one of the different provided build profiles. By default, the kicktoo-5.3.profile is used.
