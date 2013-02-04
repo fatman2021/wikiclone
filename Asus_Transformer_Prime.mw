@@ -2,7 +2,7 @@
 
 This is an introduction to installing gentoo on the Asus Transformer Prime (TF201).  At the moment, we can get it to boot and launch X, but there are quite a few problems.  Hopefully, this site will invite others to share their own experiences, and maybe even generate some solutions to these problems.
 
-==== INSTRUCTIONS ====
+==== INSTALLATION INSTRUCTIONS ====
 
 The basic steps are as follows:
 
@@ -96,6 +96,86 @@ The are not steps, but pointers:
 * Regenerate the .LNX file: abootimg --create test.LNX -r initrd.img -k zImage
 * Reblob pack: Use blobpack and when done add 28 bytes to the front of the file (see the fastboot method section above)
 
+
+
+==== CONFIGURATION ====
+
+
+===== KEYBOARD =====
+
+It is possible to change the keyboard layout to be similar to a normal desktop's.
+* emerge xmodmap
+* create a config file
+  xmodmap -pke > ~/.Xmodmap
+* edit the key bindings
+ex: to change home to windows key (Super). Change
+  keycode 180 = XF86HomePage NoSymbol XF86HomePage
+to
+  keycode 180 = Super_L NoSymbol Super_L
+note: you can use xev to get the keycode and name of a button press
+* add "xmodmap ~/.Xmodmap" to ~/.xinitrc to automatically apply this configuration
+
+===== GRAPHICS / VIDEO / XORG =====
+
+UNDER DEVELOPMENT (TEGRA XORG DRIVER).  The tegra xorg driver (from L4T RC16.2) works!
+* download the latest Cardu driver package from Nvidia (https://developer.nvidia.com/linux-tegra)
+* extract the package and copy config.tbz2 and nvidia_drivers.tgz from Linux_for_Tegra/nv_tegra/ to the device
+* extract (using --backup!) the two tars to /
+* (notice that two files libjpeg.so and libEGL.so.1 are overwritten (TODO: test the conflicts))
+* remove /etc/wpa_supplicant.conf (unnecessary; and in the wrong place)
+* cd /usr/lib/xorg/modules/drivers; ln -s tegra_drv.abi13.so tegra_drv.so
+* recompile your kernel with CONFIG_SYSVIPC (otherwise X won't boot and will tell you to do this! Note: enabled in the latest test.blob/test.LNX)
+* place the contents /etc/init/nv.conf in an local.d/mystart.start (I'm not sure what these do, but they cause cpufreq-set to not work and give us wonderful new messages in messages)
+* rm -rf /etc/init (the ttyS0.conf file has no effect).
+
+Recently (DEC 2012/JAN 2013), Stephen Warren and Thierry Reding have been working on getting an open tegra implementation in the kernel and also an xorg driver associated with that.  Purportedly, this will be in the 3.8 kernel.  We'll be keeping an eye on this over the next few weeks!  If anyone has given it a go, drop me a line!  Thiery's git is: https://gitorious.org/thierryreding/xf86-video-opentegra
+
+===== ATMEL MAXTOUCH TOUCHSCREEN =====
+
+
+JAN 2013:
+
+I'll be busy over the next few weeks, so here's a status quaestionis:
+
+(1) The nvidia tegra drivers (Linux For Tegra RC16.2, documented on
+the wiki) seem to work.  There will be conflicts with two files, and
+it would be nice to package things in an ebuild.
+(2) As a result, xrandr -o left/right/normal/inverted work!
+(3) But xinput set-prop 8 "Evdev Axis Inversion" 1, 1 && xinput
+set-prop "Evdev Axes Swap" 1 don't (i.e. I can't get the input to
+switch its coordiantes when I rotate the screen). (NB: fiddling with xinput set-prop 8 "Coordinate Transformation
+Matrix" does change the input coordinates ,but it is strange. I
+fiddled with this for a while.)
+
+The problem with (3) must be with the Atmel-Maxtouch code.  I did some
+digging around and comparison to other atmel_maxtouch.c files located
+in:
+
+o https://github.com/EnJens/kernel_tf201_stock
+THis seems to have an older version, although Rayman doesn't
+document where he patched it from.
+
+o https://github.com/AndroidRoot/android_kernel_asus_tf201/tree/10.4.2.17-mr1
+Rayman recommended this as the latest and greatest, and it has the
+latest Asus kernel_V10_4_2_17.zip (We should probably upgrade at some
+point!), but the files in question related to atmel_maxtouch are the
+same as Asus 10.4.2.15 (our version).
+
+o https://github.com/atmel-maxtouch/linux/tree/maxtouch-v3.0/drivers/input/touchscreen
+This looks promising.  CFR http://forum.xda-developers.com/showthread.php?t=1496246
+
+And that's where I am at.  Soooo if you ever get around to thinking
+about this problem -- and solve it or have more hints --- let me know.
+
+===== BATTERY =====
+
+I had no problems with the battery
+
+
+===== TOUCHPAD =====
+
+Please install the (TODO) kernel.
+
 ==== KNOWN BUGS ====
 
 * Problem: After I launch X and I kill X, the screen is blank.
@@ -134,74 +214,6 @@ Here are some tips:
 * /dev/mmcblk0p1,2,8 are ext4; mnt these in /mnt as system, cache, data respectively.
 * sudo -u yourusername startx in /etc/local.d/mystuff.start for a quick and dirty test
 * cpufreq-set -c 0 -g performance|powersave (do this for 0-3) (For some reason, placing /etc/init/nv.conf contents in lcoal.d/start.start causes cpufreq-set to stop working,s o whatever those things do, they broke this.)
-
-==== KEYBOARD LAYOUT ====
-
-It is possible to change the keyboard layout to be similar to a normal desktop's.
-* emerge xmodmap
-* create a config file
-  xmodmap -pke > ~/.Xmodmap
-* edit the key bindings
-ex: to change home to windows key (Super). Change
-  keycode 180 = XF86HomePage NoSymbol XF86HomePage
-to
-  keycode 180 = Super_L NoSymbol Super_L
-note: you can use xev to get the keycode and name of a button press
-* add "xmodmap ~/.Xmodmap" to ~/.xinitrc to automatically apply this configuration
-
-==== UNDER DEVELOPMENT (TEGRA XORG DRIVER) ====
-
-The tegra xorg driver (from L4T RC16.2) works!
-* download the latest Cardu driver package from Nvidia (https://developer.nvidia.com/linux-tegra)
-* extract the package and copy config.tbz2 and nvidia_drivers.tgz from Linux_for_Tegra/nv_tegra/ to the device
-* extract (using --backup!) the two tars to /
-* (notice that two files libjpeg.so and libEGL.so.1 are overwritten (TODO: test the conflicts))
-* remove /etc/wpa_supplicant.conf (unnecessary; and in the wrong place)
-* cd /usr/lib/xorg/modules/drivers; ln -s tegra_drv.abi13.so tegra_drv.so
-* recompile your kernel with CONFIG_SYSVIPC (otherwise X won't boot and will tell you to do this! Note: enabled in the latest test.blob/test.LNX)
-* place the contents /etc/init/nv.conf in an local.d/mystart.start (I'm not sure what these do, but they cause cpufreq-set to not work and give us wonderful new messages in messages)
-* rm -rf /etc/init (the ttyS0.conf file has no effect).
-
-==== FUTURE ====
-
-===== TEGRA XORG DRIVER =====
-
-Recently (DEC 2012/JAN 2013), Stephen Warren and Thierry Reding have been working on getting an open tegra implementation in the kernel and also an xorg driver associated with that.  Purportedly, this will be in the 3.8 kernel.  We'll be keeping an eye on this over the next few weeks!  If anyone has given it a go, drop me a line!  Thiery's git is: https://gitorious.org/thierryreding/xf86-video-opentegra
-
-===== ATMEL MAXTOUCH =====
-JAN 2013:
-
-I'll be busy over the next few weeks, so here's a status quaestionis:
-
-(1) The nvidia tegra drivers (Linux For Tegra RC16.2, documented on
-the wiki) seem to work.  There will be conflicts with two files, and
-it would be nice to package things in an ebuild.
-(2) As a result, xrandr -o left/right/normal/inverted work!
-(3) But xinput set-prop 8 "Evdev Axis Inversion" 1, 1 && xinput
-set-prop "Evdev Axes Swap" 1 don't (i.e. I can't get the input to
-switch its coordiantes when I rotate the screen). (NB: fiddling with xinput set-prop 8 "Coordinate Transformation
-Matrix" does change the input coordinates ,but it is strange. I
-fiddled with this for a while.)
-
-The problem with (3) must be with the Atmel-Maxtouch code.  I did some
-digging around and comparison to other atmel_maxtouch.c files located
-in:
-
-o https://github.com/EnJens/kernel_tf201_stock
-THis seems to have an older version, although Rayman doesn't
-document where he patched it from.
-
-o https://github.com/AndroidRoot/android_kernel_asus_tf201/tree/10.4.2.17-mr1
-Rayman recommended this as the latest and greatest, and it has the
-latest Asus kernel_V10_4_2_17.zip (We should probably upgrade at some
-point!), but the files in question related to atmel_maxtouch are the
-same as Asus 10.4.2.15 (our version).
-
-o https://github.com/atmel-maxtouch/linux/tree/maxtouch-v3.0/drivers/input/touchscreen
-This looks promising.  CFR http://forum.xda-developers.com/showthread.php?t=1496246
-
-And that's where I am at.  Soooo if you ever get around to thinking
-about this problem -- and solve it or have more hints --- let me know.
 
 ==== CONTRIBUTE ====
 Please feel free to add new problems!  Even better: new solutions!
