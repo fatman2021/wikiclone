@@ -1,171 +1,140 @@
-[[Category:Core system]]
-== Zram compressed ramdisks ==
-
-Zram was originally started in a project called [https://code.google.com/p/compcache/ compcache].  It is now included as part of the kernel sources since 3.2.
+{{Lowercase title}}
+{{InfoBox stack
+|{{InfoBox homepage|https://code.google.com/p/compcache/|header=true}}
+|{{InfoBox wikipedia|zRam}}
+}}
+'''zram''' (previously called '''compcache''') can create RAM based block devices. It is an experimental (staging) module of the Linux kernel since 3.2.
 
 == Introduction ==
+What it does is create a compressed block device in ram. That block device can then be used for swap or general purpose ram disk. The two most popular uses for it are swap to extend the available amount of ram to processes and /tmp. The ram used for the block device is dynamicaly obtained and released up to it's predefined uncompressed maximum size. The way it extends the amount of available ram to a system is by using a portion of the ram as compressed swap. It can therefore hold more pages of memory in the compressed swap than the amount of actual memory used.  Typically it compresses to a 3:1 ratio.  So, 1G of swap uses only 333MB of ram on average. The compression ratio including memory used for disk overhead varies depending on the % maximum space used.  I found it to vary from 1.5:1 for a 1.5G disk with only 5% space used, to over 3:1 when nearly full. It also is much faster at swapping pages than typical hard disk swap.
 
-What it does is create a compressed block device in ram.  That block device can then be used for swap or general purpose ram disk.  The two most popular uses for it are swap to extend the available amount of ram to processes and /tmp.  The ram used for the block device is dynamicaly obtained and released up to it's predefined uncompressed maximum size.  The way it extends the amount of available ram to a system is by using a portion of the ram as compressed swap.  It can therefore hold more pages of memory in the compressed swap than the amount of actual memory used.  Typically it compresses to a 3:1 ratio.  So, 1G of swap uses only 333MB of ram on average.   The compression ratio including memory used for disk overhead varies depending on the % maximum space used.  I found it to vary from 1.5:1 for a 1.5G disk with only 5% space used, to over 3:1 when nearly full.   It also is much faster at swapping pages than typical hard disk swap.
-
-My experience with using it, my system is still fully functional, with only slight slow downs at times.  This is for an xfce4 desktop with several apps and emerge running with PORTAGE_NICENESS=10.  The memory and swap spaces were nearly maxed out.  Intel core2 Quad core 2.6Ghz, 4G ram.  I had 4 - 1.5G zram disks for swap, plus 1G partition of hard drive swap as backup.  At one point during linking chromium, I saw the system using just over 5G of zram swap, while using about 1.2G of ram, about 100MB of hard disk swap.  The desktop was still responsive :)
+My experience with using it, my system is still fully functional, with only slight slow downs at times. This is for a [[Xfce]]4 desktop with several apps and emerge running with PORTAGE_NICENESS=10. The memory and swap spaces were nearly maxed out. Intel Core2 Quad core 2.6Ghz, 4G ram. I had 4 - 1.5G zram disks for swap, plus 1G partition of hard drive swap as backup. At one point during linking chromium, I saw the system using just over 5G of zram swap, while using about 1.2G of ram, about 100MB of hard disk swap. The desktop was still responsive :)
 
 == Caveats/Cons ==
-
-Each zram device contains it's own compression buffer, memory pools and other metadata as well as per-device locks.  This can become a serious bottleneck for multi-core machines.  To work around this problem, zram is capable of initializing multiple devices.  The recommended amount of devices for swap is 1 per cpu core.
+Each zram device contains it's own compression buffer, memory pools and other metadata as well as per-device locks. This can become a serious bottleneck for multi-core machines. To work around this problem, zram is capable of initializing multiple devices. The recommended amount of devices for swap is 1 per cpu core.
 
 For systems with limited memory, non swap use can reduce the amount of available memory to run applications.
 
-== Enabling Zram ==
-
-I recommend you enable zram as a loadable module.  The reason is the number of devices created are set during the module's loading.  If you compile the module into the kernel, it will default to 1 device and size it to 25% of total memory.  It is possible to re-configure the size later, but I don't know how you can set the number of devices during boot.  When it is a loadable module, the number of devices can be changed later with out a reboot.  You will however have to de-activate any existing devices before being able to increase or decrease the number of devices.
+== Enabling zram ==
+I recommend you enable zram as a loadable module. The reason is the number of devices created are set during the module's loading. If you compile the module into the kernel, it will default to 1 device and size it to 25% of total memory. It is possible to re-configure the size later, but I don't know how you can set the number of devices during boot. When it is a loadable module, the number of devices can be changed later with out a reboot. You will however have to de-activate any existing devices before being able to increase or decrease the number of devices.
 
 === Kernel configuration ===
-{| class="wikitable"
-|-
-! Kernel Configuration
-|-
-|Device Drivers  ---><br />
-:[*] Staging drivers ---><br />
-::<M> Compressed RAM block device support<br />
-|}
+{{Kernel||<pre>
+Device Drivers  --->
+    [*] Staging drivers --->
+        <M> Compressed RAM block device support
+</pre>}}
 
 == Gentoo/OpenRC init script ==
-=== Install ===
+
+=== Installation ===
 By far the easiest method of utilizing zram disk(s) is by using Martin Väth's zram-init script.
-Currently it is available in his mv overlay.
-{| class="wikitable"
-|-
-! Terminal
-|-
-|
- layman -a mv
- emerge zram-init
-|}
+Currently it is available in his mv [[overlay]]:
+{{RootCmd|layman -a mv}}
+{{Emerge|zram-init}}
 
-=== Configure ===
-Edit the ''/etc/conf.d/zram-init'' file and create/configure your desired zram devices.  There is lots of comments/instructions in the file.  So, proceed with editing, save it when your done. 
+=== Configuration ===
+Edit the {{Path|/etc/conf.d/zram-init}} file and create/configure your desired zram devices.  There is lots of comments/instructions in the file.  So, proceed with editing, save it when your done. 
  
-===== Remember =====
-# For multicore systems configure one zram swap per cpu core.
-# Set the priority of all zram swap devices to the same value (high).
-# Set priority of hard drive swap (low).
+{{Note|1. For multicore systems configure one zram swap per cpu core.
+2. Set the priority of all zram swap devices to the same value (high).
+3. Set priority of hard drive swap (low).}}
 
-{| class="wikitable"
-|-
-! Sample ''/etc/conf.d/zram-init''
-|-
-| Specs, Dual core cpu, 2G total ram.  Configure total 1G of swap, 512Mb of /tmp
-|-
-|
- # zram settings...
- # load zram kernel module on start?
- load_on_start="yes"
+An example:
+* Specs: Dual core cpu, 2G total ram
+* Configure total 1G of swap, 512Mb of /tmp
 
- # unload zram kernel module on stop?
- unload_on_stop="yes"
+{{File|/etc/conf.d/zram-init||<pre>
+# zram settings...
+# load zram kernel module on start?
+load_on_start="yes"
+
+# unload zram kernel module on stop?
+unload_on_stop="yes"
  
- # Number of devices.
- # It is also passed to the kernel module on modprobe.
- num_devices="2"
+# Number of devices.
+# It is also passed to the kernel module on modprobe.
+num_devices="2"
 
- # For each device, specify size, type, and flags:
- # size0, size1, ... are the variables for the sizes.
- # type0, type1, ... are the variables for the types.
- # flag0, flag1, ... are the variables for the flags.
- #
- # The size is in megabytes.
- # If the size is 0 (or empty) the device is ignored by the script.
- #
- # Available types:
- # "swap"  The device is initialized as a swap device.
- #         The flags variable specifies the priority (default is 16383)
- #         Use "-" in the flags variable to omit setting the priority
- # "/..."  The device is mounted on /...
- #         The flags variable specifies the type (ext2 or ext4, default is ext4)
- # Devices with other types are ignored by the the script
- #
- # Only variables with numbers  0 ... num_devices-1  are used by the script.
+# For each device, specify size, type, and flags:
+# size0, size1, ... are the variables for the sizes.
+# type0, type1, ... are the variables for the types.
+# flag0, flag1, ... are the variables for the flags.
+#
+# The size is in megabytes.
+# If the size is 0 (or empty) the device is ignored by the script.
+#
+# Available types:
+# "swap"  The device is initialized as a swap device.
+#         The flags variable specifies the priority (default is 16383)
+#         Use "-" in the flags variable to omit setting the priority
+# "/..."  The device is mounted on /...
+#         The flags variable specifies the type (ext2 or ext4, default is ext4)
+# Devices with other types are ignored by the the script
+#
+# Only variables with numbers  0 ... num_devices-1  are used by the script.
 
- type0="swap"
- flag0="16383"
- size0="512"
+type0="swap"
+flag0="16383"
+size0="512"
 
- type1="swap"
- flag1="16383"
- size1="512"
+type1="swap"
+flag1="16383"
+size1="512"
 
- type2="/tmp"
- flag2="ext4"
- size2="512"
-|}
+type2="/tmp"
+flag2="ext4"
+size2="512"
+</pre>}}
 
 === Start ===
-Add the init script to the desired runlevel, usually "default"
-
-{| class="wikitable"
-|-
-! Terminal
-|-
-|
- rc-config add zram default
- /etc/init.d/zram start
-|}
+Add the init script to the desired runlevel, usually "default":
+{{RootCmd|rc-config add zram default
+|/etc/init.d/zram start}}
 
 == Manual method ==
+For manual creation, with modern kernels, you can use {{Path|/etc/local.d}} and supply it with 2 files. A {{Path|zram.start}} and a {{Path|zram.stop}}. The kernel will run theses as appropriate as part of it's normal operation.
 
-For manual creation, with modern kernels, you can use /etc/local.d and supply it with 2 files. A myfile.start and a myfile.stop.  The kernel will run theses as appropriate as part of it's normal operation.
+An example:
+* Specs: 4 cpu cores, 4G ram total
+* Configure 4 1.5G zram swap and activate.
+* Estimated maximum ram used 2G @ 3:1 compression 
+{{File|/etc/local.d/zram.start||<pre>
+#!/bin/bash
 
-=== zram.start ===
-{| class="wikitable"
-|-
-! Example ''/etc/local.d/zram.start''
-|-
-| Specs:  4 cpu cores, 4G ram total.
-|-
-| Configure 4 1.5G zram swap and activate.<br />
-Estimated maximum ram used 2G @ 3:1 compression 
-|-
-| 
- #!/bin/bash
- #
+modprobe zram num_devices=4
 
- modprobe zram num_devices=4
+SIZE=1536
+echo $(($SIZE*1024*1024)) > /sys/block/zram0/disksize
+echo $(($SIZE*1024*1024)) > /sys/block/zram1/disksize
+echo $(($SIZE*1024*1024)) > /sys/block/zram2/disksize
+echo $(($SIZE*1024*1024)) > /sys/block/zram3/disksize
 
- SIZE=1536
- echo $(($SIZE*1024*1024)) > /sys/block/zram0/disksize
- echo $(($SIZE*1024*1024)) > /sys/block/zram1/disksize
- echo $(($SIZE*1024*1024)) > /sys/block/zram2/disksize
- echo $(($SIZE*1024*1024)) > /sys/block/zram3/disksize
+mkswap /dev/zram0
+mkswap /dev/zram1
+mkswap /dev/zram2
+mkswap /dev/zram3
 
- mkswap /dev/zram0
- mkswap /dev/zram1
- mkswap /dev/zram2
- mkswap /dev/zram3
+swapon /dev/zram0 -p 10
+swapon /dev/zram1 -p 10
+swapon /dev/zram2 -p 10
+swapon /dev/zram3 -p 10
+</pre>}}
 
- swapon /dev/zram0 -p 10
- swapon /dev/zram1 -p 10
- swapon /dev/zram2 -p 10
- swapon /dev/zram3 -p 10
-|}
+{{File|/etc/lolcal.d/zram.stop||<pre>
+#!/bin/bash
 
-=== zram.stop ===
-{| class="wikitable"
-|-
-! Example ''/etc/lolcal.d/zram.stop''
-|-
-|
- #!/bin/bash
- #
+swapoff /dev/zram0
+swapoff /dev/zram1
+swapoff /dev/zram2
+swapoff /dev/zram3
 
- swapoff /dev/zram0
- swapoff /dev/zram1
- swapoff /dev/zram2
- swapoff /dev/zram3
+echo 1 > /sys/block/zram0/reset
+echo 1 > /sys/block/zram1/reset
+echo 1 > /sys/block/zram2/reset
+echo 1 > /sys/block/zram3/reset
 
- echo 1 > /sys/block/zram0/reset
- echo 1 > /sys/block/zram1/reset
- echo 1 > /sys/block/zram2/reset
- echo 1 > /sys/block/zram3/reset
+modprobe -r zram
+</pre>}}
 
- modprobe -r zram
-|}
+[[Category:Core system]]
