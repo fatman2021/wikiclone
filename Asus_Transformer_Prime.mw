@@ -8,7 +8,7 @@ The basic steps are as follows:
 
 ===== PRELIMINARIES =====
 
-This guide assumes that you have installed the Jelly Bean update from ASUS.  THIS GUIDE IS A WORK IN PROGRESS: CHECK BACK OFTEN FOR UPDATES!  (CHECK THE HISTORY.) 
+This guide requires the Jelly Bean bootloader from ASUS, and will assume you already have it installed.  THIS GUIDE IS A WORK IN PROGRESS: CHECK BACK OFTEN FOR UPDATES!  (CHECK THE HISTORY.) 
 
 NOTA BENE: WE ARE NOT RESPONSIBLE FOR ANY DAMAGE DONE TO YOUR TFP!
 
@@ -39,38 +39,38 @@ a chroot environment.  This guide assumes that you are doing the latter.  It fur
 
 ===== INSTALLING THE KERNEL =====
 
-There are at present two ways to install the kernel on the TFP: nvflash or fastboot.  Once you have installed the kernel on the TFP and reboot, your machine should boot into Android (not Linux).  In order to have it boot into Linux, you need to configure the bootchooser.  See the next section.  Instructions on how to regenerate a kernel, blob, and LNX file are given further below.
+There are at present two ways to install the kernel on the TFP: nvflash or fastboot.  Once you have installed the kernel on the TFP and reboot, your machine should boot into Android (not Linux).  In order to have it boot into Linux, you need to configure the rootchooser.  See the next section.  Instructions on how to regenerate a kernel, blob, and LNX file are given further below.
 
 ====== FASTBOOT METHOD ======
 
+* WARNING: AS USUAL, FASTBOOT AND THE TFP ARE CRANKY AND SO WHAT FOLLOWS MIGHT "BRICK" YOUR DEVICE.  PLEASE RESEARCH THE FASTBOOT UTILITY BEFOREHAND.
 In order to do fastboot, do the following:
-o WARNING: AS USUAL, FASTBOOT AND THE TFP ARE CRANKY AND SO WHAT FOLLOWS MIGHT "BRICK" YOUR DEVICE.  PLEASE RESEARCH THE FASTBOOT UTILITY BEFOREHAND.
 * Download the blob file to your computer: [https://github.com/tux-mind/tf201-dev/blob/master/v2/images/fastboot.blob fastboot.blob]
 * Put the TFP in 'fastboot' mode: connect it to the computer via a usb cable, install ClockworkModRecovery app on the TFP, reboot the TFP and hold down VOLUMEDOWN upon reboot until some text shows up about going into recovery.  Release VOLUMEDOWN and wait, then select the USB ICON (VOLUMEDOWN to move, VOLUMEUP to select).  This is all standard, and documented elsewhere.
 * Flash the blob to your TFP: 
-  fastboot -i 0x0b05 flash boot newtest.blob.
+  fastboot -i 0x0b05 flash boot fastboot.blob.
 * NB: 'flashboot devices' will claim there is no device.  But it is there.
 
 ====== NVFLASH METHOD ======
 
-In order to do the nvflash method, do the following:
 * WARNING: AS USUAL, NVFLASH AND THE TFP ARE CRANKY.  IT MIGHT "BRICK" YOUR DEVICE.  PLEASE RESEARCH WHEELIE AND NVFLASH BEFOREHAND.
 * WARNING (2): wheelie is a binary with no open source (yet), and as with any binary you should be worried.
+In order to do the nvflash method, do the following:
 * Download the LNX file: [https://github.com/tux-mind/tf201-dev/blob/master/v2/images/nvflash.LNX nvflash.LNX]
 * Put the TFP in nvflash APX mode (reboot + VOLUMEUMP; this will yield a blank screen, but check dmesg to see that it is in APX mode).
 * Run wheelie:
   wheelie --blob mysecret.blob (mysecret.blob is the blob you created when you installed wheelie).
 * Flash the LNX file to your TFP:
-  nvflash -r --download 6 test.LNX
+  nvflash -r --download 6 nvflash.LNX
 * Reboot the TFP:
   nvflash -r --go (this sometimes won't reboot the machine)
 
 ===== CONFIGURE ROOTCHOOSER =====
 
-The blob and LNX files we provide in git include a modified initrd.  What we did is overwrite 'init' with [https://github.com/tux-mind/tf201-dev/tree/master/root_chooser root_chooser].  Rootchooser will mount the 8th partition of your eMMC, read the first line of the root-level file '.boot', which will be parsed as "device:directory:init" where:
+The blob and LNX files we provide in git include a modified initrd.  What we did is overwrite 'init' with [https://github.com/tux-mind/tf201-dev/tree/master/root_chooser root_chooser].  Rootchooser will mount the 8th (/boot) partition of your eMMC, read the first line of the root-level file '.boot', which will be parsed as "device:directory:init" where:
     'device' is the block device where you put your gentoo system, e.g. /dev/mmcblk0p8, /dev/mmcblk1p1, or /dev/sda1. it could be also an ext FS image file.
     'directory' is the directory inside the previous device where your gentoo lives, e.g. /gentoo or /.
-    'init' is the init script location in your gentoo root, usually /sbin/init.
+    'init' is the init script location in your rootfs, usually /sbin/init.
 If anything goes wrong, rootchooser will boot into Android.
 
 Hence, if you have gentoo on the microSD card, .boot will be:
@@ -82,7 +82,7 @@ If on the usb stick:
 If from a ext FS image file:
   /data/media/ubuntu.img:/:/sbin/init
 
-Once you have created this file, reboot and it should boot into Linux.  However, unless you have configured your gentoo to automatically start Xorg, you will see nothing but the ASUS logo.  In order to verify that it worked, either ssh in or reboot back into Android and check /sdcard/gentoo/var/log/messages.  You can debug problems by checking root_chooser.log which is generated in the root of the Android filesystem.
+Once you have created this file, reboot and it should boot into Linux.  However, unless you have configured your gentoo to automatically start Xorg, you will see nothing but the ASUS logo.  In order to verify that it worked, either ssh in or reboot back into Android and check /sdcard/gentoo/var/log/messages.  You can debug problems by checking root_chooser.log which is generated in the root (/) of the Android filesystem.
 
 ===== GENERATE A TEST.BLOB / MODIFY INITRD / COMPILE THE KERNEL =====
 
@@ -92,7 +92,7 @@ The are not steps, but pointers:
 * Extract the initrd: mkdir tmp && cd tmp && gunzip < ../initrd.img | cpio -i --make-directories
 * Regenerate the initrd (from tmp): find . | cpio --create --format='newc' > ../initrd.img && gzip ../initrd.img 
 * NB: Don't forget to gcc -o boot_chooser2.c init and cp that over to initrd as your init file.
-* Regenerate the zImage (kernel): You will want to apply the JB15.patch in our git kernel/ directory, fixing an obvious error.  The kernel we used was the one from ASUS: kernel_v10_4_2_15.zip.  The patch also applies our .config file.  
+* Regenerate the zImage (kernel): You will want to apply the JB15.patch in our git kernel/ directory, fixing many problems.  The kernel we used was the one from ASUS: kernel_v10_4_2_15.zip.  The patch also applies our .config file.  
 * Regenerate the .LNX file: abootimg --create test.LNX -r initrd.img -k zImage
 * Reblob pack: Use blobpack and when done add 28 bytes to the front of the file (see the fastboot method section above)
 
@@ -113,7 +113,8 @@ ex: to change home to windows key (Super). Change
 to
   keycode 180 = Super_L NoSymbol Super_L
 note: you can use xev to get the keycode and name of a button press
-* add "xmodmap ~/.Xmodmap" to ~/.xinitrc to automatically apply this configuration
+* add the following to ~/.xinitrc to automatically apply this configuration
+  xmodmap ~/.Xmodmap
 
 ===== GRAPHICS / VIDEO / XORG =====
 
@@ -131,7 +132,6 @@ UNDER DEVELOPMENT (TEGRA XORG DRIVER).  The tegra xorg driver (from L4T RC16.2) 
 Recently (DEC 2012/JAN 2013), Stephen Warren and Thierry Reding have been working on getting an open tegra implementation in the kernel and also an xorg driver associated with that.  Purportedly, this will be in the 3.8 kernel.  We'll be keeping an eye on this over the next few weeks!  If anyone has given it a go, drop me a line!  Thiery's git is: https://gitorious.org/thierryreding/xf86-video-opentegra
 
 ===== ATMEL MAXTOUCH TOUCHSCREEN =====
-
 
 JAN 2013:
 
@@ -169,12 +169,22 @@ about this problem -- and solve it or have more hints --- let me know.
 
 ===== BATTERY =====
 
-I had no problems with the battery
+I had no problems with the battery.
 If do you have any trouble with this try installing your DesktopEnvironment's power manager.
+For those curious, the battery information files are stored in /sys/class/power_supply/ 
 
 ===== TOUCHPAD =====
 
 Please install the [https://github.com/tux-mind/tf201-dev/tree/master/v1/images v1 kernel].
+Use [https://github.com/tux-mind/tf201-dev/tree/master/touchpad_control touchpad_control] to enable and disable the touchpad.
+
+===== SOUND =====
+
+Sound now works, but must be manually configured to use the correct card.
+Write the following to /etc/asound.conf
+  defaults.ctl.card 1
+  defaults.pcm.card 1
+  defaults.timer.card 1
 
 ==== KNOWN BUGS ====
 
@@ -185,10 +195,10 @@ Please install the [https://github.com/tux-mind/tf201-dev/tree/master/v1/images 
   Solution: Disable X blanking.  xset -dpms or xset s off or xset s noblank (or all three)
 
 * Problem: xrandr -o left/right/normal/inverted don't work
-  Solution: Install the tegra_drv (xorg driver) from RC16.2 of their Linux For Tegra release (see below)
+  Solution: Install the tegra_drv (xorg driver) from RC16.2 of their Linux For Tegra release (see above: [http://wiki.gentoo.org/wiki/Asus_Transformer_Prime#GRAPHICS_.2F_VIDEO_.2F_XORG tegra_drv])
 
 * Problem: With Tegra Drivers (RC16.2) installed, xinput set-int-prop 8 "Evdev Axes Swap" 8 1 and xinput set-int-prop 8 "Evdev Axis Inversion" 8 1 0 get registered in, e.g., xinput list-props but fail to have an actual effect on the input x/y coordinates.
-  Solution: None yet.  (See below: ATMEL MAXTOUCH)
+  Solution: None yet.  (See above: [http://wiki.gentoo.org/wiki/Asus_Transformer_Prime#ATMEL_MAXTOUCH_TOUCHSCREEN ATMEL MAXTOUCH])
 
 * My messages is spammed up with asusdec_kp_key and asusdec_keypad_processing debugging statements in /var/log/messages.
   Solution: install the [https://github.com/tux-mind/tf201-dev/tree/master/v2/images v2 kernel].
@@ -197,10 +207,10 @@ Please install the [https://github.com/tux-mind/tf201-dev/tree/master/v1/images 
   Solution: None yet.
 
 * The touchpad (on the ASUS Keyboard Dock) doesn't work.
-  Solution: Install the [https://github.com/tux-mind/tf201-dev/tree/master/v1/images v1 kernel]. Write to /dev/asusdec to control the touchpad. (Check out [https://github.com/tux-mind/tf201-dev/tree/master/touchpad_control touchpad_control] on tux_mind's github)
+  Solution: See above: [http://wiki.gentoo.org/wiki/Asus_Transformer_Prime#TOUCHPAD Touchpad]
 
 * Sound doesn't work.
-  Solution: # echo -e "defaults.ctl.card 1\ndefaults.pcm.card 1\ndefaults.timer.card 1" > /etc/asound.conf
+  Solution: See above: [http://wiki.gentoo.org/wiki/Asus_Transformer_Prime#SOUND Sound]
 
 * Compositing doesn't work due to unavailable graphics shared memory.
   Solution: Upgrade to Tegra Drivers (RC16.2)
@@ -217,6 +227,8 @@ Here are some tips:
 
 ==== CONTRIBUTE ====
 Please feel free to add new problems!  Even better: new solutions!
+
+The current [https://github.com/tux-mind/tf201-dev/blob/master/TODO TODO list] is on github.
 
 Please contact peter period hartman at utoronto period ca a.k.a. wart_ in #gentoo-embedded (and elsewhere)<br />
 Or contact massimo period dragano at gmail period com a.k.a tux_mind all over the internet
