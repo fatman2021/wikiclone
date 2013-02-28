@@ -23,3 +23,192 @@ Device Drivers  --->
         -*-   Generic HID support
         <*>   USB Human Interface Device (full HID) support
 </pre>}}
+
+{{File|/var/log/dmesg||<pre>
+smscore_set_device_mode: firmware download success: sms1xxx-hcw-55xxx-dvbt-02.fw
+[   21.580730] sms_ir_init: Allocating rc device
+[   21.580759] sms_ir_init: IR port 0, timeout 100 ms
+[   21.580764] sms_ir_init: Input device (IR) SMS IR (Hauppauge WinTV MiniStick) is set for key events
+[   21.841527] Registered IR keymap rc-hauppauge
+[   21.844000] input: SMS IR (Hauppauge WinTV MiniStick) as /devices/pci0000:00/0000:00:1f.2/usb1/1-2/rc/rc0/input4
+[   21.844877] rc0: SMS IR (Hauppauge WinTV MiniStick) as /devices/pci0000:00/0000:00:1f.2/usb1/1-2/rc/rc0
+[   21.953808] IR NEC protocol handler initialized
+[   22.054223] IR RC5(x) protocol handler initialized
+[   22.160311] DVB: registering new adapter (Hauppauge WinTV MiniStick)
+[   22.169410] usb 1-2: DVB: registering adapter 0 frontend 0 (Siano Mobile Digital MDTV Receiver)...
+[   22.185111] usbcore: registered new interface driver smsusb
+[   22.197399] IR RC6 protocol handler initialized
+[   22.244671] IR JVC protocol handler initialized
+[   22.357176] IR Sony protocol handler initialized
+[   22.421880] IR SANYO protocol handler initialized
+[   22.500133] input: MCE IR Keyboard/Mouse (smsmdtv) as /devices/virtual/input/input5
+[   22.500893] IR MCE Keyboard/mouse protocol handler initialized
+[   22.581617] lirc_dev: IR Remote Control driver registered, major 250 
+[   22.626457] rc rc0: lirc_dev: driver ir-lirc-codec (smsmdtv) registered at minor = 0
+[   22.626471] IR LIRC bridge handler initialized
+</pre>
+}}
+
+{{File|/etc/rc.||<pre>
+# table hauppauge_novaTD_usb type: RC5
+0x1c25 KEY_SELECT
+0x1c3d KEY_POWER
+0x1c3b KEY_HOME
+0x1c1c KEY_TV
+0x1c14 KEY_UP
+0x1c15 KEY_DOWN
+0x1c16 KEY_LEFT
+0x1c17 KEY_RIGHT
+0x1c25 KEY_OK
+0x1c1f KEY_EXIT
+0x1c0d KEY_MENU
+0x1c10 KEY_VOLUMEUP
+0x1c11 KEY_VOLUMEDOWN
+0x1c12 KEY_PREVIOUS
+0x1c0f KEY_MUTE
+0x1c20 KEY_CHANNELUP
+0x1c21 KEY_CHANNELDOWN
+0x1c37 KEY_RECORD
+0x1c36 KEY_STOP
+0x1c32 KEY_REWIND
+0x1c35 KEY_PLAY
+0x1c34 KEY_FASTFORWARD
+0x1c24 KEY_PREVIOUSSONG
+0x1c30 KEY_PAUSE
+0x1c1e KEY_NEXTSONG
+0x1c01 KEY_1
+0x1c02 KEY_2
+0x1c03 KEY_3
+0x1c04 KEY_4
+0x1c05 KEY_5
+0x1c06 KEY_6
+0x1c07 KEY_7
+0x1c08 KEY_8
+0x1c09 KEY_9
+0x1c0a KEY_TEXT
+0x1c00 KEY_0
+0x1c0e KEY_SUBTITLE
+</pre>
+}}
+
+{{File|/etc/rc.local||<pre>
+service lirc stop
+sleep 2
+ir-keytable -c
+ir-keytable --sysdev=rc0 --protocol=rc-5 -w /etc/rc_keymaps/hauppauge_novaTD
+ir-keytable --period=1410065407
+ir-keytable --delay=1410065407
+service lirc start 
+</pre>
+}}
+
+{{File|/etc/X11/xorg.conf||<pre>
+Section "InputClass"
+	Identifier	"Disable Hauppauge WinTV MiniStick Input Devices"
+	MatchProduct	"SMS IR (Hauppauge WinTV MiniStic|MCE IR Keyboard/Mouse (smsmdtv)"
+	Option		"Ignore"	"true"
+EndSection
+</pre>
+}}
+{{File|/etc/lirc/hardware.conf||<pre>
+REMOTE="Nova-TD"
+REMOTE_MODULES=""
+REMOTE_DRIVER="devinput"
+#REMOTE_DEVICE="/dev/input/by-path/pci-0000:00:1f.2-usb-0:2-event-ir"
+REMOTE_DEVICE="phys=usb-*/ir0"
+REMOTE_SOCKET="/var/run/lirc/lircd"
+REMOTE_LIRCD_CONF=""
+</pre>
+}}
+
+{{File|/etc/lirc/lircd.conf||<pre>
+#Configuration for the Hauppauge Nova-T 500 remote:
+include "/usr/share/lirc/extras/more_remotes/hauppauge/lircd.conf.hauppauge_novaTD_usb"
+</pre>
+}}
+
+{{File|/usr/share/lirc/extras/more_remotes/hauppauge/lircd.conf.hauppauge_novaTD_usb||<pre>
+#
+# brand:                       Hauppauge NOVA-TD
+# model no. of remote control: Hauppage Nova-TD R-005
+#
+
+begin remote
+
+ name		NOVA-TD
+ bits           16
+ eps            30
+ aeps          100
+
+ one             0     0
+ zero            0     0
+ pre_data_bits   16
+ pre_data        0x8001
+ gap          	 100000
+ toggle_bit      0
+
+     begin codes
+         Go                       0x0162
+	 Home			  0x0066
+	 Teletext		  0x0184
+	 Captions		  0x0172
+         Power                    0x0074
+         TV                       0x0179
+         Videos                   0x0189
+         Music                    0x0188
+         Pictures                 0x00E2
+         Guide                    0x016D
+         Radio                    0x0181
+         ArrowUp                  0x0067
+         ArrowLeft                0x0069
+         OK                       0x0160
+         ArrowRight               0x006A
+         ArrowDown                0x006C
+         BackExit                 0x00AE
+         Menu                     0x008B
+         VolumeUp                 0x0073
+         VolumeDown               0x0072
+         PrevCh                   0x016B
+         Mute                     0x0071
+         ChannelUp                0x0192
+         ChannelDown              0x0193
+         Record                   0x00A7
+         Rewind                   0x00A8
+         SkipBack                 0x00A5
+         Play                     0x00CF
+         Pause                    0x0077
+         Stop                     0x0080
+         Fwdwind                  0x00D0
+         SkipFwd                  0x00A3
+         1                        0x0002
+         2                        0x0003
+         3                        0x0004
+         4                        0x0005
+         5                        0x0006
+         6                        0x0007
+         7                        0x0008
+         8                        0x0009
+         9                        0x000A
+         *                        0x0037
+         0                        0x000B
+         #                        0x0029
+         one                      0x004F
+         two                      0x0050
+         three                    0x0051
+         four                     0x004B
+         five                     0x004C
+         six                      0x004D
+         seven                    0x0047
+         eight                    0x0048
+         nine                     0x0049
+         ten                      0x0052
+         Red                      0x018E
+         Green                    0x018F
+         Yellow                   0x0190
+         Blue                     0x0191
+	 Previous		  0x019C
+     end codes
+
+end remote
+</pre>
+}}
