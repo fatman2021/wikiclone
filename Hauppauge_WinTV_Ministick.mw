@@ -24,7 +24,7 @@ The firmware isn't integrated into the {{Package|sys-kernel/linux-firmware}} pac
 
 === Check Kernel Configuration ===
 
-When you compiled the needed modules and the firmware was correct loaded so you see something like the output here from my dmesg.
+When you have compiled the needed modules and the firmware was correct loaded so you see something like the output here from my dmesg.
 
 {{File|/var/log/dmesg||<pre>
 smscore_set_device_mode: firmware download success: sms1xxx-hcw-55xxx-dvbt-02.fw
@@ -51,7 +51,7 @@ smscore_set_device_mode: firmware download success: sms1xxx-hcw-55xxx-dvbt-02.fw
 </pre>
 }}
 
-To control the event devices you can use the '''lsinput''' tool out of the {{Package|sys-apps/input-utils}} package. 
+To check the event devices you can use the '''lsinput''' tool out of the {{Package|sys-apps/input-utils}} package. 
 
 {{RootCmd|lsinput|output=<pre>
 /dev/input/event4
@@ -73,7 +73,32 @@ To control the event devices you can use the '''lsinput''' tool out of the {{Pac
    bits ev : EV_SYN EV_KEY EV_REL EV_MSC EV_REP
 </pre>}}
 
-{{Important|Later when we create or own '''InputClass''' and set the '''Ignore''' stuff in /etc/X11/xorg.conf we use the eventX name and that sting is limited. So we can't use the full string of the device name as shown in '''dmesg''' output. For the lirc daemon device path we use a substitution syntax that allow us later to plug the stick where we want on the usb bus.
+'''Udevadm''' will also work.
+
+{{RootCmd|udevadm info -q all -n /dev/input/event4|output=<pre>
+P: /devices/pci0000:00/0000:00:1f.2/usb1/1-2/rc/rc0/input4/event4
+N: input/event4
+S: input/by-path/pci-0000:00:1f.2-usb-0:2-event-ir
+E: DEVLINKS=/dev/input/by-path/pci-0000:00:1f.2-usb-0:2-event-ir
+E: DEVNAME=/dev/input/event4
+E: DEVPATH=/devices/pci0000:00/0000:00:1f.2/usb1/1-2/rc/rc0/input4/event4
+E: ID_INPUT=1
+E: ID_INPUT_KEY=1
+E: ID_PATH=pci-0000:00:1f.2-usb-0:2
+E: ID_PATH_TAG=pci-0000_00_1f_2-usb-0_2
+E: ID_SERIAL=noserial
+E: MAJOR=13
+E: MINOR=68
+E: SUBSYSTEM=input
+E: UDEV_LOG=3
+E: USEC_INITIALIZED=20837104
+E: XKBLAYOUT=de
+E: XKBMODEL=pc105
+E: XKBVARIANT=nodeadkeys
+</pre>
+}}
+
+{{Important|Later when we create or own '''InputClass''' and set the '''Ignore''' stuff in /etc/X11/xorg.conf. For this we use the eventX name and that string is limited. So we can't use the full string of the device name as shown in '''dmesg''' output. For the lirc daemon device path we use a syntax that allow us later to plug the stick where we want on the usb bus.}}
 
 === Gentoo ===
 
@@ -177,26 +202,25 @@ Replace '''/lib/udev/rc_keymaps/hauppauge''' with '''/etc/rc_keymaps/hauppauge_n
 
 ==== Option2: Manual with /etc/local.d/ir-keytable.start ====
 
+{{Note|Don't add the lircd to default runlevel. The daemon will started by the '''/etc/local.d/ir-keytable.start'''.
+
 {{File|/etc/local.d/ir-keytable.start||<pre>
-/etc/init.d/lirc stop
-#sleep 2
-ir-keytable -c
-ir-keytable --protocol=rc-5 -w /etc/rc_keymaps/hauppauge_novaTD
-ir-keytable --period=1410065407
-ir-keytable --delay=1410065407
-/etc/init.d/lirc start 
+ir-keytable -c --protocol=rc-5 -w /etc/rc_keymaps/hauppauge_novaTD
+ir-keytable --delay=500
+ir-keytable --period=50
+/etc/init.d/lircd start 
 </pre>
 }}
 
 === Xorg ===
 
-Ignore the remote devices in Xorg.
+Ignore the remote control devices in Xorg. 
 
-TODO: MCE IR device
+{{Note|If you plan to use the MCE IR Keyboard/Mouse you need to remove the MCE string from '''MatchProduct'''}}
 
 {{File|/etc/X11/xorg.conf||<pre>
 Section "InputClass"
-	Identifier	"Disable Hauppauge WinTV MiniStick Input Devices"
+	Identifier	"Ignore Hauppauge WinTV MiniStick IR Devices"
 	MatchProduct	"SMS IR (Hauppauge WinTV MiniStic|MCE IR Keyboard/Mouse (smsmdtv)"
 	Option		"Ignore"	"true"
 EndSection
@@ -209,7 +233,7 @@ EndSection
 REMOTE="Nova-TD"
 REMOTE_MODULES=""
 REMOTE_DRIVER="devinput"
-REMOTE_DEVICE="phys=usb-*/ir0"
+REMOTE_DEVICE="phys=usb-*/ir*"
 REMOTE_SOCKET="/var/run/lirc/lircd"
 REMOTE_LIRCD_CONF=""
 </pre>
