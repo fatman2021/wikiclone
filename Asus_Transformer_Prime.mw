@@ -67,20 +67,21 @@ In order to do the nvflash method, do the following:
 
 ===== CONFIGURE ROOTCHOOSER =====
 
-The blob and LNX files we provide in git include a modified initrd.  What we did is overwrite 'init' with [https://github.com/tux-mind/tf201-dev/tree/master/root_chooser root_chooser].  Rootchooser will mount the 8th (/boot) partition of your eMMC, read the first line of the root-level file '.boot', which will be parsed as "device:directory:init" where:
-    'device' is the block device where you put your gentoo system, e.g. /dev/mmcblk0p8, /dev/mmcblk1p1, or /dev/sda1. it could be also an ext FS image file.
-    'directory' is the directory inside the previous device where your gentoo lives, e.g. /gentoo or /.
-    'init' is the init script location in your rootfs, usually /sbin/init.
+The blob and LNX files we provide in git include a modified initrd.  What we did is overwrite 'init' with [https://github.com/tux-mind/tf201-dev/tree/master/root_chooser root_chooser].  Rootchooser will mount the 8th (/data) partition of your eMMC, read the first line of the root-level file '.root', which will be parsed as "blkdev:root_directory_or_image:init_path init_args" where:
+    'blkdev' is the block device to mount, e.g. /dev/mmcblk0p8, /dev/mmcblk1p1, or /dev/sda1.
+    'root_directory_or_image' is the directory inside the previous device where your installation lives, e.g. /gentoo or /. It can also be the path to an ext4 formatted image to use.
+    'init_path' is the init script location in your rootfs, usually /sbin/init.
+    'init_args' are optional arguments for the init program.
 If anything goes wrong, rootchooser will boot into Android.
 
-Hence, if you have gentoo on the microSD card, .boot will be:
+Hence, if you have gentoo on the microSD card, .root will be:
   /dev/mmcblk1p1:/:/sbin/init
 If it is on /data/gentoo, then:
   /dev/mmcblk0p8:/gentoo:/sbin/init
 If on the usb stick:
   /dev/sda1:/:/sbin/init
-If from a ext FS image file:
-  /data/media/ubuntu.img:/:/sbin/init
+If from a ext FS image file in /data/media:
+  /dev/mmcblk0p8:/media/ubuntu.img:/:/sbin/init
 
 Once you have created this file, reboot and it should boot into Linux.  However, unless you have configured your gentoo to automatically start Xorg, you will see nothing but the ASUS logo.  In order to verify that it worked, either ssh in or reboot back into Android and check /sdcard/gentoo/var/log/messages.  You can debug problems by checking root_chooser.log which is generated in the root (/) of the Android filesystem.
 
@@ -91,7 +92,7 @@ The are not steps, but pointers:
 * Extract the zImage and initrd from the .LNX file: abootimg -x test.LNX
 * Extract the initrd: mkdir tmp && cd tmp && gunzip < ../initrd.img | cpio -i --make-directories
 * Regenerate the initrd (from tmp): find . | cpio --create --format='newc' > ../initrd.img && gzip ../initrd.img 
-* NB: Don't forget to gcc -o boot_chooser2.c init and cp that over to initrd as your init file.
+* NB: Don't forget to gcc -o boot_chooser4.c init and cp that over to initrd as your init file.
 * Regenerate the zImage (kernel): You will want to apply the JB15.patch in our git kernel/ directory, fixing many problems.  The kernel we used was the one from ASUS: kernel_v10_4_2_15.zip.  The patch also applies our .config file.  
 * Regenerate the .LNX file: abootimg --create test.LNX -r initrd.img -k zImage
 * Reblob pack: Use blobpack and when done add 28 bytes to the front of the file (see the fastboot method section above)
