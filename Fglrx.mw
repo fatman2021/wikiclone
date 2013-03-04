@@ -3,28 +3,39 @@
 |{{InfoBox wikipedia|AMD Catalyst|header=true}}
 |{{InfoBox gdoc|ati-faq}}
 }}
-AMD Catalyst (previous '''fglrx''': '''F'''ire'''GL''' and '''R'''adeon for '''X''' ) is the proprietary graphics driver for AMD/ATI graphic cards. The open source alternative is [[radeon]].
+'''AMD Catalyst''' (previous '''fglrx''': '''F'''ire'''GL''' and '''R'''adeon for '''X''' ) is the proprietary graphics driver for AMD/ATI graphic cards. The open source alternative is [[radeon]].
+
+== Hardware detection ==
+To choose the right driver, first detect the graphics card. You can use [[Hardware detection#lspci|lspci]] for this task:
+{{RootCmd|lspci {{!}} grep -i VGA}}
+
+If you have an AGP card, also detect the chipset supporting AGP:
+{{RootCmd|lspci {{!}} grep -i AGP}}
 
 == Hardware support ==
 {| class="wikitable"
 ! Product name
 ! Driver version
 ! X server (max)
+! Bus
 ! Note
 |-
 | Radeon HD 5000 and newer
-| {{Yes|[http://packages.gentoo.org/package/x11-drivers/ati-drivers 12.11_beta11]}}
+| {{Yes|[http://packages.gentoo.org/package/x11-drivers/ati-drivers 13.1]}}
 | {{Yes|1.13}}
+| PCIe
 |
 |-
 | Radeon HD 2000 - 4000
 | {{Partial|[http://packages.gentoo.org/package/x11-drivers/ati-drivers 12.6_beta_pre897]}}
 | {{Partial|1.12}}
+| PCIe or AGP
 | Mask 12.6 and newer, see below
 |-
 | Radeon HD 1000 and older
 | {{No|&nbsp;}}
-| {{No|&nbsp;}}
+|
+|
 | Use [[radeon]] driver
 |}
 
@@ -37,16 +48,27 @@ AMD Catalyst (previous '''fglrx''': '''F'''ire'''GL''' and '''R'''adeon for '''X
 == Installation ==
 
 === Kernel ===
-You need to activate the following kernel options:
+You need [[USB]] support. Also you need to activate the following kernel options:
 {{Kernel||<pre>
+Loadable module support --->
+    [*] Enable loadable module support
+Processor type and features  --->
+    [*] MTRR (Memory Type Range Register) support
 Bus options (PCI etc.)  --->
-    [*] PCI support
+    [*] PCI Express support
     [*] Message Signaled Interrupts (MSI and MSI-X)
 Device Drivers  --->
     Graphics support  --->
         < > Direct Rendering Manager (XFree86 4.1.0 and higher DRI support) --->
-        <*> Support for frame buffer devices --->
-            < > ATI Radeon display support
+</pre>}}
+
+If you have an AGP card, enable AGP support:
+{{Kernel||<pre>
+Device Drivers  --->
+    Graphics support  --->
+        <*> /dev/agpgart (AGP Support)  --->
+            Choose your AGP driver, e.g.:
+            <*> AMD Opteron/Athlon64 on-CPU GART support
 </pre>}}
 
 === Driver ===
@@ -66,6 +88,9 @@ Check the USE flags of {{Package|x11-drivers/ati-drivers}}:
 
 After setting this you want to update your system so the changes take effect:
 {{Emerge|params+=--changed-use --deep|@world}}
+
+=== acpid ===
+Some cards need acpid running to handle events. See the [[ACPI]] article.
 
 == Configuration ==
 
@@ -87,6 +112,9 @@ The most comfortable way for most users is to use {{Path|opt/bin/amdcccle}} as a
 
 == Troubleshooting ==
 * {{Bug|ati-drivers|search=package}}
+
+=== Unexplained segmentation faults and kernel crashes ===
+If you experience unexplained segmentation faults and kernel crashes with this driver and multi-threaded applications such as [[Wine]] set ''UseFastTLS'' in [[xorg.conf]] to either ''0'' or ''1'', but not ''2''.
 
 == See also ==
 * [[fglrx Quick Switch]] - Quickly switch between this driver and the open [[Radeon]] driver using GRUB 2 without downgrading xorg-server. 
