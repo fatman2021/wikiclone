@@ -19,11 +19,10 @@ Install {{Package|sys-boot/syslinux}}:
 
 == Setup ==
 
-=== MBR setup ===
 {{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
 
-Install MBR:
-{{RootCmd|cat /usr/share/syslinux/mbr.bin > /dev/sda}}
+=== MBR setup ===
+{{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/mbr.bin of{{=}}/dev/sda}}
 
 Set the boot partition as active:
 {{RootCmd|fdisk /dev/sda|output=<pre>
@@ -40,22 +39,23 @@ Command (m for help): w
  ...
 </pre>}}
 
+=== GPT setup ===
+{{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/gptmbr.bin of{{=}}/dev/sda}}
+
+Run gdisk and enable legacy BIOS boot partition attributes on the partition where /boot/extlinux is stored.
+
 === EXTLINUX setup ===
 {{RootCmd
-|mount /dev/sda1 /boot #If necessary
 |mkdir /boot/extlinux
 |extlinux --install /boot/extlinux
-|cd /boot
-|ln -s . boot
+|ln -snf . /boot/boot
 }}
 
 {{Note|The "boot -> ." symlink is not necessary ''per se'', but for the sake of consistency, it's made so the example configurations are the same for users with {{Path|/boot}} on same partition and those with separate partitions.}}
 
 === SYSLINUX setup ===
 {{RootCmd
-|mount /dev/sda1 /boot #If necessary
 |syslinux --install /dev/sda1
-|umount /boot
 }}
 
 === PXELINUX setup ===
@@ -84,6 +84,10 @@ default
 </pre>}}
 {{Note|For easy maintenance, create config files by hostname and symlink to the IP representation. If you want a default netboot, just delete the symlink.}}
 
+== Modules ==
+syslinux package contain various modules to support variants of features, starting with syslinux 5 some modules depends on others, its good idea to copy most basic modules regardless of usecase.
+{{RootCmd|cp /usr/share/syslinux/{menu.c32,memdisk,libcom32.c32,libutil.c32} /boot/extlinux/}}
+
 == Configuration ==
 Configuration file varies between bootloaders:
 * SYSLINUX: {{Path|syslinux.cfg}}
@@ -99,7 +103,7 @@ This will give you a simple "<tt>boot:</tt>" prompt, similar to the one in Gento
 DEFAULT gentoo
 
 LABEL gentoo
-      KERNEL /boot/kernel-3.6.11-gentoo
+      LINUX /boot/kernel-3.6.11-gentoo
 </pre>}}
 
 === Menu configuration ===
@@ -119,11 +123,13 @@ MENU TITLE Boot
 
 LABEL gentoo
       MENU LABEL Gentoo Linux
-      KERNEL /boot/kernel-3.6.11-gentoo
+      LINUX /boot/kernel-3.6.11-gentoo
 
 LABEL gentoo-old
       MENU LABEL Gentoo Linux (previous kernel)
-      KERNEL /boot/kernel-3.5.7-gentoo
+      LINUX /boot/kernel-3.5.7-gentoo
 </pre>}}
+
+{{Note|Avoid using 'KERNEL' for selecting the kernel images, use LINUX instead, As example, if you use KERNEL and the image ends with .0 the extlinux will misunderstand it and try to PXE it ending with a screen graphical artefacts and nothing else.}}
 
 [[Category:Bootloaders]]
