@@ -40,6 +40,26 @@ Add zfs to the boot runlevel to mount all zpools on boot:
 Per default ZFS uses as much memory as available for its [[Wikipedia:Adaptive replacement cache|ARC]] cache. It should not be less than 512MB and a good value is 1/4 of available memory. This property can only be set during module loading, to restrict how much memory should be used to 512MB:
 {{RootCmd|echo "options zfs zfs_arc_max{{=}}512M" >> /etc/modprobe.d/zfs.conf}}
 
+== Installing into the kernel directory (for static installs) ==
+This example uses 9999, but just change it to the latest ~ or stable (when that happens) and you should be good.
+The only issue you may run into is having zfs and zfs-kmod out of sync with eachother.  Just try to avoid that :D
+
+This will generate the needed files, and copy them into the kernel sources directory.
+
+{{RootCmd|env EXTRA_ECONF='--enable-linux-builtin' ebuild /usr/portage/sys-kernel/spl/spl-9999.ebuild clean configure
+|(cd /var/tmp/portage/sys-kernel/spl-9999/work/spl-9999 && ./copy-builtin /usr/src/linux)
+|env EXTRA_ECONF='--with-spl=/usr/src/linux --enable-linux-builtin' ebuild /usr/portage/sys-fs/zfs-kmod/zfs-kmod-9999.ebuild clean configure
+|(cd /var/tmp/portage/sys-fs/zfs-kmod-9999/work/zfs-kmod-9999/ && ./copy-builtin /usr/src/linux)}}
+
+After this, you just need to edit the kernel config to enable CONFIG_SPL and CONFIG_ZFS and emerge the zfs binaries.
+
+{{RootCmd|mkdir -p /etc/portage/profile
+|echo 'sys-fs/zfs -kernel-builtin' >> /etc/portage/profile/package.use.mask
+|echo 'sys-fs/zfs kernel-builtin' >> /etc/portage/package.use
+|emerge -1v sys-fs/zfs}}
+
+The echo's only need to be run once, but the emerge needs to be run every time you install a new version of zfs.
+
 == Usage ==
 ZFS includes already all programs to manage the hardware and the file systems, there are no additional tools needed.
 
