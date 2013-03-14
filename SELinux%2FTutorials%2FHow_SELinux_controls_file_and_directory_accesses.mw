@@ -1,0 +1,194 @@
+== How SELinux controls file and directory accesses ==
+
+In the previous tutorial, we learned that SELinux adds in another method for finding out what the privileges would be for a process: a security context. This security context, together with the run-time user that the process is in, would define what the process is allowed to do.
+
+When most users hear about controlling access on a Linux system, they immediately think about allowing file and directory access. It is tangible, a real-life scenario and simple to imagine or even reproduce. So let's talk about how SELinux would control file and directory access - we'll talk about the various other resources that SELinux can control later.
+
+=== File access on Linux, without SELinux ===
+
+Let's rewind a bit, and consider file access on a Linux system, but without any additional access control methods.
+
+Access to files and directories is governed through the process' run-time user, the file/directory owner information and permission bits. With '''ls -l''', or the more verbose '''stat''', you can get information about the file ownership and permission bits. Let's consider the following output (ignore the ''Context'' bit from '''stat''' for now).
+
+{{Cmd|stat /etc/tor/torrrc|output=<pre>
+  File: 'torrc'
+  Size: 227             Blocks: 8          IO Block: 4096   regular file
+Device: 903h/2307d      Inode: 261536      Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: system_u:object_r:tor_etc_t
+Access: 2012-11-02 21:13:54.100965797 +0100
+Modify: 2012-11-02 21:13:54.100965797 +0100
+Change: 2012-11-25 16:00:44.244998238 +0100
+ Birth: -
+</pre>}}
+{{Cmd|ls -l /etc/tor/torrc|output=<pre>
+-rw-r--r--. 1 root root 227 Nov  2 21:13 torrc
+</pre>}}
+
+What this information tells us, is that the ''torrc'' file is owned by the root Linux user, part of the root Linux group, and that both the owner (root), group (root) and other users can read it (the '''r''' bit is set). Only the owner (root Linux user) has write access to the file (the '''w''' bit is set). So access-wise, a process that runs as a non-root user will be able to read the file, but not write to it.
+
+So when something (a process, called the ''actor'') tries to write (which is a ''permission'') to the file /etc/tor/torrc (which is called the ''resource''), Linux checks the access controls and denies the request. The permissions that are in scope for the standard Linux access controls are the well-known read/write/execute rights, and they are based on the process ownership and file ownership.
+
+This file access control is very standard on Linux, and should be well known by administrators and users. When looking at the file (or directory) ownership, it should be immediately obvious for users what can and cannot happen against the file. Consider the /var/cache/gorg directory:
+
+{{Cmd|ls -ld /var/cache/gorg|output=<pre>
+drwxrwx---.  6 gorg    gorg    4096 Feb 19  2012 gorg
+</pre>}}
+
+In the above example, you should immediately notice that - unless a process is running as the gorg user, or within the gorg group - no process has access to this directory. Well, none is wrong: root-owned processes can still get into the directory and manipulate it (as root is the all-powerful user). Or the /var/lib/slocate directory:
+
+{{Cmd|ls -ld /var/lib/slocate|output=<pre>
+drwxr-x---. 2 root locate 4096 Nov  2  2010 slocate
+</pre>}}
+
+Here, root-running processes can write into the directory, and processes that are running within the "locate" group can read/access the directory. Other processes will not be able to, as shown by the next attempt (by a regular user process) to enter this directory:
+
+{{Cmd|cd /var/lib/slocate|output=<pre>
+bash: cd: slocate: Permission denied
+</pre>}}
+
+What users like you and me do in order to know what would or wouldn't be allowed, is to check the ''actor'' information (in this case, the run-time user, which is a regular user account), the ''resource'' information (in this case, the ownership details for the file) and then match the ''permission'' we want to check (like entering a directory) against the allowed permissions (execute in this case).
+
+=== SELinux-ifying the examples ===
+
+Before going towards SELinux itself, let's first write the above examples in a policy-like language.
+
+Let's start with the /etc/tor/torrrc file, which had the following information (meta-data):
+
+{{Cmd|ls -l /etc/tor/torrc|output=<pre>
+-rw-r--r--. 1 root root 227 Nov  2 21:13 /etc/tor/torrc
+</pre>}}
+
+We could write the access controls against this file as follows:
+* Allow any process that runs as the root Linux user to read the torrc file
+* Allow any process that runs as the root Linux user to write to the torrc file
+* Allow any process that runs within the root group to read the torrc file
+* Allow any process to read the torrc file
+
+Or with the slocate directory:
+
+{{Cmd|ls -ld /var/lib/slocate|output=<pre>
+drwxr-x---. 2 root locate 4096 Nov  2  2010 slocate
+</pre>}}
+
+This could be written as:
+* Allow any process that runs as the root Linux user to read the slocate directory information
+* Allow any process that runs as the root Linux user to write into the slocate directory (create files and such)
+* Allow any process that runs as the root Linux user to enter the slocate directory (and thus search for files within)
+* Allow any process that runs within the locate group to read the slocate directory information
+* Allow any process that runs within the locate group to enter the slocate directory
+
+Although quite verbose, this does tell you exactly what the permissions are on the torrc file or slocate directory. 
+
+{{Note|In reality, it isn't so much the "slocate directory" and "torrc file" that is part of the rule, but the ownership and permission bits. So to be correct, the slocate access controls would be more like the following:
+
+* Allow any process that runs as the root Linux user to read any directory owned by root and with the 'owner read' flag set
+* Allow any process that runs as the root Linux user to write into any directory owned by root and with the 'owner write' flag set
+* etc...
+}}
+
+It isn't so much the content of the rules that we want to make clear, but the way how the rules are written. They all contain information such as
+# the context of the process that is acting upon something
+# the context of the resource on which the process is acting
+# the type or class of the resource
+# the permission or permissions that are allowed given the first three information blurbs
+
+In other words, you can write it as follows:
+
+ Allow ''some process'' with a certain context (like run-time user or group information) to 
+ do something (the ''permissions'') against a file or directory (the ''class'') that 
+ matches ''another certain context'' (like ownership permission bits).
+
+In '''SELinux vocabulary''', we say that
+# the context of the process that is acting upon something is called the ''domain''
+# the context of the resource on which the process is acting is called the ''type''
+# the type or class of the resource is called the ''class''
+# the permission or permissions that are allowed given the ''domain'', ''type'' and ''class'' are the ''permissions''
+
+With this vocabulary in mind, a SELinux ''allow statement'' is structured as follows:
+
+ allow <domain> <type>:<class> { <permissions> };
+
+=== SELinux type enforcement ===
+
+SELinux has several language constructs for its various features, but for now we'll stick with the ''type enforcement'' part. In the previous section, we already discussed that SELinux uses a construction with the following syntax:
+
+  allow <domain> <type>:<class> { <permissions> };
+
+The next thing we need to do is to substitute the place-holders with real values.
+
+==== SELinux domains and types ====
+
+We already discussed domains in the previous tutorial somewhat, but we didn't call it domains then just yet. Remember the ''security context'' that is assigned to a process? We had an example such as ''system_u:system_r:auditd_t''. Well, the third field of the context (''auditd_t'') is the ''domain'' in which a process is running.
+
+{{RootCmd|ps -eZ {{!}} grep auditd|output=<pre>
+system_u:system_r:auditd_t      24008 ?        00:00:00 auditd
+</pre>}}
+
+The suffix ''_t'' is a naming convention (but not mandatory for SELinux) to tell administrators that the given label is a ''type'' (or ''domain'' when it is for a running process). Because of this, we call the feature of SELinux that governs these 'allow rules' the ''type enforcement'' part of SELinux. It is also the SELinux feature that you will get to know the most, since it is the part of SELinux that most development goes into.
+
+Domains are nothing more than regular types, but with the added knowledge that they are assigned to running processes.
+
+==== An example type enforcement rule ====
+
+Let's fill in a few of the place-holders with real-life values.
+
+ allow auditd_t <type>:file { write };
+
+In the above example, we used the ''domain'' for the audit daemons (''auditd_t''), the class ''file'' and the permission ''write''. All we have left is the ''<type>'' of the file we want to allow writing to. Now, the Linux audit daemon has to write into the audit logs, right? So it makes sense that the type we put there is the type for the audit log file.
+
+Well, given that types are, naming-convention-wise, suffixed with ''_t'', and that we are talking about the audit daemon log files, then a name such as ''auditd_log_t'' would not be wrong, would it? So then our rule becomes:
+
+ allow auditd_t auditd_log_t:file { write };
+
+Well, this is exactly what SELinux does:
+# if the process runs within the auditd_t domain (and thus has a security context with ''auditd_t'' in its third position)
+# and if the target has the type ''auditd_log_t'' set,
+# and the target is a file
+# then the permission ''write'' is granted
+
+And behold, we can ask SELinux if this rule is enabled on our system, using '''sesearch'''.
+
+{{RootCmd|sesearch --allow --source auditd_t --target auditd_log_t --class file --perm write|output=<pre>
+Found 1 semantic av rules:
+   allow auditd_t auditd_log_t : file { ioctl read write create getattr setattr lock append unlink link rename open } ; 
+</pre>
+}}
+
+As you can see from the output, processes running in the ''auditd_t'' domain can do much more than just ''write'' to files with the ''auditd_log_t'' type assigned to them. They can control I/O, read, write, create such files, get attributes, set attributes, lock the file, append, unlink or link the file, rename the file and open the file.
+
+=== How does SELinux know the labels of files? ===
+
+From the first tutorial, we know that all processes have a security context. And from the previous sections, we know this security context contains a part called the ''domain'' that is used by SELinux for its type enforcement policy rules. We also saw an example policy rule for the audit daemon, writing to the audit log files:
+
+ allow auditd_t auditd_log_t:file { write };
+
+But how does SELinux know that a file is assigned the ''auditd_log_t'' type? Well, SELinux stores this information in an ''extended attribute'' of the file. Extended attributes are parameters (key and value pairs) that are assigned to a file. On a regular Linux system, extended attributes are optional and most often not used. If you start using file-level access controls (facl's) then extended attributes are used to store the additional access control information. SELinux too stores its information in an extended attribute. These extended attributes are always for one file only: files cannot "share" extended attributes, but multiple files can of course have the same ''values'' for their extended attributes.
+
+The extended attribute key that we need is the ''security.selinux'' extended attribute. The ''security.'' prefix tells Linux that this is a security-related attribute and as such should not be simply controllable by regular users: you need specific permissions to change these extended attributes (and SELinux too can be used to govern who or what is able to change the ''security.selinux'' attribute).
+
+Let's look at this attribute for the /var/log/audit/audit.log file.
+
+{{RootCmd|getfattr -m security.selinux -d /var/log/audit/audit.log|output=<pre>
+getfattr: Removing leading '/' from absolute path names
+# file: var/log/audit/audit.log
+security.selinux="system_u:object_r:auditd_log_t"
+</pre>
+}}
+
+Surprise surprise, the extended attribute contains a security context identifier (''system_u:object_r:auditd_log_t'') with a third field that matches exactly what we would expect (''auditd_log_t''). 
+
+Now, you don't need to use ''getfattr'' (which is short for 'get file attribute') to get the SELinux context of a file. The '''ls''' command can be used as well (with the '''-Z''' option), and we noticed earlier already that '''stat''' also displays the SELinux context. 
+
+{{RootCmd|ls -lZ /var/log/audit/audit.log|output=<pre>
+-rw-------. 1 root root system_u:object_r:auditd_log_t 1297813 Mar 12 20:56 /var/log/audit/audit.log
+</pre>}}
+
+Files are not the only resource that use extended attributes. Everything that you can find on a (modern) file system can have extended attributes: directories, symbolic links, socket files, block devices, character devices, etc. SELinux thus employs extended attributes to the fullest by storing the SELinux context (security context) as extended attributes of all these resources.
+
+=== What you need to remember ===
+
+From this tutorial, you should remember that SELinux
+* uses contexts for processes (''domains'') and contexts for files (''types'') as part of its internal language for allowing access
+* uses the ''allow <domain> <type>:<class> { <permissions> };'' syntax for this access
+* stores the security context (or SELinux context) of a file or directory as an extended attribute of this file
