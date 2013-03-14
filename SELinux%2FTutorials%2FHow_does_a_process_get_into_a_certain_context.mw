@@ -1,0 +1,156 @@
+== How does a process get into a certain context ==
+
+In the previous tutorials, we already got across the context in which a process resides, and which can be checked using utilities like '''ps -Z'''.
+
+{{RootCmd|ps -eZ {{!}} grep auditd|output=<pre>
+system_u:system_r:kernel_t:s0     448 ?        00:00:04 kauditd
+system_u:system_r:auditd_t:s0    6731 ?        00:00:22 auditd
+</pre>
+}}
+
+But how do processes get into this context?
+
+The answer lays in ''transitions''.
+
+=== Context inheritance ===
+
+First of all, know that SELinux supports inheritance of contexts. Even more, inheritance of contexts is default behavior: if there is no policy in SELinux telling otherwise, then anything created will inherit the context of its parent.
+* A process running as context ''foo_t'' and which spawns another process (forks), this new process too will run in the ''foo_t'' context (as long as SELinux has no rules telling otherwise)
+* A file or directory created in a directory with context ''bar_t'' will get the ''bar_t'' context as well (as long as SELinux has no rules telling otherwise)
+
+This inheritance is always the case, even if the SELinux management utilities (but not SELinux policy rules) say otherwise: even if there is a context definition saying that {{Path|/var/log/audit}} should be ''auditd_log_t'', if you create this {{Path|audit}} directory within {{Path|/var/log}} then this directory will inherit the ''var_log_t'' context from its parent directory. Only later, when you run '''restorecon''', will the context be changed.
+
+Since we are talking about inheritance, there probably is a root context for everything. Well, there is - of course this is defined by the policy and SELinux support, but it is safe to assume that the root context (domain) for processes is the ''kernel_t'' context (as this is the context that the kernel runs as, and it is the kernel that spawns init, which itself spawns various other processes) and the root context for the file system is ''root_t''.
+
+{{Cmd|ls -ldZ /|output=<pre>
+dr-xr-xr-x. root root system_u:object_r:root_t:s0      /
+</pre>
+}}
+
+=== Transitioning ===
+
+Of course, SELinux would be quite dull if it doesn't support changing to other contexts. And in this tutorial, we want to talk about process context transitions: the idea that a process, once created, is within a different context than its parent process.
+
+SELinux supports context transitions when a process forks (actually upon calling ''execve()'' which is implied when we talk about high-level forking and not the ''fork()'' method). Forking seems like some weird programming term to some, so let's say it is when something is executed. And when you execute something, we mean that a process referred to some file (most likely a binary or a script) saying "execute this", so that the referred file is loaded and 'becomes' a process.
+
+What a SELinux policy writer can do in these cases is to define a context transition, like so:
+
+ When an init_t process executes a file with context initrc_exec_t, 
+ then the resulting process should run in the initrc_t context.
+
+Or, in some dumb ASCII-art alike flow:
+
+ [init_t] --(execute initrc_exec_t) ---> [initrc_t]
+
+Basically what the SELinux policy writer wants to achieve is that, when the init process (running on the Linux system) executes an init script (to be found in {{Path|/etc/rc.d/init.d}} or {{Path|/etc/init.d}} then this script will run in the ''initrc_t'' domain. 
+
+==== The need for the file context ====
+
+In the previous examples, you notice that the file context of the target file (to be executed) is used. Remember the previous tutorials on file contexts? SELinux does not use paths internally - it always uses contexts. So a policy writer cannot use {{Path|/etc/init.d/sysstat}}, but has to refer to the context that this file would have - ''initrc_exec_t''.
+
+The syntax used is again a naming convention, but is not mandatory. SELinux also doesn't parse the name; the context could very well be called ''garble_mumble_joy''. Naming conventions though are interesting since they allow us mere humans to understand what the purpose is of the context. So in case of ''initrc_exec_t'', we could read this as "the context for an executable file that, when executed, might have the resulting process run in ''initrc_t''".
+
+==== Real-life example: startup of SSH ====
+
+Let's look at a real-life example: the start-up of the SSH daemon.
+
+Basically, what happens when the SSH daemon is started through its service, is
+# the Linux kernel executes /sbin/init, resulting in the init process
+# the init process executes /etc/init.d/sshd, resulting in this init service script running for a (short) while
+# this sshd init service script executes /usr/sbin/sshd, resulting in the sshd daemon
+
+For SELinux, with the common policy loaded, this could be noted as:
+ [kernel_t] --(execute init_exec_t)--> [init_t]
+ [init_t] --(execute initrc_exec_t)--> [initrc_t]
+ [initrc_t] --(execute sshd_exec_t)--> [sshd_t]
+
+What we are defining here are ''process transitions'' from one domain to another, through the execution of a file.
+
+=== When is a transition allowed ===
+
+Now, such a transition can only occur when the following three rules are matched.
+# The origin domain must have execute rights on the file
+# The file context itself must be identified as an ''entry point'' for the target domain
+# The origin domain must be allowed to transition to the target domain
+
+Only if all three rules (policies) are matched, only then will such a domain transition occur. Let's look at these three rules in more detail.
+
+==== Execute rights on the file ====
+
+As we have seen before, SELinux has a very fine-grained set of permissions that it can control. The ''execute'' permission on files is one of them. If a domain does not have ''execute'' rights on the file, then it will not be able to execute that file. Simple as that. 
+
+This too is a common source of denials or permission issues: a process tries to execute some file but is not allowed to. Again, as we learned in the past, this is very probably because of a wrong file context. On a Gentoo system, daemons that fail to execute files are most likely because they are trying to execute a file with the ''lib_t'' context (often the case for files in {{Path|/usr/lib}} somewhere) instead of the ''bin_t'' context.
+
+So in case of the init script (''initrc_t'') calling the SSHd binary (''sshd_exec_t''):
+
+{{RootCmd|sesearch -s initrc_t -t sshd_exec_t -c file -p execute -Ad|output=<pre>
+Found 1 semantic av rules:
+   allow initrc_t sshd_exec_t : file { read getattr execute open } ;
+</pre>}}
+
+Great, so the init service script is allowed to execute the SSHd binary.
+
+==== Entrypoint for a domain ====
+
+By itself, executing a file with a specific label isn't sufficient to trigger a domain transition. Remember that SELinux does not parse contexts itself - it has no knowledge that ''sshd_exec_t'' has anything to do with SSH daemons, let alone ''sshd_t''. So we need to tell it that ''sshd_exec_t'' and ''sshd_t'' are related, by saying that the ''sshd_exec_t'' file is an '''entrypoint''' for the ''sshd_t'' domain.
+
+{{RootCmd|sesearch -s sshd_t -t sshd_exec_t -c file -p entrypoint -Ad|output=<pre>
+Found 1 semantic av rules:
+   allow sshd_t sshd_exec_t : file { ioctl read getattr lock execute execute_no_trans entrypoint open } ;
+</pre>}}
+
+As a counter-example, checking if ''ssh_exec_t'' (which is used for the SSH client) is known as an entrypoint for the SSH daemon (''sshd_t'') shows no hits:
+
+{{RootCmd|sesearch -s sshd_t -t ssh_exec_t -c file -p entrypoint -Ad}}
+
+What we can do is ask '''sesearch''' for what domains the ''ssh_exec_t'' type ''is'' an entrypoint for.
+
+{{RootCmd|sesearch -t ssh_exec_t -c file -p entrypoint -Ad|output=<pre>
+Found 5 semantic av rules:
+   allow xm_ssh_t ssh_exec_t : file { ioctl read getattr lock execute entrypoint open } ;
+   allow ssh_t ssh_exec_t : file { ioctl read getattr lock execute execute_no_trans entrypoint open } ;
+   allow sge_job_ssh_t ssh_exec_t : file { ioctl read getattr lock execute entrypoint open } ;
+   allow condor_startd_ssh_t ssh_exec_t : file { ioctl read getattr lock execute entrypoint open } ;
+   allow nx_server_ssh_t ssh_exec_t : file { ioctl read getattr lock execute entrypoint open } ;
+</pre>
+}}
+
+That's a lot - if the same context can be used for multiple target domains, how would SELinux know what domain to use? Enter the third requirement: the process transition.
+
+==== Process transitions ====
+
+The third requirement is that there must be a SELinux policy saying that, to go from the source domain to the target domain, that a type transition has to be allowed. Let's look at the one from ''initrc_t'' to ''sshd_t'':
+
+{{RootCmd|sesearch -s initrc_t -t sshd_t -c process -p transition -Ad|output=<pre>
+Found 1 semantic av rules:
+   allow initrc_t sshd_t : process { transition siginh } ;
+</pre>
+}}
+
+It is this permission that allows us to have multiple domains as entrypoint, while retaining an unambiguous transition. Consider our previous example of the SSH client: the ''ssh_exec_t'' was entrypoint for multiple domains, including ''xm_ssh_t'' and ''nx_server_ssh_t''. However, the domains that are allowed to execute the SSH client to transition to the ''xm_ssh_t'' and those that are allowed to execute the SSH client to transition to the ''nx_server_ssh_t'' are distinct.
+
+{{RootCmd|sesearch -t xm_ssh_t -c process -p transition -Ad|output=<pre>
+Found 2 semantic av rules:
+   allow xm_t xm_ssh_t : process { transition getattr } ;
+   allow xm_ssh_t xm_ssh_t : process { fork transition sigchld sigkill sigstop signull signal getsched setsched getsession getpgid setpgid getcap setcap share getattr noatsecure siginh rlimitinh dyntransition execmem setkeycreate setsockcreate } ;
+</pre>}}
+{{RootCmd|sesearch -t nx_server_ssh_t -c process -p transition -Ad|output=<pre>
+Found 2 semantic av rules:
+   allow nx_server_t nx_server_ssh_t : process { transition getattr } ;
+   allow nx_server_ssh_t nx_server_ssh_t : process { fork transition sigchld sigkill sigstop signull signal getsched setsched getsession getpgid setpgid getcap setcap share getattr noatsecure siginh rlimitinh dyntransition execmem setkeycreate setsockcreate } ;
+</pre>}}
+
+In our ugly ASCII flow diagram, this would be shown as follows:
+ [xm_t] --(execute ssh_exec_t)--> [xm_ssh_t]
+ [nx_server_t] --(execute ssh_exec_t) --> [nx_server_t]
+
+So even though ''ssh_exec_t'' is entrypoint for multiple target domains, the real transitions are unique.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* SELinux by default inherits contexts, be it from processes (on fork) or parent files/directories
+* Contexts of processes can change on execute of a command from that process' context, but only under the conditions that
+** the target file context is executable for the source domain
+** the target file context is marked as an entrypoint for the target domain
+** the source domain is allowed to transition to the target domain
