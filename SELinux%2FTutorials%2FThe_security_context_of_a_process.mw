@@ -1,0 +1,103 @@
+== The security context of a process ==
+
+When working on a Linux system, you are undoubtedly aware that there are ''processes'' running all around. Processes (sometimes also referred to as ''tasks'') are generally speaking applications that are running. For instance, on a booted Linux system, you might find processes such as '''sshd''' (the OpenSSH daemon, used to provide secure remote shells towards the system), '''crond''' (the Cron daemon, used to run certain commands at predefined time(intervals)) or '''udevd''' (the device handling daemon, which receives kernel events and acts on those towards the system), but also user processes like '''bash''' (a user shell), '''xinit''' (the graphical X server session application) or even '''ps''' (the command to show running processes).
+
+=== Processes on Linux ===
+
+From a process listing, more advanced administrators will be able to tell you what each process is (supposed to be) doing. This is because these processes have names that are known to match a given application - '''sshd''' is the '''s'''ecure '''sh'''ell '''d'''aemon.
+
+{{Cmd|ps|output=<pre>
+ PID TTY        TIME CMD
+ 540 pts/4  00:00:00 bash
+2286 pts/4  00:00:00 ps
+</pre>}}
+
+In the above example, two processes are listed. The first one is the user shell (where '''bash''' stands for ''Bourne Again SHell'') and most likely the shell that the user is currently working in, i.e. the application in which he just typed ''ps'') and the second one is the '''ps''' application (short for ''processes'', the application that is showing the output of the running processes). Of course, many more are running on a Linux system, but without additional arguments to the '''ps''' command, it only outputs the applications running within the current session of the user.
+
+Let's take a look at a few other processes. In the next command, we ask for all running processes on the system ('''-e''') with additional information ('''-f'''), but limit the output to those processes that have ''auditd'' and ''sshd'' in their name. We'll run this as the root Linux user, since some hardened Linux systems do not allow regular users to view processes of other users.
+
+{{RootCmd|ps -ef {{!}} grep -E '(auditd{{!}}sshd)'|output=<pre>
+root     3934   1    0    20:30 ?      00:00:00 /sbin/auditd
+root     3946   2    0    20:30 ?      00:00:00 [kauditd]
+root     4159   1    0    20:30 ?      00:00:00 /usr/sbin/sshd
+root     4240   1    0    21:03 tty1   00:00:00 grep -E (auditd|sshd)
+</pre>}}
+
+In this example, we notice four processes in the output:
+# the '''auditd''' process, which is the Linux audit daemon (responsible for handling audit events and writing them to the audit log files)
+# the '''kauditd''' kernel process, which is a part of the Linux kernel responsible for the kernel audit events (and communicates with the '''auditd''' process). The special brackets surrounding it are telling you that this is not a regular (userland) process (launched through a command), but a kernel process (started/managed by the Linux kernel itself)
+# the '''sshd''' secure shell daemon
+# the '''grep''' command we just used to filter the output of the previous command
+
+Now, although seasoned administrators are well able to tell you what these processes are (supposed to be) doing, they will also tell you that these processes are all running as the ''Linux root user'', the all-powerful administrator account on Unix and Linux systems. And because of that, all these applications have the same powers over the system as the root user does.
+
+=== Privileges of processes ===
+
+As long as applications behave as they should, and users are not abusing the applications, then having them run as root is okay. And although root-running applications have all the powers of the root user, because they are written with a few tasks in mind (how difficult is it to write an audit daemon, or a secure shell daemon, with no bugs in, right?) they are often seen as sufficiently trustworthy to run on a system.
+
+But then comes in the evil, malicious person. A user with little to no specific privileges on the system (a regular user account, or perhaps not even an account at all) who is trying to interact with one of these root-running processes in a way that these applications suddenly misbehave and give the user root access (''privilege escalation'' in case the user was running as a non-privileged account and now holds root privileges) or allows the user to launch commands through the root-running process (''remote command execution'').
+
+Bugs in applications that allow such attacks are called ''vulnerabilities'' and are not new to administrators and engineers. Even for applications closely developed for security purposes, such as the audit daemon or secure shell daemon, such vulnerabilities arise from time to time. An example would be [https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2008-1628 CVE-2008-1628] where the Linux audit daemon (version lower than 1.7) has a vulnerability that could potentially lead to code execution (and thus privilege escalation). An important aspect of system security is thus to keep track of security updates - do not allow your system to run old software versions that are known to be vulnerable to one or more exploitable bugs. Or even better, don't run old software. Period.
+
+On Gentoo, you can use '''glsa-check''' to verify if your system is running any software provided by a package that is known to be vulnerable. Although not perfect (it requires the Gentoo security team to create Gentoo Linux Security Advisories before the tool can detect potential vulnerabilities) it is one of the many measures you can take to stay secure.
+
+{{RootCmd|glsa-check -t all|output=<pre>
+This system is not affected by any of the listed GLSAs
+</pre>}}
+
+Another method would be to keep track of all CVEs (reports describing vulnerabilities in software, hardware and operating systems) applicable to your system. Tools like [http://cvechecker.sourceforge.net cvechecker] can help you in this.
+
+But constantly upgrading your software still doesn't protect the system from being attacked. Software might be vulnerable without a fix at hand (for instance in case of 0day exploits, where the vendor or developer of the software is not yet or just very recently been made aware of the vulnerability, and has not had the time to update its software) or the fix might not have been packaged by your Linux distribution yet. And in some companies, security fixes, even when released by the distribution, take weeks or even months to be pushed out to the production systems.
+
+One of the core problems at hand are the '''privileges of the process''' that is being attacked. Applications that run as ''root'' are prone to be attacked in the hope to get root access on the system (and thus be all powerful). Because of this, application engineers have been using various methods to lower the privileges under which the application is running.
+
+* Some applications use a split process setup, where one very small application runs as root (because it needs to, for instance to bind on a TCP or UDP port lower than 1024, or to access certain system resources) and the other one runs as a non-root user. The non-root running application is the main application and attempts to securely communicate with the first process. This way, the likelihood that a vulnerability is found in the (small) root-running process is lowered.
+* Some applications use Linux capabilities and drop the capabilities that they don't need. Capabilities are one way of reducing root privileges, but are not in scope of this tutorial set.
+* Some applications don't run as root - period. A relational database such as postgresql or mysql is developed to run as its own, dedicated (non-root) user. As a result, vulnerabilities in these applications are less likely to result in total system compromise, although the databases themselves are still compromised.
+* Some applications run in a ''chroot jail'' (which stands for ''ch''ange ''root''), which means that the application is ran without a full view on the system. Instead, it is only aware of a small set of files, specifically placed to allow the application to run - and nothing more. A successful exploit against such an application would result in privilege escalation within a ''chroot jail'', where the attacker can hopefully not break out. Thus, the attacker still has no rights to get confidential information from outside the chroot (as he cannot see or find this information).
+
+Another powerful method is to run the application within a ''Mandatory Access Control'' confined environment, of which '''SELinux''' is a nice example.
+
+=== Confining applications ===
+
+What '''SELinux''' does is to allow the applications to run, with just those privileges the applications need. The privileges that SELinux supports are ''much, much'' more fine-grained than what is known without SELinux. Where an application previously ran with the privileges of the user (such as root), it now runs with the privileges of a specifically crafted ''domain'', identified by a ''security context''.
+
+Let's take a look at our previous example, but now ask '''ps''' to also display the ''security contexts'' of the running processes. I'm going to drop the "more information" option ('''-f''') for readability reasons (but I'll include '''grep''' in the filter then, since dropping the "more information" will also not display the arguments of the '''grep''' command and we need it later).
+
+{{RootCmd|ps -eZ {{!}} grep -E '(auditd{{!}}sshd{{!}}grep)'|output=<pre>
+system_u:system_r:auditd_t   root     3934 ?      00:00:00 /sbin/auditd
+system_u:system_r:kernel_t   root     3946 ?      00:00:00 [kauditd]
+system_u:system_r:sshd_t     root     4159 ?      00:00:00 /usr/sbin/sshd
+root:sysadm_r:sysadm_t       root     4240 ?      00:00:00 grep
+</pre>}}
+
+On a RedHat Enterprise Linux 6 system, the output might be similar to the following:
+
+{{RootCmd|ps -eZ {{!}} grep -E '(auditd{{!}}sshd{{!}}grep)'|output=<pre>
+system_u:system_r:auditd_t:s0                               root     3934 ?      00:00:00 /sbin/auditd
+system_u:system_r:kernel_t:s0                               root     3946 ?      00:00:00 [kauditd]
+system_u:system_r:sshd_t:s0-s0:c0.c1023                     root     4159 ?      00:00:00 /usr/sbin/sshd
+unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023       root     4240 ?      00:00:00 grep
+</pre>}}
+
+The ''security context'' of the process is the first column in the output. It is simply put a specific ''label'' assigned to a process, which informs SELinux about the rights and privileges that are allowed to be granted on the process. It is the combination of this label (the context) together with the run-time user under which the process is running (root in the above example) that defines that the process is allowed to do on a system.
+
+Just like with the run-time user, 
+* several processes can be assigned the same label (context).<br />Just like many processes could run under a dedicated ''mysql'' account, multiple processes can run with the same context assigned to them, like ''system_u:system_r:mysqld_t''
+* a process is always assigned one and exactly one label (context).<br />Just like processes either run as root, mysql ''or'' (but never ''and'') another user, they are always running in one security context, never multiple contexts at once
+
+However, there is a huge difference that sets apart SELinux from the regular permission system, which is the '''Mandatory''' part of the access control system.
+
+Unlike the run-time user, which can be changed at will by the application itself (root users can change their Linux identity towards any user they like, and non-root users can too if they are able to authenticate themselves properly), a process ''cannot change its security context'' without it being explicitly allowed (as one of the permissions granted to the security context). It is the ''policy'' that defines how and when contexts can change, and this is not at the discretion of the application or user. Hence the name, ''Mandatory'' access control versus ''Discretionary'' access control.
+
+This mandatory part of the access control is what makes SELinux powerful in reducing the likelihood that vulnerable applications are exploited to do what they are not supposed to: since the application cannot control the ''security context'' in which it is running, any 'hostile take-over' of the process will not result in any privilege escalation beyond what the policy tells us that the application is allowed to do.
+
+=== What you need to remember ===
+
+That's it for the first part of the tutorials (many more will follow).
+
+What you should remember from this tutorial is that
+# a process is assigned a ''security context'' which, just like with the user under which the process runs, helps Linux in identifying what the application should and shouldn't be allowed to do, and
+# that a ''security context'' cannot change at the discretion of the process, but is instead governed by the SELinux policy itself
+
+Next, we will take a look at what these privileges and permissions are towards regular files and directories.
