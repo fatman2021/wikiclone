@@ -1,0 +1,143 @@
+== Controlling file contexts yourself ==
+
+Now that we understand that processes run within a certain SELinux domain, and that this domain is used by SELinux to check the permissions against files with a particular context, we now need to find out how to set the file contexts ourself and how to make this manageable. After all, if a denial gives us a hint about a wrong context, we need to rectify this.
+
+The context of a file (or directory) in SELinux is set through its extended attribute, but having to manually set the context for every file would require a huge database of all possible file paths and their associated SELinux context. As this is not really manageable, SELinux uses ''file context definitions'' using regular expressions.
+
+=== A file context definition/expression ===
+
+In our example of the audit logs, it is safe to assume that every file within /var/log/audit is to be used for audit logging purposes. So expression-wise, we could say that ''/var/log/audit/.*'' is a good match for files which should have the ''auditd_log_t'' type. Although correct, it leaves ''/var/log/audit'' itself undefined.
+
+What most SELinux policy writers do in such a case is to use a regular expression that matches both the directory as well as its content:
+
+ /var/log/audit(/.*)?
+
+Next is to define which context to assign to it. In our example, we use the ''auditd_log_t'' type. SELinux' management tools will automatically convert this to the full context ''system_u:object_r:auditd_log_t'' (or ''system_u:object_r:auditd_log_t:s0'' - we will discuss the context structure and their additional fields in a later part of this tutorial series). So we have
+
+ /var/log/audit(/.*)?                      system_u:object_r:auditd_log_t
+
+We are still missing the class(es) for which this is applicable. As we have an expression that matches both a directory and files, we generally say that all classes (well, file related classes since we are talking about a file system) are applicable. So we have:
+
+ /var/log/audit(/.*)?      all files       system_u:object_r:auditd_log_t
+
+With '''semanage fcontext''', we can query the existing SELinux file context definitions. To get to the definition for the audit logs:
+
+{{RootCmd|semanage fcontext -l {{!}} grep auditd_log_t|output=<pre>
+/var/log/audit(/.*)?                               all files          system_u:object_r:auditd_log_t 
+</pre>
+}}
+
+=== All file context definitions ===
+
+The '''semanage fcontext -l''' command will display all file context definitions that SELinux policy writers have provided.
+
+It is important to remember that this 'database' of file contexts is provided by SELinux policy writers: if you ever need to write your own application policy, you will have to define the contexts in a similar way as well as part of the policy. On distributions such as RedHat Enterprise Linux, where the installed (and loaded) SELinux policy is the full policy set of all applications that are supported on RedHat Enterprise Linux, you will notice that this list is '''huge'''. That is because all policies are already loaded and, as such, all context definitions are as well.
+
+Distributions such as Gentoo, which only load the policies that are applicable to your system (additional policies are loaded as you install additional software using a standard dependency structure), this list is still big but more manageable.
+
+The '''semanage''' command takes this information from flat files stored in {{Path|/etc/selinux}}. Sadly, the command is also crippled in its function: it does not display all contexts and expressions that are applicable on the system. It only shows those that are not part of any 'auto-generated' contexts, such as with home directory contexts. To get information on what the context ought to be (according to the SELinux configuration files), you can use '''matchpathcon'''.
+
+{{Cmd|/usr/sbin/matchpathcon /home/swift/.config|output=<pre>
+/home/swift/.config      staff_u:object_r:xdg_config_home_t
+</pre>}}
+
+=== Applying contexts on files ===
+
+With the SELinux management utilities having a view on what contexts files, directories and other file-related classes should have, we still have to somehow apply this context to the files. Having the correct contexts on the files is '''extremely important''', so much so that I'm going to re-iterate this in a nicely formatted paragraph.
+
+{{Important|Ensuring that the target files and directories have the right SELinux context is primordial to get your system to behave as it should. Too many times users disable SELinux because SELinux is prohibiting certain access, whereas the problem is just that their files are not labeled correctly.}}
+
+This is where '''restorecon''' comes into play.
+
+The '''restorecon''' utility will check the contexts of the files and match those against the contexts that are defined in the SELinux context definition expressions. It uses a special ''mapping algorithm'' to make sure that it matches the expression that is most likely applicable to the file, checks its should-be context against the existing context and, if it doesn't match, changes the context of the file.
+
+The special ''mapping algorithm'' will look through the expressions and filter those expressions that match the file. From that set of expressions, it 
+# checks if there is an expression without wildcards (like {{Path|/var/log/audit/audit\.log}})
+# if not, it looks for the expression with the wildcard the furthest from the start (so with {{Path|/var/log/audit(/.*)?}} and {{Path|/var/log/audit/.*}}, the latter has its wildcard the furthest from the start)
+# if there are multiple expressions with the same wildcard distance, it looks for the expression with the most characters in it (so with {{Path|/var/log/audit(/.*)?}} and {{Path|/var/log/audit(/.*)\.log}} the latter has the most characters in it)
+
+Although there are a few more rules to it, the above ones are the simplest to explain for now and suffice in 99.9% of the cases where you need to know this. You can also use the '''findcon''' utility to display ''all'' matching expressions. As far as we can tell, the lowest returned value is the one that will be picked (but I'm not sure, so use '''matchpathcon''' in these cases if you really want to be sure).
+
+{{Cmd|findcon /etc/selinux/strict/contexts/files/file_contexts -p /var/cache/gorg/doc|output=<pre>
+/.*             system_u:object_r:default_t
+/var/.*         system_u:object_r:var_t
+/var/cache/gorg(/.*)?           system_u:object_r:gorg_cache_t
+</pre>}}
+
+Let's run '''restorecon''' against a few files and directories.
+
+{{RootCmd|restorecon -v /var/log/audit/audit.log}}
+
+No output is good, since it means that the context was correct to begin with. Let's try a recursive one:
+
+{{RootCmd|restorecon -Rv /etc|output=<pre>
+restorecon reset /etc/resolv.conf.tail context staff_u:object_r:etc_t->staff_u:object_r:net_conf_t
+restorecon reset /etc/dnsmasq.conf context staff_u:object_r:etc_t->staff_u:object_r:dnsmasq_etc_t
+restorecon reset /etc/csh.env context staff_u:object_r:etc_t->staff_u:object_r:etc_runtime_t
+</pre>
+}}
+
+In this example, '''restorecon''' has changed the contexts of three files. For instance, the {{Path|dnsmasq.conf}} file was labeled with the ''etc_t'' type and has now been set to the ''dnsmasq_etc_t'' type.
+
+{{Note|Not all contexts will be reset by default through '''restorecon'''. There are types that are called ''customizable types'', meant as types that could be set anywhere on the system so a fixed location is difficult to define. '''restorecon''' will leave those alone, unless you add in the '''-F''' option. You also need to specify the '''-F''' option if you want to reset the entire context (so all fields) rather than just the type (third field) of the security context.}}
+
+==== Other methods for applying contexts ====
+
+There are other methods for applying SELinux contexts on files, but these have their drawbacks...
+
+Some distributions support a {{Path|.autorelabel}} file which you can place in the root file system. When you do this, the distribution will run '''restorecon''' on all files at the next boot. 
+
+{{RootCmd|touch /.autorelabel|reboot}}
+
+You need to check your distributions' documentation to see if this is supported or not. And the fact that you need to wait for a reboot isn't really usable in most situations.
+
+Another method is to use '''chcon'''. This tool, which stands for ''ch''ange ''con''text, allows you to change the SELinux context of a file directly, without consulting the SELinux context definitions from the policy. This has the downside that the next '''restorecon''' will reset the context back to what is defined in the SELinux context definitions. The '''chcon''' command is only recommended to test out context changes before really registering them against the context definitions, or when you are dealing with the before mentioned ''customizable types'' (we'll get to that in a later tutorial).
+
+=== Adding your own definition rules ===
+
+When you're dealing with SELinux file contexts, you will need to set the context yourself. Be it because you use a non-standard location, or because the locations are depending on things like server-name and the current policy cannot handle this well - setting the contexts yourself is something you will need to learn.
+
+First, you need to know what the context needs to be for a file. Let's say that you configured the audit daemon to log on {{Path|/srv/logs/audit}} instead of {{Path|/var/log/audit}}. By default, SELinux will probably assume that this directory should have the ''var_t'' context.
+
+{{RootCmd|matchpathcon /srv/logs/audit|output=<pre>
+/srv/logs/audit system_u:object_r:var_t:s0
+</pre>}}
+
+This will give problems, since the ''auditd_t'' domain has little rights to do anything with ''var_t''. We can query the currently loaded SELinux policy using '''sesearch''' (we have done that a few times in the previous tutorials as well). 
+
+{{RootCmd|sesearch -s auditd_t -t var_t -SA|output=<pre>
+Found 9 semantic av rules:
+   allow auditd_t file_type : filesystem getattr ;
+   allow domain var_t : file { read getattr } ;
+   allow daemon var_t : dir { getattr search open } ;
+   allow domain var_t : dir { getattr search open } ;
+   allow domain var_t : sock_file { read write getattr } ;
+   allow auditd_t var_t : dir { getattr search open } ;
+</pre>
+}}
+
+{{Note|In the above example, you now notice that there are not only allow statements shown for the requested domain (''auditd_t'') but also apparently for other domains, like ''domain'' and ''daemon''. This is because SELinux supports the notion of ''attributes'', or labels, towards types and domains. For instance, all types that are meant for processes (and thus are domains that will 'act'), are given the ''domain'' attribute (label). Generic policies (like ''Allow all domains to search through the var_t labeled directories'') can then use this attribute instead of iterating across the various explicit types. As the ''auditd_t'' domain is also labeled with the ''daemon'' and ''domain'' attributes, we can see the allow statements for those as well.}}
+
+So what we need to do is to mark {{Path|/srv/logs}} as ''var_log_t'' and {{Path|/srv/logs/audit}} and subdirectories/files as ''auditd_log_t''. This can be accomplished using '''semanage''' followed by a '''restorecon'''.
+
+{{RootCmd|semanage fcontext -a -t var_log_t "/srv/logs(/.*)?"
+|semanage fcontext -a -t auditd_log_t "/srv/logs/audit(/.*)?"
+|restorecon -Rv /srv/logs|output=<pre>
+restorecon reset /srv/logs context unconfined_u:object_r:var_t->unconfined_u:object_r:var_log_t
+restorecon reset /srv/logs/audit context unconfined_u:object_r:var_t->unconfined_u:object_r:auditd_log_t
+</pre>
+}}
+
+What we did was tell the SELinux management utilities to add ('''-a''') a file context definition ('''fcontext''') with type ''var_log_t'' ('''-t var_log_t''') and ''auditd_log_t'', for the given expressions at the end. Then, we used '''restorecon''' to update the contexts of the files according to the newly created definitions.
+
+The '''semanage''' utility is the main utility you will use to modify and alter SELinux settings on your system. So it comes to no surprise that deleting context definitions you set earlier on is done through this utility as well. All we need to do is use '''-d''' (to delete) instead of '''-a'''.
+
+{{RootCmd|semanage fcontext -d -t var_log_t "/srv/logs(/.*)?"}}
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+# the context of a file is one of the most important parts of a SELinux secured system, 
+# that wrong contexts are the most common source of SELinux-related denials and permission problems, 
+# that contexts are defined by mapping types with regular expressions through '''semanage fcontext''', and
+# that contexts are then best applied through '''restorecon'''
