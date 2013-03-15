@@ -1,0 +1,69 @@
+== Using SELinux booleans ==
+
+We talked about AVC denials for file accesses, and when you work a bit with SELinux, you will notice that some activities are being denied whereas there is a perfectly logical reason to allow them. When this reason depends on certain factors (or choices), SELinux policy writers are encouraged to make the policy optional. And optional in SELinux world means that allowing the access should be triggered through a ''SELinux boolean''.
+
+A ''SELinux boolean'' is a single string (hopefully sufficiently interpretable) that changes how SELinux reacts. With '''getsebool''' you can get a list of booleans and their current value.
+
+{{RootCmd|getsebool -a|output=<pre>
+abrt_anon_write --> off
+abrt_handle_event --> off
+allow_console_login --> on
+allow_cvs_read_shadow --> off
+...
+</pre>}}
+
+The output above has been filtered a lot, as a system where the complete SELinux policy is loaded (non-Gentoo systems usually load in the entire policy for all applications) can easily reach 200 different booleans. Booleans allow changes in policy behavior to be toggled by the administrator.
+
+=== Getting boolean information ===
+
+Not all booleans are named in a way that you know what they mean. With '''semanage boolean -l''' you can get the description of a boolean.
+
+{{RootCmd|semanage boolean -l {{!}} grep abrt_anon_write|output=<pre>
+abrt_anon_write                (off  ,  off)  Allow ABRT to modify public files
+                                              used for public file transfer services.
+</pre>}}
+
+The boolean status too is displayed in this output, but you can also get it from '''getsebool''' or even from reading the pseudo-file in the SELinux file system at {{Path|/sys/fs/selinux/booleans}}.
+
+=== What does a boolean change? ===
+
+When you would toggle a boolean, it changes the active policy rules on a system. As we searched and displayed existing policy rules with '''sesearch''' before, you will probably not be surprised to learn that this tool can display the effects of a ''SELinux boolean'' as well.
+
+By passing the boolean name itself (through '''--bool''' or '''-b''') together with the '''---show_cond''' (or '''-C''') option, '''sesearch''' can show you what rules are influenced. For instance, to get the ''allow'' statements that are triggered with a change of the ''abrt_anon_write'' boolean:
+
+{{RootCmd|sesearch -b abrt_anon_write -AC|output=<pre>
+Found 3 semantic av rules:
+DT allow abrt_t public_content_rw_t : file { ioctl read write ... } ; [ abrt_anon_write ]
+DT allow abrt_t public_content_rw_t : dir { ioctl read write ... } ; [ abrt_anon_write ]
+DT allow abrt_t public_content_rw_t : lnk_file { ioctl read write ... } ; [ abrt_anon_write ]
+</pre>}}
+
+The output of the command shows that, right now, the boolean is disabled ('''D''' at the beginning of the rules) and that the rule itself will become active if the boolean becomes true ('''T''' as second letter). If the boolean is enabled, it would be '''ET''' or, if a statement would become active if the boolean was false, the second letter would be '''F'''.
+
+Because of booleans, we suggest that you always add in the '''-C''' operand to a '''sesearch''' command so that you can notice if something would be triggered through a boolean and, if so, what this boolean is. In many cases, toggling a boolean is sufficient for a system to continue working.
+
+=== Changing boolean status ===
+
+Changing SELinux booleans can be done through '''setsebool''' (where you add the desired state of the boolean, such as ''on'' or ''off'') or '''togglesebool''' (which flips the current value of a boolean).
+
+{{RootCmd|setsebool abrt_anon_write on
+|togglesebool abrt_anon_write}}
+
+When you do this, the changed value will take effect immediately but only for the duration that the current loaded policy is active. That means, if the system reboots, you loose the changes. Or when you explicitly would reload the SELinux policy, you loose the changes. On the other hand, switching booleans this way is fast and helps you to debug problems.
+
+Some booleans are also only meant to assist during debugging. For instance, the ''allow_ptrace'' boolean, when set, allows administrative domains to ''ptrace'' processes (for instance using the '''strace''' command), something administrators do to debug problems in applications. Since you only need this capability during the debugging session, it doesn't make sense to have this persisted across reboots.
+
+=== Persisting boolean changes ===
+
+Of course, when you ''do'' want to persist the changes across reboots, you don't want to have to run the necessary commands over and over again. With the SELinux management utilities, you can persist such changes using the '''-P''' option.
+
+{{RootCmd|setsebool -P abrt_anon_write on}}
+
+This command will take a while to complete, as the SELinux policy itself is rebuilt and stored, and the requested value for the boolean is registered as well. However, once completed, the boolean value remains active even across reboots.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* SELinux supports booleans to dynamically update the run-time policy
+* the values of these booleans can be persisted across reboots 
+* you can use '''sesearch''' to display the consequences of a boolean or to see if a boolean is available to allow certain statements
