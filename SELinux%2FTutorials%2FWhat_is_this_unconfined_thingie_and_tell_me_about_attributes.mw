@@ -1,0 +1,120 @@
+== What is this unconfined thingie (and tell me about attributes)? ==
+
+In various documents on the Internet, and in a few examples in previous tutorials as well, you might have noticed that there are domains called ''unconfined_t''. This domain warrants its article by itself, as it gives us a nice introduction towards ''SELinux policy stores'' as well.
+
+=== What is so special about the unconfined domain ===
+
+So let's get back to an example that shows processes running in the ''unconfined_t'' domain.
+
+{{Cmd|ps -eZ {{!}} grep gnome|output=<pre>
+unconfined_u:unconfined_r:unconfined_t    test  3125  ?  0:00 /usr/bin/gnome-keyring-daemon
+</pre>
+}}
+
+Nothing specific about this, right? Just a domain like others we have seen... only, the difference is that within SELinux, unconfined domains are allowed to do almost anything they please (hence the name, ''unconfined'').
+
+Applications that are normally confined might also run in the ''unconfined_t'' domain if they are launched by a user whose processes are already in the ''unconfined_t'' domain: transitions away from ''unconfined_t'' are exceptional.
+
+==== Why using unconfined domains ====
+
+The idea behind unconfined domains is to support SELinux-enabled systems where the network-facing daemons (the services) are running in confined domains (like ''auditd_t'', ''sshd_t'', etc.) but where the users themselves run in a more unrestricted fashion: all commands they execute are trusted by the system.
+
+When such configurations are used, SELinux is mainly set up to protect against remote attacks (and remotely exploitable vulerabilities). Local attacks (any exploitable vulnerability that requires local access) are thus not mitigated when using SELinux with unconfined domains.
+
+The huge advantage in such setups is that the policy development is much easier, and users have little impact from SELinux to begin with. Systems that do not support unconfined domains require their users to have more knowledge about SELinux before they can truly work on their system.
+
+==== Selecting the right policy store ====
+
+{{Note|This is Gentoo-specific; most distributions only support policies with unconfined domains, or at least by default use unconfined domains and require users to reconfigure their setup to remove unconfined domain support if they do not want it}}
+
+Within Gentoo, users that have ''SELINUXTYPE=strict'' set, or ''mcs'' or ''mls'' but with ''USE=-unconfined'', will have their system running without unconfined domain support. If on the other hand ''SELINUXTYPE'' is set to ''targeted'', or ''mcs'' or ''mls'' with ''USE=unconfined'', then their systems will support unconfined domains.
+
+{{File|/etc/selinux/config||<pre>
+SELINUXTYPE=targeted
+</pre>}}
+
+What happens underlyingly is that the SELinux management utilities use different ''policy stores''; when you previously accessed the {{Path|/etc/selinux}} location, you probably have noticed that there is a subdirectory named after the ''SELINUXTYPE'' setting. This subdirectory contains the policy store that SELinux uses. When the system boots, it reads in the ''SELINUXTYPE'' setting to find out where to load the policy from. In {{Path|/etc/selinux/*/policy}} the policy file itself can be found, and it is this binary file that gets loaded in memory when the system boots.
+
+On a Gentoo system, you might find multiple directories there - one for each type you want supported. This is governed through the ''POLICY_TYPES'' variable in {{Path|make.conf}} and is by default set to ''strict targeted''.
+
+=== Not only unconfined_t is unconfined ===
+
+In most examples, seeing domains run with ''unconfined_t'' gives enough triggers for people to understand that this process runs in an unconfined domain. However, there are other domains that ''can be'' unconfined as well, depending on if the system supports unconfined domains or not.
+
+Or, differently put, if your system is configured to support unconfined domains, then some of the domains that you think are confined domains are still unconfined.
+
+Doesn't help understanding it? Okay, let me first then introduce you to type attributes, and we'll get back to it then...
+
+==== SELinux attributes ====
+
+In the tutorial on [[SELinux/Tutorials/Controlling_file_contexts_yourself|controlling file contexts]] a note already referred to SELinux type attributes, so it's now time to dive deeper into those.
+
+When dealing with access controls, it is sometimes nice to be able to group multiple contexts so that you can say something like ''All end user domains should be allowed to read the {{Path|/etc/passwd}} file''. If the access control system doesn't support grouping, then you will need to iterate this for every user domain that exists:
+ allow user_t etc_t:file read;
+ allow staff_t etc_t:file read;
+ allow sysadm_t etc_t:file read;
+ allow unconfined_t etc_t:file read;
+
+What SELinux does, is support ''SELinux type attributes'' that can be assigned on several types. If every type above also gets the attribute ''userdomain'', then the policy can just say:
+ allow userdomain etc_t:file read;
+
+This attribute support is being used more and more to make the policies flexible, manageable and understandeable. 
+
+In the '''sesearch''' output, you will already have noticed that domains or types that do not end in ''_t'' are displayed. When this is the case, the shown domain or type is actually a type attribute (the convention is that these attributes do not get a suffix). You can query the type attributes currently in the policy using the '''seinfo''' tool. For instance, to get an overview of all types that have the ''userdomain'' attribute set:
+
+{{Cmd|seinfo -auserdomain -x|output=<pre>
+   userdomain
+      sysadm_t
+      staff_t
+      user_t
+</pre>
+}}
+
+The syntax here is '''-a''' (for ''attribute'') immediately followed (without space in between) by the attribute name. 
+
+Vice versa, you can ask '''seinfo''' to show all attributes assigned to a particular type or domain. So for the ''user_t'' domain:
+
+{{Cmd|seinfo -tuser_t -x|output=<pre>
+   user_t
+      privfd
+      process_user_target
+      xserver_unconfined_type
+      xdrawable_type
+      userdomain
+      xcolormap_type
+      dbusd_system_bus_client
+      ubac_constrained_type
+      unpriv_userdomain
+      nsswitch_domain
+      x_domain
+      domain
+</pre>
+}}
+
+==== So, what about this unconfined then? ====
+
+Back to the strange paragraphs on seemingly confined domains being unconfined... 
+
+When unconfined domains are supported, then a specific attribute (called ''unconfined_domain_type'') is added to the policy, and a number of domains will get this attribute assigned. The moment they have this attribute active, then the domain is running in an unconfined mode (since the attribute itself grants them all the privileges they want).
+
+On such systems, you can query which domains are unconfined through '''seinfo''' easily:
+
+{{Cmd|seinfo -aunconfined_domain_type -x|output=<pre>
+  unconfined_domain_type
+    kernel_t
+    initrc_t
+    ...
+</pre>
+}}
+
+So even though the processes are shown running in different domains, because they still have the ''unconfined_domain_type'' attribute assigned to them, they still run as an unconfined domain.
+
+When the system removes support for unconfined domains, then the type attribute ''unconfined_domain_type'' disappears with it, and the domains that were running unconfined are again confined.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* unconfined domains run virtually without SELinux protection
+* unconfined domains are meant to have ''users'' run with little SELinux interference, whereas the network-facing daemons still run in confined, SELinux-protected domains
+* Gentoo supports multiple SELinux policy stores (which are the subdirectories in {{Path|/etc/selinux}})
+* SELinux has support for ''type attributes'', which can group multiple different types and assign privileges to the entire group of types
