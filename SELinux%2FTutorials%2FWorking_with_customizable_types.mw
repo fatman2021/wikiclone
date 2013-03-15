@@ -1,0 +1,69 @@
+== Working with customizable types ==
+
+When talking about '''restorecon''' we already touched the subject of using the '''-F''' option (''force'') and mentioned that this is for customizable types. Hence, this tutorial is to cover some grounds regarding customizable types and why they have been brought to life to begin with.
+
+=== What are customizable types used for ===
+
+SELinux ''customizable types'' are type contexts (thus suffixed with ''_t'') which can be assigned on files and other resources, and where this context is not reset during a standard relabel operation (either through '''restorecon''' or through a complete system relabel operation). Because of this behavior, such contexts are most frequently used on files where the path of the file itself is not really fixed on Linux systems (so the policy writer cannot provide a context definition that matches most users systems).
+
+A list of customizable types on a SELinux system can be received by reading the content of the {{Path|/etc/selinux/*/contexts/customizable_types}} file:
+
+{{Cmd|cat /etc/selinux/targeted/contexts/customizable_types|output=<pre>
+sandbox_file_t
+svirt_image_t
+virt_content_t
+httpd_user_htaccess_t
+httpd_user_script_exec_t
+httpd_user_content_ra_t
+httpd_user_content_rw_t
+httpd_user_content_t
+git_session_content_t
+home_bin_t
+</pre>}}
+
+So if you have a script in a home directory (currently labeled ''user_home_t'') and you change the context of this file towards ''home_bin_t'', then a relabel of this file (be it directly or through a recursive relabeling operation against the entire home directory) will not change the context back from ''home_bin_t'' to ''user_home_t''.
+
+{{Cmd|ls -Z getinfo.sh|output=<pre>
+-rwxr-x---. swift users user_u:object_r:user_home_t:s0 getinfo.sh
+</pre>}}
+
+{{Cmd|chcon -t home_bin_t
+|ls -Z getinfo.sh|output=<pre>
+-rwxr-x---. swift users user_u:object_r:home_bin_t:s0 getinfo.sh
+</pre>}}
+
+{{Cmd|restorecon -v getinfo.sh}}
+
+=== Marking types as customizable ===
+
+There is no formal method for marking types as customizable: this is in the hands of the SELinux policy writers. It also doesn't really make sense to mark types that are non-customizable as customizable, as in most cases all you then need to do is to use '''semanage fcontext''' to add in another context definition (expression) and be done with it.
+
+However, in the unlikely situation that you really need a type marked as customizable, you can update the before-mentioned {{Path|customizable_types}} file yourself, but be aware that any system update (package updates) will most likely overwrite your changes anyway.
+
+Thus the best way to get a type marked as customizable is to ask the distribution developers for help.
+
+=== Setting the context ===
+
+As shown earlier, most customizable types can be set using '''chcon''' even for regular users. Because the types will not be changed back after a relabel operation, there is no need to use '''restorecon'''. However, it is ''not'' because a type is customizable that regular users can change labels towards a customizable type.
+
+Relabel operations remain governed through SELinux policies. For regular users, this means they have the ''relabelfrom'' permission from ''user_home_t'' and ''relabelto'' permission towards some of the customizable types.
+
+{{Cmd|sesearch -s user_t -t user_home_t -c file -p relabelfrom -A
+|sesearch -s user_t -t home_bin_t -c file -p relabelto -A}}
+
+For instance, regular users do not have the permission to relabel a file as a ''svirt_image_t'' file.
+
+=== Overriding customizable contexts (hard resets) ===
+
+When you need to override the customizable contexts, you can use the '''-F''' (which stands for ''force'') option with '''restorecon'''. This not only resets the context back to what the context definition expressions define, but it also resets the other fields of the context to what they are supposed to be. The purpose of these other fields will be explained in a later tutorial.
+
+{{RootCmd|restorecon -RF /home/swift}}
+
+It is ''not recommended'' to do this against all user home directories on a system where lots of users have access to. Many of these users will have used customizable types to update the contexts of their home files (such as marking files as ''httpd_user_content_t'' so that the web server can display the content) and resetting the contexts for all files will make these changes undone.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* customizable types exist for files and resources that have no fixed location on a file system
+* the list of current customizable types can be found in {{Path|/etc/selinux/*/contexts/customizable_types}}
+* the context of files with a customizable type context can be reset if you use the ''force'' ('''-F''') option during relabel operations
