@@ -1,0 +1,137 @@
+== Permissive versus enforcing ==
+
+A SELinux-hardened system will run with SELinux in ''enforcing'' mode, meaning that the SELinux policy is in effect and things that it doesn't want to allow won't be allowed. But when trying to debug permission problems, it might make sense to temporarily disable SELinux. In this case, you can opt to have SELinux run in ''permissive'' mode, either for the entire system, or for a specific (set of) types.
+
+=== Switching between enforcing and permissive ===
+
+The purpose of supporting ''permissive'' policies is to allow a system to run with SELinux enabled, while still allowing all accesses that the applications are trying to do. A SELinux-enabled system that runs in permissive mode is ''not'' protected by SELinux. The true purpose is that it ''still logs'' what it would have denied and as such allows the administrator to get a sense of what would happen if he switches the system from ''permissive'' to ''enforcing'' mode.
+
+Switching between enforcing and permissive mode is possible ''if'' the kernel you have booted supports SELinux Development mode (CONFIG_SECURITY_SELINUX_DEVELOP=y). Otherwise, the kernel automatically boots in enforcing mode and you are not able to switch back. Although such kernels are sometimes considered the safest (as a successful intrusion still doesn't allow the attacker to disable SELinux, even if he obtains full administrative access) most distributions keep development mode on. After all, once you have full administrative access, you can rebuild policies and add in the privileges you need anyhow. And even kernels with development mode on can still be hardened - there is a ''secure_mode_policyload'' boolean that disables switching to permissive mode until you reboot the system.
+
+To get information about the current state, you can use '''getenforce''' or '''sestatus'''.
+
+{{RootCmd|getenforce|output=<pre>
+Enforcing
+</pre>}}
+
+{{RootCmd|sestatus|output=<pre>
+SELinux status:                 enabled
+SELinuxfs mount:                /sys/fs/selinux
+SELinux root directory:         /etc/selinux
+Loaded policy name:             strict
+Current mode:                   enforcing
+Mode from config file:          enforcing
+Policy MLS status:              disabled
+Policy deny_unknown status:     denied
+Max kernel policy version:      28
+</pre>}}
+
+==== Using the setenforce command ====
+
+To switch from enforcing to permissive and back, you can use the '''setenforce''' command. This command supports ''Enforcing'', ''Permissive'', ''1'' or ''0'' as argument. 
+
+{{RootCmd|setenforce 1}}
+
+The use of the '''setenforce''' command is useful to temporarily switch from or to enforcing mode. For instance, if your system boots up in permissive and you think the system is ready to run in enforcing mode ''after'' it has been booted, you can use '''setenforce 1''' after booting to enable enforcing mode.
+
+==== The selinux configuration file ====
+
+The default value (enforcing or permissive) when the system boots is defined in the {{Path|/etc/selinux/config}} file, through the ''SELINUX'' parameter.
+
+{{Cmd|cat /etc/selinux/config|output=<pre>
+# This file controls the state of SELinux on the system on boot.
+
+# SELINUX can take one of these three values:
+#       enforcing - SELinux security policy is enforced.
+#       permissive - SELinux prints warnings instead of enforcing.
+#       disabled - No SELinux policy is loaded.
+SELINUX=enforcing
+
+# SELINUXTYPE can take one of these four values:
+#       targeted - Only targeted network daemons are protected.
+#       strict   - Full SELinux protection.
+#       mls      - Full SELinux protection with Multi-Level Security
+#       mcs      - Full SELinux protection with Multi-Category Security 
+#                  (mls, but only one sensitivity level)
+SELINUXTYPE=strict
+</pre>
+}}
+
+In the above example, the system boots in enforcing mode by default.
+
+==== Using the enforcing kernel boot parameter ====
+
+Another method to define how to boot is using the ''enforcing='' boot parameter. This parameter overrides the setting in the configuration file, so even with ''SELINUX=enforcing'' set, if you boot with ''enforcing=0'' then the system will boot in SELinux permissive mode.
+
+{{File|grub.conf||<pre>
+default 0
+timeout 3
+
+title Gentoo Linux Hardened (SELinux permissive)
+root (hd0,0)
+kernel /kernel root=/dev/md3 real_rootflags=data=journal enforcing=0 dolvm domdadm rootfstype=ext4 devtmpfs.mount=0
+initrd /initramfs
+</pre>}}
+
+{{Note|On a Gentoo Hardened system, if you have the ''selinux_gentoo'' init script enabled, you will also need to boot with ''nosetenforce'' if you do not want the init script to call '''setenforce''' back towards enforcing mode.}}
+
+==== Differences in application behavior ====
+
+When we said that running in ''permissive'' mode has the system run as if SELinux was not enabled, we weren't really lying... well, perhaps a bit.
+
+There is the matter of ''SELinux-aware applications''. These are applications that know about SELinux on a system, and behave differently when SELinux is enabled or not. Most of these applications however do not change their behavior based on the permissive or enforcing mode - only if SELinux is truly disabled. But that does mean that running your system in permissive might still have applications behave as if SELinux was in enforcing mode, or at least behave differently than when SELinux is disabled.
+
+SELinux-aware applications are usually linked with the {{Path|libselinux.so}} library, which can be checked with '''scanelf''' (part of the {{Package|app-misc/pax-utils}} package).
+
+{{Cmd|scanelf -n cron|output=<pre>
+ TYPE   NEEDED FILE 
+ET_DYN libpam.so.0,libselinux.so.1,libc.so.6 cron 
+</pre>}}
+
+An example for cron would be the [[SELinux/FAQ#Cron_fails_to_load_in_root.27s_crontab_with_message_.27.28root.29_ENTRYPOINT_FAILED_.28crontabs.2Froot.29.27|entrypoint failed]] error which comes up even in permissive mode.
+
+=== Marking one type as permissive ===
+
+The previous sections all used full switching - either the system is running in enforcing, or the system is running in permissive.
+
+Luckily, SELinux has a neat feature where you can tell it one particular domain should be permissive whereas the rest runs in enforcing mode. All you need to do is tell '''semanage''' what domain you want to put in permissive mode.
+
+{{RootCmd|semanage permissive -a xbmc_t}}
+
+You can get an overview of the current permissive domains as well, using '''semanage permissive -l'''.
+
+=== Completely disabling SELinux ===
+
+If you need to disable SELinux completely, there are two options: either update the configuration file, or use the boot parameter.
+
+However, before proceeding with this, it is important that you understand what the consequences are: disabling SELinux also disables the generation of contexts. That means that every file created or modified (if modification is done using a replacement operation, like '''vim''' does by default) will ''not'' get a SELinux context anymore. If you then boot back with SELinux enabled, SELinux will refuse to load/read in those files (they will get the ''default_t'' context assigned - not through extended attributes, just default behavior - that not many domains can read or work with).
+
+As a consequence, when you have booted a system with SELinux disabled, you need to do a full file system relabel again when booting with SELinux enabled, and you'll probably need to do so in permissive mode. Afterwards, you can reboot back in enforcing mode.
+
+==== Disabling through the boot parameter ====
+
+If ''CONFIG_SELINUX_BOOTPARAM'' is enabled in the kernel, then you can boot with SELinux disabled using ''selinux=0'' as boot parameter.
+
+{{File|grub.conf||<pre>
+default 0
+timeout 3
+
+title Gentoo Hardened (SELinux disabled)
+root (hd0,0)
+kernel /kernel root=/dev/md3 real_rootflags=data=journal selinux=0 dolvm domdadm rootfstype=ext4 devtmpfs.mount=0
+initrd /initramfs
+</pre>
+}}
+
+==== Disabling through the configuration file ====
+
+If you want to boot with SELinux disabled without boot parameter, you can edit {{Path|/etc/selinux/config}} and set the ''SELINUX'' parameter to ''disabled''.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* SELinux has two "modes" of operation: permissive and enforcing
+* in ''permissive'' mode SELinux does not enforce its policy, but only logs what it would have blocked (or granted)
+* applications that are SELinux-aware might still behave differently with ''permissive'' mode than when SELinux is completely disabled
+* specific types can be marked as ''permissive'' while the rest of the system is in ''enforcing'' mode
+* completely disabling SELinux has consequences on the file contexts so an entire system relabeling is needed afterwards
