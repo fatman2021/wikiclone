@@ -1,0 +1,111 @@
+== The purpose of SELinux roles ==
+
+We have seen that a process' context defines what the process is allowed to do, and that a context can change as part of a domain transition. This access control is called ''type enforcement'', but SELinux is able to do more than that. Enter ''SELinux roles''...
+
+=== SELinux user domains ===
+
+Let's take a look at the context of a regular ''Linux user'', returned by '''id''' (or '''id -Z''' but we'll show the full output first).
+
+{{Cmd|id|output=<pre>
+uid=1000(swift) gid=100(users) groups=100(users),16(cron),...,995(gorg) context=user_u:user_r:user_t
+</pre>}}
+
+The context shows that the user is inside the ''user_t'' domain. 
+
+Let's take a look at the context of the root user, when directly logged on (i.e. on the console).
+
+{{RootCmd|id -Z|output=<pre>
+root:sysadm_r:sysadm_t
+</pre>}}
+
+In this case, it shows that the root user is inside the ''sysadm_t'' domain.
+
+SELinux policy dictates that the regular user domain (''user_t'') is an unprivileged domain: it should never be allowed to do any administrative tasks. Even if you grant this user root access (through '''sudo''' or '''su''') this shouldn't should not be able to do much damage to the system. This isn't because of the ''user_t'' domain however - it is because of the ''SELinux role'' that that user is in.
+
+=== The role part in the context ===
+
+In the context we've seen, the role is the second field:
+ user_u:user_r:user_t
+
+As you can see, the naming convention states that it should end with ''_r''. However - again - this is a policy convention and not dictated by SELinux itself.
+
+The ''SELinux role'' dictates what domains (contexts) are possible to be in. It doesn't mean that the user can freely choose which domains he launches in next (there are still the domain transitions that govern this); it means that, even if he was allowed to transition, if the domain is not attached to his role, the transition will fail.
+
+The result of such a failed transition will be logged as a SELinux error, like so:
+ invalid context: user_u:user_r:portage_t
+
+This is very important to understand. Consider a developer trying to start the mysql daemon from the command line (so not in daemon mode). Even if he was allowed to execute the ''mysqld_exec_t'' labeled file, and transition, then ''still'' it would not be allowed as ''mysqld_t'' is not a type (domain) allowed for any of the user roles (''user_r'', ''staff_r'', ''sysadm_r'').
+
+==== Listing the approved domains ====
+
+With the '''seinfo''' tool, you can list what domains are allowed for a particular role. 
+
+{{Cmd|seinfo -ruser_r -x|output=<pre>
+   user_r
+      Dominated Roles:
+         user_r
+      Types:
+         chromium_renderer_t
+         user_gkeyringd_t
+         ...
+</pre>}}
+
+If you are trying to start up an application (let's not consider services yet) and it fails, it might be a good idea to look if the domain of that application (like ''mozilla_t'' or ''chromium_t'') is a supported domain for the role you are in.
+
+==== Switching roles ====
+
+Users can switch roles if they want. However, they can only do so if their SELinux user is allowed to "be" in the other role. With '''semanage user -l''' you can see if that is the case.
+
+{{RootCmd|semanage user -l|output=<pre>
+SELinux User    SELinux Roles
+
+root            staff_r sysadm_r
+staff_u         staff_r sysadm_r
+sysadm_u        sysadm_r
+system_u        system_r
+unconfined_u    unconfined_r
+user_u          user_r
+</pre>}}
+
+We will talk about SELinux users later. For now, it suffices to say that the SELinux user (first column) has to match the first entry in the context of the user (as returned by '''id -Z'''):
+ user_u:user_r:user_t
+
+So in the case of the above context, we see that this user is ''only'' allowed to be in the ''user_r'' role. In other words, this user is not able to switch roles.
+
+ root:sysadm_r:sysadm_t
+
+In this case, the user could switch from the ''sysadm_r'' role to the ''staff_r'' role.
+
+Switching roles is done using '''newrole -r <targetrole>'''. It is most commonly used to switch from the ''staff_r'' role to the ''sysadm_r'' role:
+{{Cmd|newrole -r sysadm_r|output=<pre>
+Password: </pre>
+}}
+
+==== Standard set of roles ====
+
+The following table gives an impression of the standard roles available on a SELinux system. Your means may vary, as more roles might exist on your system.
+
+{|class="wikitable"
+|- style="vertical-align: top; white-space: nowrap;"
+! Role
+! Description
+|-
+| user_r
+|The regular user role, which is meant to only allow user applications and other non-privileged domains
+|-
+| staff_r
+|Similar to the ''user_r'' role, but might be allowed to receive more system information than a regular user. This role is mostly given to users that should be allowed to switch towards other roles.
+|-
+| sysadm_r
+|System administrative role; this is a very powerful role as it is allowed most target domains, including privileged domains. Use with care.
+|-
+| system_r
+|System role, not meant to be switched to directly (and newrole will even disallow it as it doesn't have a default user domain associated with it - something we'll talk about later)
+|}
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* roles dictate which domains that the user (or session) is allowed to go in
+* changing roles is done using newrole
+* the SELinux user definitions declare what the supported roles are that a user can "go" to
