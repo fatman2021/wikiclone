@@ -1,0 +1,108 @@
+== Defining SELinux users ==
+
+In the previous tutorial, we briefly touched SELinux users as to explain how SELinux roles work. In this tutorial, we're going to focus on the SELinux user aspect itself.
+
+=== The SELinux user part in the context ===
+
+If we go back to the current user context, then we already know that the second field is the role and the third field the domain.
+
+{{Cmd|id -Z|output=<pre>
+user_u:user_r:user_t
+</pre>}}
+
+You have probably already guessed that the first field is the SELinux user.
+
+Just like with the SELinux role (which defines what the possible domains are), it is the SELinux user that defines what the possible roles are.
+
+==== Roles assigned to a SELinux user ====
+
+The roles that are assigned to a particular SELinux user can be seen from '''semanage user -l'''.
+
+{{RootCmd|semanage user -l|output=<pre>
+SELinux User    SELinux Roles
+
+root            staff_r sysadm_r
+staff_u         staff_r sysadm_r
+sysadm_u        sysadm_r
+system_u        system_r
+unconfined_u    unconfined_r
+user_u          user_r
+</pre>}}
+
+But unlike with the roles and their influence on the domains, we ''can'' change which roles are assigned to what SELinux user. We'll get to that later in this tutorial, let's first look at the difference between a user account and a SELinux user.
+
+==== Linux accounts versus SELinux users ====
+
+It is important to know that a SELinux user is not a Linux account or vice versa. Linux accounts are mapped to SELinux users, most of the time in a many-to-few relationship. In other words, many Linux accounts will, if they are logged on to a system, be running as the same SELinux user. This is not mandatory though - you can create separate SELinux accounts for each Linux user, but if all these users have similar rights, it would only incur overhead.
+
+You can see the mapping of Linux accounts to SELinux users using '''semanage login -l'''.
+
+{{RootCmd|semanage login -l|output=<pre>
+
+Login Name                SELinux User             
+
+__default__               user_u
+root                      root
+swift                     staff_u
+system_u                  system_u
+</pre>}}
+
+In the above example, there is 
+* the ''root'' user, which is mapped to the ''root'' SELinux user
+* the ''swift'' account, which is mapped to the ''staff_u'' SELinux user
+* the special ''system_u'' account (which doesn't exist - it is a special definition for system daemons)
+* the special ''__default__'' account (which doesn't exist) which plays the role of the catch-all account
+
+The catch-all account ''__default__'' here ensures that all newly created Linux account users are mapped to the (unprivileged) ''user_u'' SELinux user.
+
+If you notice any ''Login Name'' that starts with the percentage sign (%), then it means that it is not about the Linux account, but the primary group. For instance:
+
+{{RootCmd|semanage login -l {{!}} grep oper|output=<pre>
+%operators                staff_u
+</pre>}}
+
+In the above case, all users whose primary group is the ''operators'' group will be mapped to the ''staff_u'' user.
+
+=== Manipulating SELinux user information ===
+
+As mentioned before, we ''can'' update this information - both the mapping towards SELinux user as the associated roles with a SELinux user.
+
+==== Managing login mappings ====
+
+First of all, to manage login mappings, we use the '''semanage login''' set of commands. 
+
+For instance, to create the ''operators'' group mapping:
+
+{{RootCmd|semanage login -a -s staff_u %operators}}
+
+Removing mappings is done with the '''-d''' instead of '''-a''' option. You can also modify a mapping using '''-m'''.
+
+However, if you change a mapping for a user that already owns files on the file system, it is ''very important'' to reset the context of these files completely (i.e. using '''-F''' with '''restorecon''') or set the new SELinux owner and role using '''chcon'''.
+
+{{RootCmd|chcon -R -u staff_u -r staff_r /home/oper}}
+
+If not, then the files are owned by the 'wrong' SELinux user which might cause permission troubles later on.
+
+==== Managing user to role mappings ====
+
+Similar as with the login mappings, we now use '''semanage user''' to modify the user/role mappings.
+
+For instance, to create a new SELinux user called ''infra_u'' and grant it the ''staff_r'' and ''sysadm_r'' roles:
+
+{{RootCmd|semanage user -a -R "staff_r sysadm_r" infra_u}}
+
+=== Properties of a SELinux user ===
+
+The SELinux user feature in SELinux has a few interesting properties.
+
+Generally speaking, SELinux user information is never changed in a session. This isn't SELinux itself per se that dictates it, but is implemented as policy rules. There are a few deviations to this (such as when starting services), but are closely guarded policy-wise. Unlike the effective user id of a session, which can be changed using tools like '''su''' or '''sudo''', the SELinux user information thus remains the same. This makes it possible for improved auditing, but it is mostly a security measure (to make sure that someone can never change their role to a role that they shouldn't be in).
+
+SELinux users also allow for specific, additional constraints to be put. One of these is ''user based access control'' which, roughly speaking, ensures that files owned by one SELinux user can never be accessed by another SELinux user (but ''sysadm_u'', ''root'' and ''system_u'' are exempt from this) if that file has a context with the ''ubac_constrained_type'' attribute assigned to it.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* SELinux users define what roles a user is allowed to go to
+* Linux accounts are mapped to SELinux users (but they are not the same) in a many-to-few relationship (usually)
+* the '''semanage login''' and '''semanage user''' set of commands are used to manipulate these settings
+* SELinux user information rarely changes in a session (mostly only when services are launched where they become ''system_u'')
