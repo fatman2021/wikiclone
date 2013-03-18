@@ -1,0 +1,85 @@
+== Linux services and the system_u SELinux user ==
+
+So now we know that the security context of a process contains a part called the ''SELinux user'', one ''SELinux role'' and the ''SELinux domain'' that the process runs in. We have also talked a bit about SELinux users and that they are somewhat immutable (the user cannot change the SELinux user). Well, in this tutorial we'll talk about an exception to this rule, mainly when managing Linux services.
+
+=== The system_u SELinux user ===
+
+The ''system_u'' SELinux user is meant to be used for running system services. It should not be assigned to end users. On most servers thus, most daemons will be running as the ''system_u'' SELinux user, most likely (or even solely?) in the ''system_r'' role.
+
+This is because SELinux is primarily a ''type enforcement'' mandatory access control system, thus most access controls are situated around the domain part (i.e. the third field in the context, the one ending in ''_t'', like ''sshd_t''). For these daemons, no additional access controls or constraints should be declared, so they run as the ''system_u'' SELinux user and ''system_r'' SELinux role.
+
+It is for user domains (local users) that ''SELinux user'' and ''SELinux role'' constraints are positioned more, as we want to govern the activities that local users can do, as local user access is often considered a risk and thus warrants proper control.
+
+=== Linux service scripts ===
+
+Most Linux service scripts are, as you know, located in {{Path|/etc/init.d}} (I will not talk about '''systemd''' yet as I have no experience with it). These service scripts are launched by the '''init''' system upon boot (or runlevel change), but can also be called directly by administrators.
+
+For the standard SELinux policies, these scripts are either labeled ''initrc_exec_t'' or ''<domain>_initrc_exec_t'':
+
+{{Cmd|ls -lZ /etc/init.d/sshd|output=<pre>
+-rwxr-xr-x. 1 root root system_u:object_r:initrc_exec_t 2057 Nov 21 18:20 /etc/init.d/sshd
+</pre>}}
+
+The idea is that, when '''init''' or the administrator runs those scripts, the script itself runs in the ''initrc_t'' domain. However, if you double-check, you will notice that ''only'' the ''system_r'' role is allowed the ''initrc_t'' domain - so a regular user domain should not be able to transition towards the ''initrc_t'' domain.
+
+{{Cmd|seinfo -rsysadm_r -x {{!}} grep initrc_t
+|seinfo -rsystem_r -x {{!}} grep initrc_t|output=<pre>
+  initrc_t
+</pre>}}
+
+So what is happening when you do start the script? After all, everything seems to run, right?
+
+{{RootCmd|/etc/init.d/sshd start|output=<pre>
+Authenticating root.
+Password: 
+* Starting SSH daemon...          [ started ]
+</pre>}}
+
+==== The process to transition to initrc_t ====
+
+{{Note|This is policy-defined, and a small part is Gentoo-specific, so might be a bit different on your system. However, the general idea is the same here (which is the purpose of this tutorial).}}
+
+What happens is that, upon executing the init script, a transition occurs to the ''run_init_t'' domain (Gentoo). Then, OpenRC (Gentoo's init system) calls the '''run_init''' command. This command will invoke the script (again) but with a transition, not only to the target ''initrc_t'' domain, but also with the ''system_u:system_r'' related context (so it switches SELinux user and role).
+
+On non-Gentoo systems, it is very likely that administrators are already asked to use the '''run_init''' command upon managing services.
+
+{{RootCmd|run_init /etc/init.d/sshd status|output=<pre>
+ * sshd: started
+</pre>}}
+
+The ''run_init_t'' domain is one of the few domains that are allowed (by policy) to do a SELinux user- and role change.
+
+==== Domain-specific init scripts ====
+
+Some services have a domain-specific init script. For instance, the {{Path|/etc/init.d/nscd}} script has the ''system_u:object_r:nscd_initrc_exec_t'' context.
+
+In this case, if the system administrator executes this script, ''no'' such transition occurs. This is because the ''nscd_initrc_exec_t'' script is not defined as an entrypoint for the ''run_init_t'' domain. Instead, it is only known as an entrypoint for the ''initrc_t'' domain itself. When trying to execute it directly, SELinux attempts to transition to the ''initrc_t'' domain but, as there is no switch in user/role, it fails. In the audit logs (or messages file) you then find an error like the following:
+ type=SELINUX_ERR msg=audit(1363638369.361:144): security_compute_sid:  invalid context staff_u:system_r:initrc_t for 
+ scontext=staff_u:sysadm_r:sysadm_t tcontext=system_u:object_r:nscd_initrc_exec_t tclass=process
+
+To force the change in user/role, you ''need'' to call the '''run_init''' command for this (if you are allowed this command), like so:
+
+{{RootCmd|run_init /etc/init.d/nscd status|output=<pre>
+Authenticating root.
+Password:
+ * nscd: started
+</pre>}}
+
+==== Purpose of domain-specific init scripts ====
+
+The purpose of this distinction is to allow specific users (or roles) to execute the domain-specific init scripts, while not granting privileges to execute the other scripts. In this case, users that are not allowed to execute ''run_init_t'' can be allowed to execute the mentioned domain-specific init script. In this case, the policy will ''automatically'' (i.e. without using '''run_init_t''') switch the role towards ''system_r'' (but mind you, this requires that the user is allowed the ''system_r'' role).
+
+When this occurs however, no change in SELinux user happens. As a result, these services will then run under the ''SELinux user'' of the user that (re)started the service. As the process runs in the ''system_r'' and proper domain however, this has no additional impact on the system.
+
+{{Note|With systemd, this is no longer the case, as processes are not launched by the user domain; instead, users communicate with the (''system_u''-running) systemd daemon, which launches the daemons itself}}
+
+Later in this series, when we know how to create our own policies, we will be creating our own role and type which ''will'' be allowed to execute such scripts.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* calling linux service scripts (init scripts) causes a change in SELinux user, role and domain, partially due to policy and partially due to the '''run_init''' command
+* some service scripts are not labeled the regular ''initrc_exec_t'' and require a different approach for calling them, and might result in the process to remain running under the users' SELinux user (but that's okay)
+* it is the SELinux policy that governs changes in roles and users
+
+This article is meant to review a bit how SELinux functions (so we use the init scripts here as a common example).
