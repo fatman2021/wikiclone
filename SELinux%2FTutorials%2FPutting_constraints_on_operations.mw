@@ -1,0 +1,50 @@
+== Putting constraints on operations ==
+
+SELinux also has a powerful feature called ''constraints'', which we have actually crossed already when talking about ''user-based access control''. However, constraints are used for much more. But before that, an important observation...
+
+Many users think about constraints (when they hear the word, regardless of its SELinux implementation) as being a method for ''reducing'' what is allowed in a black-listing approach: you are by default allowed anything, but when a constraint is given, this constraint tells me under which circumstances it is ''not allowed''. This is in our opinion a wrong view when considering the SELinux meaning: in SELinux, it is more of a filter, using a white-listing approach. A constraint, under SELinux, tells is under which circumstances an operation ''is allowed'' - circumstances that don't match are disallowed.
+
+But then again, if no constraints are defined for an operation, then SELinux happily continues with the operation (of course if the other checks pass, like type enforcement rules).
+
+=== Differences between constraints and type enforcement ===
+
+Unlike type enforcement, which uses one particular field in a security context (third field, the type), constraints use the ''entire context'' as their rules and are more targeting operations rather than domains. Let's immediately look at an example:
+
+ # SELinux object identity change constraint:
+ constrain dir_file_class_set { create relabelto relabelfrom }
+ (
+         u1 == u2
+         or t1 == can_change_object_identity
+ );
+
+What we see above is a constraint that says that a domain can only create or relabel (to or from) directories and files if either the SELinux user part of the two contexts' match (''u1 == u2'') or if the domain has the ''can_change_object_identity'' attribute assigned to it. The latter attribute can be checked, as we have seen, with '''seinfo''':
+
+{{Cmd|seinfo -acan_change_object_identity -x}}
+
+If these constraints are not met, then the operation will be denied, even if you would explicitly allow it (through another type enforcement rule).
+
+=== Constraints within SELinux ===
+
+SELinux uses constraints to give shape to its policy. Many of its features are implemented using constraints. User-based access control is one, and we'll see that MLS and MCS (which we will talk about in a later tutorial) have many of its rules implemented through constraints as well.
+
+It is not possible to disable constraints (as constraints are actually telling what ''is'' allowed, so disabling it would mean effectively stopping many of the basic operations that are otherwise allowed), and modifying constraints should be ''very carefully considered''. In any case, if changes are needed, they will need to be passed to the distribution that manages the policy builds as they are part of the base policy.
+
+=== Listing constraints ===
+
+We have made a [[SELinux/Constraints|small overview]] of the constraints enabled to make this a bit easier. You can ask your system to list the constraints using '''seinfo''', but this immediately gives fully expanded output and uses a more arithmetical expression syntax than the one shown before. For instance, the above constrain:
+
+{{Cmd|seinfo --constrain|output=<pre>
+constrain { file } { create relabelfrom relabelto  } 
+(  u1 u2 ==  t1 { logrotate_t policykit_auth_t sysadm_t lvm_t rpm_t xdm_t krb5kdc_t newrole_t portage_t 
+local_login_t rpm_script_t sysadm_passwd_t policykit_t portage_sandbox_t groupadd_t kpropd_t passwd_t 
+updpwd_t chfn_t cupsd_t gssd_t httpd_t slapd_t sshd_t udev_t virtd_t puppetmaster_t restorecond_t 
+setfiles_t kadmind_t sulogin_t useradd_t } ==  || );
+</pre>
+}}
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* constraints are an integral part of the SELinux policy
+* when something is denied even though there are (type enforcement) rules that allow it, chances are very high that a constraint is involved
+* constrains don't limit (blacklist) what is allowed, but filter (whitelist) what is
