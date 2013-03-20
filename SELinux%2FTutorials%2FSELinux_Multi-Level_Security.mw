@@ -1,0 +1,72 @@
+== SELinux Multi-Level Security ==
+
+We have looked at type enforcement (domains and their allowed permissions towards other domains and types), roles (what domains are allowed for a certain role), SELinux users (what roles are allowed for a specific SELinux user). These covered 3 of the four fields, so let's cover the last field (actually both fields): the ''Multi-Level Security'' aspect of SELinux.
+
+=== Theoretical approach ===
+
+The idea behind the ''Multi-Level Security'' (abbreviated to mls) approach is that SELinux supports ''sensitivity levels'' (which are hierarchically structured) and ''categories'' (which have no hierarchical correlation). 
+
+==== Sensitivity levels ====
+
+The sensitivity level is the hierarchical part of the multi-level security approach. It is commonly exemplified through the data classification sensitivities ''public'', ''internal'', ''confidential'' and ''regulatory'', although this is fully configurable by the administrator. With the sensitivity labels, an MLS-enabled system can mark certain content as being of a certain sensitivity (or range of sensitivities, although generally resources are marked with a single sensitivity label) and have processes marked as supporting a sensitivity (or range, in which case the highest is considered the "clearance" whereas the lowest is the "current sensitivity").
+
+Using sensitivity labels, one can mark certain resources (like documents) as being confidential, even if they have a "standard" type like ''user_home_t''. If a user is then only allowed the ''public'' and ''internal'' sensitivity levels, he will never be able to read this confidential document, even when 
+# regular Linux access controls permit it
+# the SELinux type enforcement permits it
+# the user-based access control constraint permits it
+
+==== Categories ====
+
+The second part of the multi-level security are the ''categories''. Categories can be seen as labels assigned to a resource. Examples of categories could be department names (''hr'', ''infrastructure'', ''ict'', ''sales'', etc.) or projects (''project1'', ''project2'', ...), but are fully configurable as well. Unlike sensitivity levels, categories do not have any correlation with each other.
+
+The purpose of categories is to further fine-tune the level security. If you want to grant a user process access to the confidential documents, but only of two departments, then it can run in a sensitivity level of ''confidential:sales,ict''. Other resources that are marked with different categories are not compatible with this sensitivity and thus denied.
+
+=== Applying MLS on a Linux system ===
+
+Linux systems that use the mls policy might notice that the final field uses parts prefixed with ''s'' and parts prefixed with ''c''. These are, as you might already have guessed, for the ''sensitivity'' and ''category''. But apart from the sensitivy and category, there are also three operators important: the range operator for the sensitivity levels (-), the range operator for the categories (.) or distinct separators for categories (,).
+
+{|class="wikitable"
+|- style="vertical-align: top; white-space: nowrap;"
+! Example
+! Current sensitivity level
+! Clearance sensitivity level
+! Category set
+|-
+| user_u:user_r:user_t:s0
+| s0 (lowest sensitivity level)
+| s0 (lowest sensitivity level)
+| c0 (a default category, gets translated to "")
+|-
+| user_u:user_r:user_t:s0-s0:c0.c15
+| s0 (lowest sensitivity level)
+| s0 (lowest sensitivity level)
+| c0.c15 (range of c0 to c15)
+|-
+| user_u:user_r:user_t:s0-s2:c1,c4.c8
+| s0 (lowest sensitivity level)
+| s2
+| c1,c4.c8 (c1 plus c4 to c8)
+|}
+
+==== How MLS restrictions work ====
+
+The MLS part of SELinux will check the context of the process and the context of the target resource, and see what their relationship is. This is called the ''dominance'' and has four possible returns:
+# the process' context ''dominates'' the resource context, meaning that the resource has a sensitivity level equal to or below the sensitivity level of the process, and the categories of the process are a superset (more than) or the same as the target resource. 
+# the process' context ''is dominated by'' the resource context, meaning that the resource has a sensitivity level equal to or higher than the sensitivity level of the process, and the categories of the process are a subset (less than) or the same as the target resource.
+# the process' context and resource's context are the same (same sensitivity and categories)
+# the process' context and the resource's context are ''incompatible'': regardless of the sensitivity level, each context has at least one category that the other doesn't have.
+
+MLS policies then dictate what happens upon certain permission checks. For instance, a policy might say that
+* read operations are only allowed if the domain ''dominates'' the context of the resource
+* write operatons are only allowed if the domain ''is dominated by'' the context of the resource
+
+==== MLS on a default installation ====
+
+Most distributions do not create specific labels and categories up front - they let the administrator decide how to deal with sensitivities and categories. What the distributions do configure are which domains need to have a level beyond the lowest level (most likely which domains need the highest level with all categories), like kernel-related domains.
+
+=== What you need to remember ===
+
+What you should remember from this tutorial is that
+* SELinux supports sensitivity levels (hierarchical) and categories (labels)
+* the SELinux policy dictates what is allowed based on the dominance between two contexts
+* distributions usually do not provide a starting set of sensitivities and categories
