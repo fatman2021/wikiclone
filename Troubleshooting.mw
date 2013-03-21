@@ -72,3 +72,36 @@ Relying on our friend lspci again, we run {{RootCmd|lspci -k}}
 Note that here, we have text indicating that a driver is in use.  If not, we weren't able to successfully load the driver.  Assuming the driver was built as a module rather than builtin, try ''modprobe <module>'' to attempt loading the module.  If your driver was builtin, consider making it a module while you debug why it isn't working, because you can load a module with ''modprobe'' and unload a module with ''modprobe -r''.
 ===== Troubleshooting a Driver =====
 To start, with your driver built as a module, {{RootCmd|modprobe -r}} it. run {{RootCmd|dmesg -c}}  This will clear your message buffer so that when troubleshooting the driver, we have very little extraneous information to deal with. Now, {{RootCmd|modprobe}} your driver, and run {{RootCmd|dmesg}}  This should aid us in finding out why our driver isn't functioning properly.  Often, we will be missing firmware, and should grab either sys-kernel/linux-firmware or a specific firmware package from Portage.
+
+=== Software Issues ===
+==== Portage Issues ====
+===== Dependency Graph Slot Conflicts =====
+Occasionally, you will see messages like this when trying to emerge a package:
+ !!! Multiple package instances within a single package slot have been pulled
+ !!! into the dependency graph, resulting in a slot conflict:
+
+Generally, this means that the packages listed have multiple requested versions in the dependency graph.  And fortunately most, if not all cases that you will encounter, you can resolve by manually upgrading to the highest requested version.  So assuming that you get the following exact message:
+ app-emulation/emul-linux-x86-xlibs:0 
+ (app-emulation/emul-linux-x86-xlibs-20120127::gentoo, installed) pulled in by 
+ ~app-emulation/emul-linux-x86-xlibs-20120127 required by (app-emulation/emul-linux-x86-medialibs-20120127::gentoo, installed) 
+ (and 2 more with the same problem) 
+ 
+ (app-emulation/emul-linux-x86-xlibs-20120520::gentoo, ebuild scheduled for merge) pulled in by 
+ >=app-emulation/emul-linux-x86-xlibs-20120520 required by (net-im/skype-2.2.0.35-r99::gentoo, ebuild scheduled for merge) 
+ ~app-emulation/emul-linux-x86-xlibs-20120520 required by (app-emulation/emul-linux-x86-medialibs-20120520::gentoo, ebuild scheduled for merge) 
+
+we see that most recent version desired is 20120520, so we just {{RootCmd|emerge --oneshot =app-emulation/emul-linux-x86-xlibs-20120520}} and we are good to go.  Often, it's advantages to oneshot all of the conflicts at once because they sometimes depend on one another.
+
+=== Collecting Additional Information ===
+When seeking help, it's best to come prepared.  Someone volunteering their time doesn't want to waste that time fumbling about.  That's where ''wgetpaste'' comes in handy. Let's say you want to show your configuration file ''/etc/conf.d/net'', using wgetpaste is as simple as {{Cmd|wgetpaste /etc/conf.d/net}}.  Or let's say that you want to show what the output of your ''lspci'' command is, you can just run {{RootCmd| lspci &#124; wgetpaste}}
+These return a link to a pastebin that you can easily share with someone to get help.
+Things that you should consider pasting if you want help:
+
+If you have hardware problems or kernel issues:
+ /usr/src/linux/.config
+If you have portage issues"
+ emerge -qpv --info
+If compilation of a package fails:
+ /var/tmp/portage/<cate-gory>/<package>-<version>/temp/build.log
+If you are having issues with Xorg:
+ /var/log/Xorg.0.log
