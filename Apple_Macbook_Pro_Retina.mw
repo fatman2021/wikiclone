@@ -1,0 +1,154 @@
+== General Platform Notes ==
+
+These instructions cover the Macbook Pro with Retina Display, 13" model. This model does not have the dual graphics cards and only has the Intel HD 4000 card. It has the model code 10,2
+
+These instructions will perform a Dual Boot setup with MacOS. A single boot installation could be performed, but you will need to use the rEFIt instructions for installing rEFIt to the EFI system partition using bless instead of to the MAC partition (which is the default). I have not tried this yet but you can read about it on the rEFIt website.
+
+== lspci and lsusb ==
+
+lspci:
+ 00:00.0 Host bridge: Intel Corporation 3rd Gen Core processor DRAM Controller (rev 09)
+ 00:01.0 PCI bridge: Intel Corporation Xeon E3-1200 v2/3rd Gen Core processor PCI Express Root Port (rev 09)
+ 00:01.1 PCI bridge: Intel Corporation Xeon E3-1200 v2/3rd Gen Core processor PCI Express Root Port (rev 09)
+ 00:02.0 VGA compatible controller: Intel Corporation 3rd Gen Core processor Graphics Controller (rev 09)
+ 00:14.0 USB controller: Intel Corporation 7 Series/C210 Series Chipset Family USB xHCI Host Controller (rev 04)
+ 00:16.0 Communication controller: Intel Corporation 7 Series/C210 Series Chipset Family MEI Controller #1 (rev 04)
+ 00:1a.0 USB controller: Intel Corporation 7 Series/C210 Series Chipset Family USB Enhanced Host Controller #2 (rev 04)
+ 00:1b.0 Audio device: Intel Corporation 7 Series/C210 Series Chipset Family High Definition Audio Controller (rev 04)
+ 00:1c.0 PCI bridge: Intel Corporation 7 Series/C210 Series Chipset Family PCI Express Root Port 1 (rev c4)
+ 00:1c.1 PCI bridge: Intel Corporation 7 Series/C210 Series Chipset Family PCI Express Root Port 2 (rev c4)
+ 00:1d.0 USB controller: Intel Corporation 7 Series/C210 Series Chipset Family USB Enhanced Host Controller #1 (rev 04)
+ 00:1f.0 ISA bridge: Intel Corporation QS77 Express Chipset LPC Controller (rev 04)
+ 00:1f.2 SATA controller: Intel Corporation 7 Series Chipset Family 6-port SATA Controller [AHCI mode] (rev 04)
+ 00:1f.3 SMBus: Intel Corporation 7 Series/C210 Series Chipset Family SMBus Controller (rev 04)
+ 02:00.0 Ethernet controller: Broadcom Corporation Device 16a3 (rev 21)
+ 02:00.1 SD Host controller: Broadcom Corporation NetXtreme BCM57765 Memory Card Reader (rev 21)
+ 03:00.0 Network controller: Broadcom Corporation BCM4331 802.11a/b/g/n (rev 02)
+
+lsusb
+ Bus 001 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+ Bus 002 Device 002: ID 8087:0024 Intel Corp. Integrated Rate Matching Hub
+ Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+ Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+ Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+ Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+ Bus 001 Device 003: ID 05ac:8510 Apple, Inc. 
+ Bus 002 Device 003: ID 0424:2512 Standard Microsystems Corp. USB 2.0 Hub
+ Bus 002 Device 008: ID 05ac:828c Apple, Inc. 
+ Bus 002 Device 004: ID 0a5c:4500 Broadcom Corp. BCM2046B1 USB 2.0 Hub (part of BCM2046 Bluetooth)
+ Bus 002 Device 005: ID 05ac:0259 Apple, Inc. 
+
+
+== Installation Steps ==
+
+Install Ubuntu's daily liveCD to a USB drive using unetbootin on an existing PC. You MUST use a 64 bit USB boot image. As of March 2013, I had use the daily as 12.10 does not have the right wireless drivers. However, you could use an older Ubuntu and install via a USB Ethernet NIC or via Thunderbolt (plug in the Thunderbolt before you boot).
+
+Boot MacOS on the Macbook Pro and install rEFIt per the automatic installation instructions here: [a http://refit.sourceforge.net/doc/c1s1_install.html ]
+
+Use MacOS Disk Utility to resize the MacOS partition on the fly, which by default takes up most of the disk, and behind it create your Linux root partition of the size you desire.
+
+Shut down the Mac, and boot it up twice (Requirement for rEFIt). You should start seeing the rEFIt boot menu after the second reboot.
+
+Now, plug the Ubuntu USB stick into the Mac and boot the Mac. Select the new option in the menu which should be the USB stick.
+
+When it boots, most everything should work except the sound on the liveCD.
+
+Proceed with a standard Gentoo install using the Ubuntu live environment. Install your snapshot into the root partition you created (Probably /dev/sdb4) and configure it per the installation instructions but do not install the boot loader. Note that by default the EFI system partition will be sdb1, Apple root will be sdb2 and Apple recovery will be sdb3.
+
+I use the EFI Stub Kernel method of booting. It is very simple and there are other ways but I will describe the stub method.
+
+In this method, the Mac app rEFIt will act as the boot manager/boot loader and it will boot the kernel directly. The kernel must have EFI stub support compiled in.
+
+Use at least a 3.7 Kernel. The wireless drivers you need later do not compile with a kernel greater than 3.8 at the present time.
+
+Configure your kernel as normal, but add the following options for EFI Stub:
+
+Processor type and features  --->
+    [*] EFI runtime service support 
+    [*]   EFI stub support
+
+Processor type and features  --->
+    [*] Built-in kernel command line
+    (root=/dev/sda2)
+
+Make sure the root= line on your kernel command line configuration is correct. More details about Kernel configuration for EFI stub are here: [[ EFI stub kernel ]]
+
+This assumes you do not need an initramfs. I do not use one. If you do, the EFI stub method may not be the easiest method. But it can still be done, refer to the [[ EFI_stub_kernel ]] page.
+
+Also, add the following Kernel options for driver support:
+
+These options are in addition to the standard options you would select for Intel based PC's
+
+Drivers, Input, Generic Input, Mouse:
+ CONFIG_MOUSE_BCM5974=y (For trackpad support)
+
+Drivers, Hardware monitoring
+ CONFIG_SENSORS_APPLESMC (Motion, light sensor, kbd backlight)
+
+Drivers, Graphics Support:
+ CONFoptions snd_hda_intel model=mbp101
+ IG_DRM_I915=y (Intel 8xx/9xx/HD Graphics)
+
+Drivers, Graphics, Backlight, Lowlevel Backlight:
+ CONFIG_BACKLIGHT_APPLE=y (screen backlight)
+
+Drivers, X86 Platform Specific
+ CONFIG_APPLE_GMUX=y
+
+Ensure the following options are NOT set (required for proper Broadcom wireless):
+ CONFIG_MAC80211=n (Networking support, Wireless)
+ CONFIG_B43=n (Drivers, Network Device, Wireless LAN)
+ CONFIG_BRCMFMAC=n (Drivers, Network device, Wireless LAN)
+ CONFIG_SSB=n (Drivers, Sonics Silicon Backplane)
+
+Drivers, Multimedia support, Media USB
+ CONFIG_USB_VIDEO_CLASS=m (Webcam)
+
+Drivers, Sound, ALSA, PCI:
+ CONFIG_SND_HDA_INTEL=m (Must be built as a module to set the option, see below)
+ CONFIG_SND_HDA_CODEC_HDMI=m
+ CONFIG_SND_HDA_CODEC_CIRRUS=m
+
+Once configured, compile the kernel as normal but do not copy it to /boot. Once it is compiled, do the following:
+
+Your built in Macbook SSD should be /dev/sdb if you booted from the Ubuntu USB which will probably be /dev/sda.
+Assuming it is /dev/sdb, your "EFI System Partition" will be /dev/sdb1, in which case, copy it to the EFI partition as such:
+
+ mkdir /mnt/efi
+ mount /dev/sdb1 /mnt/efi
+ cp /usr/src/linux/arch/x86_64/boot/bzImage /mnt/efi/EFI/Boot/Gentoo_37_x64.efi
+
+You do not need to setup any bootloaders (Grub nor Lilo) for this to work. rEFIt will automatically detect the kernel you copied to that location and show it as a boot option when you reboot.
+
+Complete the rest of the gentoo installation, and reboot. rEFIt should show Gentoo_37_x64.efi as an option in the boot menu.
+
+
+Required for Audio: Add the following to the bottom of /etc/modprobe.d/alsa:
+ options snd_hda_intel model=mbp101
+
+== Wireless Drivers ==
+
+The wireless drivers are hard to get working. Having a USB Ethernet adapter on hand will be helpful for the install. The wireless will work on the latest daily Ubuntu liveCD but they will not work by default on Gentoo.
+
+The BCM4331 is not supported by the in-kernel B43 driver at this time.
+
+It is also not supported by the version of broadcom-sta in the Gentoo portage tree at this time - 5.100.82.112
+
+The Macbook Pro retina actually uses a similar wireless chip as the Dell Vostro's from 2012. Now those do work on Ubuntu - but only because Ubuntu is maintaining the drivers for Dell in the Ubuntu tree. You will need to download the Ubuntu .deb file, convert it with deb2targz, compile it against your kernel and install it.
+
+Here are the notes on the Ubuntu launchpad where they "Added 4331 support" which is our chip: [ https://launchpad.net/ubuntu/+source/bcmwl/6.20.155.1+bdcom-0ubuntu1 ]
+
+Ensure your /usr/src/linux symlink is correct and matches the running kernel (You probably have to reboot into your fresh gentoo install before running the compile steps)
+
+ emerge deb2targz
+ wget  https://launchpad.net/ubuntu/+source/bcmwl/6.20.155.1+bdcom-0ubuntu6/+build/4225739/+files/bcmwl-kernel-source_6.20.155.1%2Bbdcom-0ubuntu6_amd64.deb
+ deb2targz bcmwl-kernel-source_6.20.155.1+bdcom-0ubuntu6_amd64.deb
+ tar -zxvf bcmwl-kernel-source_6.20.155.1+bdcom-0ubuntu6_amd64.tar.gz
+ cd usr/src/bcmwl-6.20.155.1+bdcom/
+ for i in patches/* ; do patch -p1 < $i ; done
+ sed -i 's/BINARCH = i386/BINARCH = x86_64/' Makefile
+ make
+ make install
+ depmod -a
+
+That should install the wl.ko into your modules directory. You can then modprobe wl, run iwconfig and make sure you see the NIC and you can finish setting up the wireless as per normal Gentoo wireless installation.
