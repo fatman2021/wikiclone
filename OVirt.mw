@@ -9,47 +9,99 @@
 * A '''client side UI''' (GWT based) and/or '''RESTful API''' to control the engine core.
 
 == Description ==
-This article will try to explain how to install oVirt on Gentoo system, more specifically we'll set up the following:
-* For the engine core
-** The Java runtime environment
-** A JBoss server instance
-** A [[PostgreSQL]] server
-** The engine core and UI
+
+* A [[PostgreSQL]] server
+* The engine core and UI
 
 * For the VDSM agents
 ** (Work in progress)
 
-{{Note|This manual is what I did on my Gentoo server. If you have different install, which you probably do, you might not strictly do copy/paste and some additional steps might be necessary. I will specify every error I encountered and a solution to it at the end of the document. Feel free to add any problem not noted}}
+== PostgreSQL ==
 
-== Install Java runtime ==
-Ovirt manual is suggesting installing openJDK. My server has sun-jdk already set so I will point you to [http://www.gentoo.org/doc/en/java.xml Gentoo Java guide] for setting java environment. '''Make sure you are setting jdk version 1.6 or 1.7'''
+* Emerge PostgreSQL server.
+{{emerge|{{package|dev-db/postgresql-server}}}}
+* Configure PostgresSQL server
+{{RootCmd|emerge --config {{package|dev-db/postgresql-server}}}}
+* Allow network access
 
-== Install Java application server – JBoss ==
-oVirt runs on JBoss application server, here is a quick guide to set up jboss for our needs. The plan is to have JBoss under /opt, make a jboss user and set the installation dir as the user's home dir (I did this because I wanted to have everything on a single place for portability and because it makes things easier with permissions etc). Then we 'll put ovirt inside this directory and set it up.
+Modify:
+{{File|/etc/postgres-*/pg_hba.conf||<pre>
+host    all             all             127.0.0.1/32            password
+host    all             all             ::1/128                 password
+</pre>}}
 
-* First go to /opt as root
-{{RootCmd|cd /opt}}
+* Start
+{{RootCmd|/etc/init.d/postgres* start}}
 
-* Download latest JBoss version 7
-{{RootCmd|wget http://download.jboss.org/jbossas/7.1/jboss-as-7.1.1.Final/jboss-as-7.1.1.Final.tar.gz}}
+* Create user and database
+{{RootCmd|su - postgres -c "psql -d template1"|output=<pre>
+template1=# create user engine password 'engine';
+template1=# drop database engine;
+template1=# create database engine owner engine;
+</pre>}}
 
-* Untar the archive
-{{RootCmd|tar xvzf jboss-as-7.1.1.Final.tar.gz}}
+== oVirt Engine ==
 
-* Create the jboss user {{Note|For compatibility with Fedora we use uid/gid 36, on gentoo this one is used for the "games" user/group so make sure you change uid/gids inside /etc/passwd and /etc/group and reset permissions on /usr/games, without it we'll have some trouble setting up NFS storage domains later. Also the -Z option is there in case you are on the ''seLinux'' [[profile]], if not ignore it}}
-{{RootCmd|useradd -d /opt/jboss-as-7.1.1.Final -u 36 -g 36 -r jboss -Z user_u}}
+* Add oVirt overlay to /etc/portage/make.conf
 
-* Now set permissions for jboss's home dir
-{{RootCmd|chown -R ''jboss'':''jboss'' /opt/jboss-as-7.1.1.Final}}
+Portage overlay exists here: http://github.com/alonbl/ovirt-overlay
 
-* Test that JBoss is working by	starting the server as jboss user
-{{RootCmd|su jboss|}}{{cmd|cd ~|bin/standalone.sh}}
-* Now open a browser to your server's hostname (let's assume it's "engine-dev") and check out http://engine-dev:8080 you should see JBoss's welcome screen.
+* Emerge ovirt-engine
+{{emerge|app-emulation/ovirt-engine}}
 
-=== Troubleshooting JBoss ===
+You may need to add unstable keywords to various packages.
+
+* Configure ovirt-engine
+{{RootCmd|emerge --config app-emulation/ovirt-engine}}
+
+Follow instructions.
+
+== Configure Apache ==
+
+* Add, after APACHE2_OPTS="XXX"
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="${APACHE2_OPTS} -D PROXY"
+</pre>}}
+* Restart
+{{RootCmd|/etc/init.d/apache2 restart}}
+
+=== Testing ===
+
+Login into http://localhost/ovirt-engine
+
+Logs are at /var/log/ovirt-engine
+
+== Install vdsm ==
+{{Warning|VDSM for now is mostly Fedora/Redhat oriented, trying to set up VDSM on a non-Fedora node takes more than you think. If you succeed however please update this part of the article and notify upstream. Until then I suggest you use an oVirt-node image for your Hypervisors from here [http://ovirt.org/releases/stable/binary/]}}
+* Install dev-python/pyflakes as it is needed by vdsm
+{{Emerge|dev-python/pyflakes}}
+* Obtain VDSM source RPM
+{{Cmd|wget -c http://fsimonce.fedorapeople.org/vdsm/fedora-16/SRPMS/vdsm-4.9.0-0.200.g2fc4e63.fc16.src.rpm}}
+* Convert rpm package to tgz
+{{Cmd|rpm2tgz vdsm-4.9.0-0.200.g2fc4e63.fc16.src.rpm}}
+* Unpack the archive
+{{Cmd|tar zxvf vdsm-4.9.0-0.200.g2fc4e63.fc16.src.tgz}}
+* Enter the directory and do the configure-make-make install magic (Recommended to use –prefix when compiling from source so you can have all files under one directory per package)
+{{RootCmd|cd vdsm-4.9.0-0.200.g2fc4e63.fc16}}
+{{RootCmd|./configure --prefix{{=}}/path/to/install/directory && make && make install}}
+
+== How to contribute ==
+* oVirt project is working with Gerrit code review for code contribution.
+* In order to register and login to oVirt's Gerrit, you'll need an OpenID account.
+** You can use a Google OpenID, or register to some other provider and use it,
+* All other details can be found here: http://www.ovirt.org/wiki/Working_with_oVirt_Gerrit
+
+== Advanced features ==
+
+=== oVirt Node integration ===
+* By default development setup works with hosts based on base distro's installations.
+* In order to be able to work with oVirt Node (which is a sub-set of the base OS), you'll need to setup a Public Key environment.
+* More details on Engine and oVirt Node integration can be found here: http://www.ovirt.org/wiki/Engine_Node_Integration.
+** Note that by default Gentoo does not have /etc/pki folder, and you'll need to create it (or write an eBuild which will do that).
+
+=== Troubleshooting JBoss (obsolete) ===
 If you're being attacked by exceptions, follow this list:
 * Verify jboss folder owner and permissions.
-* For external connections, make sure your firewall allows incoming traffic on 8080 port.
 * If your machine has and selinux policy installed, make sure it will not block JBoss. Here is a very dirty and insecure jboss.te just to temporarily pass these denials (you'll also need selinux-java)
 {{Code|jboss.te|<pre>module jboss 1.0;
 
@@ -85,276 +137,9 @@ allow java_t self:tcp_socket { listen accept };
 allow java_t node_t:tcp_socket node_bind;
 </pre>}}
 
-* Used TCP ports: 8080/8443/8083/1090/4457
-** These ports may be used by other applications. Either close other application or change JBoss configuration (/opt/jboss-as-7.1.1.Final/standalone/configuration/standalone.xml)
+* Used TCP ports: 8702/8083/1090/4457
 ** Since JBoss binds to the hostname, your hostname should be resolvable, or you may add it to /etc/hosts for local resolution.
  127.0.0.1 localhost engine-dev
-
-* Verify you gave JBoss's enough RAM to work with
-{{Cmd|export JAVA_OPTS{{=}}"-Xmx2048m"}}
-
-== Installing PostgreSQL ==
-oVirt Engine works with postgresql 9.1.x 
-
-If you didn't already, specify default locale for your server ('''as root'''):
-* Check /etc/locale.gen, e.g.:
-{{RootCmd|cat /etc/locale.gen|output=<pre>
-...
-en_US ISO-8859-1
-en_US.UTF-8 UTF-8
-sr_RS UTF-8
-sr_RS@latin UTF-8
-...
-</pre>}}
-
-* Create /etc/env.d/02locale
-{{RootCmd|echo 'LANG{{=}}"en_US.UTF-8"' > /etc/env.d/02locale}}
-
-* Update environment for current shell (and every new shell you open) or simply reboot
-{{RootCmd|env-update
-|source /etc/profile}}
-
-Now lets install PostgreSQL...
-
-* Emerge Postgresql server. Make sure '''uuid''' useflag is enabled!
-{{RootCmd
-|echo "dev-db/postgresql-server uuid" >> /etc/portage/package.use/monolithic
-|emerge -DuNavt dev-db/postgresql-server:9.1 jdbc-postgresql
-}}
-* Make sure the jdbc installed is 9.1_XXX (you may need to unmask it).
-* Once emerged, verify the config files in /etc/postgresql-9.1 	and /etc/conf.d directory. Use [http://www.gentoo.org/doc/en/postgres-howto.xml Gentoo Postgresql Guide] as a reference for configuration.
-* Make sure pg_hba.conf file has access rules set to trust
-* Add jboss user to postgres group
-{{RootCmd|usermod -a -G postgres jboss}}
-* Run the relevant emerge --config … command.
-* Start the database server
-
-== Installing oVirt Engine Core ==
-Now that our needed components are in place it's time to download and build the engine core. Sticking to the plan lets get ovirt engine's source code and place it inside ~jboss/ We 'll do the whole process as user jboss
-
-{{RootCmd|su jboss}}{{Cmd|cd ~|wget http://www.ovirt.org/releases/stable/src/ovirt-engine-3.1.0.tar.gz|
-|mkdir ovirt-engine|tar xvzf ovirt-engine-3.1.0.tar.gz -C ovirt-engine}}
-
-=== Install maven ===
-* Install dev-java/maven-bin. '''It is no longer a must to build version 2 of maven. Version 3 is supported.''' As of time of writing, stable version in portage is 2.2.1 so it is safe to just emerge it. Alternatively you may add it to your keywords file:
-{{RootCmd|echo "dev-java/maven-bin:3.0 ~amd64" >> /etc/portage/package.keywords}}
-* Next:
-{{Emerge|dev-java/maven-bin}}
-* If unsure, emerge strict version:
-{{RootCmd|emerge -DuNavt {{=}}dev-java/maven-bin-2.2.1}}
-* or
-{{RootCmd|emerge -DuNavt {{=}}dev-java/maven-bin:3.0}}
-* Set up the needed repositories for Maven. To create default repository directory, run maven as non-privileged user. DO NOT use root user.
-{{Cmd|mvn-2.2}}
-* This command will create .m2 directory in jboss user's HOME directory.
-* Copy paste the content of the file below into user's ~/.m2/settings.xml file. See the [[http://ovirt.org/wiki/Building_oVirt_engine#Maven_personal_settings Maven personal settings]] on the oVirt wiki.
-{{File|~/.m2/settings.xml||<pre> 
-<?xml version="1.0"?>
-<settings xmlns="http://maven.apache.org/POM/4.0.0"
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-          http://maven.apache.org/xsd/settings-1.0.0.xsd">
-
-<!--**************************** PROFILES ****************************-->
-
-        <activeProfiles>
-                <activeProfile>oVirtEnvSettings</activeProfile>
-        </activeProfiles>
-
-        <profiles>
-                <profile>
-                        <id>oVirtEnvSettings</id>
-                        <properties>
-                                <jbossHome>/opt/7.1.1.Final</jbossHome>
-                                <JAVA_1_6_HOME>/opt/sun-jdk-1.6.0.26</JAVA_1_6_HOME>
-                                <forkTests>always</forkTests>
-                        </properties>
-                </profile>
-        </profiles>
-</settings>
-
-</pre>}}
-* Modify '''jbossHome''' and '''JAVA_1_6_HOME''' tags as needed. '''If these parameters are incorrect, compiling and installing using maven will fail!'''
-
-=== Build oVirt-engine ===
-
-==== Prepare build environment ==== 
-* Increase some maximum values by default. Add the following to ~jboss/.mavenrc:
- export MAVEN_OPTS="-Xmx2048M -XX:MaxPermSize=2048M"
-* Values for mx and MaxPermSize may be different!
-* Build GWT to work with a specific browser (this is needed in case you don't have that much RAM to compile support for all 6). Modify 
-** ~jboss/ovirt-engine/frontend/webadmin/modules/webadmin/src/main/resources/org/ovirt/engine/ui/webadmin/WebAdmin.gwt.xml
-** ~jboss/ovirt-engine/frontend/webadmin/modules/userportal/src/main/java/org/ovirt/engine/ui/userportal/UserPortal.gwt.xml 
-by adding the lines:
-<pre>
-<!-- Reduce the number of permutations to compile, just for tests: -->
-<set-property name="user.agent" value="gecko1_8"/>
-</pre>
-
-==== Building ovirt-engine and REST api ====
-* As unprivileged user
-{{Cmd
-|cd ~/ovirt-engine/
-|mvn-2.2 -e -DskipTests{{=}}true clean install
-}}
-
-==== Compile web-admin and user-portal ====
-* As unprivileged user
-{{Cmd
-|cd ~/ovirt-engine/
-|mvn-2.2 -e -DskipTests{{=}}true clean install -Pgwt-admin,gwt-user
-}}
-
-==== Application deployment ====
-Time to put oVirt Engine Core and its components to JBoss
-* The first deployment of the application to JBoss AS container should use the setup profile:
-{{Cmd
-|cd ~/ovirt-engine/ear
-|mvn-2.2 -e -DskipTests{{=}}true clean install -Pdep,setup
-}}
-* There is a issue with the dep and setup_postgres profiles getting in the way of each other. The setup_postgres profile will prevent the deployment of the quartz jar to the JBoss server. So after this step completes, run:
-{{Cmd
-|cd ~jboss/ovirt-engine/ear
-|mvn-2.2 -e -DskipTests{{=}}true clean install -Pdep
-}}
-* From this point on, since postgres is already set up, every time you deploy you can simply run:
-{{Cmd
-|cd $OVIRT_HOME/ear
-|mvn-2.2 -e -DskipTests{{=}}true clean install -Pdep
-}}
-
-==== New ROOT container deployment ====
-We need to replace the JBoss's root container (what you see under http://engine-dev:8080/) with oVirt's ROOT.war since it'll hold the Engine Core's certificate and public ssh key, used by oVirt nodes.
-* Copy ROOT.war to the deployments directory
-{{Cmd|cp -a ~/ovirt-engine/packaging/fedora/setup/resources/jboss/ROOT.war ~/standalone/deployments/}}
-* Tweak standalone.xml to enable the new server's root
-{{file|~/standalone/configuration/standalone.xml||<pre>
-[...]
-<virtual-server name="default-host" enable-welcome-root="false">
-[...]</pre>}}
-* And tell JBoss to deploy it next time it runs
-{{Cmd|touch ~/standalone/deployments/ROOT.war.dodeploy}}
-
-==== Creating the database schema ====
-Finally it's time to create the database schema for Engine Core
-{{Cmd
-|cd ~/ovirt-engine/backend/manager/dbscripts
-|./create_db_devel.sh -u postgres
-}}
-
-=== Create the oVirt Engine Core's Certificate Authority and keys ===
-Now we need to create the Engine Core's CA certificate that 'll be used to sign the certificate of each Hypervisor and its public ssh key, needed for engine <-> Hypervisor communication. The plan is to put everything under ~/pki (on Fedora /etc/pki is used) and put the needed values on the database.
-
-* First lets make the needed dirs
-{{Cmd|mkdir ~/pki
-|mkdir ~/pki/vps-ca
-|mkdir ~/pki/vps-ca/ca}}
-
-* Now compile pubkey2ssh program needed to create the public ssh key from your CA certificate
-{{Cmd|cd ~/pki/vps-ca/ca|gcc ~/ovirt-engine/backend/manager/3rdparty/pub2ssh/src/pubkey2ssh.c -o pubkey2ssh -lcrypto}}
-
-* Create and set up the CA
-{{Cmd|cd ~/ovirt-engine/backend/manager/conf/ca
-|./installCA_dev.sh `pwd` ~/pki/vps-ca}}
-
-* Create and set up the SSH keys
-{{Cmd|cd ~/pki/vps-ca/ca
-|./exportK2SSH.sh ~/pki/vps-ca/ca/.keystore engine engine.pub NoSoup4U
-|./pubkey2ssh keys/engine.pub engine > keys/engine.ssh.key.txt
-|rm keys/engine.pub}}
-
-{{Warning|"NoSoup4U" is the default password for the keystore and the certificate defined inside ~/pki/vps-ca/ca/* files and scripts, you should change it !}}
-
-* Put CA certificate and public SSH key under /
-{{Cmd|cd ~/pki/vps-ca/ca
-|cp keys/engine.ssh.key.txt ~/standalone/deployments/ROOT.war/
-|cp ca.pem ~/standalone/deployments/ROOT.war/ca.crt}}
-
-{{Note|SignReq.sh script found inside ~/pki/vps-ca/ca will try to write to /var/lock, in case your jboss user is not allowed to write there -or you don't want to- just edit that script like this {{file|SignReq.sh||<pre>#lock_file=$7
-if [ -z "$lock_file" ]; then
-        lock_file=/tmp/.openssl.exclusivelock
-fi</pre>}}  If you don't then you'll hit an error each time you try to add a Hypervisor to the system }}
-
-* Set CA directories on the database
-Time to add our new CA to the database, this script will do the trick...
-{{file|ca_db.sh||<pre>
-#!/bin/bash
-
-CA_DIR=/opt/7.1.1.Final/pki/vps-ca/ca
-
-psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/certs/engine.cer' where option_name = 'CertificateFileName';"
-psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/.keystore' where option_name = 'TruststoreUrl';"
-psql engine postgres -c "update vdc_options set option_value = '$CA_DIR' where option_name = 'CABaseDirectory';"
-psql engine postgres -c "update vdc_options set option_value = 'ca.pem' where option_name  = 'CACertificatePath';"
-psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/.keystore' where option_name = 'keystoreUrl';"
-psql engine postgres -c "update vdc_options set option_value = '$CA_DIR/private/ca.pem' where option_name = 'CAEngineKey';"</pre>}}
-
-=== Testing ===
-* Start JBoss application server
-{{cmd|cd ~|bin/standalone.sh -b 0.0.0.0}}
-* Test JBoss by accessing from browser: http://engine-dev:8080/
-* Use username '''admin@internal''' and password '''letmein!'''	for testing access.
-* Accessing the web-admin: http://engine-dev:8080/webadmin
-* Accessing the user-portal: http://engine-dev:8080/UserPortal
-* Accessing the RESTful API:
-{{Cmd|wget -O - --debug --auth-no-challenge --http-user{{=}}admin@internal --http-password{{=}}'letmein!' head{{=}}'Accept: application/xml' http://engine-dev:8080/api/}}
-* From the browser: http://engine-dev:8080/api
-
-== Install vdsm ==
-{{Warning|VDSM for now is mostly Fedora/Redhat oriented, trying to set up VDSM on a non-Fedora node takes more than you think. If you succeed however please update this part of the article and notify upstream. Until then I suggest you use an oVirt-node image for your Hypervisors from here [http://ovirt.org/releases/stable/binary/]}}
-* Install dev-python/pyflakes as it is needed by vdsm
-{{Emerge|dev-python/pyflakes}}
-* Obtain VDSM source RPM
-{{Cmd|wget -c http://fsimonce.fedorapeople.org/vdsm/fedora-16/SRPMS/vdsm-4.9.0-0.200.g2fc4e63.fc16.src.rpm}}
-* Convert rpm package to tgz
-{{Cmd|rpm2tgz vdsm-4.9.0-0.200.g2fc4e63.fc16.src.rpm}}
-* Unpack the archive
-{{Cmd|tar zxvf vdsm-4.9.0-0.200.g2fc4e63.fc16.src.tgz}}
-* Enter the directory and do the configure-make-make install magic (Recommended to use –prefix when compiling from source so you can have all files under one directory per package)
-{{RootCmd|cd vdsm-4.9.0-0.200.g2fc4e63.fc16}}
-{{RootCmd|./configure --prefix{{=}}/path/to/install/directory && make && make install}}
-
-== How to contribute ==
-* oVirt project is working with Gerrit code review for code contribution.
-* In order to register and login to oVirt's Gerrit, you'll need an OpenID account.
-** You can use a Google OpenID, or register to some other provider and use it,
-* All other details can be found here: http://www.ovirt.org/wiki/Working_with_oVirt_Gerrit
-
-== Errors & Solutions ==
-* Theese are the errors and solutions as I was going through the process of installing oVirt. Feel free to add your own :)
- '''Error''': When compiling projects, getting errors about unmappable characters.
-'''Solution''': My install is UTF8, but default locale was not set. So default locale by Maven/JBoss (not sure which one) was US_ASCII. Set default locale and errors are history.
- '''Error''': Compile process dies with '''PermGenSpace''' error.
-'''Solution''': This error means that no more memory is available to java compiler. This is fixed by setting MAVEN_OPTS with higher values for mx and MaxPermSize parameters. Another trick that helped was choosing only one browser to compile GWT for by modifying above mentioned files.
- '''Error''': Compile process dies with error code 137.
-'''Solution''': This one I'm not quite sure about. The only info I could google out was a suggestion to try change the java compiler (oVirt wiki uses openJDK, me sun-jdk). The solution for me was to add '''-e -DskipTests=true''' options to maven. Again, I'm not sure how this is relevant as I don't know what error 137 means or how it is caused.
-* Errors while deploying the root container
- '''Error''': Message: JBAS014724: Missing required attribute(s): cache-ref
-'''Solution''': 
-{{Cmd|diff ovirt-engine/backend/manager/conf/standalone.xml standalone/configuration/standalone.xml}}
-<pre>
-165c158
-<                 <stateful default-access-timeout="5000"/>
----
->                 <stateful default-access-timeout="5000" cache-ref="simple"/>
-</pre>
- '''Error''': Message: JBAS014788: Unexpected attribute 'show-model' encountered
-'''Solution''': 
-{{Cmd|diff ovirt-engine/backend/manager/conf/standalone.xml standalone/configuration/standalone.xml}}
-<pre>
-222c215
-<         <subsystem xmlns="urn:jboss:domain:jmx:1.1" show-model="true"/>
----
->         <subsystem xmlns="urn:jboss:domain:jmx:1.1"/>
-</pre>
-
-== Advanced features ==
-
-=== oVirt Node integration ===
-* By default development setup works with hosts based on base distro's installations.
-* In order to be able to work with oVirt Node (which is a sub-set of the base OS), you'll need to setup a Public Key environment.
-* More details on Engine and oVirt Node integration can be found here: http://www.ovirt.org/wiki/Engine_Node_Integration.
-** Note that by default Gentoo does not have /etc/pki folder, and you'll need to create it (or write an eBuild which will do that).
 
 == External resources ==
 * [http://www.ovirt.org/wiki/Workshop_November_2011 Additional information (including presentations)]
