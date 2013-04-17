@@ -1,0 +1,86 @@
+== Abstract ==
+This articles show how to set up a OpenRC to act as a convenient, transparent and flexible networking client which supports roaming as an alternative to [[Network Management|other solutions]] often used on notebooks.
+
+== Requirements ==
+The currently stable version of these packages are all that is needed (no *kit software required)
+* [[OpenRC]]({{Package|sys-apps/openrc}}) - management of services
+* [[wpa_supplicant]]({{Package|net-wireless/wpa_supplicant}}) - Wi-FI configuration and connection
+** enable the qt4 USE flag if you want to have a GUI for the Wi-FI client
+* {{Package|sys-apps/ifplugd}} - for hotplugging of ethernet interfaces
+** {{Package|sys-apps/netplug}} can be used as an alternative, but development has been discontinued
+
+== Configuration and setup ==
+Before you start configuring the interfaces, make sure that they work (meaning you have the required drivers installed) and that you know their names. A convenient way is to make a [[Udev#NIC_assigned_eth0.2C_but_is_moved_to_eth1|Udev rule to give them human-readable names]] like ethernet0, wireless0.
+=== OpenRC service management ===
+For each interface an init script must be created for OpenRC to manage that interface by making a symlink to net.lo
+{{RootCmd|ln -s /etc/init.d/net.lo /etc/init.d/net.${INTERFACE_NAME} }}
+where '''${INTERFACE_NAME}''' is the name of the interface, e.g. eth0, wlan0, ethernet0, wireless0
+
+If simple roaming is required, any network interface will satisfy the virtual '''net''' service. Therefore it is recommended to set rc_need_strict="NO" in /etc/rc.conf.
+{{File|/etc/rc.conf||
+<pre>
+rc_need_strict="NO"
+</pre>
+}}
+The services responsible for managing the interfaces must be added to one or more runlevel. This makes it possible to have network profiles by having most services in the default runlevel and then adding the interfaces to stacked runlevels and having different configuration files in /etc/conf.d/ for each runlevel as /etc/conf.d/net.${RUNELEVEL} 
+The options and syntax of /etc/conf.d/net is decribed in the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4 Gentoo Handbook] which shows how to set up more complicated networks (this how-to assumes that all connections are initiated via DHCP)
+==== Suspend to RAM example ====
+With most services in the default runlevel and network services in a runlevel "network", which is stacked on the default runlevel, a PM hook for pm-utils can be crated which transparently stops network services before suspending, thus preventing timeouts and other problems.
+{{File|/etc/pm/sleep.d/00network||
+<pre>
+#!/bin/bash
+
+# properly stop and start the network
+
+if [ -r "${PM_FUNCTIONS}" ]; then
+    . "${PM_FUNCTIONS}" 
+elif [ -r "${FUNCTIONS}" ]; then
+    . "${FUNCTIONS}"
+else
+# pm-utils version is too old, or something else is wrong
+    exit $NA
+fi
+
+
+case "$1" in
+   	hibernate|suspend)
+		exec rc default
+		;;
+	thaw|resume)
+		exec rc network
+		;;
+	*) exit $NA
+		;;
+esac
+</pre>
+}}
+The hook must be executable
+{{RootCmd|chmod a+x /etc/pm/sleep.d/00network}}
+=== Wi-Fi management ===
+A minimal /etc/wpa_supplicant/wpa_cupplicant.conf is required to begin with. The permissions for the control interface should reflect who can configure the wireless interface. This minimal example assumes only users in the wheel group are allowed to configure the interface and that the configuration file can be updated by clients.
+{{File|/etc/wpa_supplicant/wpa_cupplicant.conf||<pre>
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
+update_config=1
+</pre>
+}}
+The use of the wpa_supplicant daemon on the interface may have to be enforced in /etc/conf.d/net<ref name=handbook>[http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4&chap=4  Gentoo Handbook, Wireless Networking]</ref>
+==== Clients ====
+The wpa_supplicant daemon can be controlled via clients 
+* wpa_cli - command-line client
+* wpa_gui - Qt4 based GUI client (only with the qt4 USE flag)
+** can be started in the system tray in the Xorg startup file .xinitrc
+{{File|~/.xinitrc||<pre>
+wpa_gui -t &   # -t : immediately minimize to system tray
+</pre>
+}}
+
+=== Ethernet management ===
+OpenRC automatically hotplugs all interfaces if configured in /etc/rc.conf
+{{File|/etc/rc.conf||
+<pre>
+rc_hotplug="*"
+</pre>
+}}
+so the respective services will be started if that interface becomes available and ifplugd will be automatically started for every ethernet interface to ensure that the device gets configured when a carrier is acquired (e.g. a cable is plugged in).
+== References ==
+<references/>
