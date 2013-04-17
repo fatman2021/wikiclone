@@ -14,9 +14,9 @@ Next, make sure the nginx service is started automatically:
 
 == Configuration ==
 The nginx configuration is handled by {{Path|/etc/nginx/nginx.conf}}. 
-Example 1 shows a single-site access, without dynamic capabilities (such as [[PHP]]), gentoo default configuration.
+Example 1 shows a single-site access, without dynamic capabilities (such as [[PHP]]).
 
-{{File|/etc/nginx/nginx.conf|Example 1|<pre>
+{{File|/etc/nginx/nginx.conf|Example 1 - Gentoo's default configuration|<pre>
 user nginx nginx;
 worker_processes 1;
 
@@ -76,8 +76,8 @@ http {
 }
 </pre>}}
 
-To enable additional functionalities like php, it needs the php-fpm module from php to be running.
-On localhost socket communication with a php process.
+=== Enabling PHP support  ===
+Add following lines to your nginx configuriation to enable PHP support. In this example nginx is exchanging information with the PHP process via a UNIX socket.
 {{File|/etc/nginx/nginx.conf|Example 2 - Enabling PHP support|<pre>
 [...]
 http{
@@ -91,7 +91,31 @@ http{
 }
 </pre>}}
 
-=== IP access lists ===
+Additionally it is needed to build {{Package|dev-lang/php}} with FastCGI Process Manager (php-fpm) support enabled.
+Add the fpm USE flag to the PHP package: 
+{{RootCmd|echo "dev-lang/php fpm" >> /etc/portage/package.use}}
+
+Rebuild php with the new USE flag enabled.
+{{emerge|dev-lang/php}}
+ 
+{{Note|Using UNIX socket communication is the preferred and recommended configuration}}
+Review the {{Path|/etc/php/fpm-php5.4/php-fpm.conf}} configuration, add following line:
+{{File|/etc/php/fpm-php5.4/php-fpm.conf|Example 3 - Running PHP with UNIX socket support|<pre>
+...
+listen = /var/run/php-fpm.socket
+...
+</pre>}}
+
+Start the php-fpm daemon:
+{{RootCmd|/etc/init.d/php-fpm start}}
+
+Add php-fpm to the default runlevel 
+{{RootCmd|rc-update add php-fpm default}}
+
+Reload nginx with changed configuration
+{{RootCmd|/etc/init.d/nginx reload}}
+
+=== IP access list ===
 Example 3 shows how to allow access to a particular site ''/nginx_status'' only to certain IP addresses f.e. ''192.0.2.1 198.51.100.1/24 127.0.0.1''.
 IP addresses are in CIDR notation, see definition example below:
 {{File|/etc/nginx/nginx.conf|Example 3 - Enabling and configuring an IP access lists for /nginx_status page|<pre>
