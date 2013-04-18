@@ -232,7 +232,57 @@ Copy the example database configuration file:
 </pre>}}
 
 ==== PostgreSQL ====
-Someone who uses Postgre needs to fill this in please.
+For PostgreSQL there are different methods of authentification. For a installation on the local machine I prefer using the local account when connecting trough a socket. By default this is enabled.
+
+
+Create a database and a new user without a password and give him ownership of it. Remember, when connecting trough the socket the shell user is used for authentification, so its name must be gitlab.
+
+
+{{RootCmd
+|su postgres -c "psql -d template1"
+|output=<pre>
+template1=# CREATE USER gitlab;
+template1=# CREATE DATABASE gitlabhq_production OWNER gitlab;
+template1=# \q
+</pre>}}
+
+
+The gitlab user will need access to the PostgreSQL socket, so it's required to add him to the postgres group
+
+{{RootCmd
+|gpasswd -a gitlab postgres
+}}
+And a little test, just to be shure everything went fine:
+{{Cmd
+|psql -l
+|prompt=gitlab /home/gitlab/gitlab#}}
+
+
+Copy the example database configuration file:
+{{Cmd|cp database.yml.postgresql config/database.yml|prompt=gitlab /home/gitlab/gitlab#}}
+
+
+*Edit the new configuration file and add the database credentials just created:
+{{Cmd
+|nano config/database.yml
+|prompt=gitlab /home/gitlab/gitlab#
+|output=<pre>
+#
+# PRODUCTION
+#
+production:
+  adapter: postgresql
+  encoding: unicode
+  database: gitlabhq_production
+  pool: 5
+  username: gitlab
+  # password:
+  # host: localhost
+  # port: 5432
+  socket: /run/postgresql/.s.PGSQL.5432
+</pre>}}
+
+
 
 === Configure Git to Accept Gitolite ===
 GitLab needs to be able to commit and push changes to Gitolite. In order to do that Git requires a username and email:
