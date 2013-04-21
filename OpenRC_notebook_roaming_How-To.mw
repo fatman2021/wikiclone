@@ -18,17 +18,27 @@ For each interface an init script must be created for OpenRC to manage that inte
 {{RootCmd|ln -s /etc/init.d/net.lo /etc/init.d/net.${INTERFACE_NAME} }}
 where '''${INTERFACE_NAME}''' is the name of the interface, e.g. eth0, wlan0, ethernet0, wireless0
 
-If simple roaming is required, any network interface will satisfy the virtual '''net''' service. Therefore it is recommended to set rc_need_strict="NO" in /etc/rc.conf.
+If simple roaming is required, any network interface will satisfy the virtual '''net''' service. Therefore it is recommended to set rc_need_strict="NO" in {{Path|/etc/rc.conf}}.
 {{File|/etc/rc.conf||
 <pre>
 rc_need_strict="NO"
 </pre>
 }}
-The services responsible for managing the interfaces must be added to one or more runlevel. This makes it possible to have network profiles by having most services in the default runlevel and then adding the interfaces to stacked runlevels and having different configuration files in /etc/conf.d/ for each runlevel as /etc/conf.d/net.${RUNELEVEL} 
-The options and syntax of /etc/conf.d/net is decribed in the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4 Gentoo Handbook] which shows how to set up more complicated networks (this how-to assumes that all connections are initiated via DHCP)
+The services responsible for managing the interfaces must be added to one or more runlevel. This makes it possible to have network profiles by having most services in the default runlevel and then adding the interfaces to stacked runlevels and having different configuration files in {{Path|/etc/conf.d/}} for each runlevel as {{Path|/etc/conf.d/net.${RUNELEVEL}}}
+The options and syntax of {{Path|/etc/conf.d/net}} is decribed in the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4 Gentoo Handbook] which shows how to set up more complicated networks (this how-to assumes that all connections are initiated via DHCP)
 ==== Suspend to RAM example ====
-With most services in the default runlevel and network services in a runlevel "network", which is stacked on the default runlevel, a PM hook for pm-utils can be crated which transparently stops network services before suspending, thus preventing timeouts and other problems.
-{{File|/etc/pm/sleep.d/00network||
+With most services in the default runlevel and network services in a runlevel "network", which is stacked on top of the default runlevel, a PM hook for {{Package|sys-power/pm-utils}} can be crated which transparently stops network services before suspending, thus preventing timeouts and other problems.
+{{RootCmd
+|mkdir /etc/runlevels/network/
+|rc-update --stack add default network   # include init scripts form the default runlevel in the netewokr runelvel
+|rc-update del net.ethernet0 default  # remove networking scripts from the default runlevel
+|rc-update add net.ethernet0 network  # and add them to the network runlevel
+|rc-update del net.wireless0 default
+|rc-update add net.wireless0 network
+|rc-update del netmount default  # remove dependent networking services from the default runlevel
+|rc-update add netmount network  # which would start the networking scripts because of "need net" stanza
+}}
+{{File|/etc/pm/sleep.d/00network|PM hook example|
 <pre>
 #!/bin/bash
 
@@ -58,9 +68,46 @@ esac
 }}
 The hook must be executable
 {{RootCmd|chmod a+x /etc/pm/sleep.d/00network}}
+To boot into the network runlevel rather than the default one, {{Path|/etc/inittab}} must be changed as explained in [[Complete_Handbook/Configuring_the_boot_process#Init|the Handbook]]
+{{File|/etc/inittab||<pre>
+...
+
+# Default runlevel.
+id:4:initdefault:         #was 3 - can still be 3, it only depends which runlevel is assigned to network below
+
+...
+
+l0:0:wait:/sbin/rc shutdown 
+l0s:0:wait:/sbin/halt -dhp
+l1:1:wait:/sbin/rc single
+l2:2:wait:/sbin/rc nonetwork
+l3:3:wait:/sbin/rc default
+l4:4:wait:/sbin/rc network      # was default
+l5:5:wait:/sbin/rc default
+l6:6:wait:/sbin/rc reboot
+l6r:6:wait:/sbin/reboot -dk
+...
+</pre>
+}}
+The bootloader can also support multiple options for different setups
+{{File|/boot/grub/grub.conf|Grub v1 example|<pre>
+default 0
+timeout 30
+
+title Gentoo Linux 2.6.24-r5 with network
+root (hd0,0)
+kernel /boot/kernel-genkernel-x86-2.6.24-gentoo-r5 root=/dev/ram0 real_root=/dev/sda3
+initrd /boot/initramfs-genkernel-x86-2.6.24-gentoo-r5
+
+title Gentoo Linux 2.6.24-r5 no network
+root (hd0,0)
+kernel /boot/kernel-genkernel-x86-2.6.24-gentoo-r5 root=/dev/ram0 real_root=/dev/sda3 3
+initrd /boot/initramfs-genkernel-x86-2.6.24-gentoo-r5
+</pre>
+}}
 
 ==== Exclusive network interface example ====
-It may be desirable to have always only one networking interface configured. This can be done by the postup or postdown functions defined in /etc/conf.d/net<ref name=handbook-functions>[http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4&chap=5 Gentoo Handbook, Adding Functionality]</ref>
+It may be desirable to have always only one networking interface configured. This can be done by the postup or postdown functions defined in {{Path|/etc/conf.d/net}}<ref name=handbook-functions>[http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4&chap=5 Gentoo Handbook, Adding Functionality]</ref>
 {{File|/etc/conf.d/net||<pre>
 postup_wireless0() {
      rc-service net.ethernet0 stop
@@ -81,7 +128,7 @@ postdown_ethernet0() {
 }}
 
 ==== Network specific log-in procedure example ==== 
-The postup or postup_${ESSID} (this function would be triggered only after successful connection to the given ${ESSID}) functions defined in /etc/conf.d/net<ref name=handbook-functions></ref> can be used to submit data to e.g. a web log-in form
+The postup or postup_${ESSID} (this function would be triggered only after successful connection to the given ${ESSID}) functions defined in {{Path|/etc/conf.d/net}}<ref name=handbook-functions></ref> can be used to submit data to e.g. a web log-in form
 
 {{File|/etc/conf.d/net||<pre>
 postup_someESSID() {
@@ -93,13 +140,13 @@ postup_someESSID() {
 }}
 
 === Wi-Fi management ===
-A minimal /etc/wpa_supplicant/wpa_cupplicant.conf is required to begin with. The permissions for the control interface should reflect who can configure the wireless interface. This minimal example assumes only users in the wheel group are allowed to configure the interface and that the configuration file can be updated by clients.
+A minimal {{Path|/etc/wpa_supplicant/wpa_cupplicant.conf}} is required to begin with. The permissions for the control interface should reflect who can configure the wireless interface. This minimal example assumes only users in the wheel group are allowed to configure the interface and that the configuration file can be updated by clients.
 {{File|/etc/wpa_supplicant/wpa_cupplicant.conf||<pre>
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
 update_config=1
 </pre>
 }}
-The use of the wpa_supplicant daemon on the interface may have to be enforced in /etc/conf.d/net<ref name=handbook>[http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4&chap=4  Gentoo Handbook, Wireless Networking]</ref>. It is recommended to have dhcpcd watch the wireless interface (this is by default if no special networking setup is defined) and obtain and address when a carrier is acquired. Hotplugging via ifplugd is possible but isn't necessary as dhcpcd notices the change itself and ifplugd would slow down its reaction.
+The use of the wpa_supplicant daemon on the interface may have to be enforced in {{Path|/etc/conf.d/net}}<ref name=handbook>[http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4&chap=4  Gentoo Handbook, Wireless Networking]</ref>. It is recommended to have dhcpcd watch the wireless interface (this is by default if no special networking setup is defined) and obtain and address when a carrier is acquired. Hotplugging via ifplugd is possible but isn't necessary as dhcpcd notices the change itself and ifplugd would slow down its reaction.
 ==== Clients ====
 The wpa_supplicant daemon can be controlled via clients 
 * wpa_cli - command-line client
@@ -117,7 +164,7 @@ OpenRC automatically hotplugs all interfaces if configured in /etc/rc.conf
 rc_hotplug="*"
 </pre>
 }}
-so the respective services will be started if that interface becomes available and ifplugd will be automatically started for every ethernet interface to ensure that the device gets configured when a carrier is acquired (e.g. a cable is plugged in). Ifplugd will emit beeps on state change which can be disabled in /etc/ifplugd/ifplugd.conf
+so the respective services will be started if that interface becomes available and ifplugd will be automatically started for every ethernet interface to ensure that the device gets configured when a carrier is acquired (e.g. a cable is plugged in). Ifplugd will emit beeps on state change which can be disabled in {{Path|/etc/ifplugd/ifplugd.conf}}
 {{File|/etc/ifplugd/ifplugd.conf||<pre>
 ARGS="--no-beep"
 </pre>
