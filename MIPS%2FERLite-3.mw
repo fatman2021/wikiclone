@@ -1,0 +1,264 @@
+{{InfoBox stack
+|{{InfoBox homepage|http://www.ubnt.com/edgemax#edge-router-lite|header=true}}
+}}
+
+The '''EdgeRouter Lite (ERLite-3)''' is an MIPS64 router (MIPS64r2, Cavium Octeon) with 512 MB of RAM, which uses a (removable) USB pendrive for storage. This document describes how to run Gentoo on this device.
+
+[[File:Edgerouter-original-package.jpg|thumb|EdgeRouter Lite original packaging]]
+[[File:Edgerouter-nocover.jpg|thumb|EdgeRouter Lite (inside)]]
+
+== What's is provided ==
+
+=== GPL Sources ===
+
+Ubiquiti provides a GPL archive containing the sources of all open-source software that runs on this router. The GPL archive can be found here [http://www.ubnt.com/download#EdgeRouter:Lite]
+
+=== The Processor ===
+ system type             : UBNT_E100 (CN5020p1.1-500-SCP)
+ processor               : 0
+ cpu model               : Cavium Octeon+ V0.1
+ BogoMIPS                : 1000.00
+ wait instruction        : yes
+ microsecond timers      : yes
+ tlb_entries             : 64
+ extra interrupt vector  : yes
+ hardware watchpoint     : yes, count: 2, address/irw mask: [0x0ffc, 0x0ffb]
+ isa                     : mips1 mips2 mips3 mips4 mips5 mips64r2
+ ASEs implemented        :
+ shadow register sets    : 1
+ kscratch registers      : 0
+ core                    : 0
+ VCED exceptions         : not available
+ VCEI exceptions         : not available
+
+ processor               : 1
+ cpu model               : Cavium Octeon+ V0.1
+ BogoMIPS                : 1000.00
+ wait instruction        : yes
+ microsecond timers      : yes
+ tlb_entries             : 64
+ extra interrupt vector  : yes
+ hardware watchpoint     : yes, count: 2, address/irw mask: [0x0ffc, 0x0ffb]
+ isa                     : mips1 mips2 mips3 mips4 mips5 mips64r2
+ ASEs implemented        :
+ shadow register sets    : 1
+ kscratch registers      : 0
+ core                    : 1
+ VCED exceptions         : not available
+ VCEI exceptions         : not available
+
+=== The USB Flash Drive ===
+
+The details of the USB flash drive that comes with this board are the following:
+{{ContentBox|USB Details|<pre>
+Bus 002 Device 012: ID 13fe:3e00 Kingston Technology Company Inc. Flash Drive
+</pre>}}
+
+==== Partitioning ====
+The USB flash drive on the board has two partitions. A small FAT32 one for the Linux Kernel image and a big ext3 one containing the root filesystem in a squashfs file. The squashfs file is in the GPL
+archive as well.
+
+{{Note|Although it is possible to replace the supplied USB memory stick with another one, be careful as not all of them work. If you managed to find one that works please edit this page to list
+the 'lsusb -v' output for that USB flash drive. This is the reason why this guide only focuses on the nfsroot configuration.}}
+
+{{ContentBox|Default USB partitioning|<pre>
+Disk /dev/sde: 3880 MB, 3880452096 bytes, 7579008 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x65690700
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sde1            2048      292863      145408    c  W95 FAT32 (LBA)
+/dev/sde2          292864     3710975     1709056   83  Linux
+</pre>}}
+
+=== The Linux Kernel ===
+The Linux kernel that comes with the board is a modified 2.6.32.13 one. If you ever want to rebuild it yourself from the GPL archive, you need a mips64-octeon-linux-gnu toolchain that comes with
+the Cavium SDK. Typical distro toolchains (mips64-unknonwn-*) will fail to compile these kernel sources with errors like these:
+
+{{RootCmd|make ARCH{{=}}mips  CROSS_COMPILE{{=}}mips64-unknown-linux-gnu-|output=
+Error: Opcode not supported on this processor: octeon (mips64r2) `saa $6,($7) <br>
+Error: Opcode not supported on this processor: octeon (mips64r2) `saa $9,($7) <br>
+Error: Opcode not supported on this processor: octeon (mips64r2) `saa $3,($7)
+}}
+
+=== The RootFS ===
+This router comes with Debian 6.0.6
+{{File|/etc/debian_version||<pre>
+6.0.6</pre>}}
+
+== Preparing the Gentoo MIPS64 RootFS  ==
+
+=== Getting the MIPS64 stage3 tarball ===
+The ERLite-3 uses a 64-bit MIPS64r2 Big-Endian Cavium Octeon processor. So the stage3 we want for this board is a mip64-* one. For this guide, we will pick a glibc based one.
+
+{{RootCmd|mkdir /mnt/erlite-3/}}
+{{RootCmd|wget [http://distfiles.gentoo.org/experimental/mips/stages/stage3-mips64_multilib-20120924.tar.bz2 http://distfiles.gentoo.org/experimental/mips/stages/stage3-mips64_multilib-20120924.tar.bz2]}}
+{{RootCmd|tar xvjf stage3-mips64_multilib-20120924.tar.bz2 -C /mnt/erlite-3}}
+{{RootCmd|rm stage3-mips64_multilib-20120924.tar.bz2}}
+
+=== Getting the latest portage snapshot ===
+{{RootCmd|wget [http://distfiles.gentoo.org/snapshots/portage-latest.tar.bz2 http://distfiles.gentoo.org/snapshots/portage-latest.tar.bz2]}}
+{{RootCmd|tar xjvpf portage-latest.tar.bz2 -C /mnt/erlite-3/usr}}
+{{RootCmd|rm portage-latest.tar.bz2}}
+
+=== Reset root password ===
+In order to be able to login after the first boot, you need to reset the root password. For this edit the {{Path|/mnt/erlite-3/etc/shadow}} file and remove the '*' from the second column.
+{{Important|Remember to set your root password once you have successfully boot your board for the first time}}
+
+== Building the toolchain ==
+
+The are many different ways to build a mips64 toolchain. We will use the Gentoo {{Package|sys-devel/crossdev}} script to build one.
+{{Emerge|crossdev}}
+
+Create a cross toolchain for MIPS64 (big-endian system):
+{{RootCmd|crossdev -t mips64-unknown-linux-gnu}}
+
+Make sure you read this [http://www.gentoo.org/proj/en/base/embedded/cross-development.xml] and this [http://www.gentoo.org/proj/en/base/embedded/handbook/] to understand how to use crossdev in your day-to-day development.
+
+== The MIPS64 Linux Kernel ==
+
+Since this is a brand new board, not many things are supported upstream. For example, the Cavium Octeon Ethernet driver (currently in Staging) will flood the stdout with warnings like the following ones:
+
+{{ContentBox|warnings|<pre>
+cvmx_helper_board_get_mii_address: Unknown board type 20002
+cvmx_helper_board_get_mii_address: Unknown board type 20002
+cvmx_helper_board_get_mii_address: Unknown board type 20002
+cvmx_helper_board_get_mii_address: Unknown board type 20002 
+cvmx_helper_board_get_mii_address: Unknown board type 20002
+</pre>}}
+
+Moreover, this is no driver for the USB controller, meaning that if you want to build another kernel yourself, you will not be able to use the USB flash drive.
+
+=== Getting the Kernel ===
+We will use the Linux Kernel from the Linus' git repo for now, but there might be other repos more suitable for this board out there. If you find one, please edit this guide as appropriate.
+
+{{RootCmd
+|mkdir /mnt/erlite-3-kernel ; cd /mnt/erlite-3-kernel
+}}
+{{RootCmd
+|git clone --depth 1 git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git ; cd linux
+}}
+
+=== Patching the Kernel ===
+To workaround the previously mentioned problem with the Ethernet driver (and possibly other drivers as well), you can use this patch [http://dev.gentoo.org/~hwoarang/files/mips/edgerouterlite/0001-mips-octeon-Add-support-for-the-EdgeRouterLite-board.patch] which is based on the previously mentioned GPL archive provided by Ubiquiti.
+
+{{RootCmd
+|wget http://dev.gentoo.org/~hwoarang/files/mips/edgerouterlite/0001-mips-octeon-Add-support-for-the-EdgeRouterLite-board.patch -O erlite-3.patch ; patch -p1 < erlite-3.patch
+}}
+
+=== Building the Kernel ===
+
+{{RootCmd
+|ARCH{{=}}mips CROSS_COMPILE{{=}}mips64-unknown-linux-gnu- cavium_octeon_defconfig
+|ARCH{{=}}mips CROSS_COMPILE{{=}}mips64-unknown-linux-gnu- make
+|ARCH{{=}}mips CROSS_COMPILE{{=}}mips64-unknown-linux-gnu- make modules_install INSTALL_MOD_PATH{{=}}/mnt/erlite-3/
+}}
+
+== Booting Up==
+
+=== NFS Boot ===
+==== Install and Configure the TFTP Server ====
+The TFTP server will be used to load the new kernel image on the board.
+For this, you need the {{Package|net-ftp/tftp-hpa}} package.
+{{Emerge|net-ftp/tftp-hpa}}
+
+Edit the {{Path|/etc/conf.d/in.tftpd}} file as appropriate.
+
+{{File|/etc/conf.d/in.tftpd||<pre>
+# /etc/init.d/in.tftpd
+
+# Path to server files from
+# Depending on your application you may have to change this.
+# This is commented out to force you to look at the file!
+#INTFTPD_PATH="/var/tftp/"
+#INTFTPD_PATH="/tftpboot/"
+INTFTPD_PATH="/mnt/erlite-3/kernel/"
+
+# For more options, see in.tftpd(8)
+# -R 4096:32767 solves problems with ARC firmware, and obsoletes
+# the /proc/sys/net/ipv4/ip_local_port_range hack.
+# -s causes $INTFTPD_PATH to be the root of the TFTP tree.
+# -l is passed by the init script in addition to these options.
+INTFTPD_OPTS="-R 4096:32767 -s ${INTFTPD_PATH}"
+</pre>}}
+
+And start the service (add it to the default runlevel if you wish)
+{{RootCmd|rc-update add in.tftpd default (optional)}}
+{{RootCmd|/etc/init.d/in.tftpd start}}
+
+==== Install and Configure the NFS Server ====
+
+The NFS Server will export the ([[#Preparing_the_Gentoo_RootFS|previously extracted and prepared]]) stage3 (/mnt/erlite-3) to the ERLite-3 board.
+
+In order to use your PC as an NFS server, you need the following kernel options to be enabled:
+
+{{Kernel||<pre>
+File Systems --->
+    Network File Systems --->
+        <*> NFS server support
+        -*-   NFS server support for NFS version 3
+</pre>
+}}
+
+You also need to build and configure the {{Package|net-fs/nfs-utils}} as follows:
+
+{{Emerge|net-fs/nfs-utils}}
+
+Then edit the {{Path|/etc/exportfs}} as follows:
+
+{{File|/etc/exports||<pre>
+# /etc/exports: NFS file systems being exported.  See exports(5).
+/mnt/erlite3/ 192.168.1.2(async,rw,no_root_squash,no_subtree_check)
+</pre>}}
+
+{{RootCmd|rc-update add nfs default (optional)}}
+{{RootCmd|/etc/init.d/nfs start}}
+==== Prepare U-Boot for NFS boot ====
+
+U-boot is pre-configured as follows:
+
+{{ContentBox|U-Boot configuration|<pre>
+bootdelay=0
+baudrate=115200
+download_baudrate=115200
+nuke_env=protect off $(env_addr) +$(env_size);erase $(env_addr) +$(env_size)
+autoload=n
+ethact=octeth0
+bootcmd=fatload usb 0 $loadaddr vmlinux.64;bootoctlinux $loadaddr coremask=0x3 root=/dev/sda2 rootdelay=15 rw rootsqimg=squashfs.img rootsqwdir=w mtdparts=phys_mapped_flash:512k(boot0),512k(boot1),64k@3072k(eeprom)
+loadaddr=0x9f00000
+numcores=2
+stdin=serial
+stdout=serial
+stderr=serial
+env_addr=0x1fbfe000
+env_size=0x2000
+flash_base_addr=0x1f800000
+flash_size=0x400000
+uboot_flash_addr=0x1f880000
+uboot_flash_size=0x70000
+flash_unused_addr=0x1f8f0000
+flash_unused_size=0x310000
+bootloader_flash_update=bootloaderupdate
+</pre>}}
+
+For NFS boot, we need to set the following variables:
+ ipaddr : IP for the ERLite-3 board (e.g. 192.168.1.2)
+ serverip : IP for the PC acting as tftp server (e.g. 192.168.1.3)
+ bootcmd : We need to override the existing 'bootcmd' command with one suitable for tftp boot
+
+For this, use the following commands in the u-boot command line (Press Ctrl-C to interrupt the boot process)
+
+ setenv ipaddr "192.168.1.2"
+ setenv serverip "192.168.1.3"
+ setenv bootcmd 'tftpboot $loadaddr vmlinux; bootoctlinux $loadaddr coremask=0x3 ip=192.168.1.2::192.168.1.254:255.255.255.0:edge:eth0:off root=/dev/nfs nfsroot=192.168.1.3:/mnt/erlite-3/,tcp,vers=3
+
+And now save the new configuration
+
+ saveenv
+
+Now, it is time to reset the router and boot into your shiny new Gentoo MIPS64 rootfs.
+
+=== USB Boot ===
+TODO (needs kernel with USB driver and a USB stick that works on that board)
