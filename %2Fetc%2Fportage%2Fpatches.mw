@@ -1,0 +1,61 @@
+The patches directory provides another way to apply user-defined patches. The advantage is if all you want is to apply a patch, you may do so without forking the entire package to an overlay, or defining a hook function, which can make following the upstream ebuild easier. This isn't a feature that's actually supplied by Portage directly. Ebuilds or eclasses must provide support for patches explicitly by calling <code>epatch_user()</code> from eutils.eclass. This works out well because you can just let the package maintainer determine an appropriate place to apply patches. For example, qt4-build.eclass implements epatch_user directly in the eclass, after programatically applying patches defined by a global PATCHES array. Different ebuilds/eclasses may have their own systems. The function writes a lockfile to <code>$T</code>, so it isn't a big deal if accidentally callled more than once.
+
+{{File|/usr/portage/eclass/eutils.eclass||<nowiki>
+# @FUNCTION: epatch_user
+# @USAGE:
+# @DESCRIPTION:
+# Applies user-provided patches to the source tree. The patches are
+# taken from /etc/portage/patches/<CATEGORY>/<PF|P|PN>[:SLOT]/, where the first
+# of these three directories to exist will be the one to use, ignoring
+# any more general directories which might exist as well. They must end
+# in ".patch" to be applied.
+#
+# User patches are intended for quick testing of patches without ebuild
+# modifications, as well as for permanent customizations a user might
+# desire. Obviously, there can be no official support for arbitrarily
+# patched ebuilds. So whenever a build log in a bug report mentions that
+# user patches were applied, the user should be asked to reproduce the
+# problem without these.
+#
+# Not all ebuilds do call this function, so placing patches in the
+# stated directory might or might not work, depending on the package and
+# the eclasses it inherits and uses. It is safe to call the function
+# repeatedly, so it is always possible to add a call at the ebuild
+# level. The first call is the time when the patches will be
+# applied.
+#
+# Ideally, this function should be called after gentoo-specific patches
+# have been applied, so that their code can be modified as well, but
+# before calls to e.g. eautoreconf, as the user patches might affect
+# autotool input files as well.
+epatch_user() {
+	[[ $# -ne 0 ]] && die "epatch_user takes no options"
+
+	# Allow multiple calls to this function; ignore all but the first
+	local applied="${T}/epatch_user.log"
+	[[ -e ${applied} ]] && return 2
+
+	# don't clobber any EPATCH vars that the parent might want
+	local EPATCH_SOURCE check base=${PORTAGE_CONFIGROOT%/}/etc/portage/patches
+	for check in ${CATEGORY}/{${P}-${PR},${P},${PN}}{,:${SLOT}}; do
+		EPATCH_SOURCE=${base}/${CTARGET}/${check}
+		[[ -r ${EPATCH_SOURCE} ]] || EPATCH_SOURCE=${base}/${CHOST}/${check}
+		[[ -r ${EPATCH_SOURCE} ]] || EPATCH_SOURCE=${base}/${check}
+		if [[ -d ${EPATCH_SOURCE} ]] ; then
+			EPATCH_SOURCE=${EPATCH_SOURCE} \
+			EPATCH_SUFFIX="patch" \
+			EPATCH_FORCE="yes" \
+			EPATCH_MULTI_MSG="Applying user patches from ${EPATCH_SOURCE} ..." \
+			epatch
+			echo "${EPATCH_SOURCE}" > "${applied}"
+			return 0
+		fi
+	done
+	echo "none" > "${applied}"
+	return 1
+}
+</nowiki>}}
+
+=== See Also ===
+* http://www.funtoo.org/Localpatch_%28Tutorial%29
+* http://dilfridge.blogspot.com/2012/04/neat-trick-for-testing-patches-in.html
