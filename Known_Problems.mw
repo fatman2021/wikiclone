@@ -18,11 +18,11 @@ Upon then inspecting the aclocal.out file you will find the error:
 
 === Cause ===
 
-As documented at [http://www.flameeyes.eu/autotools-mythbuster/forwardporting/automake.html changes in automake release] the AM_CONFIG_HEADER macro has deprecated in automake 1.13 and has been replaced by AC_CONFIG_HEADERS. This version was in the tree for some time, but it only got recently unmasked and allowed to be used in an eclass.
+As documented at [http://www.flameeyes.eu/autotools-mythbuster/forwardporting/automake.html changes in automake release] the <code>AM_CONFIG_HEADER</code> macro has deprecated in automake 1.13 and has been replaced by <code>AC_CONFIG_HEADERS</code>. This version was in the tree for some time, but it only got recently unmasked and allowed to be used in an eclass.
 
 === Temporary Fixes ===
 
-* Emerge the failing packages again by appending WANT_AUTOMAKE="1.12" in front, this will cause them to use the previous version:
+* Emerge the failing packages again by appending <code>WANT_AUTOMAKE="1.12"</code> in front, this will cause them to use the previous version:
 
 {{RootCmd|WANT_AUTOMAKE{{=}}"1.12" emerge -1 app-misc/failing-package}}
 
@@ -34,3 +34,41 @@ As documented at [http://www.flameeyes.eu/autotools-mythbuster/forwardporting/au
 === Resolution ===
 
 When such a failing package occurs, people should file a bug for that package (make sure none exists already) and block {{Bug|451744}}; that way, maintainers can deal with the problem such that eventually all packages are fixed and then we can upgrade to the version 1.13 of automake. Make sure to provide enough details (emerge --info) and attach the relevant files.
+
+== "=app-misc/pax-utils-0.5" is blocking sys-kernel/genkernel ==
+
+=== Symptons ===
+
+When you try to <code>emerge genkernel</code> you get output similar to the following:
+
+{{ContentBox|Output|<pre>[ebuild     UD ] app-misc/pax-utils-0.5 [0.7]
+[ebuild  N     ] sys-kernel/genkernel-3.4.45  USE="-crypt -cryptsetup (-ibm) (-selinux)" 
+[blocks B      ] =app-misc/pax-utils-0.5 ("=app-misc/pax-utils-0.5" is blocking sys-kernel/genkernel-3.4.45)
+
+ * Error: The above package list contains packages which cannot be
+ * installed at the same time on the same system.
+
+  (sys-kernel/genkernel-3.4.45::gentoo, ebuild scheduled for merge) pulled in by
+    genkernel
+
+  (app-misc/pax-utils-0.5::gentoo, ebuild scheduled for merge) pulled in by
+    >=app-misc/pax-utils-0.1.17 required by (sys-apps/portage-2.1.11.62::gentoo, installed)
+    <app-misc/pax-utils-0.6 required by (sys-kernel/genkernel-3.4.45::gentoo, ebuild scheduled for merge)
+    >=app-misc/pax-utils-0.2.1 required by (sys-kernel/genkernel-3.4.45::gentoo, ebuild scheduled for merge)</pre>}}
+
+=== Cause ===
+
+lddtree, a recursive version of [http://en.wikipedia.org/wiki/Ldd_(Unix) ldd] has changed its output format; this has been reported in {{Bug|450688}}.
+
+=== Temporary Fixes ===
+
+This can be temporarily fixed by masking the versions of pax-utils where the output has changed, then emerge genkernel again:
+
+{{RootCmd|echo ">{{=}}app-misc/pax-utils-0.5" >> /etc/portage/package.mask
+|emerge -C sys-kernel/genkernel}}
+
+Don't forget to remove the mask once the bug is resolved.
+
+=== Resolution ===
+
+Wait for {{Bug|450688}} to resolve, which requires the genkernel maintainers to correct the parsing; this may take some time as the genkernel team is undermanned, help is welcome.
