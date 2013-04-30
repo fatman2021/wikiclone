@@ -99,6 +99,35 @@ short_open_tag = On
 date.timezone = "Europe/London"
 </pre>}}
 
+== Selinux ==
+If you are using selinux you must create a policy. Hopefully later when the ebuild comes back this will be done automatically.
+
+Make local_zoneminder.te
+<pre> 
+module local_zoneminder 1.0; 
+
+require { 
+               type httpd_t;
+               type initrc_var_run_t;
+               type initrc_t;
+               type v4l_device_t;
+               type file_t;
+              class unix_stream_socket { read connectto };
+              class file { read lock };
+              class shm { unix_read unix_write associate read write getattr };
+              class chr_file getattr;
+}
+
+#============= httpd_t ============== 
+allow httpd_t initrc_t:unix_stream_socket connectto;
+allow httpd_t initrc_t:shm { unix_read unix_write associate read write getattr };
+allow httpd_t initrc_var_run_t:file { read lock };
+allow httpd_t v4l_device_t:chr_file getattr;
+</pre>
+Now it's time to build the modules.
+{{RootCmd|checkmodule -M -m -o local_zoneminder.mod local_zoneminder.te 
+|semodule_package -o local_zoneminder.pp -m local_zoneminder.mod
+|semodule -i local_zoneminder.pp}}
 == Other ==
 Shared memory:
  sysctl kernel.shmmax=536870912
