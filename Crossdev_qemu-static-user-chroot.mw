@@ -150,30 +150,53 @@ garmin garmintxt gpsclock itrax mtk3301 nmea ntrip navcom oceanserver oldstyle o
 rtcm104v3 sirf superstar2 timing tsip tripmate tnt ubx" 
 
 </pre>}}
-== Running Qemu-user on Chroot ==
-=== Host Configuration ===
+== Isnt a chroot good enough? ==
+Short answer, no. As soon as you try to build python, gcc, or any number of others you begin to see.
+The issue is that many of these programs perform tests to verify function, or use helpers to compile bytecode etc.
+Seems like not an issue, until you think about whats happening here: You are generating binaries for arm that the build
+system then tries to execute to verify they work. Our solution is to use qemu to run them. 
 
-==== Qemu-user Installation ====
-In order to take advantage of qemu-user mode we need to do a few things. First we need to merge the main package we are going to need. Note the use of the static use flag.
-Python is needed during qemu-user compiling.
+With QEMU user emulation you can run non-native executables. I.e. with QEMU configured for arm-linux-user you can run arm binaries. Unfortunately, without any further configuration, you can run only static executables. For dynamic executables you need to have all the libraries the executable depends on, built for the same architecture as the main executable (ARM here). This at first sight poses a problem -- you need pretty much the same standard libraries that you already have in your system (glibc, ...), but for a different architecture.
 
-{{RootCmd|echo "{{=}}app-emulation/qemu-user-1.1.0-r1 ~x86" >> /etc/portage/package.keywords
-|eselect python set python2.7
-|USE{{=}}"static" emerge -b1 app-emulation/qemu-user
-}}
+Such situation (wanting a different set of libraries) can be solved by a chroot. It would also nicely isolate your new ARM linux install. But ordinary chroot must keep the same architecture. Without one more ingredient to the mix you would only get:
+{{Cmd chroot: failed to run command `/bin/bash': Exec format error }}
 
-==== Binfmt_misc Configuration ====
-First you need to build the kernel module binfmt_misc. 
-Add this to your kernel .config: CONFIG_BINFMT_MISC=m or CONFIG_BINFMT_MISC=y. 
-If this module is not built already, then the devel host will require a reboot after the kernel update and modules_install.
-The complete list of relevant kernel options (tested on 3.2.1-gentoo-r2) is as follows.
+The last magic ingredient is binfmt_misc. Binfmt_misc generalizes the classical shebang, allowing you to associate custom interpreters to specific file types. Yes, you guessed it -- it allows us to associate ARM (or some other arch) ELF executables with our qemu. After setting up the association the executables can be run the same way as native executables, without specifying QEMU on the command line.
 
+So, to recap: We use
+
+    qemu user emulation to run the ARM executables
+    chroot as a place to keep the installed distro including the required dynamic libraries
+    binfmt_misc to tell the kernel to run ARM ELF executables with the help of qemu
+
+There's one last thing to resolve: We need a static build of QEMU, so that QEMU itself doesn't need any libraries. -- With dynamic QEMU, we'd find ourselves with the need of native libraries inside the chroot, which would defeat the purpouse. 
+
+Ready? Lets get started..
+
+=== Setting the required kernel options ===
+In order for binfmt_misc support to work, we need to enable the appropriate kernel drivers. As well, there is some VIRTIO and KVM stuff that will be useful. You all know how to config a kernel, i assume. If not, have a look at the Gentoo Handbook, and come on back when you're ready.
+
+here is the relavent kernel option:
 {{kernel|3.2.1-gentoo-r2|<pre>
 Executable file formats / Emulations  --->
  [*] Kernel support for MISC binaries 
 </pre>}}
+{{Code |zgrep CONFIG_BINFMT_MISC /proc/config.gz|<pre> CONFIG_BINFMT_MISC=y || CONFIG_BINFMT_MISC=m </pre> }}
 
-Mount the binfmt_misc handler if it's not already, then we need to register our format with the kernel via the procfs.
+get that building if needed, and well turn to qemu-user. 
+
+=== install static qemu-user ===
+I tried for a couple days to get this to compile with static libs. Turns out there are come issues with glib that prevent it. However, debian provides one that'll do nicely.
+{{Cmd |wget http://http.us.debian.org/debian/pool/main/q/qemu/qemu-user-static_1.4.0+dfsg-2exp_amd64.deb}}
+Grab Alien if you dont have it, this will let us easily strip the package off our binary.
+{{Emerge| alien }}
+unpack it with
+{{Cmd| alien -t qemu-user-static_1.4.0+dfsg-2exp_amd64.deb }}
+which will spit out a nice tarball. The only file I cared about was qemu-arm-static. This is the arm interpreter.
+
+==== Binfmt_misc Configuration ====
+
+Now mount the binfmt_misc handler if it's not already, then we need to register our format with the kernel via the procfs.
 
 {{RootCmd|[ -d /proc/sys/fs/binfmt_misc ] {{!}}{{!}} modprobe binfmt_misc
 |[ -f /proc/sys/fs/binfmt_misc/register ] {{!}}{{!}} mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc
@@ -282,5 +305,3 @@ To use it, just specify the '''CC=armv7a-hardfloat-linux-gnueabi-gcc''' in the M
 
 You also could switch to emulated gcc as well:
 {{RootCmd|source switch.sh emu}}
-
-[[Category:Google Summer of Code]]
