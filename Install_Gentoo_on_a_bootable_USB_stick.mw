@@ -112,12 +112,14 @@ Now we are going to chroot into the Gentoo environment...
 {{RootCmd|cp /etc/resolv.conf /mnt/gentoo/resolv.conf}}
 {{RootCmd|chroot /mnt/gentoo /bin/bash}}
 
-== Get LILO installed on your USB stick ==
-To install a bootloader, emerge lilo...
+== Bootloader ==
+
+So that you can boot the new system you must install a bootloader onto your USB stick. You have many options for this, but here I will just run through {{lilo}} and {{syslinux}}.
+
+== lilo Bootloader Configuration ==
 
 {{RootCmd|emerge sys-boot/lilo}}
 
-== Final Configuration Steps ==
 Edit {{path|etc/lilo.conf}} so that it has the correct information in it now.
 
 {{Warning|These settings are very important and will be discussed line by line. If you get this wrong you might break your current Linux installation.}}
@@ -154,6 +156,35 @@ Added Gentoo-352 ? *
 
 The first warning is to be expected as we are not installing the boot loader onto the hard disk in your computer. The second warning will only cause a problem on machines that are old, if it is a problem for you try cutting down the kernel by removing modules.
 
+== syslinux Bootloader Configuration ==
+
+{{RootCmd|emerge syslinux}}
+
+Put the boot sector onto your USB stick.
+
+{{RootCmd|dd bs=404 count=1 conv=notrunc if=/usr/share/syslinux/mbr.bin of=/dev/sdb}}
+
+Now to configure the bootloader, to do this we use a text editor:
+
+{{RootCmd|mkdir /boot/syslinux}}
+
+{{File|/boot/syslinux/syslinux.cfg||<pre>
+PROMPT 1
+TIMEOUT 50
+DEFAULT gentoo
+ 
+LABEL gentoo
+        LINUX ../kernel-genkernel-x86_64-3.5.2-gentoo
+        APPEND root=LABEL=GENTOO_USB_ROOT scandelay=3 ro
+        INITRD ../initramfs--genkernel-x86_64-3.5.2-gentoo
+</pre>}}
+
+Then to install syslinux onto your USB stick, device is not absolutely necessary but will throw an error if you make a mistake (not that we ever make mistakes ;-) ).
+
+{{RootCmd|extlinux --device /dev/sdb1 --install /boot/syslinux}}
+
+== fstab Configuration ==
+
 {{File|/etc/fstab|Configure your fstab to work with labels|<pre>
 LABEL=GENTOO_USB_BOOT   /boot           ext2            noauto,noatime  1 2
 LABEL=GENTOO_USB_ROOT   /               ext2            noatime         0 1
@@ -164,6 +195,11 @@ LABEL=GENTOO_USB_ROOT   /               ext2            noatime         0 1
 
 Set the password for the root user and that is it. Exit the chroot environment and unmount all the mounts you made before going into it.
 
+== Setting the root password ==
+The stage3 tarball we used comes with a password... I don't now what that password is and you should change it anyway, before leaving your chroot make sure to set it to something you know so that you can login to your new system.
+
+{{RootCmd|passwd}}
+
 == Locale and other configurations ==
 The locale configuration is left up to you, it is quite easy and covered in the handbook. But don't skip this step!
 
@@ -173,6 +209,6 @@ Although you can use the system we just made as a standard Gentoo system, if you
 == That is all ==
 You should now be able to boot your shiny new Gentoo system from the USB drive.
 
-{{Note|Although an amd64 system was used here to do this, it will work just the same way for a 32-bits x86 machine.}}
+{{Note|Although an amd64 system was used here to do this, it will work just the same way for a 32-bit x86 machine.}}
 
 [[Category:Core system]]
