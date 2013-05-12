@@ -66,10 +66,10 @@ Install {{Package|net-firewall/iptables}}:
 {{Emerge|iptables}}
 
 == Firewall ==
-To create firewall rules, we are going to use ipt=$(which iptables) or ipt=$(which ip6tables) for IPv6 support to write down a few rules that will be loaded using `$ipt-restore <$rules' (rules file are usally saved to `/var/lib/$ipt/rules-save' so that whenever your machine is powered on, the rules set will be loaded automatically with `/etc/init.d/$ipt'.
+To create firewall rules, we are going to use <code>ipt=$(type -p iptables)</code> or <code>ipt=$(type -p ip6tables)</code>. For IPv6 support to write down a few rules that will be loaded using <code>"$ipt-restore" <"$rules"</code>. (rules file are usally saved to <code>/var/lib/"${ipt##*/}"/rules-save</code> so that whenever your machine is powered on, the rules set will be loaded automatically with <code>/etc/init.d/"${ipt##*/}"</code>.
 
 Lets begin with a little example:
-{{RootCmd|$ipt -P INPUT DROP}}
+{{RootCmd|"$ipt" -P INPUT DROP}}
 
 If you're looking into the perfect firewall, the previous command will set up the policy for INPUT chain and will satisfy the more paranoids. However, the previous will drop every packet that will be sent to the local host. And that, usually, nobody want it to be a default policy. 
 
@@ -77,19 +77,19 @@ That example shows how we will be generating firewall rules.
 
 === Stateless firewall ===
 Traditional firewall uses stateless firewall rules like:
-{{RootCmd|$ipt -A INPUT --sport 80 -j ACCEPT}}
+{{RootCmd|"$ipt" -A INPUT --sport 80 -j ACCEPT}}
 
 that just opens unconditional holes without any kind of filtering based on the states of the connection nor the interfaces nor the ports. That rules will just accept any web traffic on port 80 because standard web traffic originate from port 80 (`--sport' switch means source port). This what is avoided by using a stateful firewall approach that filter the in/outbound packets based on the state of the ''connection''.
 
 === Stateful firewall ===
 In a stateful firewall approach, the previous example will be handled like:
 {{RootCmd|<pre>
-$ipt -P INPUT                                                                                       DROP
-$ipt -A INPUT -i eth0 -p tcp --sport 80 --syn -m conntrack --ctstate --state NEW                 -j ACCEPT
-$ipt -A INPUT                                 -m conntrack --ctstate --state ESTABLISHED,RELATED -j ACCEPT
+"$ipt" -P INPUT                                                                                       DROP
+"$ipt" -A INPUT -i eth0 -p tcp --sport 80 --syn -m conntrack --ctstate --state NEW                 -j ACCEPT
+"$ipt" -A INPUT                                 -m conntrack --ctstate --state ESTABLISHED,RELATED -j ACCEPT
 </pre>}}
 
-First, we will drop everything like a hot potato, then accept only incoming traffic depending on the state of the state of the packets (stated NEW here), and then establish the connection. Eeven better, we could place the last line before the second to avoid going into complicated filtering chain for already related and established connections.
+First, we will drop everything like a hot potato, then accept only incoming traffic depending on the state of the state of the packets (stated NEW here), and then establish the connection. Even better, we could place the last line before the second to avoid going into complicated filtering chain for already related and established connections.
 
 This is how a stateful firewall operate to avoid opening unneeded holes and accept in/outbound packets based on the state of the packets.
 
