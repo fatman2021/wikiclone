@@ -1,16 +1,132 @@
-Looking a few weeks ago to a nice and fast wiki or ressource page to get started with X multihead without wanting to meddle in dozen of pages again and again.
+This page describes the setup of multiple monitors under Xorg. For
+further instructions concerning the general setup of monitors under
+Xorg see [[Xorg/Monitor]]. Multihead-support in X has luckily
+progressed in recent versions, so it's pretty easy to set up. It's as
+simple as defining monitors.
 
-Well, nothing could be found quickly to satisfy a simple way to get multihead running every time a screen or a particular screen was attached to a computer. Well, some old X.org/Multihead found out there was really too old, written before the new [[xorg.conf]] file less adoption with {{Package|x11-base/xorg-server}}-1.10.0 (was it that version?).
+== Basic setup ==
 
-Anyway, again, I had to find out how to do it alone without any single hint found in the intertubes. I was just impressed how the xorg.conf file less could be very efficientt at handling multi screens set up that are always, or not, attached to the computer.
+The basic procedure is defining one "Monitor" section per Monitor and
+then tying everything together in a "Device" section specifying the
+video chip driving the monitors. For the following examples we assume,
+that the Xorg configuration is stored in `/etc/X11/xorg.conf.d' and
+there is no `/etc/X11/xorg.conf' (alternatively all files in
+xorg.conf.d can be combined to form an xorg.conf). We create one file
+per monitor. The following example is the basic version for two
+monitors of the same resolution.
 
-How to get it working? Simple as defining monitors in `/etc/X11/xorg.conf.d'. One can use the manufacturer names to get a single config file attached to a single device. That's way, one can add custom settings like video modes etc.
+{{File|/etc/X11/xorg.conf.d/41-dvi-monitor.conf||<pre>
+Section "Monitor"
+    Identifier  "DVI"
+EndSection
+</pre>}}
 
-The following is just an example. First there is no `/etc/X11/xorg.conf'. And then add the following files or rather a variation adapted to your set up to get going.
+{{File|/etc/X11/xorg.conf.d/42-hdmi-monitor.cof||<pre>
+Section "Monitor"
+    Identifier  "DP"
+    Option      "LeftOf"        "DVI"
+EndSection
+</pre>}}
 
-{{Note|Actually [[Xrandr]]-1.3 is a little defficient in this regard because actually X can probe pretty finely the screen devices. However, xrandr will just get/display the minimum resolution fitted to the smallest screen attached to the machine. This is really annoying because one should have again and again go read Xorg.0.log to get the possible resolutions, define a few modes with xrandr, and then chose a video mode with xrandr. Nothing userfriendly... at hand. That's matter of minutes, but still, annoying when one just want to attach a bigger screen to a computer and watch a movie, for example. The latter can be achieved, somewhat, with the following guide.}}
+Each "Monitor" section needs to contain an Identifier, everything else
+is optional. The identifier may be freely chosen. The placement of the
+monitors is done relatively with one of the keywords RightOf, LeftOf,
+Above or Below. (Additionally there is Relative keyword for fancy
+cases.) Each monitor can recieve custom options (e.g. resolution) in
+its configuration.
 
-{{File|/etc/X11/xorg.conf.d/41-vga-monitor.conf||<pre>
+Now we need to map the monitors to the actual outputs. This is done in
+the "Device" section describing the video chip and driver. In our
+example this would look like the following.
+
+{{File|/etc/X11/xorg.conf.d/50-video.conf||<pre>
+Section "Device"
+    Option      "Monitor-DVI2" "DVI"
+    Option      "Monitor-DP1" "DP"
+    Driver      "intel"
+EndSection
+</pre>}}
+
+{{Important|The driver has to be your video card driver. Common
+options are for example intel, radeon or nouveau.}}
+
+Here the names are of the form "Monitor-<port>" were port is the name
+listed in "xrandr -q". This should be everything you need for the
+basic setup.
+
+== More complex cases ==
+
+First a more complete third example of a monitor file, with resolution
+options. Here you see, that one can also use the manufacturer names to
+get a single config file attached to a single device.
+
+{{File|/etc/X11/xorg.conf.d/43-lvds-monitor.conf||<pre>
+Section "Monitor"
+    Modeline    "1280x800x60" 71.00 1280 1328 1360 1440 800 803 809 823
+    Option      "PreferredMode" "1280x800"
+    Identifier  "LVDS"
+    Option      "RightOf"       "DVI"
+    VendorName  "CMO"
+EndSection
+</pre>}}
+
+First a more complete example of the video configuration for
+{{Package|x11-drivers/xf86-video-intel}}.
+
+{{File|/etc/X11/xorg.conf.d/50-video.conf||<pre>
+Section "Device"
+    Option      "Monitor-DVI2" "DVI"
+    Option      "Monitor-DP1" "DP"
+    Option      "Monitor-LVDS2" "LVDS"
+    Option      "AccelMethod" "sna"
+    Option      "TearFree" "true"
+    Option      "DRI" "True"
+    Option      "XvMCSurfaces" "6"
+    Identifier  "GMA-X4500"
+    Driver      "intel"
+EndSection
+</pre>}}
+
+The following was made for {{Package|x11-drivers/xf86-video-ati}} for
+radeon driver. Notice the change of the video output name on the same
+laptop.
+
+{{File|/etc/X11/xorg.conf.d/50-video.conf||<pre>
+Section "Device"
+    Option      "Monitor-DVI-0" "DVI"
+    Option      "Monitor-HDMI-0" "DP"
+    Option      "Monitor-LVDS" "LVDS"
+    Option      "AccelMethod" "EXA"
+    Option      "ClockGating" "On"
+    Option      "ForceLowPowerMode" "On"
+    Option      "VGAAccess" "On"
+    Identifier  "HD3450"
+    Driver      "radeon"
+    Option      "MonitorLayout" "LVDS, AUTO"
+EndSection
+</pre>}}
+
+{{Note|If you are using {{Package|x11-drivers/ati-drivers}} then to
+increase your Virtual in xorg.conf it must be an exact multiple of the
+highest resolution monitor. For instance if your largest monitor is
+1920x1080 then enter 3840 2160 for Virtual. This will enable xrandr to
+work properly. This appears to be a bug.}}
+
+== Different resolutions ==
+
+{{Note|Actually [[Xrandr]]-1.3 is a little defficient in this regard
+because actually X can probe pretty finely the screen
+devices. However, xrandr will just get/display the minimum resolution
+fitted to the smallest screen attached to the machine. This is really
+annoying because one should have again and again go read Xorg.0.log to
+get the possible resolutions, define a few modes with xrandr, and then
+chose a video mode with xrandr. Nothing userfriendly... at
+hand. That's matter of minutes, but still, annoying when one just want
+to attach a bigger screen to a computer and watch a movie, for
+example. The latter can be achieved, somewhat, with the following
+guide.}}
+
+{{File|/etc/X11/xorg.conf.d/44-vga-monitor.conf||<pre>
 Section "Monitor"
     Option      "SyncOnGreen" "True"
     Modeline    "1280x1024x85" 157.50 1280 1344 1504 1728 1024 1025 1028 1072
@@ -22,79 +138,16 @@ Section "Monitor"
 EndSection
 </pre>}}
 
-{{Note|Actually anybody could notice the level of fine probping of X server or rather {{Package|x11-drivers/xf86-input-evdev}} (?) whith numerous handy details (numerous screen resolutions, gamma values and other obscure values). One can pick any defined video mode on the list and X server with pick it up. Fine. Now, whenever anybody would want to change the video mode of a particular display... xrandr will complain about inexistant modes. What? The video modes vanished somewhere, well only remain the ones that can fit to the biggest resolution that can fit to the smallest display (following?). So one should copy/paste some prefered video modes like in the previous fashion.}}
-
-{{File|/etc/X11/xorg.conf.d/42-dvi-monitor.conf||<pre>
-Section "Monitor"
-    Option      "PreferredMode" "1680x1080"
-    Identifier  "DVI"
-    VendorName  "DELL"
-EndSection
-</pre>}}
-
-{{File|/etc/X11/xorg.conf.d/43-hdmi-monitor.cof||<pre>
-Section "Monitor"
-    Identifier  "HDMI"
-EndSection
-</pre>}}
-
-{{File|/etc/X11/xorg.conf.d/44-lvds-monitor.conf||<pre>
-Section "Monitor"
-    Modeline    "1280x800x60" 71.00 1280 1328 1360 1440 800 803 809 823
-    Option      "PreferredMode" "1280x800"
-    Identifier  "LVDS"
-    VendorName  "CMO"
-EndSection
-</pre>}}
-
-{{Important|One should adapt the previous config file to its hardware. The previous goal was: a single config file for a single device. Yes, one should make one for every single device attached to the computer. That's far from being very user friendly but it is the only way to get the right resolution and video for every single device.}}
-
-And finally, one do not need to define or include monitors sub section in the following screen section... That's because the effect of the previous defined monitors files will be used right away, thanks to evdev for the hot swap ability, whenever the refered monitor device will be attached to the computer.
-
-{{File|/etc/X11/xorg.conf.d/50-screen.conf||<pre>
-Section "Device"
-    Option      "Monitor-DP1" "HDMI"
-    Option      "Monitor-LVDS2" "LVDS"
-    Option      "Monitor-VGA2" "VGA"
-    Option      "AccelMethod" "sna"
-    Option      "TearFree" "true"
-    Option      "DRI" "True"
-    Option      "XvMCSurfaces" "6"
-    Identifier  "GMA-X4500"
-    Driver      "intel"
-EndSection
-
-Section "Screen"
-    Identifier "Intel"
-    Device     "GMA-X4500"
-    Option     "NoMTRR"
-EndSection
-</pre>}}
-
-{{Important|The only remaining issue is :every single Xorg video driver will name differently each video output adapter. Again, one should handle this on her/his own...}}
-
-{{Note|The prevous 50-screen.conf was done for {{Package|x11-drivers/xf86-video-intel}}. The following was made for {{Package|x11-drivers/xf86-video-ati}} for radeon driver. Notice the change of the video output name on the same laptop.}}
-
-{{File|/etc/X11/xorg.conf.d/50-screen.conf||<pre>
-Section "Device"
-    Option      "Monitor-HDMI-0" "HDMI"
-    Option      "Monitor-LVDS" "LVDS"
-    Option      "Monitor-VGA-0" "VGA"
-    Option      "AccelMethod" "EXA"
-    Option      "ClockGating" "On" 
-    Option      "ForceLowPowerMode" "On"
-    Option      "VGAAccess" "On"
-    Identifier  "HD3450"
-    Driver      "radeon"
-    Option      "MonitorLayout" "LVDS, AUTO"
-EndSection
-
-Section "Screen"
-    Identifier "Radeon"
-    Device     "HD3450"
-EndSection
-</pre>}}
-
-{{Note|If you are using {{Package|x11-drivers/ati-drivers}} then to increase your Virtual in xorg.conf it must be an exact multiple of the highest resolution monitor. For instance if your largest monitor is 1920x1080 then enter 3840 2160 for Virtual. This will enable xrandr to work properly. This appears to be a bug.}}
+{{Note|Actually anybody could notice the level of fine probping of X
+server or rather {{Package|x11-drivers/xf86-input-evdev}} (?) whith
+numerous handy details (numerous screen resolutions, gamma values and
+other obscure values). One can pick any defined video mode on the list
+and X server will pick it up. Fine. Now, whenever anybody would want
+to change the video mode of a particular display... xrandr will
+complain about inexistant modes. What? The video modes vanished
+somewhere, well only remain the ones that can fit to the biggest
+resolution that can fit to the smallest display (following?). So one
+should copy/paste some prefered video modes like in the previous
+fashion.}}
 
 [[Category:X.Org]]
