@@ -73,3 +73,39 @@ Afterwards, add the fore-mentioned snippet to your bashrc (with the same vt spec
 {{RootCmd|systemctl enable x11.service}}
 
 and voilà.
+
+
+=== Improving the DISPLAY+XDG_VTNR hack ===
+
+In order to avoid relying on the ''DISPLAY+XDG_VTNR'' trick to determine whether to start X11, we can extend the two above approaches by using a dedicated environment variable to distinguish the specific shell where X11 is to be started.
+
+First, create a dedicated ''login'' wrapper:
+
+{{File|/usr/local/sbin/x11login|X11 vt login wrapper|<pre>
+#!/bin/sh
+exec /bin/login "${@}" START_X11=1
+</pre>}}
+
+This causes the user to be logged in with ''START_X11=1'' environment variable set. Then, tell getty to use that file instead of the default ''/bin/login'':
+
+{{File|/etc/systemd/system/x11.service|X11 autologin service using login wrapper|<pre>
+[Unit]
+After=systemd-user-sessions.service
+
+[Service]
+ExecStart=/sbin/mingetty --autologin username --loginprog=/usr/local/sbin/x11login --noclear tty8 38400
+
+[Install]
+WantedBy=multi-user.target
+</pre>}}
+
+Finally, modify bashrc (or equivalent) to use the variable rather than guessing:
+
+{{File|~/.bashrc|X11 autostart checking dedicated variable|<pre>
+if [[ ${START_X11} == 1 ]]; then
+    unset START_X11
+    exec startx
+fi
+</pre>}}
+
+Remember to unset the variable before starting X11 -- otherwise all the X11 terminals would have it set and try to spawn another X11 session.
