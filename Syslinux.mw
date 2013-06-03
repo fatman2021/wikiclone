@@ -21,7 +21,11 @@ Install {{Package|sys-boot/syslinux}}:
 
 {{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
 
-=== MBR setup ===
+To use Syslinux you need to make sure to both install the proper boot sector, and then to install the actual boot loader into the partition. Make sure not to omit steps.
+
+=== Boot Sector Setup ===
+
+==== MBR setup ====
 {{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/mbr.bin of{{=}}/dev/sda}}
 
 Set the boot partition as active:
@@ -39,12 +43,14 @@ Command (m for help): w
  ...
 </pre>}}
 
-=== GPT setup ===
+==== GPT setup ====
 {{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/gptmbr.bin of{{=}}/dev/sda}}
 
 Run gdisk and enable legacy BIOS boot partition attributes on the partition where /boot/extlinux is stored.
 
-=== EXTLINUX setup ===
+=== Boot Loader Install ===
+
+==== EXTLINUX setup ====
 {{RootCmd
 |mkdir /boot/extlinux
 |extlinux --install /boot/extlinux
@@ -53,12 +59,12 @@ Run gdisk and enable legacy BIOS boot partition attributes on the partition wher
 
 {{Note|The "boot -> ." symlink is not necessary ''per se'', but for the sake of consistency, it's made so the example configurations are the same for users with {{Path|/boot}} on same partition and those with separate partitions.}}
 
-=== SYSLINUX setup ===
+==== SYSLINUX setup ====
 {{RootCmd
 |syslinux --install /dev/sda1
 }}
 
-=== PXELINUX setup ===
+==== PXELINUX setup ====
 With PXELINUX is possible to netboot using images that are shared through a TFTP server. This article will assume there is a TFTP server installed, and it's TFTP root directory is in {{Path|/var/lib/tftpboot}}. With this setup, copy the PXELINUX loader to the TFTP boot dir and create a config dir.
 
 {{RootCmd|cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/pxelinux.0
@@ -131,5 +137,16 @@ LABEL gentoo-old
 </pre>}}
 
 {{Note|Avoid using 'KERNEL' for selecting the kernel images, use LINUX instead, As example, if you use KERNEL and the image ends with .0 the extlinux will misunderstand it and try to PXE it ending with a screen graphical artefacts and nothing else.}}
+
+=== Passing Kernel Parameters ===
+Unless you're hardcoding kernel parameters in your kernel image, you will want to pass them through the boot loader. To do so you have to use the '''APPEND''' parameter, like this:
+
+{{File|/boot/extlinux/extlinux.conf||<pre>
+DEFAULT gentoo
+
+LABEL gentoo
+      LINUX /boot/kernel-3.6.11-gentoo
+      APPEND root=/dev/sda1
+</pre>}}
 
 [[Category:Bootloaders]]
