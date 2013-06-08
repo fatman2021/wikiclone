@@ -527,7 +527,40 @@ It looks like you are using UUID instead and that's fine. ''/etc/default/grub'' 
 === Chroot ===
 If you have a separate ''/boot'' partition and plan to install GRUB2, be sure to mount only the target root partition before chrooting, but not the `/boot' partition as well. Mount ''/boot'' once inside the chroot environment. This is required because grub2-mkconfig will not detect ''/boot'' as a separate partition and will assume ''/boot'' and ''root'' are on the same partition if ''/boot'' was mounted before chrooting.
 
-=== Booting from LVM Logical Volumes ===
+=== Booting to LVM, RAID and/or Encrypted Volumes ===
+
+{{Note|Using these technologies with GRUB2 requires that, when partitioning, the size allotted for the MBR/post-MBR gab be greater than the conventional 32 kilobytes (63 sectors of 512 bytes). This is needed do to the enlarged size of the ''core.img'' file which GRUB embeds in the post-MBR gap region. It is recommended that the size before the first physical partition be 1 megabyte (or 2048 sectors of 512 bytes).
+
+For the following two code blocks, note that the first (only 63 sectors of 512 bytes) will not allow GRUB2 to work with these technologies... though the latter of (2048 sectors of 512 blocks) is adequate.
+}}
+
+{{Code||<pre>
+
+Disk /dev/sda: 160.0 GB, 160000000000 bytes, 312500000 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x000cfe45
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *          63    48821534    24410736   8e  Linux LVM
+
+</pre>}}
+
+{{Code||<pre>
+
+Disk /dev/sda: 320.1 GB, 320072933376 bytes, 625142448 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x0009d633
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048      499711      248832   83  Linux LVM
+
+</pre>}}
+
+==== Booting from LVM Logical Volumes ====
 GRUB2 supports booting from an [[LVM]] partition. However, one must set the '''device-mapper''' USE flag in order to activate this feature:
 {{File|/etc/portage/package.use||<pre>
 sys-boot/grub:2 device-mapper
@@ -536,7 +569,7 @@ Reemerge if needed. Next tell GRUB2 to preload its "lvm" module,
 {{RootCmd|echo "GRUB_PRELOAD_MODULES{{=}}lvm" >> /etc/default/grub}}
 And (re)generate grub.cfg with '''''grub2-mkconfig'''''.
 
-=== Booting from RAID Array ===
+==== Booting from RAID Array ====
 The documentation on this subject, along with booting from encrypted physical volumes, is close to null. As I do not boot from a RAID array, anyone who managed to boot from a complex RAID array is welcomed to complete this section.
 
 {{Note|Booting from RAID is only relevant for BIOS [boot]. EFI users shall roll out their custom initramfs or use an initramfs package available out there. Depending on your setup, you may use a BIOS/MBR or BIOS/GPT combination. Here is an example to a BIOS/GPT setup with `/boot' and `root' [`/'] on RAID-1 [http://sinodun.com/2010/07/installing-grub2-on-gnulinux-software-raid/] and Xen on RAID-5.}}
@@ -574,7 +607,7 @@ Booting from a RAID array is very similar to booting from a LVM Logical Volume a
 
 I can guess tat this should work with a simple software RAID setup. However, I have no idea or what command, if any exit at the moment of writing, to use to assemble an array such as `mdadm --assemble --scan /dev/md0' that an initramfs could take care of.
 
-=== Booting from LUKS Physical Volume ===
+==== Booting from LUKS Physical Volume ====
 {{Code||<pre>
 ...
 insmod gzio
