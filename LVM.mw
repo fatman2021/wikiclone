@@ -151,6 +151,59 @@ Before we remove a Logical Volume (LV) we should unmount and deactivate, so no f
 The following command removes the LV named lvol1 from VG named vg0:
 {{RootCmd|lvremove /dev/vg0/lvol1}}
 
+=== Thin metadata, pool, and LV ===
+Recent versin of LVM2 (2.02.89) support "thin" volumes. Thin volumes are to block devices what sparse files are to filesystems. Thus, a thin LV within a pool can be "overcommitted" - it can even be larger than the pool itself. Just like a sparse file, the "holes" are filled as the block device gets populated. If the filesystem has "discard" support, as fiels are deleted, the "holes" can be recreated, reducing utilization of the thin pool.
+
+==== Create thin pool ====
+{{Warning||If the thin pool metadata overflows, the pool will be corrupted and data within it unrecoverable!}} 
+Each thin pool has some metadata associated with it, which is added to the thin pool size. You can specify it explicitly, otheriwse lvm2 will compute one based on the size of the thin pool as the minimum of <tt>pool_chunks * 64 bytes</tt> or 2MiB, whichever is larger.
+{{RootCmd|lvcreate -L 150M --type thin-pool --thinpool thin_pool vg0}}
+This create a thin pool named "thin_pool" with a size of 150MB (actually, it slightly bigger than 150MB because of the metadata).
+{{RootCmd|lvcreate -L 150M --metadatasize 2M --type thin-pool --thinpool thin_pool vg0}}
+This create a thin pool named "thin_pool" with a size of 150MB and an explicit metadata size of 2MiB.
+
+Unfortunately, because the metasize is added to thin pool size, the intuitive way of filling a VG wit ha thin pool doesn't work:[https://bugzilla.redhat.com/show_bug.cgi?id=812726]
+{{RootCmd|lvcreate -l 100%FREE --type thin-pool --thinpool thin_pool vg0|output=Insufficient suitable allocatable extents for logical volume thin_pool: 549 more required}}
+
+Note the thin pool does not have an associated device node like other LV's.
+==== Create a thin LV ====
+A Thin LV is somewhat unusual in LVM - the thin pool itself is an LV, so a thin LV is a "LV-within-an-LV". Since the volumes are sparse, a virtual size instead of a phyical size is specified:
+{{RootCmd|lvcreate -T vg0/thin_pool -V 300M -n lvol1}}
+Note how the LV is larger then the pool it is create in. Its also possible to create the thin metadata, pool and LV on the same command:
+{{RootCmd|lvcreate -T vg0/thin_pool -V 300M -L150M -n lvol1}}
+==== List thin pool and thin LV ====
+Thin LV are just like any other lv are are displayed using the <tt>lvdisplay</tt> and scanned using <tt>lvscan</tt>
+==== Extend thin pool ====
+{{Warning||As of LVM2 2.02.89, the metadata size of the thin pool cannot be expanded, it is fixed at creation}}
+The thin pool is expanded like a non-thin LV:
+{{RootCmd|lvextend -L500M vg0/thin_pool}}
+or
+{{RootCmd|lvextend -L+350M vg0/thin_pool}}
+==== Extend thin LV ====
+A Thin LV is expanded just like a regular LV:
+{{RootCmd|lvextend -L1G vg0/lvol1}}
+or
+{{RootCmd|lvextend -L+700M vg0/lvol1l}}
+Note this is asymetric from create where the virtual size was specified with -V isntead of -L/-l. The filesystem can then be expanded using that filesystem's tools.
+==== Reduce thin pool ====
+Currently, LVM cannot reduce the size of the thin pool[https://bugzilla.redhat.com/show_bug.cgi?id=812731].
+==== Reduce thin LV ====
+Before shrinking an LV, shrink the filesystem first using that filesystem's tools. Some filesystems do not support shrinking.
+A Thin LV is reduced just like a regular LV:
+{{RootCmd|lvreduce -L300M vg0/lvol1l}}
+or
+{{RootCmd|lvreduce -L-700M vg0/lvol1}}
+Note this is asymetric from create where the virtual size was specified with -V isntead of -L/-l.
+==== Thin pool Permissions ====
+It is not possible to change the permission on the thin pool (nor would it make any sense to).
+==== Thin LV Permissions ====
+A thin LV can be set read-only/read-write the same waya regular LV is
+==== Thin pool Removal ====
+The thin pool cannot be removed until all the thin LV within it are removed. Once that is done, it can be removed:
+{{RootCmd|lvremove vg0/thin_pool}}
+==== Thin LV Removal ====
+A thin is removed like a regular LV
+
 == Examples ==
 We can create some scenarios using loopback devices, so no real storage devices are used.
 
@@ -194,6 +247,10 @@ Here is an example of an entry in [[fstab]] (using ext4):
 {{File|/etc/fstab||<pre>
 /dev/vg0/lvol1  /mnt/data  ext4  noatime  0 2
 </pre>}}
+For thin volumes, add the <tt>discard</tt> option:
+{{File|/etc/fstab||<pre>
+/dev/vg0/lvol1  /mnt/data  ext4  noatime,discard  0 2
+</pre>}}
 
 === LVM2 MIRROR ===
 We use two hard drives and create our LV ''lvol1'' like in the first example. This time we use 40% of the size of our VG ''vg0'', because we need some space in the VG for the MIRROR and log files:
@@ -209,6 +266,8 @@ LVM will now ensure that a full copy (MIRROR) of /dev/vg0/lvol1 exists on /dev/l
 To remove the MIRROR:
 {{RootCmd|lvconvert -m0 /dev/vg0/lvol1}}
 If one half of the MIRROR fails, the other one will be automatically converted into a not mirrored LV (loose the ''mirror'' atribute). LVM is different from Linux RAID1 that it doesn't read/write from both mirrored images, there is no performace increase.
+
+Thin pools and their volumes are currently incompaitble with mirroring.
 
 === LVM2 Snapshots ===
 A snapshot is an LV as copy of another LV, which takes in all the changes that were made in the original LV to show the content of that LV in a different state. We once again use our two hard drives and create LV ''lvol1'' this time with 60% of VG ''vg0'':
@@ -233,12 +292,26 @@ LVM2 snapshots are writeable LV, we could use them to let a project go on into t
 |mount /dev/vg0/project2_lvol1 /mnt/project2}}
 Now we have three different versions of LV ''lvol1'', the original and two snapshots which can be used parallel and changes are written to the snapshots.
 {{Note|the original LV ''lvol1'' cannot be reduced in size or removed if snapshots of it exist. Snapshots can be increased in size without growing the file system on them, but they cannot exceed the size of the original LV}}
+=== LVM2 Thin Snapshots ===
+{{Notice||A thin snapshot canot only be taken on a thin origin}}
+Creating a thin snapshot is simple:
+{{RootCmd|lvcreate -s -n 08092011_lvol1 /dev/vg0/lvol1}}
+Note how a size is not specified with -l/-L - nor the virtual size with -V. Snapshots have a virtual size the same as their origin, and a phyical size of 0 like all new thin volumes. This also means its not possible to limit the phyical size of the snapshot. 
+Thin snapshots are writable just like regualr snapshot. It is also possible to have efficent recursive snapshots (snapshots of snapshots)
+{{RootCmd|lvcreate -s -n 08092012_lvol1 /dev/vg0/08092011_lvol1}}
+Unlink regular LVM snapshots, which get slower with each indirection, this is not that case with thin snapshots.
 
 === LVM2 Rollback Snapshots ===
 To rollback the logical volume to the version of the snapshot, use the following command:
 {{RootCmd|lvconvert --merge /dev/vg0/08092011_lvol1}}
 This might take a couple of minutes, depending on the size of the volume.
 {{Important|the snapshot will disappear and this is not revertable}}
+=== LVM2 Thin Rollback Snapshots ===
+For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the origin and rename the snapshot:
+{{RootCmd|<pre>
+umount /dev/vg0/lvol1
+lvremove /dev/vg0/lvol1
+lvrename vg0/08092011_lvol1 lvol1</pre>}}
 
 === LVM2 Stripeset ===
 The STRIPSET is the same as RAID0, data is written to several devices at the same time to increase performance. In LVM2 it is possible to distribute LV over several PV for the same effect. We create three PV and then VG ''vg0'':
@@ -261,6 +334,8 @@ The option -i 3 indicates that we want to spread it over 3 PV in out VG vg0:
 </pre>}}
 On each PV 400MB got reserved for our LV ''lvm_stripe'' in VG ''vg0''
 
+A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings, do not specify it manually when creating a thin volume.
+
 === LVM2 RAID5 ===
 LVM2 can use its internal mechanism to create stripesets with parity in a similar way as RAID5 does, but in this case you need at least 3 different PV
 {{RootCmd|pvcreate /dev/loop[0-2]
@@ -281,6 +356,8 @@ The option -i 2 indicates that we want create 2 stripes + 1 parity stripe (so we
     Wiping internal VG cache
 </pre>}}
 On each PV 600MB got reserved for our LV ''lvm_raid5'' in VG ''vg0''
+
+Thin pools and their volumes are currently incompaitble with RAID5.
 
 == Troubleshooting ==
 LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
