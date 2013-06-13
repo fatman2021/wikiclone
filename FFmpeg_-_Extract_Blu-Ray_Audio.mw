@@ -1,30 +1,31 @@
-=== Introduction ===
-Some music audio only titles are just becoming available on Blu-Ray, and music lovers may need to extract the audio to another portable medium.  Since the Blu-Ray audio is usually one big file, the file chapters need to be found and split.  Most portable media requires VFAT filesystem preventing larger files sizes, and further splitting is essential.
+Some music audio only titles are just becoming available on Blu-Ray, and music lovers may need to extract the audio to another portable medium. Since the Blu-Ray audio is usually one big file, the file chapters need to be found and split. Most portable media requires VFAT [[filesystem]] preventing larger files sizes, and further splitting is essential.
 
-This article will only discuss unencrypted Blu-Ray Audio media, and merrily point users to MakeMKV (media-video/makemkv) for handling encrypted Blu-Ray media.
+This article will only discuss unencrypted Blu-Ray Audio media, and merrily point users to MakeMKV ({{Package|media-video/makemkv}}) for handling encrypted Blu-Ray media.
 
-{{Warning|Copying copy righted material not purchased by you or material you do not hold a license is a crime.  Some Countries may be more strict, and consider simply tampering with encrypted material a crime.  Funny things may also occur if you tinker with encrypted Blu-Rays, such as blacklisting. ;-)}}
+{{Important|Copying copy righted material not purchased by you or material you do not hold a license is a crime.  Some Countries may be more strict, and consider simply tampering with encrypted material a crime.  Funny things may also occur if you tinker with encrypted Blu-Rays, such as blacklisting. ;-)}}
 
 {{Note|Audio ranges greater than 24 bits or 480000 Hz are frequently stated as being indistinguishable to the human ear.  As for me, I notice little difference between 16 and 24 bit, or 44100 and 48000 Hz of noisy music.}}
 
 {{Note|Encrypted (or commercial) Blu-ray media is extremely difficult to enjoy within Linux, as MPlayer's libaacs rarely works when playing encrypted Blu-ray media.  Also anything higher than the common 16 bit 44100 Hz (CD Audio Quality), and you will require a Home Theater or 5.1/7.1 Dolby/DTS Audio Reciever with more than five quality speakers to decode and be able to notice a difference above CD audio quality.  Recievers also have the ability to copy stereo two channel into five or more channel audio, sounding extremely similar to 5.1 PCM.  If you're an older person and dislike having to always buy additional equipment to be able to enjoy these newer proprietary formats, it has been quite common when considering Blu-ray media, to continue using only the tried and well tested CD and DVD media!}}
 
 === Install Required Packages ===
-Although MPlayer can also be used, FFmpeg seems more refined when dumping or clipping specific audio chapters from DVD or Blu-Ray media.
+Although [[MPlayer]] can also be used, FFmpeg seems more refined when dumping or clipping specific audio chapters from DVD or Blu-Ray media.
 
-{{RootCmd|emerge media-video/ffmpeg}}
+{{Emerge|media-video/ffmpeg}}
 
 (If somebody successfully uses MPlayer/MPlayer2 to dump PCM specified chapters, feel free to add it to this Wiki page and retitle appropriately.  I've only experienced MPlayer seeking to the beginnning chapter and, not recognizing or stopping at the specified end chapter. ie. "mplayer -ao pcm:fast:file=audio.wav -chapter 2-2 -vo null -vc null input_file")
 
 === Mount Blu-Ray Disc ===
 Blu-Rays use UDF, and require to be mounted as such.  Probably best to edit the following file to provide mount points as such.  (I use AutoFS, so incorporate as needed.)
-{{File|/etc/fstab||<nowiki>
+{{File|/etc/fstab||<pre>
 /dev/sr0       /mnt/dvd        iso9660         noauto,user,ro  0 0
-/dev/sr0       /mnt/dvd-udf    udf             noauto,user,rw  0 0</nowiki>}}
+/dev/sr0       /mnt/dvd-udf    udf             noauto,user,rw  0 0
+</pre>}}
 
 Or the following will automatically decide with little to no additional access time difference,
-{{File|/etc/fstab||<nowiki>
-/dev/sr0       /mnt/dvd        auto            noauto,user,ro  0 0</nowiki>}}
+{{File|/etc/fstab||<pre>
+/dev/sr0       /mnt/dvd        auto            noauto,user,ro  0 0
+</pre>}}
 
 Create the mount folders if you don't have them already,
 {{RootCmd|mkdir /mnt/dvd /mnt/dvd-udf}}
@@ -33,29 +34,33 @@ Mount the disc,
 {{Cmd|sudo mount /mnt/dvd-udf}}
 
 === Find Available Stream Types ===
-You've likely found your main large meda stream file on your Blu-Ray, something similar to "./BDMV/STREAM/0000.m2ts".
+You've likely found your main large media stream file on your Blu-Ray, something similar to {{Path|./BDMV/STREAM/0000.m2ts}}.
 
 Using ffplay, you'll likely see something like this within stdout,
-
-<nowiki>Stream #0:0[0x1011]: Video: h264 (High) (HDMV / 0x564D4448), yuv420p, 1920x1080 [SAR 1:1 DAR 16:9], 29.97 fps, 29.97 tbr, 90k tbn, 59.94 tbc</nowiki><br>
-<nowiki>Stream #0:1[0x1100]: Audio: pcm_bluray (HDMV / 0x564D4448), 48000 Hz, stereo, s32, 2304 kb/s</nowiki><br>
-<nowiki>Stream #0:2[0x1101]: Audio: pcm_bluray (HDMV / 0x564D4448), 48000 Hz, 5.1(side), s32, 6912 kb/s</nowiki><br>
-<nowiki>Stream #0:3[0x1102]: Audio: dts (DTS-HD MA) ([134][0][0][0] / 0x0086), 48000 Hz, 5.1(side), s16, 1536 kb/s</nowiki><br>
-
-<nowiki>Stream #0 on this audio only Blu-Ray is only a black screen with song titles.  We'll skip this stream since we want audio only PCM WAV</nowiki><br>
-<nowiki>Stream #1 is the PCM two channel stereo mix.</nowiki><br>
-<nowiki>Stream #2 is the PCM 5.1 high resolution mix.</nowiki><br>
-<nowiki>Stream #2 is the DTS mix.</nowiki><br>
+{{Cmd|ffplay ...|output=<pre>
+Stream #0:0[0x1011]: Video: h264 (High) (HDMV / 0x564D4448), yuv420p, 1920x1080 [SAR 1:1 DAR 16:9], 29.97 fps, 29.97 tbr, 90k tbn, 59.94 tbc
+Stream #0:1[0x1100]: Audio: pcm_bluray (HDMV / 0x564D4448), 48000 Hz, stereo, s32, 2304 kb/s
+Stream #0:2[0x1101]: Audio: pcm_bluray (HDMV / 0x564D4448), 48000 Hz, 5.1(side), s32, 6912 kb/s
+Stream #0:3[0x1102]: Audio: dts (DTS-HD MA) ([134][0][0][0] / 0x0086), 48000 Hz, 5.1(side), s16, 1536 kb/s
+...
+Stream #0 on this audio only Blu-Ray is only a black screen with song titles.  We'll skip this stream since we want audio only PCM WAV
+Stream #1 is the PCM two channel stereo mix.
+Stream #2 is the PCM 5.1 high resolution mix.
+Stream #2 is the DTS mix.
+</pre>}}
 
 Keep an eye on the Hz, s16/s24/s32 and kb/s, as they're indicators of audio quality.
 
 === Extract Audio Streams ===
+
 ==== Extract Full Audio Streams ====
 To extract the three individual stream types into one large file, you can use FFmpeg.  (Although this is likely undesirable due to file size limitations on VFAT filesystems.)
 
-{{Cmd|ffmpeg -i ./BDMV/STREAM/00000.m2ts -map 0:1 -acodec pcm_s24le music.wav}}
-{{Cmd|ffmpeg -i ./BDMV/STREAM/00000.m2ts -map 0:2 -acodec pcm_s24le music-pcm51.wav}}
-{{Cmd|ffmpeg -i ./BDMV/STREAM/00000.m2ts -map 0:3 -acodec copy music.dts}}
+{{Cmd
+|ffmpeg -i ./BDMV/STREAM/00000.m2ts -map 0:1 -acodec pcm_s24le music.wav
+|ffmpeg -i ./BDMV/STREAM/00000.m2ts -map 0:2 -acodec pcm_s24le music-pcm51.wav
+|ffmpeg -i ./BDMV/STREAM/00000.m2ts -map 0:3 -acodec copy music.dts
+}}
 
 Verify you have successfully extracted the streams using ffplay or mplayer.  Monitor the stdout messages to ensure proper drivers and codecs are used for the stream types specified.
 
@@ -71,6 +76,7 @@ Another work around, is to play the 24bit PCM WAV files using a software media p
 {{Note|If this section applies to you, then you will need to augment the further FFmpeg incanatations below with the "-acodec pcm_s16le" option.}}
 
 ==== Extract Individual Chapters ====
+
 ===== Find Chapters =====
 FFprobe will display the chapters to stdout, if they are preserved within the media file.
 
@@ -84,7 +90,10 @@ FFprobe will display the chapters to stdout, if they are preserved within the me
 At this point, we'll assume we want Stream #1 for standard two stereo PCM WAV files (ie. map 0:1) and the second (#0.2) chapter.
 
 FFprobe's snipped output:
-<br><nowiki>Chapter #0.2: start 534.934400, end 888.087200</nowiki><br>
+{{Cmd|ffprobe ...|output=<pre>
+...
+Chapter #0.2: start 534.934400, end 888.087200
+</pre>}}
 
 The incanatation of FFmpeg we'll use for exacting this individual chapter, using seconds for start and duration indicators.
 {{Cmd|ffmpeg -ss [start] -i in.dts -t [duration] -c:v copy -c:a copy out.wav}}
@@ -100,8 +109,9 @@ I have only piped the message stdout of the CLI tools to a series of text files,
 Someday, this will likely be automated and integrated into abcde.sh.
 
 === Tips ===
+
 ==== Cover Art ====
-Cover art is usually found within the /mnt/dvd/BDMV/META/DL folder. For example,
+Cover art is usually found within the {{Path|/mnt/dvd/BDMV/META/DL}} folder. For example:
 {{Cmd|cp /mnt/dvd/BDMV/META/DL/discinfo_640x360.jpg ${HOME}/Music/My_Album/cover.jpg}}
 
 ==== MPlayer Upmix When 24bit Decoding Not Available ====
@@ -111,8 +121,10 @@ The PCM 5.1 WAV files are encoded at 24 bit PCM 5.1 WAV 48000 Hz.
 
 The work around here is to upmix to 32 bit using sb32le or floatle, since MPlayer by default down mixes to 16 bit or s16le.  MPlayer also by default cuts channels to two channels.
 
-{{Cmd|<nowiki>mplayer -af format=s32le,channels=8 PCM51-24bit/01.my_music_track.dts</nowiki>}}
-{{Cmd|<nowiki>mplayer2 -af format=s32le,channels=8 PCM51-24bit/01.my_music_track.dts</nowiki>}}
+{{Cmd
+|mplayer -af format{{=}}s32le,channels{{=}}8 PCM51-24bit/01.my_music_track.dts
+|mplayer2 -af format{{=}}s32le,channels{{=}}8 PCM51-24bit/01.my_music_track.dts
+}}
 
 ==== No DTS-H Master? ====
 My receiver shows it's decoding DTS-HD Master stream when bit perfect or high definition audio decoding is selected within my Window's player, but my receiver only says it's decoding the usual "DTS" decoding while playing streams within Linux.  From reports on the web, bit perfect or high definition streaming to the receiver isn't possible within Linux.  Other reports state it is possible using Intel's HDMI.  (NVidia's video card HDMI using Linux binary drivers isn't performing DTS-HD Master here.)
@@ -122,19 +134,22 @@ Split tracks of long streams, it's nice to have gapless playback for preventing 
 
 FIXME: The following is from Snipplr, but doesn't work for me. :-/
 
-{{Cmd|mkfifo /tmp/aufifo}}
-{{Cmd|aplay -t raw -c 2 -f S16_LE -r 44100 /tmp/aufifo &> /tmp/aplayfifo.log &}}
-{{Cmd|<nowiki>mplayer -ao pcm:nowaveheader:file=/tmp/aufifo 01.track.wav 02.track.wav 03.track.wav &</nowiki>}}
+{{Cmd
+|mkfifo /tmp/aufifo
+|aplay -t raw -c 2 -f S16_LE -r 44100 /tmp/aufifo &> /tmp/aplayfifo.log &
+|mplayer -ao pcm:nowaveheader:file{{=}}/tmp/aufifo 01.track.wav 02.track.wav 03.track.wav &
+}}
 
 Or use MPlayer2:
-{{Cmd|<nowiki>mplayer2 -ac hwdts -af channels=8 -ao alsa:device=hw=1.3 -gapless-audio DTS/*.dts</nowiki>}}
+{{Cmd|mplayer2 -ac hwdts -af channels{{=}}8 -ao alsa:device{{=}}hw{{=}}1.3 -gapless-audio DTS/*.dts}}
 
 ==== Additional Tools====
-Additional tools which might be useful, but not utilized within this Wiki.
-
-<nowiki>media-sound/shntool A multi-purpose WAVE data processing and reporting utility, ie. splitting WAV files.</nowiki><br>
-<nowiki>media-video/mplayer Media Player for Linux, as an option to FFmpeg</nowiki><br>
-<nowiki>media-video/tsmuxer Utility to create and demux TS and M2TS files</nowiki><br>
+Additional tools which might be useful, but not utilized within this Wiki:
+* {{Package|media-sound/shntool}} - A multi-purpose WAVE data processing and reporting utility, ie. splitting WAV files.
+* [[MPlayer]] - Media Player for Linux, as an option to FFmpeg
+* {{Package|media-video/tsmuxer}} -  Utility to create and demux TS and M2TS files
 
 === References ===
 Properly configure ALSA for [http://alsa.opensrc.org/DigitalOut pass-through digital audio], including specifying default decoding codecs for hardware digital decoders when using MPlayer.
+
+[[Category:Multimedia]]
