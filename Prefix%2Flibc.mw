@@ -1,6 +1,5 @@
-This is a project to support libc inside a [[Prefix]]. See also [http://www.awa.tohoku.ac.jp/~benda/projects/android.html Gentoo on Android].
+This is a project to support libc inside a [[Prefix]]. See also [http://www.awa.tohoku.ac.jp/~benda/projects/android.html Gentoo on Android]. A general use case is for Prefix on RHEL 5 (CentOS 5 ans SL 5), where the host glibc-2.5 is too old to support modern features.
 
-== Comparison ==
 Before this project, Prefix is based on rpath mechanism. The differences are summerized in this table.
 
 {| class="wikitable" style="text-align: center"
@@ -17,3 +16,45 @@ Before this project, Prefix is based on rpath mechanism. The differences are sum
 | app-admin/binutils-config || inject --dynamic-linker || inject -rpath and -R
 |-
 | sys-libs/glibc || {{Yes}} || {{No}}
+|}
+
+Provided a rpath variant of Gentoo Prefix (Prefix-rapth), we can roll out a libc variant Prefix (Prefix-libc) with the following guide. It applies to a Gentoo Prefix on RHEL-5.6 amd64, for other setups it should be similar. Feel free to documents corner cases here.
+
+== Using heroxbd's overlay ==
+This is a developer's overlay by heroxbd. The changes will be reviewed and included in the official tree gradually. As of Jun 16, 2013, the overlay includes app-admin/binutils-config (for injecting --dynamic-linker and for disabling cross-eprefix target library... see below), app-admin/gcc-config (for a bug fix) and sys-libs/glibc (for Prefix support).
+
+Let's add heroxbd's overlay with [[Layman]] from app-portage/layman,
+
+{{Cmd|layman -a heroxbd}}
+
+Make sure overlays from layman are effective,
+
+{{File|${EPREFIX}/etc/portage/make.conf|populate overlay in make.conf|<pre>
+...
+source /gentoo/var/lib/layman/make.conf
+...
+</pre>}}
+
+replace /gentoo with your own $EPREFIX.
+
+Details for playing with layman can be found at [[Layman]].
+
+== Set Up Environmental Variables ==
+Assume $EPREFIX represents, the new path, Prefix-libc, and $BPREFIX represents, the old path, Prefix-rpath.
+
+* copy over etc
+{{Cmd|cp -a {$BPREFIX,$EPREFIX}/etc}}
+* clear out necessary USE flags in make.conf or package.use. We need a minimal set for bootstrap
+* copy portage data
+{{Cmd|rsync -a {$BPREFIX,$EPREFIX}/usr/share/portage/}}
+* used by portage to override EPREFIX
+{{Cmd|export PORTAGE_OVERRIDE_EPREFIX{{=}}$EPREFIX}}
+* disable collision-protect for bootstrap
+{{Cmd|export FEATURES{{=}}"-collision-protect"}}
+* add PATH of new Prefix
+{{Cmd|export PATH{{=}}"$EPREFIX/bin:$EPREFIX/sbin:$EPREFIX/usr/bin:$EPREFIX/usr/sbin:$PATH"}}
+* clear out gcc toolchain PATH like $EPREFIX/usr/x86_64-pc-linux-gnu/gcc-bin/4.7.2, as it will confuse gcc-config later
+=== Set Up New Toolchain ===
+The host libc (e.g. glibc-2.5 for RHEL 5) might be very old. There are many incompatibilities as time goes. Here we take extra care not to mix new and old toolchain. The process mimics that of building of cross toolchain.
+
+== sys-devel/binutils ==
