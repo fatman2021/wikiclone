@@ -45,6 +45,9 @@ Assume $EPREFIX represents, the new path, Prefix-libc, and $BPREFIX represents, 
 
 * copy over etc
 {{Cmd|cp -a {$BPREFIX,$EPREFIX}/etc}}
+* use amd64/with-libc profile
+{{Cmd|rm $EPREFIX/etc/portage/make.profile; ln -s @OVERLAY@/profile/prefix/linux/amd64/with-libc $EPREFIX/etc/portage/make.profile}}
+@OVERLAY@ being the overlay of heroxbd, if you got it via layman, it would located at $EPREEFIX/var/lib/layman/heroxbd.
 * clear out necessary USE flags in make.conf or package.use. We need a minimal set for bootstrap
 * copy portage data
 {{Cmd|rsync -a {$BPREFIX,$EPREFIX}/usr/share/portage/}}
@@ -56,10 +59,22 @@ Assume $EPREFIX represents, the new path, Prefix-libc, and $BPREFIX represents, 
 {{Cmd|export PATH{{=}}"$EPREFIX/bin:$EPREFIX/sbin:$EPREFIX/usr/bin:$EPREFIX/usr/sbin:$PATH"}}
 * clear out gcc toolchain PATH like $EPREFIX/usr/x86_64-pc-linux-gnu/gcc-bin/4.7.2, as it will confuse gcc-config later
 == Set Up New Toolchain ==
-The host libc (e.g. glibc-2.5 for RHEL 5) might be very old. There are many incompatibilities as time goes. Here we take extra care not to mix new and old toolchain. The process mimics that of building of cross toolchain.
+The host libc (e.g. glibc-2.5 for RHEL 5) might be very old. There are many incompatibilities(e.g. [http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52922 this bug]) as time goes. Here we take extra care not to mix new and old toolchain. The process mimics that of building of cross toolchain.
+
+glibc becomes incompatible in both library and include. binutils has to be installed '''before''' glibc in that the configure test attempts to load libc.so from new Prefix, which conflict with old ld.so (the dynamic linker). gcc has to be installed '''after''' glibc in that it needs to get its internal fixinclude from new glibc in new Prefix during build.
 
 === sys-devel/binutils ===
 * In another terminal, for old prefix, emerge binutils-config from heroxbd's overlay with USE="-dynl -targetlib"
 {{Cmd|env USE{{=}}"-dynl -targetlib" emerge sys-devel/binutils-config}}
 
-These are two temperary USE flags, -dynl for not injecting --dynamic-linker, -targetlib for preventing libraries in Prefix-libc to be mixed with Prefix-rpath.
+These are two temperary USE flags, -dynl for not injecting --dynamic-linker, -targetlib for preventing libraries in Prefix-libc to be mixed with Prefix-rpath
+* emerge binutils
+{{Emerge|-1O sys-devel/binutils}}
+Verify the new ld dose not have $EPREFIX/{usr/,}lib in runpath.
+{{Cmd|readelf -d $EPREFIX/usr/$(portageq envvar CHOST)/binutils-bin/2.23/ld <nowiki>|</nowiki> grep Library<pre>
+ 0x000000000000000f (RPATH)              Library rpath: [/home/benda/gnto/usr/lib/binutils/x86_64-pc-linux-gnu/2.23:/gpfshome/home/benda/gentoo/usr/x86_64-pc-linux-gnu/lib/gcc:/gpfshome/home/benda/gentoo/usr/x86_64-pc-linux-gnu/lib:/gpfshome/home/benda/gentoo/lib:/gpfshome/home/benda/gentoo/usr/lib]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/benda/gnto/usr/lib/binutils/x86_64-pc-linux-gnu/2.23:/gpfshome/home/benda/gentoo/usr/x86_64-pc-linux-gnu/lib/gcc:/gpfshome/home/benda/gentoo/usr/x86_64-pc-linux-gnu/lib:/gpfshome/home/benda/gentoo/lib:/gpfshome/home/benda/gentoo/usr/lib]
+</pre>}}
+* emerge binutils-config
+dependencies first
+{{
