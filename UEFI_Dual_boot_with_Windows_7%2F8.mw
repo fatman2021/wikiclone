@@ -102,3 +102,60 @@ PARTITIONS!!<br />
 Do you want to proceed? (Y/N): y<br />
 OK; writing new GUID partition table (GPT) to /dev/sda.<br />
 The operation has completed successfully.<br />
+<br />
+Make file systems:<br />
+mkfs.ext2 /dev/sda5<br />
+mkfs.ext4 /dev/sda7<br />
+mkswap /dev/sda6<br />
+swapon /dev/sda6<br />
+As long as the EFI stub kernel is in an ext2, ext3, ext4, reiser, or fat32 file system rEFInd will find it and add it to the menu.<br /> 
+
+Run blkid:<br />
+Example return: /dev/sda7: UUID="1f43e373-f923-4ec2-a62e-6a0d98927583" TYPE="swap" PARTLABEL="Linux filesystem" PARTUUID="92d3d504-9e7e-4c3d-9e56-15e3bd43511b"<br />
+The / partition PARTUUID will be used in the kernel configuration in the form root=PARTUUID=92d3d504-9e7e-4c3d-9e56-15e3bd43511b . Keep it handy.<br />
+<br />
+Continue with the handbook through "7. Configuring the Kernel".<br />
+===== Kernel configuration: =====
+Use either "7.b. Default: Manual Configuration" or "7.c. Alternative: Using genkernel" but start genkernel with 'genkernel --menuconfig all' vice just 'genkernel all'. In addition to the items specified in the handbook or set by genkernel, enable the following:<br />
+In menuconfig:<br />
+-*- Enable the block layer  ---><br />
+Partition Types  ---><br />
+[*]   PC BIOS (MSDOS partition tables) support<br />
+[*]   EFI GUID Partition support<br />
+<br />
+Processor type and features  ---><br />
+[*] Built-in kernel command line                                                             <br />
+(root=PARTUUID=92d3d504-9e7e-4c3d-9e56-15e3bd43511b) Built-in kernel command string          <br />
+[*]   Built-in command line overrides boot loader arguments  <br />
+<br />
+Firmware Drivers  ---><br />
+<*> EFI Variable Support via sysfs<br />
+<br />
+Device Drivers  ---><br />
+Graphics support  ---><br />
+<*> Support for frame buffer devices  ---><br />
+[*]   EFI-based Framebuffer Support<br />
+<br />
+File systems  ---><br />
+Pseudo filesystems  ---><br />
+-*- /proc file system support                                                                   <br />
+[*]   /proc/kcore support                                                                       <br />
+[*] Tmpfs virtual memory file system support (former shm fs)                                    <br />
+[*]   Tmpfs POSIX Access Control Lists                                                          <br />
+-*-   Tmpfs extended attributes                                                                 <br />
+[*] HugeTLB file system support                                                                 <br />
+<*> Userspace-driven configuration filesystem<br />
+<br />
+
+UEFI does not support loading a separate initramfs for your kernel. So if you need an initramfs, it has to be built into the kernel via CONFIG_INITRAMFS_SOURCE. It must be an uncompressed CPIO archive with .cpio filename extension.<br />
+Example of converting a genkernel built initramfs: xzcat /boot/initramfs-genkernel-x86_64-3.9.6-gentoo > /boot/initramfs.cpio<br />
+<br />
+If an initramfs is used, enable these additional kernel configuration items:<br />
+General setup  ---><br />
+[*] Initial RAM filesystem and RAM disk (initramfs/initrd) support              <br />
+(initramfs.cpio) Initramfs source file(s)                                       <br />
+(0)     User ID to map to 0 (user root) (NEW)                                   <br />
+(0)     Group ID to map to 0 (group root) (NEW)                                 <br />
+      Built-in initramfs compression mode (None)  ---> <br />
+<br />
+Use make && make modules_install && make install to build a manual kernel. Finish the handbook. No need to emerge or install grub or lilo or grub2. REFInd will act as boot manager. <br />
