@@ -1,0 +1,141 @@
+This article will deal with getting Gentoo to act as a Bluetooth Network Aggregation Point "NAP".
+
+== What is a NAP ==
+The Bluetooth specification incorporates the ability to create a Personal Area Network "PAN". It is an Ethernet transparent protocol, thus all standard protocols (especially IP) can be used in such a PAN. A NAP can be thought of being the Master in such a network. It will provide the connectivity to other networks (Internet for instance) for up to eight via Bluetooth connected PAN devices (cell phones, PDAs, laptops maybe).
+
+== Scope of this article ==
+We will deal with the creation of a Gentoo "NAP" in order to connect a Bluetooth enabled cell phone with the Internet. Then, for instance one could synchronize the cell phone's contacts/calendar with a syncml capable groupware server located anywhere on the Internet. We will henceforth call the NAP-Server "Gentoo-Box" and the PAN-Client "cell phone".
+
+== Prerequisites ==
+A [[Bluetooth|Bluetooth installation]] must be done first. If you use ''simple-agent'', no GUI programs or applets are needed. Set the "test-programs" USE flag on the ''net-wireless/bluez'' package, to get the latest ''bluez-test-nap'' script. We also need [[Network bridge|Network Bridging]], but with our own host configuration.
+
+== Setting up a network bridge ==
+As the Bluez NAP-Server relies on Gentoo to handle the Ethernet link created by Bluez we will create an Ethernet bridge, so we will be able use the full power of the Gentoo startup scripts. Make sure to '''backup all files before editing''' them.
+
+We will deal with the following scenario as I think this to be the easiest and most common case.
+<pre>Internet <-- Global IP Address --> Router (with DHCP and routing (NAT) capabilities) <-- local IP Address --> Gentoo-Box</pre>
+
+Execute ifconfig to locate the network card which connects to the router.
+{{RootCmd|ifconfig|output=<pre>
+eth0      Link encap:Ethernet  HWaddr 00:e0:f4:19:c4:25
+          inet addr:192.168.0.2  Bcast:192.168.0.255  Mask:255.255.255.0
+          inet6 addr: fe80::2e0:f4ff:fe19:c425/64 Scope:Link
+          inet6 addr: 2001::2/64 Scope:Global
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:108069 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:152560 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:50247357 (47.9 MiB)  TX bytes:25484155 (24.3 MiB)
+          Interrupt:27 Base address:0x6000
+</pre>}}
+The line ''inet addr:192.168.0.2 Bcast:192.168.0.255 Mask:255.255.255.0'' is the one you should be looking for.
+
+Remember the device name (''eth0'') and edit /etc/conf.d/net.
+{{File|/etc/conf.d/net||
+...
+# Comment out this line, and add the following lines:
+#config_eth0{{=}}"dhcp"
+config_eth0{{=}}"null"
+bridge_br1{{=}}"eth0"
+config_br1{{=}}"dhcp"
+# Next two lines, to make two values work (keep setfd before stp):
+brctl_br1{{=}}"setfd 1
+stp on"
+...
+}}
+This tells Gentoo to not ask for a dhcp-lease (actually it tells Gentoo to do nothing for eth0) on eth0 and create a new bridge br1, which contains eth0. As eth0 used to get its IP Address via dhcp, we set br1 to do exactly that. The options "stp on" and "setfd 1" make sure, the Spanning Tree Protocol is used, and the forwarding state of the bridge will be reached within one second of a topology change. The last options speeds up the cell phone connection considerably, as Gentoo tends to default to around 10 seconds, thus every cell phone connect would take at least that long.
+
+Create a new symbolic link, and restart the network.
+{{RootCmd
+|ln -s net.lo /etc/init.d/net.br1
+|/etc/init.d/net.eth0 stop && /etc/init.d/net.br1 start|output=<pre>
+...
+* Starting br1
+*   Creating bridge br1 ...                                                                             [ ok ]
+*   Adding ports to br1
+*     eth0 ...                                                                                          [ ok ]
+*   Bringing up br1
+...
+</pre>}}
+Check, if you are connected to the web (ping wiki.gentoo.org). If everything works well, add br1 to your default runlevel.
+{{RootCmd|rc-update add net.br1 default}}
+
+== Connecting your cell phone to the Internet ==
+Start the NAP service and notice interface br1. Enter in a terminal:
+{{RootCmd|bluez-test-nap br1}}
+
+Watch Syslog when you tell your cell phone to connect to the internet using the Gentoo-Box as NAP.
+{{RootCmd|tail -F /var/log/messages|output=<pre>
+Jul 27 12:53:19 gentoo bluetoothd[11077]: link_key_request (sba=AA:AA:AA:AA:AA:AA, dba=BB:BB:BB:BB:BB:BB)
+Jul 27 12:53:19 gentoo bluetoothd[11077]: link_key_request (sba=AA:AA:AA:AA:AA:AA, dba=BB:BB:BB:BB:BB:BB)
+Jul 27 12:53:19 gentoo device bnep0 entered promiscuous mode
+Jul 27 12:53:19 gentoo br1: port 3(bnep0) entering listening state
+Jul 27 12:53:19 gentoo bluetoothd[11077]: Added new connection: bnep0
+Jul 27 12:53:19 gentoo bluetoothd[11077]: bridge br1: interface bnep0 added
+Jul 27 12:53:20 gentoo br1: port 3(bnep0) entering learning state
+Jul 27 12:53:21 gentoo br1: topology change detected, propagating
+Jul 27 12:53:21 gentoo br1: port 3(bnep0) entering forwarding state
+</pre>}}
+
+You should now be able to connect and load webpages.
+
+=== Modifying the bluez-test-nap script ===
+If you want to get rid of the sleep timer in the standard bluez-test-nap script, or you want to run the NAP service in the background, you could make these small changes:
+{{File|signal-pause.patch||
+--- /usr/local/bin/bluez-test-nap	2012-07-08 17:49:31.517734026 +0200
++++ /usr/local/bin/bluez-test-nap.new	2012-07-08 17:51:41.749731790 +0200
+@@ -3,7 +3,7 @@
+ from __future__ import absolute_import, print_function, unicode_literals
+ 
+ import sys
+-import time
++import signal
+ import dbus
+ from optparse import OptionParser, make_option
+ 
+@@ -42,8 +42,7 @@
+ print("Press CTRL-C to disconnect")
+ 
+ try:
+-	time.sleep(1000)
+-	print("Terminating connection")
++	signal.pause()
+ except:
+ 	pass
+}}
+
+Copy the script to an alternate location, and apply the patch.
+{{RootCmd
+|cp /usr/bin/bluez-test-nap /usr/local/bin/bluez-test-nap
+|patch -p0 < /PATH/TO/signal-pause.patch
+}}
+
+<br />
+Now the NAP service can be started in three ways:
+* If /usr/local/bin comes first in your $PATH, you can still type:
+: {{RootCmd|bluez-test-nap br1}}
+
+* To run the script in the background, and stop it:
+: {{RootCmd|/usr/local/bin/bluez-test-nap br1 &>/dev/null &|killall -SIGINT bluez-test-nap}}
+
+* To run at startup, let /etc/init.d/local read next scripts. These files must be made executable.
+: {{File|/etc/local.d/bluez-test-nap.start||/usr/local/bin/bluez-test-nap br1 &>/dev/null}}
+: {{File|/etc/local.d/bluez-test-nap.stop||killall -SIGINT bluez-test-nap &>/dev/null}}
+: {{RootCmd|chmod +x /etc/local.d/bluez-test-nap.start /etc/local.d/bluez-test-nap.stop}}
+
+== Troubleshooting ==
+
+=== No webpages can be loaded ===
+If the phone does not show any sign of being connected, try Wireshark to figure out what packets are being send and received. Maybe a simple
+{{RootCmd|echo 1 > /proc/sys/net/ipv4/ip_forward}}
+can do the trick. Make sure no firewall settings on the Gentoo-Box interfere.
+
+=== Restore your old internet connection ===
+If you lose your internet connectivity, if things break, restore your backup of /etc/conf.d/net and restart networking.
+{{File|/etc/conf.d/net||
+(old file)
+}}
+{{RootCmd|/etc/init.d/net.eth0 restart}}
+
+=== Tools for testing ===
+There is an ''bluez-test-network'' utility, that you can use for testing PAN-connection, initiated from server side and ''monitor-bluetooth'' utility to watch what is going behind the D-bus scene, because watching /var/log/messages can be not enough.
