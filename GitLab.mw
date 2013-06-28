@@ -1,7 +1,7 @@
 {{Stub}}
 
 == Disclaimer ==
-This guide is a rough port from the [https://github.com/gitlabhq/gitlabhq/blob/stable/doc/install/installation.md official guide] and various internet references.<br />
+This guide is a rough port from the [https://github.com/gitlabhq/gitlabhq/blob/master/doc/install/installation.md official guide] and various internet references.<br />
 Some of the steps have been consolidated and obviously customized to the standard Gentoo environment.<br />
 If something is missing, please make a point of updating this article, with special attention to dependencies please.
 
@@ -13,184 +13,83 @@ If something is missing, please make a point of updating this article, with spec
 * {{Package|dev-vcs/git}}
 * {{Package|dev-db/redis}}
 
+{{RootCmd|echo "dev-lang/tk threads" >> /etc/portage/package.use}}
+{{emerge|openssl icu ruby git redis}}
+
+{{RootCmd
+|rc-service redis start}}
+
+{{RootCmd
+|rc-update add redis default}}
+
 == Prepare the Necessary Users ==
-Gitolite should use the ''git'' user, already created when git was installed:
-{{RootCmd|usermod -s /bin/bash -c 'Git Version Control' -d /home/git git}}
+{{RootCmd|eselect ruby set ruby19}}
+{{RootCmd|eselect python set python2.7}}
 
+Gitlab uses the ''git'' user, so add it:
 
-Create a user for GitLab:
-{{RootCmd|useradd -U -s /bin/bash -c 'GitLab system' -m -G git gitlab}}
+{{RootCmd|useradd -m -s /bin/bash -c 'Git Version Control' -d /home/git git}}
 
+{{RootCmd|<nowiki>echo 'export PATH=$(ruby -rubygems -e "puts Gem.user_dir")/bin:$PATH' >> /home/git/.bashrc</nowiki>}}
 
-Generate a key for GitLab:
-{{Cmd|ssh-keygen -q -N '' -t rsa -f /home/gitlab/.ssh/id_rsa|prompt=gitlab /home/gitlab#}}
+{{RootCmd|gem install bundler --no-ri --no-rdoc}}
 
+=== Gitlab Shell ===
 
-Copy GitLab's public key to Gitolite's home directory:
 {{RootCmd
-|cp /home/gitlab/.ssh/id_rsa.pub /home/git/gitlab.pub
-|chmod a{{=}}r /home/git/gitlab.pub
-}}
+|su git}}
 
-
-Create a folder for Gitolite's scripts and add the new directory to $PATH environment variable for user ''git'':
 {{Cmd
-|mkdir /home/git/bin
-|echo 'export PATH{{=}}/home/git/bin:$PATH' >> /home/git/.bash_profile
-|prompt=git /home/git#
-}}
+|cd
+|prompt=git}}
 
-
-Add Ruby to ''gitlab'''s $PATH environment variable:
-{{Cmd|echo 'export PATH{{=}}$(ruby -rubygems -e "puts Gem.user_dir")/bin:$PATH' >> /home/gitlab/.bashrc|prompt=gitlab /home/gitlab#}}
-
-== Gitolite ==
-
-=== Clone from GitLab's Fork ===
-For the purposes of this guide, the Gitolite v3.2.0 fork provided by GitLab will be used:
-{{Cmd|git clone -b gl-v320 http://github.com/gitlabhq/gitolite.git /home/git/gitolite|prompt=git /home/git#}}
-''Make sure you download the newest version and adjust the above command accordingly''
-
-=== Install ===
-Use the installer to create a symlink to the Gitolite executable and then run the installer:
 {{Cmd
-|/home/git/gitolite/install -ln
-|/home/git/gitolite/src/gitolite setup -pk /home/git/gitlab.pub
-|prompt=git /home/git#
-|output=<pre>
-Initialized empty Git repository in /home/git/repositories/gitolite-admin.git/
-Initialized empty Git repository in /home/git/repositories/testing.git/
-WARNING: /home/git/.ssh/authorized_keys missing; creating a new one
-</pre>}}
+|<nowiki>git clone https://github.com/gitlabhq/gitlab-shell.git</nowiki>
+|prompt=git ~}}
 
-=== Adjust Repository Permissions ===
-{{RootCmd
-|chmod -R ug+rwXs,o-rwx /home/git/repositories
-|chmod g+x /home/git
-|chown -R git:git /home/git/repositories
-}}
-
-=== Add Domains to Known Hosts ===
-{{Note|The install will fail without this step}}
 {{Cmd
-|ssh git@localhost
-|ssh git@your.domain.name
-|prompt=gitlab /home/gitlab#
-|output=<pre>
-The authenticity of host '[localhost] ([127.0.0.1])' can't be established.
-ECDSA key fingerprint is aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99.
-Are you sure you want to continue connecting (yes/no)? yes
-Warning: Permanently added '[localhost]' (ECDSA) to the list of known hosts.
-PTY allocation request failed on channel 0
-hello gitlab, this is git@hostname running gitolite3 v3.2-gitlab-patched-0-g2d29cf7 on git 1.7.12.4
+|cd gitlab-shell
+|prompt=git ~}}
 
- R W	gitolite-admin
- R W	testing
-Connection to localhost closed.
-</pre>}}
-
-=== Test the Install ===
-{{Note|The install will fail without this step}}
-Clone the admin repository so SSH adds localhost to SSH's known_hosts file.
 {{Cmd
-|git clone git@localhost:gitolite-admin.git /tmp/gitolite-admin
-|prompt=gitlab /home/gitlab#
-|output=<pre>
-Cloning into '/tmp/gitolite-admin'...
-The authenticity of host 'localhost (127.0.0.1)' can't be established.
-ECDSA key fingerprint is aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99.
-Are you sure you want to continue connecting (yes/no)? yes
-Warning: Permanently added 'localhost' (ECDSA) to the list of known hosts.
-remote: Counting objects: 6, done.
-remote: Compressing objects: 100% (4/4), done.
-remote: Total 6 (delta 0), reused 0 (delta 0)
-Receiving objects: 100% (6/6), done.
-</pre>}}
+|git checkout v1.4.0
+|prompt=git ~/gitlab-shell}}
 
-Once cloned successfully, the temporary file can be safely removed:
-{{RootCmd|rm -rf /tmp/gitolite-admin}}
-
-{{Important|Do Not Continue if the Last Step Failed}}
-
-== GitLab ==
-
-=== Clone the Source ===
 {{Cmd
-|git clone http://github.com/gitlabhq/gitlabhq.git /home/gitlab/gitlab
-|cd /home/gitlab/gitlab
-|prompt=gitlab /home/gitlab#
-}}
-{{Cmd|git checkout 4-1-stable|prompt=gitlab /home/gitlab/gitlab#}}
-{{Note|You can change ''4-1-stable'' to ''master'' if you want the bleeding edge version, but do so with caution!}}
+|cp config.yml.example config.yml
+|prompt=git ~/gitlab-shell}}
 
-=== Install Needed Gems ===
+{{important|edit config.yml with your own domain information or "localhost"}}
+
 {{Cmd
-|gem install bundler
-|gem install charlock_holmes --version '0.6.9'
-|prompt=gitlab /home/gitlab/gitlab#
-}}
-{{Note|If you are having trouble installing ''charlock_holmes'', [https://github.com/brianmario/charlock_holmes/issues/10 visit this forum]}}
+|nano config.yml
+|prompt=git ~/gitlab-shell}}
 
-
-=== Configure the Package ===
-{{Cmd|cd /home/gitlab/gitlab|prompt=gitlab /home/gitlab#}}
-{{Cmd|cp config/gitlab.yml.example config/gitlab.yml|prompt=gitlab /home/gitlab/gitlab#}}
-
-Use your favorite editor to change ''localhost'' to your FQDN:
 {{Cmd
-|nano config/gitlab.yml
-|prompt=gitlab /home/gitlab/gitlab#
-|output=<pre>
-...
-  ## This portion is for the email info sent to new users
-  host: git.domain.tld
-  port: 80
-  https: true #change if you don't have ssl
-...
-  email_from: gitlab@domain.tld
-...
-  support_email: support@domain.tld
-...
-</pre>}}
-
-Make sure GitLab can write to the log/ and tmp/ directories:
-{{RootCmd
-|cd /home/gitlab/gitlab
-|chown -R gitlab log/ tmp/
-|chmod -R u+rwX  log/ tmp/
-}}
-
-Make a directory for satellites
-{{Cmd|mkdir /home/gitlab/gitlab-satellites|prompt=gitlab /home/gitlab/gitlab#}}
-
-==== Unicorn ====
-GitLab makes use of the [https://rubygems.org/gems/unicorn Unicorn RoR HTTP server] to connect to your main webserver:
-{{Note|It cannot be used to serve content beyond the localhost}}
-{{Cmd
-|gem install unicorn
-|prompt=gitlab /home/gitlab/gitlab#}}
-Then copy and edit the configuration file :
-{{Cmd
-|cp config/unicorn.rb.example config/unicorn.rb
-|prompt=gitlab /home/gitlab/gitlab#}}
-{{Cmd
-|nano config/unicorn.rb
-|prompt=gitlab /home/gitlab/gitlab#
-|output=<pre>
-...
-# listen on a Unix domain socket and/or a TCP port,
-
-#listen 8080 # listen to port 8080 on all TCP interfaces
-#listen "127.0.0.1:8080"  # listen to port 8080 on the loopback interface
-listen "#{app_dir}/tmp/sockets/gitlab.socket"
-...
-</pre>}}
-''If you choose to use TCP, adjust accordingly later. It is useful for testing with Links''
+|./bin/install
+|prompt=git ~/gitlab-shell}}
 
 === Prepare the Database ===
 
 ==== MySQL/MariaDB ====
+
+Merge mysql if you have not already.
+{{emerge|mysql}}
+
+Setup root mysql password.
+{{important|your config version will probably be different, read emerge output to get your exact command to run}}
+
+{{RootCmd|<nowiki>emerge --config =dev-db/mysql-5.1.67</nowiki>}}
+Turn on mysql.
+
+{{RootCmd|rc-service mysql start}}
+
+Set mysql to start upon reboot.
+{{RootCmd|rc-update add mysql default}}
+
 Create the database and user:
+{{important|set your own passwords for lines 2 and 3}}
+
 {{RootCmd
 |mysql -u root -p
 |output=<pre>
@@ -208,26 +107,16 @@ Test connecting to the databases with the new user:
 Enter Password:
 </pre>}}
 
-Copy the example database configuration file:
-{{Cmd|cp config/database.yml.mysql config/database.yml|prompt=gitlab /home/gitlab/gitlab#}}
+{{Cmd
+|cp config/database.yml.mysql config/database.yml
+|prompt=git /home/git/gitlab $}}
 
+{{note
+|add your database password to this config file}}
 
-*Edit the new configuration file and add the database credentials just created:
 {{Cmd
 |nano config/database.yml
-|prompt=gitlab /home/gitlab/gitlab#
-|output=<pre>
-# PRODUCTION
-...
-  database: gitlabhq_production
-...
-  username: gitlab
-...
-  password: "gitlabdbpass"
-...
-  socket: /var/run/mysqld/mysql.sock
-...
-</pre>}}
+|prompt=git /home/git/gitlab}}
 
 ==== PostgreSQL ====
 For PostgreSQL there are different methods of authentification. For a installation on the local machine I prefer using the local account when connecting trough a socket. By default this is enabled.
@@ -280,44 +169,89 @@ production:
   socket: /run/postgresql/.s.PGSQL.5432
 </pre>}}
 
+== GitLab ==
 
-
-=== Configure Git to Accept Gitolite ===
-GitLab needs to be able to commit and push changes to Gitolite. In order to do that Git requires a username and email:
 {{Cmd
-|git config --global user.name "GitLab"
-|git config --global user.email "gitlab@fuzzlabs.org"
-|prompt=gitlab /home/gitlab/gitlab#}}
+|su -c 'su git'}}
 
+{{Cmd
+|cd
+|prompt=git $}}
 
-=== Configure GitLab Hooks ===
-The GitLab hook system allows you to hook into other external systems you have setup, such as issue trackers, another production server, an irc bot, etc.
+{{Cmd
+|<nowiki>git clone https://github.com/gitlabhq/gitlabhq.git gitlab</nowiki>
+|prompt=git ~ $}}
+
+{{Cmd
+|cd gitlab
+|prompt=git ~ $}}
+
+{{Cmd
+|git checkout 5-3-stable
+|prompt=git ~/gitlab $}}
+
+=== Configure Gitlab ===
+
+{{Cmd
+|cp config/gitlab.yml.example config/gitlab.yml
+|prompt=git ~/gitlab $}}
+
+{{note
+|edit this file with your domain name (or localhost) & edit your email sent from settings}}
+
+{{Cmd
+|nano config/gitlab.yml
+|prompt=git ~/gitlab $}}
+
+=== Deploy Directories ===
+
 {{RootCmd
-|cp /home/gitlab/gitlab/lib/hooks/post-receive /home/git/.gitolite/hooks/common/post-receive
-|chown git:git /home/git/.gitolite/hooks/common/post-receive
-}}
+|<pre>
+chown -R git log/
+chown -R git tmp/
+chmod -R u+rwX  log/
+chmod -R u+rwX  tmp/
+</pre>}}
+
+{{Cmd|<pre>
+mkdir /home/git/gitlab-satellites
+mkdir tmp/pids/
+mkdir tmp/sockets/
+mkdir public/uploads
+cp config/puma.rb.example config/puma.rb
+git config --global user.name "GitLab"
+git config --global user.email "gitlab@localhost"
+nano config/puma.rb</pre>
+|prompt=git ~/gitlab $}}
+
+{{note
+|add workers for higher loads and higher ram counts 3 for 2gb is default example}}
+
+{{RootCmd
+|chmod -R u+rwX  tmp/pids/
+|chmod -R u+rwX  tmp/sockets/
+|chmod -R u+rwX  public/uploads
+|prompt=root /home/git/gitlab #}}
 
 
 === Install Needed Gems ===
+
+{{RootCmd|sed -i -e 's/ -Wl,--no-undefined//' /usr/lib/ruby/1.9.1/x86_64-linux/rbconfig.rb}}
+
+{{Cmd|gem install charlock_holmes --version '0.6.9.4'|prompt=git /home/git/gitlab $}}
+
 * mysql
-{{Cmd|bundle install --deployment --without development test postgres|prompt=gitlab /home/gitlab/gitlab#}}
+{{Cmd|bundle install --deployment --without development test postgres|prompt=git /home/git/gitlab $}}
 * postgresql
-{{Cmd|bundle install --deployment --without development test mysql|prompt=gitlab /home/gitlab/gitlab#}}
+{{Cmd|bundle install --deployment --without development test mysql|prompt=git /home/git/gitlab $}}
 {{Note|If you are having problems installing because of Github's SSL cert, use ''export GIT_SSL_NO_VERIFY{{=}}true''}}
 
 === Initialize Database and Activate Advanced Features ===
-{{Cmd|bundle exec rake gitlab:setup RAILS_ENV{{=}}production
-|prompt=gitlab /home/gitlab/gitlab#
-|output=<pre>
-(in /home/gitlab/gitlab)
-rake aborted!
-(<unknown>): did not find expected key while parsing a block mapping at line x column y
-...
-</pre>
-}}
-{{Note|Config files seems to be indentation sensitive, so check your files for typos.}}
+{{Cmd
+|bundle exec rake gitlab:setup RAILS_ENV{{=}}production
+|prompt=git /home/git/gitlab $}}
 
-{{Cmd|bundle exec rake gitlab:satellites:create RAILS_ENV{{=}}production|prompt=gitlab /home/gitlab/gitlab#}}
+{{Note|Config files seems to be indentation sensitive, so check your files for typos.}}
 
 === Download and Start the Initscript ===
 Gentoo user ''andmarios'' has been kind enough to create an init script:
@@ -352,22 +286,36 @@ Use your favorite text editor to change the relevant portions:
 go over to the [[rails]] page, and fix up passenger...
 
 You need to deviate on the configuration of {{Path|/etc/apache2/vhosts.d/00_default_vhost.conf}} file, to adapt DocumentRoot and <Directory> directives to use {{Path|/home/gitlab/gitlab/public}}. Thus, add the following virtual host to manage gitlab :
+
+{{RootCmd|mv /etc/apache2/vhosts.d/00_default_vhost.conf /etc/apache2/vhosts.d/00_default_vhost.conf.example}}
+
 {{File|/etc/apache2/vhosts.d/00_default_vhost.conf
 ||<pre>
+<IfDefine DEFAULT_VHOST>
+Listen 80
+NameVirtualHost *:80
 <VirtualHost *:80>
-        DocumentRoot /home/gitlab/gitlab/public
-        <Directory /home/gitlab/gitlab/public>
+        DocumentRoot /home/git/gitlab/public
+        <Directory /home/git/gitlab/public>
         </Directory> 
 </VirtualHost>
+</IfDefine>
 </pre>
 }}
 
 dont forget to
+
 {{RootCmd|/etc/init.d/apache2 restart}}
+
 &&
+
 {{RootCmd|rc-update add apache2 default}}
 
 == Finish Installing ==
+
+{{RootCmd
+|usermod -s /sbin/nologin git}}
+
 Use your favorite web browser to navigate to the new host you set up<br />
 If everything loads properly, the installer has made an ''admin'' account for you.
 {{ContentBox|git.domain.tld|
@@ -407,6 +355,6 @@ In the file /home/gitlab/gitlab/config/gitlab.yml is a section that controls log
 #        app_secret: 'YOUR APP SECRET',
 </pre>
 
-and ensure to leave the leading - on the first line.  
+and ensure to leave the leading - on the first line.
 
 [[Category:Web application]]
