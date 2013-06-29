@@ -67,4 +67,72 @@ The PHP configuration is in {{Path|/etc/php}}, which contains one subdirectory f
 
 To setup Apache to use PHP, see the [[Apache#PHP support|Apache]] article.
 
+== Replacing PHP 5.4 with PHP 5.5 ==
+
+Set the ''PHP_TARGETS'' variable.
+
+{{File|/etc/portage/make.conf||<pre>
+PHP_TARGETS="php5-5"
+</pre>}}
+
+=== Uninstall incompatible extensions ===
+
+Remove all old extensions that do not build for PHP 5.5. I recommend using ''eix'' for this task. Note that when piping to emerge, you cannot use interactive mode so ''--ask'' on the ''emerge'' command is not applicable here.
+
+{{Emerge|eix}}
+{{RootCmd|eix -I --use php_targets_php5-4 --not --use php_targets_php5-5 --only-names {{!}} xargs emerge -C}}
+
+Be sure to migrate USE flags if you have specified versions in your ''package.use'' file(s).
+
+=== Remove APC ===
+Remove APC as you cannot have APC installed with PHP 5.5 with the ''opcache'' USE flag (which is by default turned on).
+
+{{Emerge|params+=-C|dev-php/pecl-apc}}
+
+=== Installation ===
+Install PHP 5.5:
+{{Emerge|dev-lang/php:5.5}}
+
+=== Replacing APC ===
+If you are building with the ''opcache'' USE flag (the default) but need APC user-land functions such as ''apc_fetch()'', install APCu, which emulates APC but only has user caching functions. This may be necessary for older projects that rely on APC for caching.
+
+If necessary, unmask it:
+{{RootCmd|echo 'dev-php/pecl-apcu ~amd64' >> /etc/portage/package.use/your-preferred-file}}
+
+Install APCu:
+{{Emerge|dev-php/pecl-apcu}}
+
+=== Stop PHP-FPM ===
+
+Stop PHP-FPM if you are using it.
+{{RootCmd|/etc/init.d/php-fpm stop}}
+
+=== Switch to PHP 5.5 ===
+Switch to it using ''eselect'' for all SAPIs:
+{{RootCmd|eselect php cli php5.5}}
+{{RootCmd|eselect php fpm php5.5}}
+
+If you have other SAPIs, be sure to run those as well.
+
+=== Uninstall PHP 5.4 ===
+{{Emerge|param+=-C|dev-lang/php:5.4}}
+
+=== Re-install compatible extensions ===
+
+==== Non-eix method ====
+Since changing ''PHP_TARGETS'' is technically a ''USE'' flag change, you should be able to simply emerge @world with flags checking for new ''USE'' flags and all extensions should re-build.
+
+{{Emerge|params+=--changed-use|@world}}
+
+==== eix method ====
+Re-install all your installed extensions that can build for PHP 5.5:
+{{RootCmd|eix -I --use php_targets_php5-5 --only-names {{!}} xargs emerge -v}}
+
+=== Clean up ===
+Since you removed extensions, it may be useful to run a dependency clean up at this point for older ones that are no longer compatible.
+
+{{RootCmd|emerge --ask --depclean|}}
+
+=== Turn on PHP-FPM again (if applicable) ===
+{{RootCmd|/etc/init.d/php-fpm start}}
 [[Category:Server]]
