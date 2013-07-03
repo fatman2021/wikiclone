@@ -358,28 +358,30 @@ For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the 
 |lvremove /dev/vg0/lvol1
 |lvrename vg0/08092011_lvol1 lvol1}}
 
-=== LVM2 Stripeset ===
-The STRIPSET is the same as RAID0, data is written to several devices at the same time to increase performance. In LVM2 it is possible to distribute LV over several PV for the same effect. We create three PV and then VG ''vg0'':
-{{RootCmd|pvcreate /dev/loop[0-2]
-|vgcreate vg0 /dev/loop[0-2]}}
-VG ''vg0'' consists of three different hard drives and now we can create our LV and spread it over them:
-{{RootCmd|lvcreate -i 3 -l 20%VG -n lvm_stripe vg0}}
-The option -i 3 indicates that we want to spread it over 3 PV in out VG vg0:
-{{RootCmd|pvscan
-|output=<pre>Logging initialised at Thu Sep  8 22:19:27 2011
-    Set umask from 0022 to 0077
-    Wiping cache of LVM-capable devices
-    Wiping internal VG cache
-    Walking through all physical volumes
-  PV /dev/loop0   VG vg0   lvm2 [2.00 GiB / 1.60 GiB free]
-  PV /dev/loop1   VG vg0   lvm2 [2.00 GiB / 1.60 GiB free]
-  PV /dev/loop2   VG vg0   lvm2 [2.00 GiB / 1.60 GiB free]
-  Total: 3 [5.99 GiB] / in use: 3 [5.99 GiB] / in no VG: 0 [0   ]
-    Wiping internal VG cache
-</pre>}}
-On each PV 400MB got reserved for our LV ''lvm_stripe'' in VG ''vg0''
+=== LVM2 RIAD 0/Stripeset ===
+{{Important|If a linear volume suffers a disk failure, a giant, contiguous "hole" is created. It may be possible to reocver data from outside that hole. If a striped volume suffers a disk failure, the instead of a contiguous hole, the geometry is closer to Swiss cheese; recovery of anything is slim to none. }} 
+Instead of a linear volume, wher multiple contiguous volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance.
 
-A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings, do not specify it manually when creating a thin volume.
+To create a 3-PV striped volume:
+{{RootCmd|pvcreate /dev/loop[0-2]
+|vgcreate vg00 /dev/loop[0-2]
+|lvcreate -i 3 -l 20%VG -n lvm_stripe vg00
+|output=Using default stripesize 64.00 KiB}}
+The -i option indicated how many PVs to stripe over, in this case, 3.
+{{RootCmd|pvscan
+|output=<pre>  PV /dev/loop0   VG vg00            lvm2 [2.00 GiB / 1.60 GiB free]
+  PV /dev/loop1   VG vg00            lvm2 [2.00 GiB / 1.60 GiB free]
+  PV /dev/loop2   VG vg00            lvm2 [2.00 GiB / 1.60 GiB free]
+</pre>}}
+On each PV 400MB got reserved for LV ''lvm_stripe'' in VG ''vg00''
+
+It is not possible to stripe an existing non-striped volume, nor add/remove "reshape" additional PVs to the stripe set, nor to covert to RAID5 or RAID6, 
+
+It is possible to mirror a stripe set. The -i and -m options can be combined to create a striped mirror:
+{{RootCmd|lvcreate -i 2 -m 1 -l 10%VG vg00}}
+This creates a 2 PV stripe set and mirrors it on 2 different PVs, for a total of 4 PVs. An existing stripe set can be mirrored with <tt>lvconvert</tt>.
+
+A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
 
 === LVM2 RAID5 ===
 LVM2 can use its internal mechanism to create stripesets with parity in a similar way as RAID5 does, but in this case you need at least 3 different PV
