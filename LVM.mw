@@ -283,9 +283,25 @@ To remove mirror, set the number of mirrors to 0:
 {{RootCmd|lvconvert -m0 vg0/lvol0}}
 
 ==== Failed mirrors ====
+To simulate a failure:
+{{RootCmd|vgchange -an vg00
+|losetup -d /dev/loop1
+|rm /var/lib/lvm_img/lvm1.img
+|dd if=/dev/null of=/var/lib/lvm_img/lvm1.img bs=1024 seek=2097152
+|losetup /dev/loop1 /var/lib/lvm_img/lvm1.img}}
+
 If part of the mirror is unavailable (usually because the disk containing the PV has failed), the VG will need to be brought up in degraded mode:
 {{RootCmd|vgchange -ay --partial vg00}}
-On the first write, will notice the mirror is broken. The default policy is to automatically reduce/break the mirror according to the number of pieces avaiable. A 3-way mirror with a missing PV will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume.
+On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces avaiable. A 3-way mirror with a missing PV will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. 
+
+To recover the mirror, we need to kick out the failed PV from the VG, add a new PV, extend the VG to the new PV, then use <tt>lvcovert</tt> to recreate the mirror:
+{{RootCmd|vgreduce --removemissing
+|pvcreate /dev/loop1
+|vgextend vg00 /dev/loop1
+|lvconvert -b -m 1 --mirrorlog disk vg00/lvol0
+}}
+
+It is possible to have LVM recreate the mirror with free extents on a different PV if a "leg" fails, to do that, set mirror_image_fault_policy to "allocate" in lvm.conf.
 
 ==== Thin mirrors ====
 It is not (yet) possible to create or add a mirror to thin pool or its volumes. It is possible to create a mirrored thin pool my creating a normal mirrored LV and then converting the LV it to a thin pool with <tt>lvconvert</tt>. This operation destroys all data the mirror!  
