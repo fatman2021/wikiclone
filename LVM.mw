@@ -383,28 +383,51 @@ This creates a 2 PV stripe set and mirrors it on 2 different PVs, for a total of
 
 A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
 
-=== LVM2 RAID5 ===
-LVM2 can use its internal mechanism to create stripesets with parity in a similar way as RAID5 does, but in this case you need at least 3 different PV
-{{RootCmd|pvcreate /dev/loop[0-2]
-|vgcreate vg0 /dev/loop[0-2]}}
-VG ''vg0'' consists of three different hard drives and now we can create our LV and spread it over them:
-{{RootCmd|lvcreate --type raid5 -l 20%VG -i 2 -I 64 -n lvm_raid5 vg0}}
-The option -i 2 indicates that we want create 2 stripes + 1 parity stripe (so we need at least 3 devices)
-{{RootCmd|pvscan
-|output=<pre>Logging initialised at Thu Sep  8 22:19:27 2011
-    Set umask from 0022 to 0077
-    Wiping cache of LVM-capable devices
-    Wiping internal VG cache
-    Walking through all physical volumes  
-  PV /dev/loop0   VG vg0      lvm2 [2,00 GiB / 1,39 GiB free]
-  PV /dev/loop1   VG vg0      lvm2 [2,00 GiB / 1,39 GiB free]
-  PV /dev/loop2   VG vg0      lvm2 [2,00 GiB / 1,39 GiB free]
-  Total: 3 [5.99 GiB] / in use: 3 [5.99 GiB] / in no VG: 0 [0   ]
-    Wiping internal VG cache
-</pre>}}
-On each PV 600MB got reserved for our LV ''lvm_raid5'' in VG ''vg0''
+=== LVM2 RAID5 / Stripeset with Parity ===
+{{Note|RAID5 / Stripeset with Parity require at least 3 PVs }}
 
-It is not (yet) possible to create or extend a strip set with parity (RAID5) to thin pool or its volumes. It is possible to create a RAID5 thin pool my creating a normal RAID5 LV and then converting the LV it to a thin pool with <tt>lvconvert</tt>. This operation destroys all data the stripe set!
+{{RootCmd|pvcreate /dev/loop[0-2]
+|vgcreate vg00 /dev/loop[0-2]
+|lvcreate --type raid5 -l 20%VG -i 2 -n lvm_raid5 vg00
+Like the RAID0/Stripe without parity, the -i option is used to specify the number of PVs stripe. However, only the data PV are specified with -i - LVM add the parity one automatically. Thus for a 3 PV RAID5, its -i 2 and not -i 3 .
+
+{{RootCmd|pvscan
+|output=<pre>  PV /dev/loop0   VG vg00            lvm2 [2.00 GiB / 1.39 GiB free]
+  PV /dev/loop1   VG vg00            lvm2 [2.00 GiB / 1.39 GiB free]
+  PV /dev/loop2   VG vg00            lvm2 [2.00 GiB / 1.39 GiB free]
+</pre>}}
+On each PV 600MB got reserved for LV ''lvm_raid5'' in VG ''vg00''
+=== Recovering from a failed RAID5 ====
+To simulate a failure:
+{{RootCmd|vgchange -an vg00
+|losetup -d /dev/loop1
+|rm /var/lib/lvm_img/lvm1.img
+|dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm1.img bs{{=}}1024 seek{{=}}2097152
+|losetup /dev/loop1 /var/lib/lvm_img/lvm1.img}}
+
+The VG will need to be brought up in degraded mode
+{{RootCmd|vgchange -ay --partial vg00}}
+The volume will work normally at this point, however this degraded the array to RAID 0 until a replacement PV is added.
+
+To repair the RAID5:
+{{RootCmd|pvcreate /dev/loop1
+|vgextend vg00 /dev/loop1
+|lvconvert --repair vg00/lvm_raid5
+|vgreduce --removemissing vg00}}
+
+Its possible to replace a still working PV in RAID5 as well
+{{RootCmd|pvcreate /dev/loop3
+|vgextend vg00 /dev/loop3
+|lvconvert --replace /dev/loop1 vg00/lvm_raid5
+|vgreduce vg00 /dev/loop1}}
+
+The same restriction on reshaping stripe sets also apply to stripe sets with parity: Existintg LVs cannot be coverted to stripe sets with parity, RAID5 LVs cannot be reshaped to add/remove additional PV, and cannot be upgraded to RAID6 or downgraded to RAID0. RAID5 volumes can be mirrored, however.  
+
+It is not (yet) possible to create or extend a strip set with parity (RAID5) to thin pool or its volumes. It is possible to create a RAID5 thin pool my creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>.
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
+{{RootCmd|lvcreate --type raid5 -i 2  -l20%VG -n thin_pool
+|lvcreate --type raid5 -i 2 -L4MB -n thin_meta
+|lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
 == Troubleshooting ==
 LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
