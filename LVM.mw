@@ -358,7 +358,7 @@ For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the 
 |lvremove /dev/vg0/lvol1
 |lvrename vg0/08092011_lvol1 lvol1}}
 
-=== LVM2 RIAD 0/Stripeset ===
+=== LVM2 RAID 0/Stripeset ===
 {{Important|If a linear volume suffers a disk failure, a giant, contiguous "hole" is created. It may be possible to reocver data from outside that hole. If a striped volume suffers a disk failure, the instead of a contiguous hole, the geometry is closer to Swiss cheese; recovery of anything is slim to none. }} 
 Instead of a linear volume, wher multiple contiguous volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance.
 
@@ -385,7 +385,9 @@ A thin pool can be striped like any other LV. All the thin volumes created from 
 
 === LVM2 RAID5 / Stripeset with Parity ===
 {{Note|RAID5 / Stripeset with Parity require at least 3 PVs }}
+RAID 5 is RAID0 with an additional parity stripe. RAID 0 is not fault-tolerant - if any of the PVs, the LV is unusable. RAID 5 offers fault tolerance - the LV can still function will a single missing PV (performance may be degraded though). A new PV can then be added to restore fault tolerance
 
+==== Creating a RAID5 LV ====
 {{RootCmd|pvcreate /dev/loop[0-2]
 |vgcreate vg00 /dev/loop[0-2]
 |lvcreate --type raid5 -l 20%VG -i 2 -n lvm_raid5 vg00}}
@@ -396,7 +398,7 @@ Like the RAID0/Stripe without parity, the -i option is used to specify the numbe
   PV /dev/loop1   VG vg00            lvm2 [2.00 GiB / 1.39 GiB free]
   PV /dev/loop2   VG vg00            lvm2 [2.00 GiB / 1.39 GiB free]
 </pre>}}
-On each PV 600MB got reserved for LV ''lvm_raid5'' in VG ''vg00''
+On each PV about 600MB got reserved for LV ''lvm_raid5'' in VG ''vg00''
 
 ==== Recovering from a failed RAID5 ====
 To simulate a failure:
@@ -424,10 +426,41 @@ Its possible to replace a still working PV in RAID5 as well
 
 The same restriction on reshaping stripe sets also apply to stripe sets with parity: Existintg LVs cannot be coverted to stripe sets with parity, RAID5 LVs cannot be reshaped to add/remove additional PV, and cannot be upgraded to RAID6 or downgraded to RAID0. RAID5 volumes can be mirrored, however.  
 
-It is not (yet) possible to create or extend a strip set with parity (RAID5) to thin pool or its volumes. It is possible to create a RAID5 thin pool my creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>.
+==== Thin RAID5 LV ====
+It is not (yet) possible to create or extend a strip set with parity (RAID5) to thin pool or its volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>.
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
 {{RootCmd|lvcreate --type raid5 -i 2  -l20%VG -n thin_pool
 |lvcreate --type raid5 -i 2 -L4MB -n thin_meta
+|lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
+
+=== LVM2 RAID 6 ===
+{{Note|RAID6 requires as at 5 PVs}}
+
+RAID 6 is similar to RAID 5, however RAID 6 can survive up to TWO PV failures, thus offering more fault tolerance than RAID5 at the expense of an extra PV. 
+
+==== Creating a RAID6 LV ====
+{{RootCmd|pvcreate /dev/loop[0-4]
+|vgcreate vg00 /dev/loop[0-4]
+|lvcreate --type raid6 -l 20%VG -i 3 -n lvm_raid6 vg00}}
+Like raid5, the -i option is used to specify the number of PVs stripe, excluding the 2 PV's for parity. Thus for 5 PV RAID6, its -i 3 and not -i 5.
+
+{{RootCmd|pvscan
+|output=<pre>  PV /dev/loop0   VG vg00     lvm2 [2.00 GiB / 1.32 GiB free]
+  PV /dev/loop1   VG vg00     lvm2 [2.00 GiB / 1.32 GiB free]
+  PV /dev/loop2   VG vg00     lvm2 [2.00 GiB / 1.32 GiB free]
+  PV /dev/loop3   VG vg00     lvm2 [2.00 GiB / 1.32 GiB free]
+  PV /dev/loop4   VG vg00     lvm2 [2.00 GiB / 1.32 GiB free]
+</pre>}}
+On each PV about 680MB got reserved for LV ''lvm_raid6'' in VG ''vg00''
+==== Recovering from a failed RAID6 ====
+Recovery for RAID6 is the same as RAID5. A RAID6 LV with a single failure reduces to RAID5. A RAID6 LV with 2 failures reduces to RAID0. It is left as an excercise to the reader to simulate a 2 PV failure.
+
+RAID6 stripe sets share the same restriction of all stripe sets: It is not possible to stripe an existing volume, convert to a different stripe type (RAID5 or RAID0), or reshape an existing LV onto more or less PV's.
+==== Thin RAID6 LV ====
+It is not (yet) possible to create or extend a RAID6 LV to thin pool or its volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>.
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
+{{RootCmd|lvcreate --type raid6 -i 2  -l20%VG -n thin_pool
+|lvcreate --type raid6 -i 2 -L4MB -n thin_meta
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
 == Troubleshooting ==
