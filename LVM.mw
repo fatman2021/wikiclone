@@ -256,6 +256,50 @@ For thin volumes, add the <tt>discard</tt> option:
 /dev/vg0/lvol1  /mnt/data  ext4  noatime,discard  0 2
 </pre>}}
 
+=== LVM2 Snapshots and LVM2 Thin Snapshots===
+A snapshot is an LV as copy of another LV, which takes in all the changes that were made in the original LV to show the content of that LV in a different state. We once again use our two hard drives and create LV ''lvol1'' this time with 60% of VG ''vg0'':
+{{RootCmd|pvcreate /dev/loop[0-1]
+|vgcreate vg0 /dev/loop[0-1]
+|lvcreate -l 60%VG -n lvol1 vg0
+|mkfs.ext4 /dev/vg0/lvol1
+|mount /dev/vg0/lvol1 /mnt/data}}
+==== LVM2 Snapshots ====
+Now we create a snapshot of ''lvol1'' named ''08092011_lvol1'' and give it 10% of VG ''vg0'':
+{{RootCmd|lvcreate -l 10%VG -s -n 08092011_lvol1 /dev/vg0/lvol1}}
+{{Important|if a snapshot exceeds it's maximum size, it disappears}}
+Mount our snapshot somewhere else:
+{{RootCmd|mkdir /mnt/08092011_data
+|mount /dev/vg0/08092011_lvol1 /mnt/08092011_data}}
+We could now access data in ''lvol1'' from a previous state.
+
+LVM2 snapshots are writeable LV, we could use them to let a project go on into two different directions:
+{{RootCmd|lvcreate -l 10%VG -s -n project1_lvol1 /dev/vg0/lvol1
+|lvcreate -l 10%VG -s -n project2_lvol1 /dev/vg0/lvol1
+|mkdir /mnt/project1 /mnt/project2
+|mount /dev/vg0/project1_lvol1 /mnt/project1
+|mount /dev/vg0/project2_lvol1 /mnt/project2}}
+Now we have three different versions of LV ''lvol1'', the original and two snapshots which can be used parallel and changes are written to the snapshots.
+{{Note|the original LV ''lvol1'' cannot be reduced in size or removed if snapshots of it exist. Snapshots can be increased in size without growing the file system on them, but they cannot exceed the size of the original LV}}
+==== LVM2 Thin Snapshots ====
+{{Note|A thin snapshot can only be taken on a thin origin. Its is possible to create a non-thin snapshot of a thin origin, however}}
+Creating a thin snapshot is simple:
+{{RootCmd|lvcreate -s -n 08092011_lvol1 /dev/vg0/lvol1}}
+Note how a size is not specified with -l/-L - nor the virtual size with -V. Snapshots have a virtual size the same as their origin, and a phyical size of 0 like all new thin volumes. This also means its not possible to limit the phyical size of the snapshot. 
+Thin snapshots are writable just like regualr snapshot.
+{{Important|If -l/-L is specified, a snapshot will still be created, but the resulting snopshot will be a regular snapshot, not a thin snapshot}}
+Recursive snapshpots can be created:
+{{RootCmd|lvcreate -s -n 08092012_lvol1 /dev/vg0/08092011_lvol1}}
+Thin snapshots have several advantages over regualr snapshots. First, thin snapshots are independent of their origins once created. The origin can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficently created recursively (snapshots of snapshots) without the "chaining" overhead of regualar recursive LVM snapshots.
+==== LVM2 Rollback Snapshots ====
+To rollback the logical volume to the version of the snapshot, use the following command:
+{{RootCmd|lvconvert --merge /dev/vg0/08092011_lvol1}}
+This might take a couple of minutes, depending on the size of the volume.
+{{Important|the snapshot will disappear and this is not revertable}}
+==== LVM2 Thin Rollback Snapshots ====
+For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the origin and rename the snapshot:
+{{RootCmd|umount /dev/vg0/lvol1
+|lvremove /dev/vg0/lvol1
+|lvrename vg0/08092011_lvol1 lvol1}}
 === LVM2 Mirrors ===
 LVM support ''mirrored'' volume, which provide fault tolerance in the event of drive failure. Unlike RAID1, there is no performace benefit - all reads and writes are delivered to a single "leg" of the mirror. 1 additional PV is required for each mirror.
 
@@ -314,52 +358,6 @@ It is not (yet) possible to create or add a mirror to thin pool or its volumes. 
 {{RootCmd|lvcreate -m 1 --mirrorlog mirrored -l40%VG -n thin_pool
 |lvcreate -m 1 --mirrorlog mirrored -L4MB -n thin_meta
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
-
-=== LVM2 Snapshots ===
-A snapshot is an LV as copy of another LV, which takes in all the changes that were made in the original LV to show the content of that LV in a different state. We once again use our two hard drives and create LV ''lvol1'' this time with 60% of VG ''vg0'':
-{{RootCmd|pvcreate /dev/loop[0-1]
-|vgcreate vg0 /dev/loop[0-1]
-|lvcreate -l 60%VG -n lvol1 vg0
-|mkfs.ext4 /dev/vg0/lvol1
-|mount /dev/vg0/lvol1 /mnt/data}}
-Now we create a snapshot of ''lvol1'' named ''08092011_lvol1'' and give it 10% of VG ''vg0'':
-{{RootCmd|lvcreate -l 10%VG -s -n 08092011_lvol1 /dev/vg0/lvol1}}
-{{Important|if a snapshot exceeds it's maximum size, it disappears}}
-Mount our snapshot somewhere else:
-{{RootCmd|mkdir /mnt/08092011_data
-|mount /dev/vg0/08092011_lvol1 /mnt/08092011_data}}
-We could now access data in ''lvol1'' from a previous state.
-
-LVM2 snapshots are writeable LV, we could use them to let a project go on into two different directions:
-{{RootCmd|lvcreate -l 10%VG -s -n project1_lvol1 /dev/vg0/lvol1
-|lvcreate -l 10%VG -s -n project2_lvol1 /dev/vg0/lvol1
-|mkdir /mnt/project1 /mnt/project2
-|mount /dev/vg0/project1_lvol1 /mnt/project1
-|mount /dev/vg0/project2_lvol1 /mnt/project2}}
-Now we have three different versions of LV ''lvol1'', the original and two snapshots which can be used parallel and changes are written to the snapshots.
-{{Note|the original LV ''lvol1'' cannot be reduced in size or removed if snapshots of it exist. Snapshots can be increased in size without growing the file system on them, but they cannot exceed the size of the original LV}}
-=== LVM2 Thin Snapshots ===
-{{Note|A thin snapshot can only be taken on a thin origin. Its is possible to create a non-thin snapshot of a thin origin, however}}
-Creating a thin snapshot is simple:
-{{RootCmd|lvcreate -s -n 08092011_lvol1 /dev/vg0/lvol1}}
-Note how a size is not specified with -l/-L - nor the virtual size with -V. Snapshots have a virtual size the same as their origin, and a phyical size of 0 like all new thin volumes. This also means its not possible to limit the phyical size of the snapshot. 
-Thin snapshots are writable just like regualr snapshot.
-{{Important|If -l/-L is specified, a snapshot will still be created, but the resulting snopshot will be a regular snapshot, not a thin snapshot}}
-Recursive snapshpots can be created:
-{{RootCmd|lvcreate -s -n 08092012_lvol1 /dev/vg0/08092011_lvol1}}
-Thin snapshots have several advantages over regualr snapshots. First, thin snapshots are independent of their origins once created. The origin can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficently created recursively (snapshots of snapshots) without the "chaining" overhead of regualar recursive LVM snapshots.
-
-=== LVM2 Rollback Snapshots ===
-To rollback the logical volume to the version of the snapshot, use the following command:
-{{RootCmd|lvconvert --merge /dev/vg0/08092011_lvol1}}
-This might take a couple of minutes, depending on the size of the volume.
-{{Important|the snapshot will disappear and this is not revertable}}
-=== LVM2 Thin Rollback Snapshots ===
-For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the origin and rename the snapshot:
-{{RootCmd|umount /dev/vg0/lvol1
-|lvremove /dev/vg0/lvol1
-|lvrename vg0/08092011_lvol1 lvol1}}
-
 === LVM2 RAID 0/Stripeset ===
 {{Important|If a linear volume suffers a disk failure, a giant, contiguous "hole" is created. It may be possible to reocver data from outside that hole. If a striped volume suffers a disk failure, the instead of a contiguous hole, the geometry is closer to Swiss cheese; recovery of anything is slim to none. }} 
 Instead of a linear volume, wher multiple contiguous volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance.
