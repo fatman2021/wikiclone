@@ -3,12 +3,12 @@
 }}
 This article describes the setup of '''bluetooth''' controllers.
 
-== Installing ==
+= Installing =
 
-=== Prerequisites ===
-Bluez uses [[udev]], so set it up first.
+== Prerequisites ==
+Bluez {{Package|net-wireless/bluez}} uses [[udev]], so set it up first.
 
-=== Kernel ===
+== Kernel ==
 You need [[USB]] and/or [[PC-Card]] support. Also you need to activate the following kernel options:
 {{Kernel||<pre>
 [*] Networking support  --->
@@ -43,7 +43,7 @@ You need [[USB]] and/or [[PC-Card]] support. Also you need to activate the follo
 | HIDP protocol support || hidp || Enables input device support. See the [[Bluetooth Input devices]] article.
 |}
 
-=== Software ===
+== Software ==
 Portage knows the global USE flag ''bluetooth'' for enabling support for Bluetooth in other packages. Enabling this USE flag will pull in {{Package|net-wireless/bluez}} automatically:
 {{File|/etc/portage/make.conf||
 USE{{=}}"... bluetooth ..."
@@ -65,92 +65,92 @@ The USE flags of bluez are:
 After setting this you want to update your system so the changes take effect:
 {{Emerge|params+=--changed-use --deep|@world}}
 
-== Configuration ==
+= Configuration =
 
-=== Service ===
+== Service ==
 You can now start bluetooth:
 {{RootCmd|/etc/init.d/bluetooth start}}
 To start bluetooth at boot time, add it your default runlevel:
 {{RootCmd|rc-update add bluetooth default}}
 
-=== Permissions ===
+== Permissions ==
 If you have the USE flag '''''acl''''' enabled globally and are using [[ConsoleKit]] (i.e you're using a ''desktop'' [[profile]]) permissions to bluetooth devices will be handled automatically.
 
 A broader solution is to add the user you want to be able to access bluetooth devices to the ''plugdev'' group:
 {{RootCmd|gpasswd -a larry plugdev}}
 
-=== Adapter Information ===
+== Adapter Information ==
 Check that your bluetooth adapter is working.
 {{Cmd|hcitool dev|output=<pre>
 Devices:
 	hci1	00:02:72:2F:A9:33
 	hci0	60:D8:19:B6:C3:1F
 </pre>}}
-Where hci0 is the first device ID and 60:D8:19:B6:C3:1F is the MAC address.
+: Where hci0 is the first device ID and 60:D8:19:B6:C3:1F is the MAC address.
 {{Note|In this case there are two adapters but only one is required.}}
 {{Note|If no adapters are found. Check that your bluetooth adapter is enabled. This may be a physical switch or keyboard function key. {{Package|net-wireless/rfkill}} is helpful for determining and setting the state of wireless adapters.}}
 
-== Usage ==
+= Usage =
 
-=== Device Attach/Pairing ===
+== Device Attach/Pairing ==
 Before a device can be used, it must be attached (''paired'' in Bluetooth-lingo). This is done by entering a PIN (or other code) on both devices.
 
 {{Note|Some simple devices like headsets do not allow entering an arbitrary PIN, they always use the same one (usually 0000 or 9999). Check the manual of your device which is to be used.}}
 
 In order to pair, you must first have the interaction agent active. Most desktop environments have bluetooth integration so will automatically support the interaction agent. For example, KDE has {{Package|net-wireless/bluedevil}}. 
 
-=== Using the simple-agent ===
-Configuration can either be performed using the BlueZ test programs (available if you enable the test-programs USE flag for bluez), or by using the D-Bus API. The first way is described here.
+== Using simple-agent ==
+Configuration can either be performed using the BlueZ test programs (available if you enable the test-programs USE flag for {{Package|net-wireless/bluez}}), or by using the D-Bus API. The first way is described here.
 
-The first step to do is to retrieve the address of the mouse. Most of the devices need you to press a special button, possibly for several seconds, to render them discoverable. 
-{{RootCmd|hcitool scan|output=<pre>
+
+* Retrieve the address of the mouse. Most of the devices need you to press a special button, possibly for several seconds, to render them discoverable. 
+{{Cmd|hcitool scan|output=<pre>
 Scanning ...
 	00:1F:20:1D:1B:4B	Bluetooth Laser Travel Mouse
 </pre>}}
-Where 00:1F:20:1D:1B:4B is the MAC address for your device.
+: Where 00:1F:20:1D:1B:4B is the MAC address for your device.
 
 
-The second step to do is to pair the device:
-{{RootCmd|simple-agent hci0 00:1F:20:1D:1B:4B|output=<pre>
+* Pair the device:
+{{Cmd|simple-agent hci0 00:1F:20:1D:1B:4B|output=<pre>
 RequestPinCode (/org/bluez/1664/hci0/dev_00_1F_20_1D_1B_4B)
 Enter PIN Code: 0000
 Release
 New device (/org/bluez/1664/hci0/dev_00_1F_20_1D_1B_4B)
 </pre>}}
-Enter a PIN and press {{Key|Enter}}, then enter the same PIN at the device. If you don't know the PIN, then it is probably 0000. It could be 1234.
+: Enter a PIN and press {{Key|Enter}}, then enter the same PIN at the device. If you don't know the PIN, then it is probably 0000. It could be 1234.
 
-If you get the following output, it means that you already have an interaction agent running on your system:
-{{RootCmd|simple-agent|output=<pre>
+{{Note|<br />
+{{Cmd|simple-agent hci0 00:1F:20:1D:1B:4B|output=<pre>
 dbus.exceptions.DBusException: org.bluez.Error.AlreadyExists: Already Exists
 </pre>}}
+: Means that you already have an interaction agent running on your system.}}
 
 
+* Mark the device as trusted so it can connect automatically: 
+{{Cmd|bluez-test-device trusted 00:1F:20:1D:1B:4B yes}}
 
-The third step is to mark the device as trusted so it can connect automatically: 
-{{RootCmd|bluez-test-device trusted 00:1F:20:1D:1B:4B yes|output=<pre>
 
-</pre>}}
-That should return you to a prompt with no output. To test if it's trusted issue "bluez-test-device trusted 00:1F:20:1D:1B:4B" without yes:
-{{RootCmd|bluez-test-device trusted 00:1F:20:1D:1B:4B|output=<pre>
+* Devices are not trusted by default. You can check trust status by leaving off the "yes" from the previous command.
+{{Cmd|bluez-test-device trusted 00:1F:20:1D:1B:4B|output=<pre>
 1
 </pre>}}
-If you get 1 then it is trusted. 0 is the default value (not trusted) - you want that to change to 1 (trusted).
+: "1" is trusted, "0" is not trusted.
+
+
+* Connect the device (this only needs to be done once, it will be done automatically after that): 
+{{Cmd|bluez-test-input connect 00:1F:20:1D:1B:4B}}
+
+
+* Your device should now be paired. You are now ready to proceed.
 
 
 
-The fourth step is to connect the device (this only needs to be done once, it will be done automatically after that): 
-{{RootCmd|bluez-test-input connect 00:1F:20:1D:1B:4B|output=<pre>
-
-</pre>}}
-This should also return you to a prompt, and the device should now be paired and working.
-
-You are now ready to proceed.
-
-== Desktop integration ==
+= Desktop integration =
 * {{Package|net-wireless/bluedevil}} for [[KDE]]
 * {{Package|net-wireless/blueman}} for [[GNOME]], [[Xfce]], GTK+
 
-== See also ==
+= See also =
 * [[Bluetooth Headset]]
 * [[Bluetooth Input devices]]
 * [[Bluetooth Network Aggregation Point]]
