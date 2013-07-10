@@ -236,17 +236,25 @@ We assume all loopback devices are available and create our hard drives:
 Now we can use /dev/loop[0-4] as we would use any other hard drive in the system.
 {{Note|On the next reboot, all the loopback devices will be released and the folder /var/lib/lvm_img can be deleted}}
 
-=== LVM2 linear volumes ===
-In this example, we will initialize two hard drive as PV and then create the VG ''vg0'':
-{{RootCmd|pvcreate /dev/loop[0-1]
-|vgcreate vg0 /dev/loop[0-1]}}
-Now lets create the LV ''lvol1'' in our VG ''vg0'' and take the maximum space available:
-{{RootCmd|lvcreate -l 100%FREE -n lvol1 vg0}}
-Create the file system and mount it to /mnt/data:
-{{RootCmd|mkfs.ext4 /dev/vg0/lvol1
-|mount /dev/vg0/lvol1 /mnt/data}}
-Now we have the capacity of 2GB from each hard drive available in /mnt/data as one 4GB device.
-{{Note|The same applies to RAID systems, if you want to create one VG use /dev/md[X-Y] instead}}
+=== LVM2 Linear volumes ===
+Linear volumes are the most common kind of LVM volume. A linear volume can consume all or part of a LV. LVM will attempt to allocate the LV to be as physically contiguous as possible. If there's a PV large enough to hold the entire LV, LVM will allocate it there, otherwise it will split it up into a few pieces a possible.
+
+A linear volume is actually implemented as degenerate stripe set (containing a single stripe).
+==== Creating a linear volume ====
+To create a linear volume:
+{{RootCmd|pvcreate /dev/loop[0-2]
+|vgcreate vg00 /dev/loop[0-2]
+|lvcreate -L3G -n lvm_stripe1 vg00
+|lvcreate -L2G -n lvm_stripe2 vg00}}
+The linear volume is the default type.
+{{RootCmd|pvscan
+|output=<pre>  PV /dev/loop0   VG vg00            lvm2 [2.00 GiB / 0    free]
+  PV /dev/loop1   VG vg00            lvm2 [2.00 GiB / 1012.00 MiB free]
+  PV /dev/loop2   VG vg00            lvm2 [2.00 GiB / 0    free]
+</pre>}}
+LVM allocate the first LV to use all of the first PV and part of the second, and the second PV to use all of the third PV.
+
+Because linear volumes have no special requirements, they are the easiest to manipulate and can be resized, relocated, at will. If an LV is allocated across multiple PVs, and any of the PV's are unavailable, that LV cannot be started and will be unusable.
 
 === /etc/fstab ===
 Here is an example of an entry in [[fstab]] (using ext4):
