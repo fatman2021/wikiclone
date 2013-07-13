@@ -299,7 +299,7 @@ Thin snapshots are writable just like regualr snapshot.
 {{Important|If -l/-L is specified, a snapshot will still be created, but the resulting snapshot will be a regular snapshot, not a thin snapshot}}
 Recursive snapshpots can be created:
 {{RootCmd|lvcreate -s -n 08092012_lvol1 /dev/vg0/08092011_lvol1}}
-Thin snapshots have several advantages over regular snapshots. First, thin snapshots are independent of their origins once created. The origin can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficiently created recursively (snapshots of snapshots) without the "chaining" overhead of regualar recursive LVM snapshots.
+Thin snapshots have several advantages over regular snapshots. First, thin snapshots are independent of their origins once created. The origin can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficiently created recursively (snapshots of snapshots) without the "chaining" overhead of regular recursive LVM snapshots.
 ==== LVM2 Rollback Snapshots ====
 To rollback the logical volume to the version of the snapshot, use the following command:
 {{RootCmd|lvconvert --merge /dev/vg0/08092011_lvol1}}
@@ -311,7 +311,7 @@ For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the 
 |lvremove /dev/vg0/lvol1
 |lvrename vg0/08092011_lvol1 lvol1}}
 === LVM2 Mirrors ===
-LVM support ''mirrored'' volume, which provide fault tolerance in the event of drive failure. Unlike RAID1, there is no performace benefit - all reads and writes are delivered to a single "leg" of the mirror. 1 additional PV is required for each mirror.
+LVM support ''mirrored'' volume, which provide fault tolerance in the event of drive failure. Unlike RAID1, there is no performance benefit - all reads and writes are delivered to a single "leg" of the mirror. 1 additional PV is required for each mirror.
 
 Mirrors support 3 kind of logs:
 {{Note|For all mirror log types except ''core'' LVM prefers - and sometimes insists - the mirror logs be kept on PV that does not contain the mirrored LVs. If if its desired to have the mirror logs on the same PV as the mirrored LVs themselves, and LVM insists on a separate PV for the log, add the <tt>--alloc anywhere</tt> parameter.}}
@@ -327,7 +327,7 @@ To create an LV with a single mirror:
 |output=WARNING: New mirror won't be synchronised. Don't read what you didn't write!}}
 The <tt>-m 1</tt> indicate we want to create 1 (additional) mirror, requiring 2 PV's. The <tt>--nosync</tt> option is an optimization - without it LVM will try synchronize the mirror by copying empty sectors from one LV to another.
 
-==== Creatting a mirror of an existing LV ====
+==== Creating a mirror of an existing LV ====
 It is possible to create a mirror of an existing LV:
 {{RootCmd|pvcreate /dev/loop[0-1]
 |vgcreate vg0 /dev/loop[0-1]
@@ -350,22 +350,22 @@ To simulate a failure:
 If part of the mirror is unavailable (usually because the disk containing the PV has failed), the VG will need to be brought up in degraded mode:
 {{RootCmd|vgchange -ay --partial vg00}}
 
-On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces available. A 3-way mirror with a missing PV will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. 
+On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces available. A 3-way mirror with a missing PV will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. If the failure is only transient, and the missing PV returns after LVM has broken the mirror, the mirrored LV will need to be recreated on it. 
 
-To recover the mirror, we need to kick out the failed PV from the VG, add a new PV, extend the VG to the new PV, then use <tt>lvcovert</tt> to recreate the mirror:
-{{RootCmd|vgreduce --removemissing vg00 
-|pvcreate /dev/loop1
+To recover the RAID 1, The failed PV needs to be removed from the VG, and replacement one added (or if the VG has a free PV, created on a different PV), the mirror recreated with <tt>lvconvert<tt>, and the old PV removed from the VG
+
+{{RootCmd|pvcreate /dev/loop1
 |vgextend vg00 /dev/loop1
 |lvconvert -b -m 1 --mirrorlog disk vg00/lvol0
-}}
+|vgreduce --removemissing vg00}}
 
 It is possible to have LVM recreate the mirror with free extents on a different PV if a "leg" fails, to do that, set mirror_image_fault_policy to "allocate" in lvm.conf.
 
 ==== Thin mirrors ====
-It is not (yet) possible to create or add a mirror to thin pool or its volumes. It is possible to create a mirrored thin pool my creating a normal mirrored LV and then converting the LV it to a thin pool with <tt>lvconvert</tt>. 2 LV are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
+It is not (yet) possible to create a mirrored thin pool or thin volume. It is possible to create a mirrored thin pool my creating a normal mirrored LV and then converting the LV it to a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a mirror into a thin pool '''destroys''' all existing data in the mirror!}}
-{{RootCmd|lvcreate -m 1 --mirrorlog mirrored -l40%VG -n thin_pool
-|lvcreate -m 1 --mirrorlog mirrored -L4MB -n thin_meta
+{{RootCmd|lvcreate -m 1 --mirrorlog mirrored -l40%VG -n thin_pool vg00
+|lvcreate -m 1 --mirrorlog mirrored -L4MB -n thin_meta vg00
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 === LVM2 RAID 0/Stripeset ===
 {{Important|If a linear volume suffers a disk failure, a giant, contiguous "hole" is created. It may be possible to recover data from outside that hole. If a striped volume suffers a disk failure, the instead of a contiguous hole, the geometry is closer to Swiss cheese; recovery of anything is slim to none. }} 
@@ -391,12 +391,61 @@ This creates a 2 PV stripe set and mirrors it on 2 different PVs, for a total of
 A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
 
 It is not possible to stripe an existing non-striped volume, nor add/remove "reshape" additional PVs to the stripe set, nor to covert to RAID5 or RAID6,
+=== LVM2 RAID 1 ===
+Unlike RAID 0, which is striping, RAID 1 is mirroring, but implemented differently than the original LVM mirror. Under RAID1, reads are spread out across PV, improving performance. RAID1 Mirror failures do not cause I/O to block because LVM does not need to break it on write. 
+
+Any place where an LVM mirror could be used, a RAID 1 mirror can be used in its place. Its possible to have LVM create RAID1 mirrors instead of regular mirrors implicitly by setting <tt>mirror_segtype_default</tt> in lvm.conf to <tt>raid1</tt>.
+==== Creating RAID 1 LV ====
+To create an LV with a single mirror:
+{{RootCmd|pvcreate /dev/loop[0-1]
+|vgcreate vg00 /dev/loop[0-1]
+|lvcreate -m 1 --type raid1 -l 40%VG --nosync -n lvm_raid1 vg00 
+|output=WARNING: New raid1 won't be synchronised. Don't read what you didn't write!}}
+
+{{RootCmd|pvscan
+|output=<pre>  PV         VG     Fmt  Attr PSize   PFree  
+  /dev/loop0 vg00   lvm2 a--    2.00g 408.00m
+  /dev/loop1 vg00   lvm2 a--    2.00g 408.00m
+</pre>}}
+On each PV about 1.2G got reserved for LV ''lvm_raid1'' in VG ''vg00''
+
+Note the difference for creating a mirror: There is no ''mirrorlog'' specified, because RAID1 LV (explicit) do not an explicit mirror log - it built-in to the LV. Second, ''--type raid1'' needs is added, it wasn't needed with LVM mirror before. Also note the similarities: ''-m 1'' to for a single mirror (''-i 1''' works too for RAID 1, unlike an LVM mirror), and the ''--nosync'' to skip the initial sync
+==== Converting existing LV to RAID 1 ====
+It is possible to convert an existing LV to RAID 1:
+{{RootCmd|pvcreate /dev/loop[0-1]
+|vgcreate vg00 /dev/loop[0-1]
+|lvcreate -n lvm_raid1 -l20%VG vg00
+|lvconvert -m 1 --type raid1 -b vg00/lvm_raid1}}
+Conversion is similar to creating a mirror from an existing LV.
+==== Removing a RAID 1 mirror ====
+To remove a RAID 1 mirror, set the number of mirrors to 0:
+{{RootCmd|lvconvert -m0 vg00/lvm_raid1}}
+Same as an LVM mirror
+==== Failed RAID 1 ====
+Simulating a failure is the same as an LVM mirror
+
+If part of the RAID1 is unavailable (usually because the disk containing the PV has failed), the VG will need to be brought up in degraded mode:
+{{RootCmd|vgchange -ay --partial vg00}}
+
+Unlike an LVM mirror, writing missing part of the RAID does NOT breaking the mirroring. If the failure is only transient, and the missing PV returns, LVM will resync the mirror my copying cover the out-of-date segments instead of the entire LV. 
+
+To recover the RAID 1, The failed PV needs to be removed from the VG, and replacement one added (or if the VG has a free PV, created on a different PV), the mirror repaired with ''lvconvert'', and the old PV removed from the VG.
+{{RootCmd|pvcreate /dev/loop1
+|vgextend vg00 /dev/loop1
+|lvconvert --repair -b vg00/lvm_raid1
+|vgreduce --removemissing vg00}}
+==== Thin RAID1 ====
+It is not (yet) possible to create a RAID 1 thin pool or thin volume. It is possible to create a RAID 1 thin pool by creating a normal mirrored LV and then converting the LV it to a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID 1 into a thin pool '''destroys''' all existing data in the mirror!}}
+{{RootCmd|lvcreate -m 1 --type raid1 -l40%VG -n thin_pool vg00
+|lvcreate -m 1 --type raid1 -L4MB -n thin_meta vg00
+|lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
 === LVM2 Stripeset with Parity (RAID4 and RAID5) ===
 {{Note|Stripeset with Parity require at least 3 PVs }}
 RAID 0 is not fault-tolerant - if any of the PVs fail the LV is unusable. By adding a parity stripe to RAID 0 the LV can still function will a single missing PV (performance may be degraded though). A new PV can then be added to restore fault tolerance.
 
-Stripsets with parity come in 2 flavors: RAID 4 and RAID 5. Under RAID 4.all the parity stripes are stored on the same LV. The PV containing the LV can become a bottleneck because all writes hit that PV, and gets worse the more PVs in the array. With RAID 5, the parity data is distrubted evenly across the LVs and no PV is a bottleneck. For that reason, RAID 4 is rare is considered obsolete/historical and in practice all stripesets with parity are RAID 5.
+Stripsets with parity come in 2 flavors: RAID 4 and RAID 5. Under RAID 4.all the parity stripes are stored on the same LV. The PV containing the LV can become a bottleneck because all writes hit that PV, and gets worse the more PVs in the array. With RAID 5, the parity data is distributed evenly across the LVs and no PV is a bottleneck. For that reason, RAID 4 is rare is considered obsolete/historical and in practice all stripesets with parity are RAID 5.
 
 ==== Creating a RAID5 LV ====
 {{RootCmd|pvcreate /dev/loop[0-2]
@@ -438,10 +487,10 @@ Its possible to replace a still working PV in RAID5 as well
 The same restriction on reshaping stripe sets also apply to stripe sets with parity: Existing LVs cannot be converted to stripe sets with parity, RAID5 LVs cannot be reshaped to add/remove additional PV, and cannot be upgraded to RAID6 or downgraded to RAID0. RAID5 volumes can be mirrored, however.  
 
 ==== Thin RAID5 LV ====
-It is not (yet) possible to create or extend a strip set with parity (RAID5) to thin pool or its volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>.
+It is not (yet) possible to create stripe set with parity (RAID5) thin pool or thin volume. It is possible to create a RAID5 thin pool by creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
-{{RootCmd|lvcreate --type raid5 -i 2  -l20%VG -n thin_pool
-|lvcreate --type raid5 -i 2 -L4MB -n thin_meta
+{{RootCmd|lvcreate --type raid5 -i 2  -l20%VG -n thin_pool vg00
+|lvcreate --type raid5 -i 2 -L4MB -n thin_meta vg00
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
 === LVM2 RAID 6 ===
@@ -468,10 +517,10 @@ Recovery for RAID6 is the same as RAID5. A RAID6 LV with a single failure reduce
 
 RAID6 stripe sets share the same restriction of all stripe sets: It is not possible to stripe an existing volume, convert to a different stripe type (RAID5 or RAID0), or reshape an existing LV onto more or less PV's.
 ==== Thin RAID6 LV ====
-It is not (yet) possible to create or extend a RAID6 LV to thin pool or its volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>.
+It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
-{{RootCmd|lvcreate --type raid6 -i 2  -l20%VG -n thin_pool
-|lvcreate --type raid6 -i 2 -L4MB -n thin_meta
+{{RootCmd|lvcreate --type raid6 -i 2  -l20%VG -n thin_pool vg00
+|lvcreate --type raid6 -i 2 -L4MB -n thin_meta vg00
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
 == Troubleshooting ==
