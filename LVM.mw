@@ -525,46 +525,51 @@ It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is poss
 
 == Troubleshooting ==
 LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
-
-=== vgcfgrestore ===
-In /etc/lvm/archive and /etc/lvm/backup are files which contain logs about metadata changes in LVM. To see what states of the VG are available to be restored:
-{{RootCmd|vgcfgrestore --list vg0
-|output=<pre>File:         /etc/lvm/archive/vg0_00002-923283887.vg
-  VG name:      vg0
-  Description:  Created *before* executing 'lvremove /dev/vg0/lvol1'
-  Backup Time:  Sat Sep 10 20:02:05 2011
-
-  File:         /etc/lvm/backup/vg0
-  VG name:      vg0
-  Description:  Created *after* executing 'lvremove /dev/vg0/lvol1'
-  Backup Time:  Sat Sep 10 20:02:05 2011
+=== vgcfgrestore utility ===
+By default, on any change to a LVM PV, VG, or LV, LVM2 create a backup file of the metadata in /etc/lvm/archive. These files can be used to recover from an accidental change (like deleting the wrong LV), LVM also keeps a backup copy of the most recent metadata in /etc/lvm/backup. These can be used to restore metadata to a replacement disk, or repair corrupted metadata.
+ 
+To see what states of the VG are available to be restored (this is just partial output)
+{{RootCmd|vgcfgrestore --list vg00
+|output=<pre>  File:		/etc/lvm/archive/vg00_00042-302371184.vg
+  VG name:    	vg00
+  Description:	Created *before* executing 'lvremove vg00/lvm_raid1'
+  Backup Time:	Sat Jul 13 01:41:32 201
 </pre>}}
-In this example we removed the LV ''lvol1'' by accident and want it back in our VG ''vg0'':
+
+==== Recovering an accidently deleted LV ====
+Suppose LV ''lvm_raid1'' was accidentally removed from VG ''vg00''. It is possible to recover it:
 {{RootCmd|vgcfgrestore -f /etc/archive/vg0_00002-923283887.vg vg0}}
-{{Important|This is not the data in the LV itself that will be restored, just the LV is recreated as it was distributed on the PV before and you have a good chance that the files are still on the PV if they weren't overwritten yet}}
+{{Important|<tt>vgcfgrestore</tt> only restores LVM metadata, NOT the data inside the LV. However <tt>pvremove</tt>, <tt>vgremove</tt>, and <tt>lvremove</tt> only wipe metadata, leaving any data intact. However, if <tt>issue_discards</tt> is set in /etc/lvm/lvm.conf then these command ARE destructive to data.}}
+==== Replacing a failed PV ====
+In the above examples, when a disk containing a PV failed, an "add/remove" technique was used: a new PV was created on a new disk, the VG extended to it, the LV repaired and the old PV removed from the VG. However it possible to do a true "replace" and recreate the metadata on the disk to be the same as the old disk.
 
-=== Replace PV ===
-We want to replace a PV and then restore the metadata to a new one, so that we reach the same state as before the device stopped working. To display all PV in a VG (even lost ones) use the following command:
-{{RootCmd|vgdisplay --partial --verbose}}
-In this example I let /dev/loop1 (unknown device) fail:
+Following the above example for a failed RAID 1:
 {{RootCmd|vgdisplay --partial --verbose
-|output=<pre>--- Physical volumes ---
-  PV Name               unknown device
-  PV UUID               3B0yFN-zKDY-yICo-fT0M-nJwS-3wZf-UEjvd1
+|output=<pre>  --- Physical volumes ---
+  PV Name               /dev/loop0     
+  PV UUID               iLdp2U-GX3X-W2PY-aSlX-AVE9-7zVC-Cjr5VU
   PV Status             allocatable
-  Total PE / Free PE    511 / 0
-
-  PV Name               /dev/loop2
-  PV UUID               4AuFVX-PWnX-qpWl-fpoS-euCV-SISW-IX6ceF
+  Total PE / Free PE    511 / 102
+   
+  PV Name               unknown device     
+  PV UUID               T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY
   PV Status             allocatable
-  Total PE / Free PE    511 / 511
+  Total PE / Free PE    511 / 102
 </pre>}}
-Using the UUID, we can tell LVM to restore new hardware and be implemented within the VG as the old one was.
-{{RootCmd|pvcreate --restorefile /etc/archive/<METADATA-FILE> --uuid <UUID> /dev/loop3}}
-Then we restore the VG to the state before the PV failed:
-{{RootCmd|vgcfgrestore -f /etc/archive/<METADATA-FILE> vg0}}
-Now you can replay your file backup if you haven't already restored the PV itself.
-
+The important line here is the UUID "unknown device". 
+{{RootCmd|pvcreate --uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY --restorefile /etc/lvm/backup/vg00 /dev/loop1
+|output=<pre>  Couldn't find device with uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY.
+  Physical volume "/dev/loop1" successfully created</pre>}}
+This recreates the PV metadata, but not the missing LV or VG data on the PV.
+{{RootCmd|vgcfgrestore -f /etc/lvm/backup/vg00 vg00
+|output=<pre>  Restored volume group vg00</pre>}}
+This now reconstructs all the missing metadata on the PV, including the LV and VG data. However it doesn't restore the data, so the mirror is out of sync.
+{{RootCmd|vgchange -ay vg00
+|output=<pre>  device-mapper: reload ioctl on  failed: Invalid argument
+  1 logical volume(s) in volume group "vg00" now active</pre>}}
+{{RootCmd|lvchange --resync vg00/lvm_raid1
+|output=<pre>Do you really want to deactivate logical volume lvm_raid1 to resync it? [y/n]: y</pre>}}
+This will resync the mirror. This works with RAID 4,5 and 6 as well. 
 === Deactivate LV ===
 You can deactivat a LV with the following command:
 {{RootCmd|umount /dev/vg0/lvol1
