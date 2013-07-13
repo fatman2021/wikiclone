@@ -296,15 +296,15 @@ Creating a thin snapshot is simple:
 {{RootCmd|lvcreate -s -n 08092011_lvol1 /dev/vg0/lvol1}}
 Note how a size is not specified with -l/-L - nor the virtual size with -V. Snapshots have a virtual size the same as their origin, and a phyical size of 0 like all new thin volumes. This also means its not possible to limit the phyical size of the snapshot. 
 Thin snapshots are writable just like regualr snapshot.
-{{Important|If -l/-L is specified, a snapshot will still be created, but the resulting snopshot will be a regular snapshot, not a thin snapshot}}
+{{Important|If -l/-L is specified, a snapshot will still be created, but the resulting snapshot will be a regular snapshot, not a thin snapshot}}
 Recursive snapshpots can be created:
 {{RootCmd|lvcreate -s -n 08092012_lvol1 /dev/vg0/08092011_lvol1}}
-Thin snapshots have several advantages over regualr snapshots. First, thin snapshots are independent of their origins once created. The origin can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficently created recursively (snapshots of snapshots) without the "chaining" overhead of regualar recursive LVM snapshots.
+Thin snapshots have several advantages over regular snapshots. First, thin snapshots are independent of their origins once created. The origin can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficiently created recursively (snapshots of snapshots) without the "chaining" overhead of regualar recursive LVM snapshots.
 ==== LVM2 Rollback Snapshots ====
 To rollback the logical volume to the version of the snapshot, use the following command:
 {{RootCmd|lvconvert --merge /dev/vg0/08092011_lvol1}}
 This might take a couple of minutes, depending on the size of the volume.
-{{Important|the snapshot will disappear and this is not revertable}}
+{{Important|the snapshot will disappear and this is not revertible}}
 ==== LVM2 Thin Rollback Snapshots ====
 For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the origin and rename the snapshot:
 {{RootCmd|umount /dev/vg0/lvol1
@@ -314,10 +314,10 @@ For thin volumes, <tt>lvconvert --merge</tt> does not work. Instead, delete the 
 LVM support ''mirrored'' volume, which provide fault tolerance in the event of drive failure. Unlike RAID1, there is no performace benefit - all reads and writes are delivered to a single "leg" of the mirror. 1 additional PV is required for each mirror.
 
 Mirrors support 3 kind of logs:
-{{Note|For all mirror log types except ''core'' LVM perfers - and sometimes insists - the mirror logs be kept on PV that does not contain the mirrored LVs. If if its desired to have the mirror logs on the same PV as the mirrored LVs themselves, and LVM insists on a seperate PV for the log, add the <tt>--alloc anywhere</tt> paramter.}}
+{{Note|For all mirror log types except ''core'' LVM prefers - and sometimes insists - the mirror logs be kept on PV that does not contain the mirrored LVs. If if its desired to have the mirror logs on the same PV as the mirrored LVs themselves, and LVM insists on a separate PV for the log, add the <tt>--alloc anywhere</tt> parameter.}}
 * '''Disk''' mirror logs the state of the mirror on the disk in extra metadata extents. LVM keeps track of what mirrored and can pick up where it left off if incomplete. This is the default.
 * '''Mirror''' logs are '''disk''' logs that are themselves mirrored. 
-* '''Core''' mirror logs record the state of the mirror in memory only. LVM will have to rebuild the mirror every time it is activated. Useful for temorary mirrors.
+* '''Core''' mirror logs record the state of the mirror in memory only. LVM will have to rebuild the mirror every time it is activated. Useful for temporary mirrors.
 
 ==== Creating an mirror LV ====
 To create an LV with a single mirror:
@@ -325,7 +325,7 @@ To create an LV with a single mirror:
 |vgcreate vg0 /dev/loop[0-1]
 |lvcreate -m 1 --mirrorlog core -l 40%VG --nosync vg00
 |output=WARNING: New mirror won't be synchronised. Don't read what you didn't write!}}
-The <tt>-m 1</tt> indicate we want to create 1 (additonal) mirror, requiring 2 PV's. The <tt>--nosync</tt> option is an optimization - without it LVM will try synchronize the mirror by copying empty sectors from one LV to another.
+The <tt>-m 1</tt> indicate we want to create 1 (additional) mirror, requiring 2 PV's. The <tt>--nosync</tt> option is an optimization - without it LVM will try synchronize the mirror by copying empty sectors from one LV to another.
 
 ==== Creatting a mirror of an existing LV ====
 It is possible to create a mirror of an existing LV:
@@ -350,7 +350,7 @@ To simulate a failure:
 If part of the mirror is unavailable (usually because the disk containing the PV has failed), the VG will need to be brought up in degraded mode:
 {{RootCmd|vgchange -ay --partial vg00}}
 
-On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces avaiable. A 3-way mirror with a missing PV will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. 
+On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces available. A 3-way mirror with a missing PV will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. 
 
 To recover the mirror, we need to kick out the failed PV from the VG, add a new PV, extend the VG to the new PV, then use <tt>lvcovert</tt> to recreate the mirror:
 {{RootCmd|vgreduce --removemissing vg00 
@@ -363,13 +363,13 @@ It is possible to have LVM recreate the mirror with free extents on a different 
 
 ==== Thin mirrors ====
 It is not (yet) possible to create or add a mirror to thin pool or its volumes. It is possible to create a mirrored thin pool my creating a normal mirrored LV and then converting the LV it to a thin pool with <tt>lvconvert</tt>. 2 LV are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
-{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a mirror into a thin pool '''destroys''' all existing data in the mirror!}}
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a mirror into a thin pool '''destroys''' all existing data in the mirror!}}
 {{RootCmd|lvcreate -m 1 --mirrorlog mirrored -l40%VG -n thin_pool
 |lvcreate -m 1 --mirrorlog mirrored -L4MB -n thin_meta
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 === LVM2 RAID 0/Stripeset ===
-{{Important|If a linear volume suffers a disk failure, a giant, contiguous "hole" is created. It may be possible to reocver data from outside that hole. If a striped volume suffers a disk failure, the instead of a contiguous hole, the geometry is closer to Swiss cheese; recovery of anything is slim to none. }} 
-Instead of a linear volume, wher multiple contiguous volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance.
+{{Important|If a linear volume suffers a disk failure, a giant, contiguous "hole" is created. It may be possible to recover data from outside that hole. If a striped volume suffers a disk failure, the instead of a contiguous hole, the geometry is closer to Swiss cheese; recovery of anything is slim to none. }} 
+Instead of a linear volume, where multiple contiguous volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance.
 
 To create a 3-PV striped volume:
 {{RootCmd|pvcreate /dev/loop[0-2]
