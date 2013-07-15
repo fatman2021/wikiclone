@@ -1,32 +1,37 @@
 <languages />
 <translate>
 
+<!--T:1-->
 {{InfoBox stack
 |{{InfoBox wikipedia|Puppet (software)|header=true}}
 |{{InfoBox ohloh}}
 }}
 
+<!--T:2-->
 '''Puppet''' is a configuration management system written in [[Ruby]]. It can be used for automating machine deployments.
 
-== Installation ==
+== Installation == <!--T:3-->
 Puppet is provided by the Gentoo package {{Package|app-admin/puppet}}.
 Currently, there is no distinction between server and client, so the basic installation procedure is the same for both.
 
+<!--T:4-->
 First, install Puppet via <tt>emerge</tt>:
 {{Emerge|puppet}}
 
-== Configuration and Setup ==
+== Configuration and Setup == <!--T:5-->
 Puppet is mainly configured through {{Path|/etc/puppet/puppet.conf}} in an INI-style format. Comments are marked with a hash sign (<tt>#</tt>).
 The configuration file is separated into several sections, or blocks:
 
+<!--T:6-->
 * <tt>[main]</tt> contains settings that act as a default for all parts of Puppet, unless overridden by settings in any of the following sections:
 ** <tt>[master]</tt> is used for settings applying to the Puppetmaster (<tt>puppet master</tt>), or CA tool (<tt>puppet cert</tt>)
 ** <tt>[agent]</tt> is used for settings applying to the Puppet agent (<tt>puppet agent</tt>)
 
+<!--T:7-->
 A more in-depth explanation, as well as a list of further blocks used is available in the [http://docs.puppetlabs.com/guides/configuring.html official Puppet documentation].
 Also, there is a [http://docs.puppetlabs.com/references/stable/configuration.html list of all configuration] options, some of which of course make only sense when applied to either server or client.
 
-=== Server (Puppetmaster) Setup ===
+=== Server (Puppetmaster) Setup === <!--T:8-->
 The default configuration put by the Ebuild into {{Path|puppet.conf}} can be used as-is. For Puppet 2.7.3, the server-related parts look like this:
 {{File|/etc/puppet/puppet.conf|Server-related default configuration|<pre>
 [main]
@@ -34,50 +39,62 @@ The default configuration put by the Ebuild into {{Path|puppet.conf}} can be use
     # The default value is '$vardir/log'.
     logdir = /var/log/puppet
 
-    # Where Puppet PID files are kept.
+    <!--T:9-->
+# Where Puppet PID files are kept.
     # The default value is '$vardir/run'.
     rundir = /var/run/puppet
 
-    # Where SSL certificates are kept.
+    <!--T:10-->
+# Where SSL certificates are kept.
     # The default value is '$confdir/ssl'.
     ssldir = $vardir/ssl
 </pre>}}
 
-==== Setting up the file server ====
+==== Setting up the file server ==== <!--T:11-->
 To be able to send files to the clients, the file server has to be configured. This is done in {{Path|/etc/puppet/fileserver.conf}}. By default, there are no files being served.
 
+<!--T:12-->
 {{File|/etc/puppet/fileserver.conf|Setting the <tt>files</tt> share|<pre>
 [files]
     path /var/lib/puppet/files
     allow 192.168.0.0/24
 </pre>}}
 
+<!--T:13-->
 The snippet above sets up a share called <tt>files</tt> (remember this identifier, as it will need to be referenced later), looking for files in {{Path|/var/lib/puppet/files}} and only available for hosts with an IP from the 192.168.0.0/24 network. You can use IP addresses, CIDR notation, and host names (including wildcards like <tt>*.domain.invalid</tt>) here. The <tt>deny</tt> command can be used to explicitly deny access to certain hosts or IP ranges.
 
-==== Starting the Puppetmaster daemon ====
+==== Starting the Puppetmaster daemon ==== <!--T:14-->
 {{Note|It is recommended that the Puppetmaster is reachable from the clients using the host name <tt>puppet</tt>. However, the name can be overridden, which of course causes configuration effort.}}
 
+<!--T:15-->
 {{Important|At this point, the host name as seen from the clients should be the same as the output of <tt>hostname -f</tt>. You might have to adjust {{Path|/etc/hosts}} to achieve this, or manually create a new certificate as [[#Manually generating certificates|explained below]].}}
 
+<!--T:16-->
 With the basic configuration as well as an initial file server configuration, we can start the Puppetmaster daemon using its init script:
 {{RootCmd|/etc/init.d/puppetmaster start}}
 
+<!--T:17-->
 During the first start, Puppet generates an SSL certificate for the Puppetmaster host and places it into the <tt>ssldir</tt>, as configured above.
 
+<!--T:18-->
 It listens on Port 8140/TCP, make sure that there are no firewall rules obstructing access from the clients.
 
-==== A simple manifest ====
+==== A simple manifest ==== <!--T:19-->
 Manifests, in Puppet's terminology, are the files in which the client configuration is specified.
 The documentation contains a [http://docs.puppetlabs.com/guides/language_guide.html comprehensive guide] about the manifest markup language.
 
+<!--T:20-->
 As a simple example, let's create a ''message of the day'' (motd) file on the client. On the puppetmaster, create a file inside the <tt>files</tt> share created earlier:
 
+<!--T:21-->
 {{File|/var/lib/puppet/files/motd|MOTD file on the server|<pre>
 Welcome to this Puppet-managed machine!
 </pre>}}
 
+<!--T:22-->
 Then, we have to create the main manifest file in the <tt>manifests</tt> directory. It is called <tt>site.pp</tt>:
 
+<!--T:23-->
 {{File|/etc/puppet/manifests/site.pp|Main manifest on the server|<pre>
 node default {
   file { '/etc/motd':
@@ -86,16 +103,20 @@ node default {
 }
 </pre>}}
 
+<!--T:24-->
 The <tt>default</tt> ''node'' (the name for a client) definition is used in case there is no specific <tt>node</tt> statement for the host.
 We use a <tt>file</tt> resource and want the {{Path|/etc/motd}} file on our clients to contain the same thing as the <tt>motd</tt> file in the <tt>files</tt> share on the host <tt>puppet</tt>. If your puppetmaster is reachable only using another host name, you have to adapt the <tt>source</tt> URI accordingly.
 
-=== Client Configuration ===
+=== Client Configuration === <!--T:25-->
 {{Important|The client '''must''' have the '''same major and minor version''' as the Puppetmaster. Using a 2.7.1 Puppetmaster with 2.7.2 clients is fine, but using 2.6 for the server and 2.7 for clients can cause unexpected issues at any time.}}
 
+<!--T:26-->
 {{Note|If your puppetmaster is not reachable via <tt>puppet</tt>, set <tt>server{{=}}&lt;your hostname&gt;</tt> to the actual host name in {{Path|/etc/puppet/puppet.conf}} in the <tt>[main]</tt> section.}}
 
+<!--T:27-->
 During the first execution of the Puppet agent, you have to wait for your certificate to be signed by the puppetmaster. To request a certificate, and run your first configuration run, execute:
 
+<!--T:28-->
 {{RootCmd|puppet agent --test --waitforcert 60|prompt=root@client #
 |output=<pre>
 info: Creating a new certificate request for client
@@ -103,15 +124,18 @@ info: Creating a new SSL key at /var/lib/puppet/ssl/private_keys/client.pem
 notice: Did not receive certificate
 </pre>}}
 
+<!--T:29-->
 Before the client can connect, you have to authorize the certificate request on the server. Our client should appear in the list of nodes requesting a certificate:
 {{RootCmd|puppet cert --list
 |prompt=root@server #
 |output=client}}
 
+<!--T:30-->
 Now, we grant the request:
 {{RootCmd|puppet cert --sign client
 |prompt=root@server #}}
 
+<!--T:31-->
 The client will check every 60 seconds whether its certificate has already been issued. After that, it continues with the first configuration run:
 {{GenericCmd|<pre>
 info: Caching catalog for client
@@ -120,34 +144,39 @@ notice: /Stage[main]//Node[default]/File[/etc/motd]/ensure: defined content as '
 notice: Finished catalog run in 0.05 seconds
 </pre>}}
 
+<!--T:32-->
 When you're seeing this message, all went well. You can now check the contents of your {{Path|/etc/motd}} file on the client:
 {{Cmd|cat /etc/motd
 |prompt=user@client $
 |output=Welcome to this Puppet-managed machine!}}
 
+<!--T:33-->
 You can now start the puppet agent as a deamon and have it launch on boot:
 {{RootCmd|/etc/init.d/puppet start
 |rc-update add puppet default
 |prompt=root@client #}}
 
-== Other Topics ==
+== Other Topics == <!--T:34-->
 
-=== Manually generating certificates ===
+=== Manually generating certificates === <!--T:35-->
 To manually generate a certificate, you can use the <tt>puppet cert</tt> utility.
 It will place all generated certificates into the <tt>ssldir</tt> as set in the puppet configuration and will sign them with the key of your local Puppet Certificate Authority (CA).
 
+<!--T:36-->
 An easy case is the generation of a certificate with '''only one Common Name:'''
 {{RootCmd|puppet cert --generate host1}}
 
+<!--T:37-->
 If you need to have '''multiple host names''' the certificate is valid for, use the <tt>--certdnsnames</tt> parameter and separate the additional host names with a colon:
 {{RootCmd|puppet cert --generate --certdnsnames puppet:puppet.domain.invalid host1.domain.invalid}}
 
+<!--T:38-->
 This example will generate a certificate valid for the three listed host names.
 
-=== Managing slots with puppet ===
+=== Managing slots with puppet === <!--T:39-->
 While the default portage provider in puppet does not support slots, a [https://github.com/whatbox/PortageGT 3rd party plugin] is available to enable this functionality in puppet.
 
-== External resources ==
+== External resources == <!--T:40-->
 * [http://puppetlabs.com/ Upstream website]
 * [http://projects.puppetlabs.com/projects/puppet/wiki Puppet Wiki]
 
