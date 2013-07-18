@@ -1,12 +1,49 @@
 == XBMC Autostart ==
+=== Standard method, via init script ===
+First create the xbmc user
+{{RootCmd|useradd -m -G audio,cdrom,video,cdrw,usb,users xbmc}}
 
-=== xinitrc ===
-Both methods require you to create an xbmc user and place an .xinitrc:
+Then define the xbmc init.d file with the following contents
+{{File|/etc/init.d/xbmc||<pre>
+#!/sbin/runscript
+# Released under the 2-clause BSD license.
+
+description="Start and stop XBMC"
+
+depend()
+{
+	need net
+}
+
+start()
+{
+        ebegin "Starting XBMC"
+        start-stop-daemon --start -u ${XBMC_USER:-xbmc} --background --pidfile /var/run/xbmc.pid --make-pidfile --exec /usr/bin/xinit -- /usr/bin/xbmc-standalone ${XMBC_OPTS} -- :0
+        eend $?
+}
+
+stop()
+{
+        ebegin "Stopping XBMC"
+        start-stop-daemon --stop --pidfile /var/run/xbmc.pid
+        eend $?
+}
+</pre>}}
+
+Set the appropriate permissions
+{{RootCmd|chmod +x /etc/init.d/xbmc}}
+
+And tell openrc to start it on boot
+{{RootCmd|rc-update add xbmc default}}
+
+
+=== Alternative method, via inittab ===
+This is based on the way the mythtv ebuilds enable the autostart of the mythtv frontend.
 
 First create the xbmc user
 {{RootCmd|useradd -m -G audio,cdrom,video,cdrw,usb,users xbmc}}
 
-
+Define an xinitrc file in xbmc's home
 {{File|/home/xbmc/.xinitrc||<pre>
 # .xinitrc
 [ -x /usr/bin/nvidia-settings ] && /usr/bin/nvidia-settings -l
@@ -16,9 +53,6 @@ First create the xbmc user
 /usr/bin/evilwm &
 exec /usr/bin/xbmc
 </pre>}}
-
-=== Via inittab ===
-This is based on the way the mythtv ebuilds enable the autostart of the mythtv frontend. But since XBMC is the better fronted, I want XBMC to autostart on boot. :)
 
 Then create the login scripts
 {{File|/home/xbmc/.bash_profile||<pre>
@@ -34,33 +68,6 @@ Finally add an inittab entry which does the autologin
 ...
 c9:2345:respawn:/sbin/mingetty --autologin xbmc tty9
 ...
-</pre>}}
-
-=== With init script ===
-{{File|/etc/init.d/xbmc||<pre>
-#!/sbin/runscript
-# Released under the 2-clause BSD license.
-
-description="Start and stop XBMC"
-
-depend()
-{
-	need net
-}
-
-start()
-{
-        ebegin "Starting XBMC"
-        su - xbmc -c "startx" & > /dev/null
-        eend $?
-}
-
-stop()
-{
-        ebegin "Stopping XBMC"
-        killall xbmc
-        eend $?
-}
 </pre>}}
 
 == Shutdown ==
