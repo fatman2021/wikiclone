@@ -401,7 +401,8 @@ This creates a 2 PV stripe set and mirrors it on 2 different PVs, for a total of
 
 A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
 
-It is not possible to stripe an existing non-striped volume, nor add/remove "reshape" additional PVs to the stripe set, nor to covert to RAID5 or RAID6,
+It is not possible to stripe an existing  volume, nor reshape the stripe set across more/less PVs to the stripe set, nor to convert to RAID5 or RAID6, A stripe set can be mirrored. It is possible to extend a stripe set across additional PVs, but they must be added in multiples of the original stripe set (which will effectively linearly append a new stripe set), or <tt>--alloc anywhere></tt> must be specified (which can hurt performance). In the above example, 3 additional PVs would be required without <tt>--alloc anywhere></tt>.
+
 === LVM2 RAID 1 ===
 Unlike RAID 0, which is striping, RAID 1 is mirroring, but implemented differently than the original LVM mirror. Under RAID1, reads are spread out across PV, improving performance. RAID1 Mirror failures do not cause I/O to block because LVM does not need to break it on write. 
 
@@ -481,7 +482,7 @@ To simulate a failure:
 
 The VG will need to be brought up in degraded mode
 {{RootCmd|vgchange -ay --partial vg00}}
-The volume will work normally at this point, however this degraded the array to RAID 0 until a replacement PV is added.
+The volume will work normally at this point, however this degraded the array to RAID 0 until a replacement PV is added. Performance is unlikely to be affected while the array is degraded - while it does need to recompute is missing data via parity, it only requires simple XOR the parity block with the remaining data. The overhead is negligible compared to the disk I/O. 
 
 To repair the RAID5:
 {{RootCmd|pvcreate /dev/loop1
@@ -495,7 +496,8 @@ Its possible to replace a still working PV in RAID5 as well
 |lvconvert --replace /dev/loop1 vg00/lvm_raid5
 |vgreduce vg00 /dev/loop1}}
 
-The same restriction on reshaping stripe sets also apply to stripe sets with parity: Existing LVs cannot be converted to stripe sets with parity, RAID5 LVs cannot be reshaped to add/remove additional PV, and cannot be upgraded to RAID6 or downgraded to RAID0. RAID5 volumes can be mirrored, however.  
+It is not possible to stripe with parity an existing volume, nor reshape the stripe set across more/less PVs to the stripe set with parity, nor to convert to RAID0 or RAID6, A stripe set with parity can be mirrored. It is possible to extend a stripe set with parity
+across additional PVs, but they must be added in multiples of the original stripe set with parity (which will effectively linearly append a new stripe set with parity), or <tt>--alloc anywhere></tt> must be specified (which can hurt performance). In the above example, 3 additional PVs would be required without <tt>--alloc anywhere></tt>.
 
 ==== Thin RAID5 LV ====
 It is not (yet) possible to create stripe set with parity (RAID5) thin pool or thin volume. It is possible to create a RAID5 thin pool by creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
@@ -524,9 +526,11 @@ Like raid5, the -i option is used to specify the number of PVs stripe, excluding
 </pre>}}
 On each PV about 680MB got reserved for LV ''lvm_raid6'' in VG ''vg00''
 ==== Recovering from a failed RAID6 ====
-Recovery for RAID6 is the same as RAID5. A RAID6 LV with a single failure reduces to RAID5. A RAID6 LV with 2 failures reduces to RAID0. It is left as an exercise to the reader to simulate a 2 PV failure.
+Recovery for RAID6 is the same as RAID5. A RAID6 LV with a single failure reduces to RAID5. A RAID6 LV with 2 failures reduces to RAID0. It is left as an exercise to the reader to simulate a 2 PV failure. 
 
-RAID6 stripe sets share the same restriction of all stripe sets: It is not possible to stripe an existing volume, convert to a different stripe type (RAID5 or RAID0), or reshape an existing LV onto more or less PV's.
+Unlike RAID5 where parity block is cheap to recompute vs disk I/O, this is only half true in RAID6. RAID6 uses 2 parity stripes: One stripe is computed the same way as RAID5 (simple XOR). The second parity stripe is much harder to compute[https://www.kernel.org/pub/linux/kernel/people/hpa/raid6.pdf].
+
+It is not possible to RAID6 an existing volume, nor reshape the RAID6 across more/less PVs, nor to convert to RAID0 or RAID5, A RAID6 can be mirrored. It is possible to extend a RAID6 across additional PVs, but they must be added in multiples of the original RAID6 (which will effectively linearly append a new RAID6), or <tt>--alloc anywhere></tt> must be specified (which can hurt performance). In the above example, 5 additional PVs would be required without <tt>--alloc anywhere></tt>.
 ==== Thin RAID6 LV ====
 It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
