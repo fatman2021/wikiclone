@@ -539,8 +539,8 @@ It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is poss
 |lvcreate --type raid6 -i 2 -L4MB -n thin_meta vg00
 |lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
-== LVM RAID10 ==
-{{Note|RAID6 requires as at 4 PVs. Also LVM syntax requires the number of PV be multiple of the numbers stripes and mirror, even though RAID10 format does not}}
+=== LVM RAID10 ===
+{{Note|RAID10 requires as at 4 PVs. Also LVM syntax requires the number of PV be multiple of the numbers stripes and mirror, even though RAID10 format does not}}
 RAID10 is a combination of RAID0 and RAID1. Its s more powerful than RAID 0+RAID 1 as mirror is done at the stripe level instead of the LV level, and therefore the layout need not be symmetric. A RAID10 volume can tolerate at least a single missing PV, and possibly more.
 
 ==== Creating a RAID10 LV ====
@@ -562,7 +562,16 @@ Both the -i AND -m options are specified: <tt>-i</tt> is the number of stripes a
 On each PV 2G got reserved for LV ''lvm_raid10'' in VG ''vg00''
 
 ==== Recovering from a failed RAID10 ====
-For a single failed PV, recovery for RAID10 is the same as RAID5.
+For a single failed PV, recovery for RAID10 is the same as RAID5. In the example above LVM chose to stripe over PV loop0 and loop2, and mirror on loop1 and loop3. The resulting array can tolerate the loss of any one PV, or 2 PV if they are on different mirrors (0/2, 0/3, 1/2, 1/3 but not 0/1 or 2/3)  
+
+It is not possible to RAID10 an existing volume, nor reshape the RAID6 across more/less PVs, nor to convert to a different RAID level/linear volume , It is possible to extend a RAID10 across additional PVs, but they must be added in multiples of the original RAID10 (which will effectively linearly append a new RAID10), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 4 additional PVs would be required without <tt>--alloc anywhere</tt>
+
+==== Thin RAID 10 ====
+It is not (yet) possible to create a RAID10 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID10 LV and then converting the LV into a thin pool with lvconvert. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV. 
+{{Warning|Conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
+{{RootCmd|lvcreate -i 2 -m 1 --type raid10 -l 1012 -n thin_pool vg00
+|lvcreate -i 2 -m 1 --type raid10 -l 6 -n thin_meta vg00
+|lvconvert --thinpool vg00/thin_pool --poolmetadata vg00/thin_meta}}
 
 == Troubleshooting ==
 LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
