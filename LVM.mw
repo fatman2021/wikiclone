@@ -402,7 +402,7 @@ This creates a 2 PV stripe set and mirrors it on 2 different PVs, for a total of
 
 A thin pool can be striped like any other LV. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
 
-It is not possible to stripe an existing  volume, nor reshape the stripe set across more/less PVs to the stripe set, nor to convert to RAID5 or RAID6, A stripe set can be mirrored. It is possible to extend a stripe set across additional PVs, but they must be added in multiples of the original stripe set (which will effectively linearly append a new stripe set), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 3 additional PVs would be required without <tt>--alloc anywhere</tt>.
+It is not possible to stripe an existing volume, nor reshape the stripes across more/less PVs, nor to convert to a different RAID level/linear volume. A stripe set can be mirrored. It is possible to extend a stripe set across additional PVs, but they must be added in multiples of the original stripe set (which will effectively linearly append a new stripe set), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 3 additional PVs would be required without <tt>--alloc anywhere</tt>.
 
 === LVM2 RAID 1 ===
 Unlike RAID 0, which is striping, RAID 1 is mirroring, but implemented differently than the original LVM mirror. Under RAID1, reads are spread out across PV, improving performance. RAID1 Mirror failures do not cause I/O to block because LVM does not need to break it on write. 
@@ -456,7 +456,7 @@ It is not (yet) possible to create a RAID 1 thin pool or thin volume. It is poss
 
 === LVM2 Stripeset with Parity (RAID4 and RAID5) ===
 {{Note|Stripeset with Parity require at least 3 PVs }}
-RAID 0 is not fault-tolerant - if any of the PVs fail the LV is unusable. By adding a parity stripe to RAID 0 the LV can still function will a single missing PV (performance may be degraded though). A new PV can then be added to restore fault tolerance.
+RAID 0 is not fault-tolerant - if any of the PVs fail the LV is unusable. By adding a parity stripe to RAID 0 the LV can still function will a single missing PV. A new PV can then be added to restore fault tolerance.
 
 Stripsets with parity come in 2 flavors: RAID 4 and RAID 5. Under RAID 4.all the parity stripes are stored on the same LV. The PV containing the LV can become a bottleneck because all writes hit that PV, and gets worse the more PVs in the array. With RAID 5, the parity data is distributed evenly across the LVs and no PV is a bottleneck. For that reason, RAID 4 is rare is considered obsolete/historical and in practice all stripesets with parity are RAID 5.
 
@@ -497,8 +497,7 @@ Its possible to replace a still working PV in RAID5 as well
 |lvconvert --replace /dev/loop1 vg00/lvm_raid5
 |vgreduce vg00 /dev/loop1}}
 
-It is not possible to stripe with parity an existing volume, nor reshape the stripe set across more/less PVs to the stripe set with parity, nor to convert to RAID0 or RAID6, A stripe set with parity can be mirrored. It is possible to extend a stripe set with parity
-across additional PVs, but they must be added in multiples of the original stripe set with parity (which will effectively linearly append a new stripe set with parity), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 3 additional PVs would be required without <tt>--alloc anywhere</tt>.
+The same restrictions of stripe sets apply to stripe sets with parity as well: It is not possible to stripe with parity an existing volume, nor reshape the stripes with parity across more/less PVs, nor to convert to a different RAID level/linear volume. A stripe set with parity can be mirrored. It is possible to extend a stripe set with parity across additional PVs, but they must be added in multiples of the original stripe set with parity (which will effectively linearly append a new stripe set with parity), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 3 additional PVs would be required without <tt>--alloc anywhere</tt>.
 
 ==== Thin RAID5 LV ====
 It is not (yet) possible to create stripe set with parity (RAID5) thin pool or thin volume. It is possible to create a RAID5 thin pool by creating a normal RAID5 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
@@ -531,7 +530,7 @@ Recovery for RAID6 is the same as RAID5. A RAID6 LV with a single failure reduce
 
 Unlike RAID5 where parity block is cheap to recompute vs disk I/O, this is only half true in RAID6. RAID6 uses 2 parity stripes: One stripe is computed the same way as RAID5 (simple XOR). The second parity stripe is much harder to compute[https://www.kernel.org/pub/linux/kernel/people/hpa/raid6.pdf].
 
-It is not possible to RAID6 an existing volume, nor reshape the RAID6 across more/less PVs, nor to convert to RAID0 or RAID5, A RAID6 can be mirrored. It is possible to extend a RAID6 across additional PVs, but they must be added in multiples of the original RAID6 (which will effectively linearly append a new RAID6), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 5 additional PVs would be required without <tt>--alloc anywhere</tt>.
+The same restrictions of stripe sets with parity apply to RAID6 as well: It is not possible to RAID6 an existing volume, nor reshape a RAID6 across more/less PVs, nor to convert to a different RAID level/linear volume. A RAID6 can be mirrored. It is possible to extend a RAID6 across additional PVs, but they must be added in multiples of the original RAID6 (which will effectively linearly append a new RAID6), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 5 additional PVs would be required without <tt>--alloc anywhere</tt>.
 ==== Thin RAID6 LV ====
 It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 LV and then converting the LV into a thin pool with <tt>lvconvert</tt>. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV.
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
@@ -550,7 +549,7 @@ RAID10 is a combination of RAID0 and RAID1. Its s more powerful than RAID 0+RAID
 |lvcreate --type raid10 -l 1020 -i 2 -m 1 --nosync -n lvm_raid10 vg00
 |output=<pre>  Using default stripesize 64.00 KiB
   WARNING: New raid10 won't be synchronised. Don't read what you didn't write!</pre>.}}
-Both the -i AND -m options are specified: <tt>-i</tt> is the number of stripes and <tt>-m</tt> is the number of mirrors. 2 stripes and 1 mirror require 4 PVs.
+Both the -i AND -m options are specified: <tt>-i</tt> is the number of stripes and <tt>-m</tt> is the number of mirrors. 2 stripes and 1 mirror require 4 PVs. --nosync is an optimization to skip the initial copy. 
 
 {{RootCmd|pvscan
 |output=<pre>  PV         VG     Fmt  Attr PSize   PFree 
@@ -564,7 +563,7 @@ On each PV 2G got reserved for LV ''lvm_raid10'' in VG ''vg00''
 ==== Recovering from a failed RAID10 ====
 For a single failed PV, recovery for RAID10 is the same as RAID5. In the example above LVM chose to stripe over PV loop0 and loop2, and mirror on loop1 and loop3. The resulting array can tolerate the loss of any one PV, or 2 PV if they are on different mirrors (0/2, 0/3, 1/2, 1/3 but not 0/1 or 2/3)  
 
-It is not possible to RAID10 an existing volume, nor reshape the RAID6 across more/less PVs, nor to convert to a different RAID level/linear volume , It is possible to extend a RAID10 across additional PVs, but they must be added in multiples of the original RAID10 (which will effectively linearly append a new RAID10), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 4 additional PVs would be required without <tt>--alloc anywhere</tt>
+The same restrictions of stripe sets apply to RAID10 as well: It is not possible to RAID10 an existing volume, nor reshape the RAID10 across more/less PVs, nor to convert to a different RAID level/linear volume , It is possible to extend a RAID10 across additional PVs, but they must be added in multiples of the original RAID10 (which will effectively linearly append a new RAID10), or <tt>--alloc anywhere</tt> must be specified (which can hurt performance). In the above example, 4 additional PVs would be required without <tt>--alloc anywhere</tt>
 
 ==== Thin RAID 10 ====
 It is not (yet) possible to create a RAID10 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID10 LV and then converting the LV into a thin pool with lvconvert. 2 LVs are required: One for the thin pool and one for the thin metadata, the conversion process will merge them into a single LV. 
