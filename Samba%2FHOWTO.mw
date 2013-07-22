@@ -1,0 +1,464 @@
+
+== Introduction to this HOWTO ==
+
+=== Purpose ===
+
+This HOWTO is designed to help you move a network from many different clients speaking different languages, to many different machines that speak a common language. The ultimate goal is to help differing architectures and technologies, come together in a productive, happily coexisting environment. 
+
+Following the directions outlined in this HOWTO should give you an excellent step towards a peaceful cohabitation between Windows, and virtually all known variations of *nix. 
+
+This HOWTO originally started not as a HOWTO, but as a FAQ. It was intended to explore the functionality and power of the Gentoo system, portage and the flexibility of USE flags. Like so many other projects, it was quickly discovered what was missing in the Gentoo realm: there weren't any Samba HOWTOs catered for Gentoo users. These users are more demanding than most; they require performance, flexibility and customization. This does not however imply that this HOWTO was not intended for other distributions; rather that it was designed to work with a highly customized version of Samba. 
+
+This HOWTO will describe how to share files and printers between Windows PCs and *nix PCs. It will also show you how to mount and manipulate shares. 
+
+There are a few topics that will be mentioned, but are out of the scope of this HOWTO. These will be noted as they are presented. 
+
+This HOWTO is based on a compilation and merge of an excellent HOWTO provided in the [http://forums.gentoo.org Gentoo forums] by Andreas "daff" Ntaflos and the collected knowledge of Joshua Preston. The link to this discussion is provided below for your reference: 
+
+*  [http://forums.gentoo.org/viewtopic.php?t=110931 HOWTO CUPS+Samba: printing from Windows & Linux] 
+
+=== Before you use this guide ===
+
+There are a several other guides for setting up CUPS and/or Samba, please read them as well, as they may tell you things left out of this HOWTO (intentional or otherwise). One such document is the very useful and well written [http://www.gentoo.org/doc/en/printing-howto.xml Gentoo Printing Guide], as configuration issues and specific printer setup is not discussed here. 
+
+=== Brief Overview ===
+
+After presenting the various USE flags, the following list will outline all of the topics covered as they are presented: 
+
+* On the Samba server:
+** Install and configure Samba
+** Install and configure CUPS
+** Adding the printer to CUPS
+** Adding the PS drivers for the Windows clients
+
+* On the Unix clients:
+** Install and configure CUPS
+** Configuring a default printer
+** Mounting a Windows or Samba share
+
+* On the Windows Clients:
+** Configuring the printer
+** Accessing Samba shares
+
+=== Requirements ===
+
+We will need the following: 
+
+* net-fs/samba
+* net-print/cups (built with the <code>ppds</code> USE flag)
+* net-print/hplip (if you have an HP printer)
+* A kernel of sorts (2.6)
+* A printer (PS or non-PS)
+* A working network (home/office/etc) consisting of more than one machine)
+
+The main package we use here is <code>net-fs/samba</code>, however, you will need a kernel with CIFS support enabled in order to mount a Samba or Windows share from another computer. CUPS will be emerged if it is not already.
+
+== Getting acquainted with Samba ==
+
+=== The USE Flags ===
+
+Before emerging anything, take a look at some of the various USE flags available to Samba. 
+
+Depending on the network topology and the specific requirements of the server, the USE flags outlined below will define what to include or exclude from the emerging of Samba. 
+
+{{USEflag|kerberos+++Include support for Kerberos. The server will need this if it is intended to join an existing domain or Active Directory. See the note below for more information.
+|acl+++Enables Access Control Lists. The ACL support in Samba uses a patched ext2/ext3, or SGI's XFS in order to function properly as it extends more detailed access to files or directories; much more so than typical *nix GID/UID schemas.
+|cups+++This enables support for the Common Unix Printing System. This provides an interface allowing local CUPS printers to be shared to other systems in the network.
+|ldap+++Enables the Lightweight Directory Access Protocol (LDAP). If Samba is expected to use Active Directory, this option must be used. This would be used in the event Samba needs to login to or provide login to a Domain/Active Directory Server. The kerberos USE flag is needed for proper functioning of this option.
+|pam+++Include support for pluggable authentication modules (PAM). This provides the ability to authenticate users on the Samba Server, which is required if users have to login to your server. The kerberos USE flag is recommended along with this option.
+|readline+++Link Samba against libreadline. This is highly recommended and should probably not be disabled.
+|python+++Python bindings API. Provides an API that will allow Python to interface with Samba.
+|winbind+++Winbind allows for a unified logon within a Samba environment. It uses a Unix implementation of Windows RPC calls, PAM and the name service switch (supported by the c library) to enable Windows NT domain users to appear and work as Unix users on a Unix system.}}
+
+A couple of things worth mentioning about the USE flags and different Samba functions include: 
+
+* ACLs on ext2/3 are implemented through extended attributes (EAs). EA and ACL kernel options for ext2 and/or ext3 will need to be enabled (depending on which file system is being used - both can be enabled).
+* While Active Directory, ACL, and PDC functions are out of the intended scope of this HOWTO, you may find these links as helpful to your cause:
+**  [http://www.gentoo.org/ http://www.bluelightning.org/linux/samba_acl_howto/] 
+**  [http://www.gentoo.org/ http://www.wlug.org.nz/HowtoSamba3AndActiveDirectory]
+
+== Server Software Installation ==
+
+=== Emerging Samba ===
+
+First of all: be sure that all your hostnames resolve correctly. Either have a working domain name system running on your network or appropriate entries in your {{Path|/etc/hosts}} file. <code>cupsaddsmb</code> often borks if hostnames don't point to the correct machines. 
+
+Hopefully now you can make an assessment of what you'll actually need in order to use Samba with your particular setup. The setup used for this HOWTO is: 
+
+* cups
+* readline
+* pam
+
+To optimize performance, size and the time of the build, the USE flags are specifically included or excluded. 
+
+First, add <code>ppds</code> to your USE flags to make sure that when CUPS is built, it has proper foomatic support: 
+
+{{RootCmd|echo "net-print/cups ppds" >> /etc/portage/package.use
+|echo "net-fs/samba readline cups pam" >> /etc/portage/package.use}}
+
+Now install the samba software:
+
+{{Emerge|net-fs/samba}}
+
+This will emerge Samba and CUPS. 
+
+=== Emerging net-print/hplip ===
+
+You only need to emerge this if you use an HP printer. 
+
+{{Emerge|net-print/hplip}}
+
+== Server Configuration ==
+
+=== Configuring Samba ===
+
+The main Samba configuration file is {{Path|/etc/samba/smb.conf}} . It is divided in sections indicated by [sectionname]. Comments are either # or ;. A sample {{Path|smb.conf}} is included below with comments and suggestions for modifications. If more details are required, see the man page for {{Path|smb.conf}} , the installed {{Path|smb.conf.example}} , the Samba Web site or any of the numerous Samba books available. 
+
+{{Code|A Sample /etc/samba/smb.conf|<pre>
+[global]
+## # Replace MYWORKGROUPNAME with your workgroup/domain
+workgroup = ## MYWORKGROUPNAME
+## # Of course this has no REAL purpose other than letting
+# everyone knows it's not Windows!
+# %v prints the version of Samba we are using.
+server string = Samba Server %v
+## # We are going to use cups, so we are going to put it in here ;-)
+printcap name = cups
+printing = cups
+load printers = yes
+## # We want a log file and we do not want it to get bigger than 50kb.
+log file = /var/log/samba/log.%m
+max log size = 50
+## # We are going to set some options for our interfaces...
+socket options = TCP_NODELAY SO_RCVBUF=8192 SO_SNDBUF=8192
+## # This is a good idea, what we are doing is binding the
+# samba server to our local network.
+# For example, if eth0 is our local network device
+interfaces = lo eth0
+bind interfaces only = yes
+## # Now we are going to specify who we allow, we are afterall
+# very security conscience, since this configuration does
+# not use passwords!
+hosts allow = 127.0.0.1 192.168.1.0/24
+hosts deny = 0.0.0.0/0
+## # Other options for this are USER, DOMAIN, ADS, and SERVER
+# The default is user
+security = share
+## # No passwords, so we're going to use a guest account!
+guest ok = yes
+
+## # Now we setup our print drivers information!
+[print$]
+comment = Printer Drivers
+path = /etc/samba/printer ## # this path holds the driver structure
+guest ok = yes
+browseable = yes
+read only = yes
+## # Modify this to "username,root" if you don't want root to
+# be the only printer admin)
+write list = root
+
+## # Now we'll setup a printer to share, while the name is arbitrary
+# it should be consistent throughout Samba and CUPS!
+[HPDeskJet930C]
+comment = HP DeskJet 930C Network Printer
+printable = yes
+path = /var/spool/samba
+public = yes
+guest ok = yes
+## # Modify this to "username,root" if you don't want root to
+# be the only printer admin)
+printer admin = root
+
+## # Now we setup our printers share. This should be
+# browseable, printable, public.
+[printers]
+comment = All Printers
+browseable = no
+printable = yes
+writable = no
+public = yes
+guest ok = yes
+path = /var/spool/samba
+## # Modify this to "username,root" if you don't want root to
+# be the only printer admin)
+printer admin = root
+
+## # We create a new share that we can read/write to from anywhere
+# This is kind of like a public temp share, anyone can do what
+# they want here.
+[public]
+comment = Public Files
+browseable = yes
+public = yes
+create mode = 0766
+guest ok = yes
+path = /home/samba/public
+</pre>
+}}
+
+{{Warning|If you like to use Samba's guest account to do anything concerning printing from Windows clients: don't set <code>guest only {{=}} yes</code> in the <code>[global]</code> section. The guest account seems to cause problems when running <code>cupsaddsmb</code> sometimes when trying to connect from Windows machines. See below, too, when we talk about <code>cupsaddsmb</code> and the problems that can arise. Use a dedicated printer user, like <code>printeruser</code> or <code>printer</code> or <code>printme</code> or whatever. It doesn't hurt and it will certainly protect you from a lot of problems.}}
+
+Now create the directories required for the minimum configuration of Samba to share the installed printer throughout the network. 
+
+{{RootCmd|mkdir /etc/samba/printer
+|mkdir /var/spool/samba
+|mkdir /home/samba/public}}
+
+At least one Samba user is required in order to install the printer drivers and to allow users to connect to the printer. Users must exist in the system's {{Path|/etc/passwd}} file. The next example uses the root user, but others can be used as well.
+
+{{RootCmd|smbpasswd -a root}}
+
+The Samba passwords need not be the same as the system passwords in {{Path|/etc/passwd}} . 
+
+You will also need to update {{Path|/etc/nsswitch.conf}} so that Windows systems can be found easily using NetBIOS: 
+
+{{Cmd|nano -w /etc/nsswitch.conf|output=<pre>
+hosts: files dns wins
+</pre>
+}}
+
+=== Configuring CUPS ===
+
+This is a little more complicated. CUPS' main config file is {{Path|/etc/cups/cupsd.conf}} . It's structure is similar to Apache's {{Path|httpd.conf}} file, so many you may find it familiar. Outlined in the example are the directives that need to be changed: 
+
+{{Code|/etc/cups/cupsd.conf|<pre>
+ServerName PrintServer          ## # your printserver name
+ServerAdmin root@PrintServer    ## # the person for printer-related hate-mail, e.g. you
+
+AccessLog /var/log/cups/access_log ## # probably doesn't need changing
+ErrorLog  /var/log/cups/error_log  ## # doesn't really need changing either
+
+LogLevel  debug ## # only while installing and testing, should later be
+                # changed to 'info'
+
+MaxClients 100 ## # I've had to set this to 1000000000 or so because some time back,
+               # there seemed to be a bug in CUPS' controlling of the web interface,
+               # making CUPS think a denial of service attack was in progress when
+               # I tried to configure a printer with the web interface. weird.
+
+BrowseAddress @IF(eth0) ## # Change this to your internal net interface
+
+<Location />
+Order Deny,Allow
+Deny From All
+Allow From 192.168.1.*  ## # the addresses of your internel network
+                        # e.g. 192.168.1.* will allow connections from any host on
+                        # the 192.168.1.0 network. change to whatever suits you
+</Location>
+
+<Location /admin>
+AuthType Basic
+AuthClass System
+Allow From 192.168.1.*  ## # same as above, allow any host on the
+                        # 192.168.1.0 network to connect and do
+                        # administrative tasks after authenticating
+Order Deny,Allow
+Deny From All
+</Location>
+</pre>
+}}
+
+Edit {{Path|/etc/cups/mime.convs}} to uncomment some lines. The changes to {{Path|mime.convs}} and {{Path|mime.types}} are needed to make CUPS print Microsoft Office document files. 
+
+The following line is found near the end of the file. Uncomment it:
+{{Code|/etc/cups/mime.convs|<pre>
+application/octet-stream        application/vnd.cups-raw        0
+</pre>
+}}
+
+Edit {{Path|/etc/cups/mime.types}} to uncomment some lines. 
+
+The following line is found near the end of the file. Uncomment it:
+{{Code|/etc/cups/mime.types|<pre>
+application/octet-stream
+</pre>
+}}
+
+CUPS needs to be started on boot, and started immediately. 
+
+{{RootCmd|rc-update add cupsd default
+|/etc/init.d/cupsd restart}}
+
+=== Installing a printer for and with CUPS ===
+
+First, go to [http://linuxprinting.org LinuxPrinting.Org] to find and download the correct PPD file for your printer and CUPS. To do so, click the link Printer Listings to the left. Select your printers manufacturer and the model in the pulldown menu, e.g. HP and DeskJet 930C. Click "Show". On the page coming up click the "recommended driver" link after reading the various notes and information. Then fetch the PPD file from the next page, again after reading the notes and introductions there. You may have to select your printers manufacturer and model again. Reading the [http://www.linuxprinting.org/cups-doc.html CUPS quickstart guide] is also very helpful when working with CUPS. 
+
+Now you have a PPD file for your printer to work with CUPS. Place it in {{Path|/usr/share/cups/model}} . The PPD for the HP DeskJet 930C was named {{Path|HP-DeskJet_930C-hpijs.ppd}} . You should now install the printer. This can be done via the CUPS web interface or via command line. The web interface is found at {{Path|http://PrintServer:631}} once CUPS is running. 
+
+{{RootCmd|lpadmin -p HPDeskJet930C -E -v usb:/dev/ultp0 -m HP-DeskJet_930C-hpijs.ppd
+|/etc/init.d/cupsd restart}}
+
+Remember to adjust to what you have. Be sure to have the name (<code>-p</code> argument) right (the name you set above during the Samba configuration!) and to put in the correct <code>usb:/dev/usb/blah</code> , <code>parallel:/dev/blah</code> or whatever device you are using for your printer. 
+
+You should now be able to access the printer from the web interface and be able to print a test page. 
+
+=== Installing the Windows printer drivers ===
+
+Now that the printer should be working it is time to install the drivers for the Windows clients to work. Samba 2.2 introduced this functionality. Browsing to the print server in the Network Neighbourhood, right-clicking on the printer share and selecting "connect" downloads the appropriate drivers automatically to the connecting client, avoiding the hassle of manually installing printer drivers locally. 
+
+There are two sets of printer drivers for this. First, the Adobe PS drivers which can be obtained from [http://www.adobe.com/support/downloads/main.html Adobe] (PostScript printer drivers). Second, there are the CUPS PS drivers, to be obtained by emerging <code>net-print/cups-windows</code> . There doesn't seem to be a difference between the functionality of the two, but the Adobe PS drivers need to be extracted on a Windows System since it's a Windows binary. Also the whole procedure of finding and copying the correct files is a bit more hassle. The CUPS drivers support some options the Adobe drivers don't. 
+
+This HOWTO uses the CUPS drivers for Windows. Install them as shown: 
+
+{{Emerge|cups-windows}}
+
+Now we'll use the script <code>cupsaddsmb</code> provided by the CUPS distribution. Be sure to read its manpage (<code>man cupsaddsmb</code>), as it will tell you which Windows drivers you'll need to copy to the proper CUPS directory. Once you've copied the drivers, restart CUPS by running <code>/etc/init.d/cupsd restart</code> . Next, run <code>cupsaddsmb</code> as shown: 
+
+{{RootCmd|cupsaddsmb -H PrintServer -U root -h PrintServer -v HPDeskJet930C}}
+
+Instead of HPDeskJet930C you could also specify "-a", which will "export all known printers":
+
+{{RootCmd|cupsaddsmb -H PrintServer -U root -h PrintServer -a}}
+
+
+{{Warning|The execution of this command often causes the most trouble. Read through the [http://forums.gentoo.org/viewtopic.php?t{{=}}110931 posts in this thread] for some troubleshooting tips.}}
+
+Here are common errors that may happen: 
+
+* The hostname given as a parameter for <code>-h</code> and <code>-H</code> ( <code>PrintServer</code> ) often does not resolve correctly and doesn't identify the print server for CUPS/Samba interaction. If an error like: '''Warning: No PPD file for printer "CUPS_PRINTER_NAME" - skipping!''' occurs, the first thing you should do is substitute <code>PrintServer</code> with <code>localhost</code> and try it again.
+* The command fails with an '''NT_STATUS_UNSUCCESSFUL''' . This error message is quite common, but can be triggered by many problems. It's unfortunately not very helpful. One thing to try is to temporarily set <code>security = user</code> in your {{Path|smb.conf}} . After/if the installation completes successfully, you should set it back to share, or whatever it was set to before.
+
+This should install the correct driver directory structure under {{Path|/etc/samba/printer}} . That would be {{Path|/etc/samba/printer/W32X86/2/}} . The files contained should be the 3 driver files and the PPD file, renamed to {{Path|YourPrinterName.ppd}} (the name which you gave the printer when installing it (see above). 
+
+Pending no errors or other complications, your drivers are now installed. 
+
+=== Finalizing our setup ===
+
+Lastly, setup our directories. 
+
+{{RootCmd|mkdir /home/samba
+|mkdir /home/samba/public
+|chmod 755 /home/samba
+|chmod 755 /home/samba/public}}
+
+=== Testing our Samba configuration ===
+
+We will want to test our configuration file to ensure that it is formatted properly and all of our options have at least the correct syntax. To do this we run <code>testparm</code> . 
+
+{{RootCmd|/usr/bin/testparm|output=<pre>
+Load smb config files from /etc/samba/smb.conf
+Processing section "[printers]"
+Global parameter guest account found in service section!
+Processing section "[public]"
+Global parameter guest account found in service section!
+Loaded services file OK.
+Server role: ROLE_STANDALONE
+Press enter to see a dump of your service definitions
+ ...
+ ...
+</pre>
+}}
+
+=== Starting the Samba service ===
+
+Now configure Samba to start at bootup; then go ahead and start it. 
+
+{{RootCmd|rc-update add samba default
+|/etc/init.d/samba start}}
+
+=== Checking our services ===
+
+It would probably be prudent to check our logs at this time also. We will also want to take a peak at our Samba shares using <code>smbclient</code> . 
+
+{{RootCmd|smbclient -L localhost|output=<pre>
+Password:
+## (You should see a BIG list of services here.)
+</pre>
+}}
+
+== Configuration of the Clients ==
+
+=== Printer configuration of *nix based clients ===
+
+Despite the variation or distribution, the only thing needed is CUPS. Do the equivalent on any other UNIX/Linux/BSD client. 
+
+{{Emerge|cups}}
+
+{{RootCmd|nano -w /etc/cups/client.conf|output=<pre>
+ServerName PrintServer      ## # your printserver name
+</pre>
+}}
+
+That should be it. Nothing else will be needed. 
+
+If you use only one printer, it will be your default printer. If your print server manages several printers, your administrator will have defined a default printer on the server. If you want to define a different default printer for yourself, use the <code>lpoptions</code> command. 
+
+First list the available printers:
+
+{{RootCmd|lpstat -a|output=<pre>
+HPDeskJet930C accepting requests since Jan 01 00:00
+laser accepting requests since Jan 01 00:00
+</pre>}}
+
+Now define your printer (in the example, HPDeskJet930C) as the default printer:
+
+{{RootCmd|lpoptions -d HPDeskJet930C}}
+
+To enable printing on the Unix/Linux systems, either specify the printer to be used, or just use the default printer (second example):
+
+{{RootCmd|lp -d HPDeskJet930C anything.txt
+|lp foobar.whatever.ps}}
+
+Just point your web browser to <code>http://printserver:631</code> on the client if you want to manage your printers and their jobs with a nice web interface. Replace <code>printserver</code> with the name of the ''machine'' that acts as your print server, not the name you gave to the cups print server if you used different names. 
+
+=== Mounting a Windows or Samba share in GNU/Linux ===
+
+{{Note|Don't forget to install <code>net-fs/samba</code> on the client(s) that will be accessing the shares.}}
+
+Now is time to configure our kernel to support CIFS. Since I'm assuming we've all compiled at least one kernel, we'll need to make sure we have all the right options selected in our kernel. For simplicity's sake, make it a module for ease of use. It is the author's opinion that kernel modules are a good thing and should be used whenever possible. 
+
+{{Kernel|Kernel support|<pre>
+CONFIG_CIFS=m
+</pre>
+}}
+
+Then make the module/install it; insert it with: 
+
+{{RootCmd|modprobe cifs}}
+
+Once the module is loaded, mounting a Windows or Samba share is possible. Use <code>mount</code> to accomplish this, as detailed below.
+
+The syntax for mounting a Windows/Samba share is:
+
+{{Code|Syntax for mounting a Windows/Samba share|<pre>
+  mount -t cifs [-o username=xxx,password=xxx] //server/share /mnt/point
+</pre>}}
+
+You can drop the <code>username</code> and <code>password</code> options if no password is needed.
+
+{{RootCmd|mount -t cifs //PrintServer/public /mnt/public}}
+
+After you mount the share, you would be able to access it as if it were a local drive. 
+
+=== Printer Configuration for Windows NT/2000/XP clients ===
+
+That's just a bit of point-and-click. Browse to {{Path|\\PrintServer}} and right click on the printer (HPDeskJet930C) and click connect. This will download the drivers to the Windows client and now every application (such as Word or Acrobat) will offer HPDeskJet930C as an available printer to print to. :-)
+
+== Links and Resources ==
+
+=== Links ===
+
+These are some links that may help you in setting up, configuration and troubleshooting your installation: 
+
+*  [http://www.cups.org/ CUPS Homepage] 
+*  [http://www.samba.org/ Samba Homepage] , especially the [http://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/CUPS-printing.html chapter on Samba/CUPS configuration] 
+*  [http://linuxprinting.org/ LinuxPrinting dot Org] 
+*  [http://www.linuxprinting.org/kpfeifle/SambaPrintHOWTO/ Kurt Pfeifle's Samba Print HOWTO] ( This HOWTO really covers ''ANYTHING'' and ''EVERYTHING'' I've written here, plus a LOT more concerning CUPS and Samba, and generally printing support on networks. A really interesting read, with lots and lots of details.)
+*  [http://www.freebsddiary.org/cups.php FreeBSD Diary's CUPS Topic] 
+
+=== Troubleshooting ===
+
+See [http://www.linuxprinting.org/kpfeifle/SambaPrintHOWTO/Samba-HOWTO-Collection-3.0-PrintingChapter-11th-draft.html#37 this page] from Kurt Pfeifle's "Printing Support in Samba 3.0" manual. Lots of useful tips there! Be sure to look this one up first, before posting questions and problems! Maybe the solution you're looking for is right there.
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Andreas "daff" Ntaflos
+* Joshua Preston
+* Joshua Saddler
+
+[[Category:Server and Security]]
+[[Category:Filesystems]]
+[[Category:Network management]]
