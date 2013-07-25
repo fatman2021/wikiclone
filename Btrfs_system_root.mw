@@ -241,3 +241,18 @@ We kick off the root fs transfer and come back after a cup of whatever.
 # cd /mnt/rawroot
 # tar cvpf - . | (cd /mnt/newroot; tar xpf -)
 </pre>}}
+
+Copy over the /home and other files as necessary.  In this particular install, /usr/portage/distfiles had been a softlink to a directory on the old /home filesystem.  If it was to have been split off from a physical directory instead, the transfer from the new root subvolume's usr/portage/distfiles to the newdistfiles subvolume is effectively a move between filesystems that would involve a copy and then a delete.  It would be more efficient to make judicious use of the -exclude switch on tar when doing the initial copy to the new mirror set.
+
+==== Edit Config on New Mirror ====
+
+Edit the grub.conf and fstab on the new mirror set to reflect the way things should look when the new mirror set becomes the boot set.  That includes editing /etc/mdadm.conf to assemble only the /dev/md1 device now.  It's also probably cleaner to do a mountpoint for /distfiles as shown and then have /usr/portage/distfiles be a softlink to it.
+
+{{Code|/etc/fstab changes on new mirror|<pre>
+/dev/md1                /boot           ext3    defaults,noatime                1 2
+LABEL=BTRFSMIRROR	/mnt/btrfsmirror	btrfs	defaults,noatime	0 0
+LABEL=BTRFSMIRROR	/		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=root	0 0
+LABEL=BTRFSMIRROR	/home		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=home	0 0
+LABEL=BTRFSMIRROR	/distfiles	btrfs	defaults,noatime,autodefrag,subvol=distfiles	0 0
+LABEL=BTRFSMIRROR	/vm		btrfs	defaults,noatime,compress=lzo,subvol=vm	0 0
+</pre>}}
