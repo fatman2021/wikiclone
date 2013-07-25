@@ -275,7 +275,7 @@ ARRAY /dev/md1 metadata=0.90 UUID=651f4200:d2f48834:c68863d8:e9942ea0
 
 </pre>}}
 
-Edit the new grub.conf to use the new btrfs based root filesystem.  Use rootflags to pull in the mount options from your new fstab for the root device.  Because we had used a label BTRFSMIRROR when making the new mirror set, we can pass that as the root to have the kernel automatically scan for and find the default volume.
+If this was a simple one disk based btrfs root filesystem the following process would probably work just fine.  Edit the new grub.conf to use the new btrfs based root filesystem.  Use rootflags to pull in the mount options from your new fstab for the root device.  Because we had used a label BTRFSMIRROR when making the new mirror set, we can pass that as the root to have the kernel automatically scan for and find the default volume.
 
 {{Code|grub.conf on new boot mirror|<pre>
 default 0
@@ -289,5 +289,185 @@ kernel /boot/kernel-3.8.13-gentoo root=LABEL=BTRFSMIRROR rootflags=defaults,noat
 #title Gentoo Linux 3.8.13-gentoo
 #root (hd0,0)
 #kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2 selinux=0
+
+</pre>}}
+
+However it turns out the kernel panics when it gets around to working with /rootfs.  So we will have to use an initial ram filesystem and an embedded init to mount the mirror set.  Following the wiki entry for [[Early Userspace Mounting]], we create the following files in /usr/src/linux/initramfs
+
+{{File|initramfs_list|files to go into the initial ram fs|<pre>
+# directory structure
+dir /proc       755 0 0
+dir /usr        755 0 0
+dir /bin        755 0 0
+dir /sys        755 0 0
+dir /var        755 0 0
+dir /lib64      755 0 0
+dir /sbin       755 0 0
+dir /mnt        755 0 0
+dir /mnt/root   755 0 0
+dir /etc        755 0 0
+dir /root       700 0 0
+dir /dev        755 0 0
+
+# busybox
+file /bin/busybox		/bin/busybox		755 0 0
+
+#
+# fsck deps
+#
+file /sbin/fsck			/sbin/fsck		755 0 0
+file /lib64/libmount.so.1	/lib64/libmount.so.1	755 0 0
+file /lib64/libblkid.so.1	/lib64/libblkid.so.1	755 0 0
+file /lib64/libc.so.6		/lib64/libc.so.6	755 0 0
+file /lib64/libuuid.so.1	/lib64/libuuid.so.1	755 0 0
+file /lib64/ld-linux-x86-64.so.2  /lib64/ld-linux-x86-64.so.2 755 0 0
+
+#
+#  fsck.ext3 and added deps
+#
+file /sbin/fsck.ext3		/sbin/fsck.ext3		755 0 0
+file /lib64/libext2fs.so.2	/lib64/libext2fs.so.2	755 0 0
+file /lib64/libcom_err.so.2	/lib64/libcom_err.so.2	755 0 0
+file /lib64/libe2p.so.2		/lib64/libe2p.so.2	755 0 0
+file /lib64/libpthread.so.0	/lib64/libpthread.so.0	755 0 0
+
+#
+# btrfs utils and added deps
+#
+file /sbin/btrfs		/sbin/btrfs		755 0 0
+file /sbin/btrfs-convert	/sbin/btrfs-convert	755 0 0
+file /sbin/btrfs-debug-tree	/sbin/btrfs-debug-tree	755 0 0
+file /sbin/btrfs-find-root	/sbin/btrfs-find-root	755 0 0
+file /sbin/btrfs-image		/sbin/btrfs-image	755 0 0
+file /sbin/btrfs-map-logical	/sbin/btrfs-map-logical	755 0 0
+file /sbin/btrfs-restore	/sbin/btrfs-restore	755 0 0
+file /sbin/btrfs-show		/sbin/btrfs-show	755 0 0
+file /sbin/btrfs-vol		/sbin/btrfs-vol		755 0 0
+file /sbin/btrfs-zero-log	/sbin/btrfs-zero-log	755 0 0
+file /sbin/btrfsck		/sbin/btrfsck		755 0 0
+file /sbin/btrfsctl		/sbin/btrfsctl		755 0 0
+file /sbin/btrfstune		/sbin/btrfstune		755 0 0
+file /sbin/mkfs.btrfs		/sbin/mkfs.btrfs	755 0 0
+file /lib64/libz.so.1		/lib64/libz.so.1	755 0 0
+
+#
+#  init script
+#
+file    /init                   /usr/src/linux/initramfs/init             755 0 0
+
+#
+#  fstab
+#
+file	/etc/fstab		/usr/src/linux/initramfs/fstab	644 0 0
+
+</pre>}}
+
+{{File|fstab|minimal fstab for /mnt/root|<pre>
+/dev/md1		/boot		ext3		defaults,noatime	1 2
+LABEL=BTRFSMIRROR	/mnt/root	btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=root	0 0
+</pre>}}
+
+{{File|init|initramfs init script|<pre>
+#!/bin/busybox sh
+
+rescue_shell() {
+    echo "$@"
+    echo "Something went wrong. Dropping you to a shell."
+    busybox --install -s
+    exec /bin/sh
+}
+
+mount_root() {
+    /sbin/btrfs device scan /dev/sda /dev/sdb
+    echo "mounting /mnt/root"
+    mount /mnt/root
+}
+
+check_filesystem() {
+    # most of code coming from /etc/init.d/fsck
+
+    local fsck_opts= check_extra= RC_UNAME=$(uname -s)
+
+    # FIXME : get_bootparam forcefsck
+    if [ -e /forcefsck ]; then
+        fsck_opts="$fsck_opts -f"
+        check_extra="(check forced)"
+    fi
+
+    echo "Checking local filesystem $check_extra : $1"
+
+    if [ "$RC_UNAME" = Linux ]; then
+        fsck_opts="$fsck_opts -C0 -T"
+    fi
+
+    trap : INT QUIT
+
+    # using our own fsck, not the builtin one from busybox
+    /sbin/fsck -p $fsck_opts $1
+
+    case $? in
+        0)      return 0;;
+        1)      echo "Filesystem repaired"; return 0;;
+        2|3)    if [ "$RC_UNAME" = Linux ]; then
+                        echo "Filesystem repaired, but reboot needed"
+                        reboot -f
+                else
+                        rescue_shell "Filesystem still have errors; manual fsck required"
+                fi;;
+        4)      if [ "$RC_UNAME" = Linux ]; then
+                        rescue_shell "Fileystem errors left uncorrected, aborting"
+                else
+                        echo "Filesystem repaired, but reboot needed"
+                        reboot
+                fi;;
+        8)      echo "Operational error"; return 0;;
+        12)     echo "fsck interrupted";;
+        *)      echo "Filesystem couldn't be fixed";;
+    esac
+    rescue_shell
+}
+
+# temporarily mount proc and sys
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+
+# disable kernel messages from popping onto the screen
+echo 0 > /proc/sys/kernel/printk
+
+# clear the screen
+clear
+
+# mounting rootfs on /mnt/root
+mount_root || rescue_shell "Error with uuidlabel_root"
+
+echo "All done. Switching to real root."
+
+# clean up. The init process will remount proc sys and dev later
+umount /proc
+umount /sys
+umount /dev
+
+# switch to the real root and execute init
+exec switch_root /mnt/root /sbin/init
+
+</pre>}}
+
+'''Note''' - You will probably need to create the /usr/src/linux/initramfs directory before introducing the above files.  
+{{Code||<pre>
+# cd /usr/src/linux
+# scripts/gen_initramfs_list.sh -o /mnt/altboot/initrd_btrfs.cpio.gz /usr/src//linux/initramfs/initramfs_list
+</pre>}}
+
+
+{{File|grub.conf|updated grub.conf on /mnt/altboot|<pre>
+default 0
+timeout 6
+splashimage=(hd0,0)/boot/grub/splash.xpm.gz
+
+title Gentoo Linux 3.8.13-gentoo
+root (hd0,0)
+kernel /boot/kernel-3.8.13-gentoo root=LABEL=BTRFSMIRROR rootflags=defaults,noatime,compress=lzo,autodefrag,subvol=root selinux=0
+initrd /boot/initrd_btrfs.cpio.gz
 
 </pre>}}
