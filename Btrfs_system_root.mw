@@ -1,0 +1,243 @@
+== Converting to a btrfs Based System ==
+This exercise is one example for re-basing a gentoo installation's root filesystem to use btrfs.  In this case, the existing system is an mdadm based mirror set using two 2tb drives at /dev/sda and /dev/sdb.  Two fresh 2tb drives have been added at /dev/sdc and /dev/sdd.
+
+=== Existing Layout ===
+* Simple two way mdadm mirror (raid1)
+** 250mb /boot partition as ext3 with metadata=0.90
+** 75gb / partition as ext4 with metadata=0.90
+** 750gb /home partition as ext4 with metadata=1.2
+** 1tb+ /vm partition as ext4 with metadata=1.2
+
+The use of the older metadata format for /boot and / partitions allows grub-0.97 to find and boot the system without needing to resort to an initial ram device.
+
+{{Code|grub.conf|<pre>
+default 0
+timeout 6
+splashimage=(hd0,0)/boot/grub/splash.xpm.gz
+
+title Gentoo Linux 3.8.13-gentoo
+root (hd0,0)
+kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2
+</pre>}}
+
+{{Code|fstab|<pre>
+/dev/md1                /boot           ext3            defaults,noatime        1 2
+/dev/md2                /               ext4            defaults,noatime        0 1
+/dev/md3                /home           ext4            defaults,noatime        0 1
+/dev/md4                /vm             ext4            defaults,noatime        0 1
+</pre>}}
+
+
+=== New Layout ===
+* 250mb /boot partition as ext3 with metadata=0.90
+* 1.9gb+ btfs partition with raid1 metadata and data
+
+We are keeping the /boot as a simple software mirror in order to stay with grub-0.97 and continue to avoid using an initial ram device.  btrfs has been built into the kernel (not a module) along with lzo compression/decompression as that will be used to optimize space utilization and read performance on the system volumes.  Likewise, the raid modules used by mdadm are also builtins.
+
+{{Code|kernel .config options|<pre>
+# cd /usr/src/linux
+# grep -i lzo .config
+CONFIG_HAVE_KERNEL_LZO=y
+# CONFIG_KERNEL_LZO is not set
+CONFIG_RD_LZO=y
+CONFIG_SQUASHFS_LZO=y
+CONFIG_CRYPTO_LZO=m
+CONFIG_LZO_COMPRESS=y
+CONFIG_LZO_DECOMPRESS=y
+CONFIG_DECOMPRESS_LZO=y
+
+# grep -i btrfs .config
+CONFIG_BTRFS_FS=y
+CONFIG_BTRFS_FS_POSIX_ACL=y
+# CONFIG_BTRFS_FS_CHECK_INTEGRITY is not set
+
+# grep -i raid .config
+CONFIG_RAID_ATTRS=y
+# CONFIG_BLK_DEV_3W_XXXX_RAID is not set
+# CONFIG_SCSI_AACRAID is not set
+CONFIG_MEGARAID_NEWGEN=y
+CONFIG_MEGARAID_MM=y
+CONFIG_MEGARAID_MAILBOX=y
+CONFIG_MEGARAID_LEGACY=y
+CONFIG_MEGARAID_SAS=y
+# CONFIG_SCSI_PMCRAID is not set
+CONFIG_MD_RAID0=y
+CONFIG_MD_RAID1=y
+CONFIG_MD_RAID10=y
+CONFIG_MD_RAID456=y
+CONFIG_MULTICORE_RAID456=y
+CONFIG_DM_RAID=y
+# CONFIG_ASYNC_RAID6_TEST is not set
+CONFIG_ASYNC_RAID6_RECOV=y
+CONFIG_RAID6_PQ=y
+</pre>}}
+
+'''Note''' - Not all of the above lzo "hits" are applicable to the btrfs compression features.  A number of the raid hits do not apply to mdadm.
+
+==== Partitioning ====
+cfdisk was used to partition /dev/sdc with the 250mb and remainder partitions by hand.  sfdisk then can be used to apply the same scheme to /dev/sdd
+
+{{Code|partitioning|<pre>
+# sfdisk -d /dev/sdc >/tmp/sdc.txt
+# cat /tmp/sdc.txt
+# partition table of /dev/sdc
+unit: sectors
+
+/dev/sdc1 : start=       63, size=   481887, Id=83, bootable
+/dev/sdc2 : start=   481950, size=3906547218, Id=83
+/dev/sdc3 : start=        0, size=        0, Id= 0
+/dev/sdc4 : start=        0, size=        0, Id= 0
+
+
+# sfdisk /dev/sdd </tmp/sdc.txt
+</pre>}}
+
+==== Setting up boot ====
+{{Code|Mirror Creation|<pre>
+# mdadm --create --verbose /dev/md5 --level=mirror --raid-devices=2 --metadata=0.90 /dev/sdc1 /dev/sdd1
+mdadm: size set to 240832K
+mdadm: array /dev/md5 started.
+
+# cat /proc/mdstat | grep md5
+md5 : active raid1 sdd1[1] sdc1[0]
+
+# mkfs -t ext3 /dev/md5
+mke2fs 1.42.7 (21-Jan-2013)
+/dev/md5 alignment is offset by 512 bytes.
+This may result in very poor performance, (re)-partitioning suggested.
+Filesystem label=
+OS type: Linux
+Block size=1024 (log=0)
+Fragment size=1024 (log=0)
+Stride=4 blocks, Stripe width=4 blocks
+60240 inodes, 240832 blocks
+12041 blocks (5.00%) reserved for the super user
+First data block=1
+Maximum filesystem blocks=67371008
+30 block groups
+8192 blocks per group, 8192 fragments per group
+2008 inodes per group
+Superblock backups stored on blocks: 
+        8193, 24577, 40961, 57345, 73729, 204801, 221185
+
+Allocating group tables: done                            
+Writing inode tables: done                            
+Creating journal (4096 blocks): done
+Writing superblocks and filesystem accounting information: done 
+
+</pre>}}
+
+The warning about /boot partition alignment might have been avoided with some more care with cfdisk.  It will be interesting to see what happens when the btrfs filesystem is created.  Grub must be installed on each of the new mirrors by hand as shown
+
+{{Code|/boot transfer|<pre>
+# mkdir /mnt/altboot
+# mount -t ext3 /dev/md5 /mnt/altboot
+# cd /boot
+# tar cpf - . | (cd /mnt/altboot; tar xpf -)
+# grub
+grub> device (hd0) /dev/sdc
+
+grub> root (hd0,0)
+ Filesystem type is ext2fs, partition type 0x83
+
+grub> setup (hd0)
+ Checking if "/boot/grub/stage1" exists... yes
+ Checking if "/boot/grub/stage2" exists... yes
+ Checking if "/boot/grub/e2fs_stage1_5" exists... yes
+ Running "embed /boot/grub/e2fs_stage1_5 (hd0)"...  22 sectors are embedded.
+succeeded
+ Running "install /boot/grub/stage1 (hd0) (hd0)1+22 p (hd0,0)/boot/grub/stage2 /boot/grub/menu.
+lst"... succeeded
+Done.
+grub> device (hd0) /dev/sdd
+
+grub> root (hd0,0)
+ Filesystem type is ext2fs, partition type 0x83
+
+grub> setup (hd0)
+ Checking if "/boot/grub/stage1" exists... yes
+ Checking if "/boot/grub/stage2" exists... yes
+ Checking if "/boot/grub/e2fs_stage1_5" exists... yes
+ Running "embed /boot/grub/e2fs_stage1_5 (hd0)"...  22 sectors are embedded.
+succeeded
+ Running "install /boot/grub/stage1 (hd0) (hd0)1+22 p (hd0,0)/boot/grub/stage2 /boot/grub/menu.
+lst"... succeeded
+Done.
+
+grub> quit
+
+</pre>}}
+
+==== Transfer of / ====
+We assume that a "hot" transfer of the system will be okay and thus do a remount of / to /mnt/rawroot to grab the basics without pulling in any additional baggage from /proc, udev and other mounts.  The new btfs will have the rootfs as a subvolume.  Other existing filesystem such as /home and /vm will become other subvolumes.  We edit /etc/fstab on an interim basis to provide mountpoints for the new filesystem and its subvolumes.  The compression and auto defragmentation features of btrfs may or may not be applicable for the underlying data.  The lzo compressor has been turned off for /mnt/newdistfiles since it will be getting the contents of /usr/portage/distfiles where files are already compressed.  The /mnt/newvm filesystem leaves out autodefrag as an option since it interferes with the performance of virtual machines and copy on write.
+
+{{Code|/etc/fstab additions|<pre>
+LABEL=BTRFSMIRROR	/mnt/btrfsmirror	btrfs	defaults,noatime	0 0
+LABEL=BTRFSMIRROR	/mnt/newroot		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=root	0 0
+LABEL=BTRFSMIRROR	/mnt/newhome		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=home	0 0
+LABEL=BTRFSMIRROR	/mnt/newdistfiles	btrfs	defaults,noatime,autodefrag,subvol=distfiles	0 0
+LABEL=BTRFSMIRROR	/mnt/newvm		btrfs	defaults,noatime,compress=lzo,subvol=vm	0 0
+</pre>}}
+
+{{Code|btrfs creation|<pre>
+# mkfs.btrfs -L BTRFSMIRROR --d raid1 -m raid1 /dev/sdc2 /dev/sdd2
+
+WARNING! - Btrfs Btrfs v0.19 IS EXPERIMENTAL
+WARNING! - see http://btrfs.wiki.kernel.org before using
+
+adding device /dev/sdd2 id 2
+fs created label BTRFSMIRROR on /dev/sdc2
+        nodesize 4096 leafsize 4096 sectorsize 4096 size 3.64TB
+Btrfs Btrfs v0.19
+
+# mkdir /mnt/btrfsmirror
+# mount /mnt/btrfsmirror
+
+# mkdir /mnt/newroot
+# btrfs subvolume create /mnt/btrfsmirror/root
+Create subvolume '/mnt/btrfsmirror/root'
+# mount /mnt/newroot
+
+# mkdir /mnt/newhome
+# btrfs subvolume create /mnt/btrfsmirror/home
+Create subvolume '/mnt/btrfsmirror/home'
+# mount /mnt/newhome
+
+# mkdir /mnt/newdistfiles
+# btrfs subvolume create /mnt/btrfsmirror/distfiles
+Create subvolume '/mnt/btrfsmirror/distfiles'
+# mount /mnt/newdistfiles
+
+# mkdir /mnt/newvm
+# btrfs subvolume create /mnt/btrfsmirror/vm
+Create subvolume '/mnt/btrfsmirror/vm'
+# mount /mnt/newvm
+
+# df
+Filesystem      1K-blocks      Used  Available Use% Mounted on
+rootfs           71959568  25451008   42846548  38% /
+/dev/md2         71959568  25451008   42846548  38% /
+devtmpfs         12332984         4   12332980   1% /dev
+tmpfs            12367228      1056   12366172   1% /run
+shm              12367228        84   12367144   1% /dev/shm
+cgroup_root         10240         0      10240   0% /sys/fs/cgroup
+cachedir             4096         4       4092   1% /lib64/splash/cache
+/dev/md1           186555     51950     124973  30% /boot
+/dev/md3        720795012 298068320  386105780  44% /home
+/dev/md4       1129522164 978970760   93168360  92% /vm
+/dev/md5           233225     52460     168724  24% /mnt/altboot
+/dev/sdd2      3906547216      1128 3904391680   1% /mnt/btrfsmirror
+/dev/sdd2      3906547216      1128 3904391680   1% /mnt/newroot
+/dev/sdd2      3906547216      1128 3904391680   1% /mnt/newhome
+/dev/sdd2      3906547216      1128 3904391680   1% /mnt/newdistfiles
+/dev/sdd2      3906547216      1128 3904391680   1% /mnt/newvm
+</pre>}}
+
+We kick off the root fs transfer and come back after a cup of whatever.
+
+{{Code|root fs copy (roughly 30 mins)|<pre>
+# mkdir /mnt/rawroot
+# mount --bind / /mnt/rawroot
+# cd /mnt/rawroot
+# tar cvpf - . | (cd /mnt/newroot; tar xpf -)
+</pre>}}
