@@ -250,9 +250,44 @@ Edit the grub.conf and fstab on the new mirror set to reflect the way things sho
 
 {{Code|/etc/fstab changes on new mirror|<pre>
 /dev/md1                /boot           ext3    defaults,noatime                1 2
+#/dev/md2		/		ext4		defaults,noatime	0 1
+#/dev/md3		/home		ext4		defaults,noatime	0 1
+#/dev/md4		/vm		ext4		defaults,noatime	0 1
 LABEL=BTRFSMIRROR	/mnt/btrfsmirror	btrfs	defaults,noatime	0 0
 LABEL=BTRFSMIRROR	/		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=root	0 0
 LABEL=BTRFSMIRROR	/home		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=home	0 0
 LABEL=BTRFSMIRROR	/distfiles	btrfs	defaults,noatime,autodefrag,subvol=distfiles	0 0
 LABEL=BTRFSMIRROR	/vm		btrfs	defaults,noatime,compress=lzo,subvol=vm	0 0
+</pre>}}
+
+Generate a new mdadm.conf file to include the new /dev/md5 /boot mirror but then edit it to rename that to /dev/md1.  The other existing arrays are stubbed out, but the information is there in case the old mirror set is put back on again.
+
+{{Code|new mdadm.conf|<pre>
+# cd /mnt/newroot/etc
+# mdadm --detail --scan >mdadm.conf
+(edit as noted)
+# cat mdadm.conf
+#ARRAY /dev/md1 metadata=0.90 UUID=a4e5e7b8:b2ce2666:78a9b883:5f5f67d5
+#ARRAY /dev/md2 metadata=0.90 UUID=881a4c3b:3cc63489:78a9b883:5f5f67d5
+#ARRAY /dev/md3 metadata=1.2 name=whatever:3 UUID=9be86c4f:2b0a9e82:b70f0ccc:1eb9b458
+#ARRAY /dev/md4 metadata=1.2 name=whatever:4 UUID=3f51c3cd:64b9aefa:957dde49:e1130638
+ARRAY /dev/md1 metadata=0.90 UUID=651f4200:d2f48834:c68863d8:e9942ea0
+
+</pre>}}
+
+Edit the new grub.conf to use the new btrfs based root filesystem.  Use rootflags to pull in the mount options from your new fstab for the root device.  Because we had used a label BTRFSMIRROR when making the new mirror set, we can pass that as the root to have the kernel automatically scan for and find the default volume.
+
+{{Code|grub.conf on new boot mirror|<pre>
+default 0
+timeout 6
+splashimage=(hd0,0)/boot/grub/splash.xpm.gz
+
+title Gentoo Linux 3.8.13-gentoo
+root (hd0,0)
+kernel /boot/kernel-3.8.13-gentoo root=LABEL=BTRFSMIRROR rootflags=defaults,noatime,compress=lzo,autodefrag,subvol=root selinux=0
+
+#title Gentoo Linux 3.8.13-gentoo
+#root (hd0,0)
+#kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2 selinux=0
+
 </pre>}}
