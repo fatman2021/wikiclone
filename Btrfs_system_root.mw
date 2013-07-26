@@ -10,7 +10,7 @@ This exercise is one example for re-basing a gentoo installation's root filesyst
 
 The use of the older metadata format for /boot and / partitions allows grub-0.97 to find and boot the system without needing to resort to an initial ram device.
 
-{{Code|grub.conf|<pre>
+{{File|/boot/grub/grub.conf||<pre>
 default 0
 timeout 6
 splashimage=(hd0,0)/boot/grub/splash.xpm.gz
@@ -20,7 +20,7 @@ root (hd0,0)
 kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2
 </pre>}}
 
-{{Code|fstab|<pre>
+{{File|/etc/fstab||<pre>
 /dev/md1                /boot           ext3            defaults,noatime        1 2
 /dev/md2                /               ext4            defaults,noatime        0 1
 /dev/md3                /home           ext4            defaults,noatime        0 1
@@ -32,11 +32,31 @@ kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2
 * 250mb /boot partition as ext3 with metadata=0.90
 * 1.9gb+ btfs partition with raid1 metadata and data
 
-We are keeping the /boot as a simple software mirror in order to stay with grub-0.97 and continue to avoid using an initial ram device.  btrfs has been built into the kernel (not a module) along with lzo compression/decompression as that will be used to optimize space utilization and read performance on the system volumes.  Likewise, the raid modules used by mdadm are also builtins.
+We are keeping the /boot as a simple software mirror in order to stay with grub-0.97 but will now need to use an initial ram filesystem.  The kernel will otherwise panic when it attempts to mount btrfs filesystems that need to have a btfs device scan done first.  We will be following the writeup for [[Early Userspace Mounting]] to build that filesystem.
 
-{{Code|kernel .config options|<pre>
-# cd /usr/src/linux
-# grep -i lzo .config
+Btrfs has been built into the kernel (not a module) along with lzo compression/decompression as that will be used to optimize space utilization and read performance on the system volumes.  Likewise, the raid modules used by mdadm are also builtins.
+
+{{Kernel||<pre>
+General setup  --->
+  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
+Device Drivers  --->
+  [*] Multiple devices driver support (RAID and LVM)  --->
+    {*}   RAID support
+    [*]     Autodetect RAID arrays during kernel boot
+    <*>     Linear (append) mode
+    <*>     RAID-0 (striping) mode
+    {*}     RAID-1 (mirroring) mode
+    {*}     RAID-10 (mirrored striping) mode
+    {*}     RAID-4/RAID-5/RAID-6 mode
+File systems  --->
+  <*> Btrfs filesystem support
+  [*]   Btrfs POSIX Access Control Lists
+</pre>}}
+
+There are a number of places where lzo is part of a module name in the kernel .config.
+
+{{RootCmd|cd /usr/src/linux}}
+{{RootCmd|grep -i lzo .config|output=<pre>
 CONFIG_HAVE_KERNEL_LZO=y
 # CONFIG_KERNEL_LZO is not set
 CONFIG_RD_LZO=y
@@ -45,40 +65,28 @@ CONFIG_CRYPTO_LZO=m
 CONFIG_LZO_COMPRESS=y
 CONFIG_LZO_DECOMPRESS=y
 CONFIG_DECOMPRESS_LZO=y
-
-# grep -i btrfs .config
-CONFIG_BTRFS_FS=y
-CONFIG_BTRFS_FS_POSIX_ACL=y
-# CONFIG_BTRFS_FS_CHECK_INTEGRITY is not set
-
-# grep -i raid .config
-CONFIG_RAID_ATTRS=y
-# CONFIG_BLK_DEV_3W_XXXX_RAID is not set
-# CONFIG_SCSI_AACRAID is not set
-CONFIG_MEGARAID_NEWGEN=y
-CONFIG_MEGARAID_MM=y
-CONFIG_MEGARAID_MAILBOX=y
-CONFIG_MEGARAID_LEGACY=y
-CONFIG_MEGARAID_SAS=y
-# CONFIG_SCSI_PMCRAID is not set
-CONFIG_MD_RAID0=y
-CONFIG_MD_RAID1=y
-CONFIG_MD_RAID10=y
-CONFIG_MD_RAID456=y
-CONFIG_MULTICORE_RAID456=y
-CONFIG_DM_RAID=y
-# CONFIG_ASYNC_RAID6_TEST is not set
-CONFIG_ASYNC_RAID6_RECOV=y
-CONFIG_RAID6_PQ=y
 </pre>}}
 
-'''Note''' - Not all of the above lzo "hits" are applicable to the btrfs compression features.  A number of the raid hits do not apply to mdadm.
+It's unclear what kernel options are pickable to make sure that the lzo module btrfs relies on will be enabled.  The likely suspect is CONFIG_HAVE_KERNEL_LZO which comes in to play for the compression of the kernel image itself:
+
+{{Kernel||<pre>
+General setup  --->
+  Kernel compression mode (Gzip)  --->
+    (X) Gzip
+    ( ) Bzip2
+    ( ) LZMA
+    ( ) XZ
+    ( ) LZO
+</pre>}}
+
+The default selection of Gzip causes CONFIG_KERNEL_LZO to not be set as shown above.  There doesn't appear to be a way to control the setting of CONFIG_HAVE_KERNEL_LZO short of editing .config directly.
+
 
 ==== Partitioning ====
 cfdisk was used to partition /dev/sdc with the 250mb and remainder partitions by hand.  sfdisk then can be used to apply the same scheme to /dev/sdd
 
-{{Code|partitioning|<pre>
-# sfdisk -d /dev/sdc >/tmp/sdc.txt
+{{RootCmd|sfdisk -d /dev/sdc >/tmp/sdc.txt}}
+{{RootCmd|sfdisk -d /dev/sdc >/tmp/sdc.txt|output=<pre>
 # cat /tmp/sdc.txt
 # partition table of /dev/sdc
 unit: sectors
@@ -87,21 +95,19 @@ unit: sectors
 /dev/sdc2 : start=   481950, size=3906547218, Id=83
 /dev/sdc3 : start=        0, size=        0, Id= 0
 /dev/sdc4 : start=        0, size=        0, Id= 0
-
-
-# sfdisk /dev/sdd </tmp/sdc.txt
 </pre>}}
+{{RootCmd|# sfdisk /dev/sdd </tmp/sdc.txt}}
 
 ==== Setting up boot ====
-{{Code|Mirror Creation|<pre>
-# mdadm --create --verbose /dev/md5 --level=mirror --raid-devices=2 --metadata=0.90 /dev/sdc1 /dev/sdd1
+
+{{RootCmd|mdadm --create --verbose /dev/md5 --level{{=}}mirror --raid-devices{{=}}2 --metadata{{=}}0.90 /dev/sdc1 /dev/sdd1|output=<pre>
 mdadm: size set to 240832K
 mdadm: array /dev/md5 started.
-
-# cat /proc/mdstat | grep md5
+</pre>}}
+{{RootCmd|cat /proc/mdstat {{|}} grep md5|output=<pre>
 md5 : active raid1 sdd1[1] sdc1[0]
-
-# mkfs -t ext3 /dev/md5
+</pre>}}
+{{RootCmd|mkfs -t ext3 /dev/md5|output=<pre>
 mke2fs 1.42.7 (21-Jan-2013)
 /dev/md5 alignment is offset by 512 bytes.
 This may result in very poor performance, (re)-partitioning suggested.
@@ -124,7 +130,6 @@ Allocating group tables: done
 Writing inode tables: done                            
 Creating journal (4096 blocks): done
 Writing superblocks and filesystem accounting information: done 
-
 </pre>}}
 
 The warning about /boot partition alignment might have been avoided with some more care with cfdisk.  It will be interesting to see what happens when the btrfs filesystem is created.  Grub must be installed on each of the new mirrors by hand as shown
