@@ -1,24 +1,30 @@
 <languages />
 
 <translate>
+<!--T:1-->
 This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.
 
-== Getting Started with OpenLDAP ==
+== Getting Started with OpenLDAP == <!--T:2-->
 
-=== What is LDAP? ===
+=== What is LDAP? === <!--T:3-->
 
+<!--T:4-->
 LDAP stands for ''Lightweight Directory Access Protocol'' . Based on X.500 it encompasses most of its primary functions, but lacks the more esoteric functions that X.500 has. Now what is this X.500 and why is there an LDAP? 
 
+<!--T:5-->
 X.500 is a model for Directory Services in the OSI concept. It contains namespace definitions and the protocols for querying and updating the directory. However, X.500 has been found to be overkill in many situations. Enter LDAP. Like X.500 it provides a data/namespace model for the directory and a protocol too. However, LDAP is designed to run directly over the TCP/IP stack. See LDAP as a slim-down version of X.500. 
 
-=== I don't get it. What is a directory? ===
+=== I don't get it. What is a directory? === <!--T:6-->
 
+<!--T:7-->
 A directory is a specialized database designed for frequent queries but infrequent updates. Unlike general databases they don't contain transaction support or roll-back functionality. Directories are easily replicated to increase availability and reliability. When directories are replicated, temporary inconsistencies are allowed as long as they get synchronised eventually. 
 
-=== How is information structured? ===
+=== How is information structured? === <!--T:8-->
 
+<!--T:9-->
 All information inside a directory is structured hierarchically. Even more, if you want to enter data inside a directory, the directory must know how to store this data inside a tree. Lets take a look at a fictional company and an Internet-like tree: 
 
+<!--T:10-->
 {{Code|Organisational structure for GenFic, a Fictional Gentoo company|<pre>
 dc:         com
              |
@@ -30,42 +36,56 @@ uid: ..   John            ## (OU-specific data)
 </pre>
 }}
 
+<!--T:11-->
 Since you don't feed data to the database in this ascii-art like manner, every node of such a tree must be defined. To name such nodes, LDAP uses a naming scheme. Most LDAP distributions (including OpenLDAP) already contain quite a number of predefined (and general approved) schemes, such as the inetorgperson, a frequently used scheme to define users. 
 
+<!--T:12-->
 Interested users are encouraged to read the [http://www.openldap.org/doc/admin24/ OpenLDAP Admin Guide] . 
 
-=== So... What's the Use? ===
+=== So... What's the Use? === <!--T:13-->
 
+<!--T:14-->
 LDAP can be used for various things. This document focuses on centralised user management, keeping all user accounts in a single LDAP location (which doesn't mean that it's housed on a single server, LDAP supports high availability and redundancy), yet other goals can be achieved using LDAP as well. 
 
+<!--T:15-->
 * Public Key Infrastructure
 
+<!--T:16-->
 * Shared Calendar
 
+<!--T:17-->
 * Shared Addressbook
 
+<!--T:18-->
 * Storage for DHCP, DNS, ...
 
+<!--T:19-->
 * System Class Configuration Directives (keeping track of several server configurations)
 
+<!--T:20-->
 * ...
 
 
-== Configuring OpenLDAP ==
+== Configuring OpenLDAP == <!--T:21-->
 
 
-=== Initial Configuration ===
+=== Initial Configuration === <!--T:22-->
 
+<!--T:23-->
 {{Note|In this document we use the genfic.com address as an example. You will ofcourse have to change this. However, make sure that the top node is an official top level domain (net, com, cc, be, ...).}}
 
+<!--T:24-->
 Let's first emerge OpenLDAP: 
 
+<!--T:25-->
 {{Emerge|openldap}}
 
+<!--T:26-->
 Now generate an encrypted password we'll use later on: 
 
 
 
+<!--T:27-->
 {{RootCmd|slappasswd|output=<pre>
 New password: my-password
 Re-enter new password: my-password
@@ -73,8 +93,10 @@ Re-enter new password: my-password
 </pre>
 }}
 
+<!--T:28-->
 Now edit the LDAP Server config at {{Path|/etc/openldap/slapd.conf}} . Below we'll give a sample configuration file to get things started. For a more detailed analysis of the configuration file, we suggest that you work through the OpenLDAP Administrator's Guide. 
 
+<!--T:29-->
 {{Code|/etc/openldap/slapd.conf|<pre>
 include	/etc/openldap/schema/core.schema
 include /etc/openldap/schema/cosine.schema
@@ -126,8 +148,10 @@ syncprov-checkpoint 100 10
 </pre>
 }}
 
+<!--T:30-->
 Next we edit the LDAP Client configuration file: 
 
+<!--T:31-->
 {{RootCmd|nano -w /etc/openldap/ldap.conf|output=<pre>
 ## (Add the following...)
 BASE         dc=genfic, dc=com
@@ -137,51 +161,68 @@ TIMELIMIT    2
 </pre>
 }}
 
+<!--T:32-->
 Now edit {{Path|/etc/conf.d/slapd}} and set the following OPTS line: 
 
+<!--T:33-->
 {{Code|/etc/conf.d/slapd|<pre>
 OPTS="-h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
 </pre>
 }}
 
+<!--T:34-->
 Finally, create the {{Path|/var/lib/openldap-ldbm}} structure: 
 
+<!--T:35-->
 {{RootCmd|mkdir -p /var/lib/openldap-ldbm
 |chown ldap:ldap /var/lib/openldap-ldbm
 |chmod 700 /var/lib/openldap-ldbm}}
 
+<!--T:36-->
 Start slapd: 
 
+<!--T:37-->
 {{RootCmd|/etc/init.d/slapd start}}
 
+<!--T:38-->
 You can test with the following command: 
 
+<!--T:39-->
 {{Cmd|ldapsearch -x -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -W}}
 
+<!--T:40-->
 If you receive an error, try adding <code>-d 255</code> to increase the verbosity and solve the issue you have. 
 
-== Replication ==
+== Replication == <!--T:41-->
 
-=== If you need high availability ===
+=== If you need high availability === <!--T:42-->
 
+<!--T:43-->
 If your environment requires high availability, then you need to setup replication of changes across multiple LDAP systems. Replication within OpenLDAP is, in this guide, set up using a specific replication account ( <code>ldapreader</code> ) which has read rights on the primary LDAP server and which pulls in changes from the primary LDAP server to the secundary. 
 
+<!--T:44-->
 This setup is then mirrored, allowing the secundary LDAP server to act as a primary. Thanks to OpenLDAP's internal structure, changes are not re-applied if they are already in the LDAP structure. 
 
-=== Setting Up Replication ===
+=== Setting Up Replication === <!--T:45-->
 
+<!--T:46-->
 To setup replication, first setup a second OpenLDAP server, similarly as above. However take care that, in the configuration file, 
 
+<!--T:47-->
 * the ''sync replication provider'' is pointing to the ''other'' system
 
+<!--T:48-->
 * the ''serverID'' of each OpenLDAP system is different
 
+<!--T:49-->
 Next, create the synchronisation account. We will create an LDIF file (the format used as data input for LDAP servers) and add it to each LDAP server: 
 
+<!--T:50-->
 {{Cmd|slappasswd -s myreaderpassword|output=<pre>
  {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
 </pre>}}
 
+<!--T:51-->
 {{Cmd|cat ldapreader.ldif|output=<pre>
 dn: cn=ldapreader,dc=genfic,dc=com
 userPassword: {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
@@ -191,33 +232,42 @@ cn: ldapreader
 description: LDAP reader used for synchronization
 </pre>}}
 
+<!--T:52-->
 {{Cmd|ldapadd -x -W -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -f ldapreader.ldif|output=<pre>
 Password: ## enter the administrative password
 </pre>}}
 
-== Client Configuration ==
+== Client Configuration == <!--T:53-->
 
-=== Migrate existing data to ldap ===
+=== Migrate existing data to ldap === <!--T:54-->
 
+<!--T:55-->
 Configuring OpenLDAP for centralized administration and management of common Linux/Unix items isn't easy, but thanks to some tools and scripts available on the Internet, migrating a system from a single-system administrative point-of-view towards an OpenLDAP-based, centralized managed system isn't hard either. 
 
+<!--T:56-->
 Go to [http://www.padl.com/OSS/MigrationTools.html http://www.padl.com/OSS/MigrationTools.html] and fetch the scripts there. You'll need the migration tools and the <code>make_master.sh</code> script. 
 
+<!--T:57-->
 Next, extract the tools and copy the <code>make_master.sh</code> script inside the extracted location: 
 
+<!--T:58-->
 {{RootCmd|mktemp -d|output=<pre>
 /tmp/tmp.zchomocO3Q
 </pre>}}
 
+<!--T:59-->
 {{RootCmd|cd /tmp/tmp.zchomocO3Q
 |tar xvzf /path/to/MigrationTools.tgz
 |mv /path/to/make_master.sh MigrationTools-47
 |cd MigrationTools-47</pre>}}
 
+<!--T:60-->
 The next step now is to migrate the information of your system to OpenLDAP. The <code>make_master.sh</code> script will do this for you, after you have provided it with the information regarding your LDAP structure and environment. 
 
+<!--T:61-->
 At the time of writing, the tools require the following input: 
 
+<!--T:62-->
 {| class="wikitable" style="text-align: left;" 
 |- 
 ! Input
@@ -246,16 +296,21 @@ At the time of writing, the tools require the following input:
 |-
 |}
 
+<!--T:63-->
 The tool will also ask you which accounts and settings you want to migrate. 
 
-=== Configuring PAM ===
+=== Configuring PAM === <!--T:64-->
 
+<!--T:65-->
 First, we will configure PAM to allow LDAP authorization. Install <code>sys-auth/pam_ldap</code> so that PAM supports LDAP authorization, and <code>sys-auth/nss_ldap</code> so that your system can cope with LDAP servers for additional information (used by {{Path|nsswitch.conf}} ). 
 
+<!--T:66-->
 {{Emerge|pam_ldap nss_ldap}}
 
+<!--T:67-->
 Now add the following lines in the right places to {{Path|/etc/pam.d/system-auth}} : 
 
+<!--T:68-->
 {{Code|/etc/pam.d/system-auth|<pre>
 ## # Note: only add them. Don't kill stuff already in there or your box won't let you login again!
 auth       sufficient   pam_ldap.so use_first_pass
@@ -285,8 +340,10 @@ session    optional     pam_ldap.so
 </pre>
 }}
 
+<!--T:69-->
 Now change {{Path|/etc/ldap.conf}} to read: 
 
+<!--T:70-->
 {{Code|/etc/ldap.conf|<pre>
 ## #host 127.0.0.1
 ## #base dc=padl,dc=com
@@ -310,12 +367,16 @@ uri ldap://ldap.genfic.com/ ldap://ldap1.genfic.com ldap://ldap2.genfic.com
 </pre>
 }}
 
+<!--T:71-->
 Next, copy over the (OpenLDAP) {{Path|ldap.conf}} file from the server to the client so the clients are aware of the LDAP environment: 
 
+<!--T:72-->
 {{RootCmd|scp ldap-server:/etc/openldap/ldap.conf /etc/openldap}}
 
+<!--T:73-->
 Finally, configure your clients so that they check the LDAP for system accounts: 
 
+<!--T:74-->
 {{Code|/etc/nsswitch.conf|<pre>
 passwd:         files ldap
 group:          files ldap
@@ -323,14 +384,17 @@ shadow:         files ldap
 </pre>
 }}
 
+<!--T:75-->
 If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is'''DANGEROUS'''and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someones password thats both in the ldap and {{Path|/etc/passwd}} , put the pass in there for 10 seconds while changing the users password and remove it when done. 
 
-== LDAP Server Security Settings ==
+== LDAP Server Security Settings == <!--T:76-->
 
-=== OpenLDAP permissions ===
+=== OpenLDAP permissions === <!--T:77-->
 
+<!--T:78-->
 If we take a look at {{Path|/etc/openldap/slapd.conf}} you'll see that you can specify the ACLs (permissions if you like) of what data users can read and/or write: 
 
+<!--T:79-->
 {{Code|/etc/openldap/slapd.conf|<pre>
 access to *
   by dn="uid=root,ou=People,dc=genfic,dc=com" write
@@ -342,10 +406,13 @@ access to attrs=userPassword,gecos,description,loginShell
 </pre>
 }}
 
+<!--T:80-->
 This gives you access to everything a user should be able to change. If it's your information, then you got write access to it; if it's another user their information then you can read it; anonymous people can send a login/pass to get logged in. There are four levels, ranking them from lowest to greatest: <code>auth search read write</code> . 
 
+<!--T:81-->
 The next ACL is a bit more secure as it blocks normal users to read other people their shadowed password: 
 
+<!--T:82-->
 {{Code|/etc/openldap/slapd.conf|<pre>
 access to attrs="userPassword"
   by dn="uid=root,ou=People,dc=genfic,dc=com" write
@@ -361,32 +428,42 @@ access to *
 </pre>
 }}
 
+<!--T:83-->
 This example gives root and John access to read/write/search for everything in the the tree below {{Path|dc{{=}}genfic,dc{{=}}com}} . This also lets users change their own <code>userPassword</code>'s. As for the ending statement everyone else just has a search ability meaning they can fill in a search filter, but can't read the search results. Now you can have multiple acls but the rule of the thumb is it processes from bottom up, so your toplevel should be the most restrictive ones. 
 
-== Working with OpenLDAP ==
+== Working with OpenLDAP == <!--T:84-->
 
-=== Maintaining the directory ===
+=== Maintaining the directory === <!--T:85-->
 
+<!--T:86-->
 You can start using the directory to authenticate users in apache/proftpd/qmail/samba. You can manage it with phpldapadmin, diradm, jxplorer, or lat, which provide easy management interfaces. 
 
-== Acknowledgements ==
+== Acknowledgements == <!--T:87-->
 
+<!--T:88-->
 We would like to thank Matt Heler for lending us his box for the purpose of this guide. Thanks also go to the cool guys in #ldap @ irc.freenode.net 
 
-== Acknowledgements ==
+== Acknowledgements == <!--T:89-->
 
+<!--T:90-->
 We would like to thank the following authors and editors for their contributions to this guide:
 
+<!--T:91-->
 * Benjamin Coles
 
+<!--T:92-->
 * swift
 
+<!--T:93-->
 * Brandon Hale
 
+<!--T:94-->
 * Benny Chuang
 
+<!--T:95-->
 * jokey
 
+<!--T:96-->
 * nightmorph
 
 </translate>
