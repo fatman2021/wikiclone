@@ -10,7 +10,7 @@ This exercise is one example for re-basing a gentoo installation's root filesyst
 
 The use of the older metadata format for /boot and / partitions allows grub-0.97 to find and boot the system without needing to resort to an initial ram device.
 
-{{File|/boot/grub/grub.conf||<pre>
+{{File|/boot/grub/grub.conf|  existing system|<pre>
 default 0
 timeout 6
 splashimage=(hd0,0)/boot/grub/splash.xpm.gz
@@ -20,7 +20,7 @@ root (hd0,0)
 kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2
 </pre>}}
 
-{{File|/etc/fstab||<pre>
+{{File|/etc/fstab|  existing system|<pre>
 /dev/md1                /boot           ext3            defaults,noatime        1 2
 /dev/md2                /               ext4            defaults,noatime        0 1
 /dev/md3                /home           ext4            defaults,noatime        0 1
@@ -132,14 +132,16 @@ Creating journal (4096 blocks): done
 Writing superblocks and filesystem accounting information: done 
 </pre>}}
 
-The warning about /boot partition alignment might have been avoided with some more care with cfdisk.  It will be interesting to see what happens when the btrfs filesystem is created.  Grub must be installed on each of the new mirrors by hand as shown
+The warning about /boot partition alignment might have been avoided with some more care with cfdisk.
 
-{{Code|/boot transfer|<pre>
-# mkdir /mnt/altboot
-# mount -t ext3 /dev/md5 /mnt/altboot
-# cd /boot
-# tar cpf - . | (cd /mnt/altboot; tar xpf -)
-# grub
+====/boot Transfer ====
+
+{{RootCmd|mkdir /mnt/altboot}}
+{{RootCmd|mount -t ext3 /dev/md5 /mnt/altboot}}
+{{RootCmd|cd /boot}}
+{{RootCmd|tar cpf - . | (cd /mnt/altboot; tar xpf -)}}
+Grub must be installed on each of the new mirrors by hand as shown.  That way if the first drive fails, the second drive can be moved down to /dev/sda, and the grub mbr code will have already been set up to make it look the first drive in the device chain.
+{{RootCmd|grub|output=<pre>
 grub> device (hd0) /dev/sdc
 
 grub> root (hd0,0)
@@ -174,9 +176,11 @@ grub> quit
 </pre>}}
 
 ==== Transfer of / ====
-We assume that a "hot" transfer of the system will be okay and thus do a remount of / to /mnt/rawroot to grab the basics without pulling in any additional baggage from /proc, udev and other mounts.  The new btfs will have the rootfs as a subvolume.  Other existing filesystem such as /home and /vm will become other subvolumes.  We edit /etc/fstab on an interim basis to provide mountpoints for the new filesystem and its subvolumes.  The compression and auto defragmentation features of btrfs may or may not be applicable for the underlying data.  The lzo compressor has been turned off for /mnt/newdistfiles since it will be getting the contents of /usr/portage/distfiles where files are already compressed.  The /mnt/newvm filesystem leaves out autodefrag as an option since it interferes with the performance of virtual machines and copy on write.
+We assume that a "hot" transfer of the system will be okay and thus do a remount of / to /mnt/rawroot to grab the basics without pulling in any additional baggage from /proc, udev and other mounts.  If the system is running any database servers such as mysql, postgres or an ldap backend, it is better to turn those services off first before attempting this.  The new btfs will have the rootfs as a subvolume.
 
-{{Code|/etc/fstab additions|<pre>
+Other existing filesystem such as /home and /vm will become other subvolumes.  We edit /etc/fstab on an interim basis to provide mountpoints for the new filesystem and its subvolumes.  The compression and auto defragmentation features of btrfs may or may not be applicable for the underlying data.  The lzo compressor has been turned off for /mnt/newdistfiles since it will be getting the contents of /usr/portage/distfiles where files are already compressed.  The /mnt/newvm filesystem leaves out autodefrag as an option since it interferes with the performance of virtual machines and copy on write.
+
+{{File|/etc/fstab|  additions to existing version|<pre>
 LABEL=BTRFSMIRROR	/mnt/btrfsmirror	btrfs	defaults,noatime	0 0
 LABEL=BTRFSMIRROR	/mnt/newroot		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=root	0 0
 LABEL=BTRFSMIRROR	/mnt/newhome		btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=home	0 0
@@ -184,8 +188,7 @@ LABEL=BTRFSMIRROR	/mnt/newdistfiles	btrfs	defaults,noatime,autodefrag,subvol=dis
 LABEL=BTRFSMIRROR	/mnt/newvm		btrfs	defaults,noatime,compress=lzo,subvol=vm	0 0
 </pre>}}
 
-{{Code|btrfs creation|<pre>
-# mkfs.btrfs -L BTRFSMIRROR --d raid1 -m raid1 /dev/sdc2 /dev/sdd2
+{{RootCmd|mkfs.btrfs -L BTRFSMIRROR --d raid1 -m raid1 /dev/sdc2 /dev/sdd2|output=<pre>
 
 WARNING! - Btrfs Btrfs v0.19 IS EXPERIMENTAL
 WARNING! - see http://btrfs.wiki.kernel.org before using
@@ -194,31 +197,30 @@ adding device /dev/sdd2 id 2
 fs created label BTRFSMIRROR on /dev/sdc2
         nodesize 4096 leafsize 4096 sectorsize 4096 size 3.64TB
 Btrfs Btrfs v0.19
-
-# mkdir /mnt/btrfsmirror
-# mount /mnt/btrfsmirror
-
-# mkdir /mnt/newroot
-# btrfs subvolume create /mnt/btrfsmirror/root
+</pre>}}
+{{RootCmd|mkdir /mnt/btrfsmirror}}
+{{RootCmd|mount /mnt/btrfsmirror}}
+{{RootCmd|mkdir /mnt/newroot}}
+{{RootCmd|btrfs subvolume create /mnt/btrfsmirror/root|output=<pre>
 Create subvolume '/mnt/btrfsmirror/root'
-# mount /mnt/newroot
-
-# mkdir /mnt/newhome
-# btrfs subvolume create /mnt/btrfsmirror/home
+</pre>}}
+{{RootCmd|mount /mnt/newroot}}
+{{RootCmd|mkdir /mnt/newhome}}
+{{RootCmd|btrfs subvolume create /mnt/btrfsmirror/home|output=<pre>
 Create subvolume '/mnt/btrfsmirror/home'
-# mount /mnt/newhome
-
-# mkdir /mnt/newdistfiles
-# btrfs subvolume create /mnt/btrfsmirror/distfiles
+</pre>}}
+{{RootCmd|mount /mnt/newhome}}
+{{RootCmd|mkdir /mnt/newdistfiles}}
+{{RootCmd|btrfs subvolume create /mnt/btrfsmirror/distfiles|output=<pre>
 Create subvolume '/mnt/btrfsmirror/distfiles'
-# mount /mnt/newdistfiles
-
-# mkdir /mnt/newvm
-# btrfs subvolume create /mnt/btrfsmirror/vm
+</pre>}}
+{{RootCmd|mount /mnt/newdistfiles}}
+{{RootCmd|mkdir /mnt/newvm}}
+{{RootCmd|btrfs subvolume create /mnt/btrfsmirror/vm|output=<pre>
 Create subvolume '/mnt/btrfsmirror/vm'
-# mount /mnt/newvm
-
-# df
+</pre>}}
+{{RootCmd|mount /mnt/newvm}}
+{{RootCmd|df|output=<pre>
 Filesystem      1K-blocks      Used  Available Use% Mounted on
 rootfs           71959568  25451008   42846548  38% /
 /dev/md2         71959568  25451008   42846548  38% /
@@ -238,22 +240,20 @@ cachedir             4096         4       4092   1% /lib64/splash/cache
 /dev/sdd2      3906547216      1128 3904391680   1% /mnt/newvm
 </pre>}}
 
-We kick off the root fs transfer and come back after a cup of whatever.
+We kick off the root fs transfer and come back after a cup of whatever.  Roughly speaking, the existing 2tb drive set is using almost 1.9tb, with about 40gb available on the / and /home filesystems and about 90gb available on the old /vm.  The copy of the root filesystem is roughly 30 minutes.  The other copies are left for overnight.
 
-{{Code|root fs copy (roughly 30 mins)|<pre>
-# mkdir /mnt/rawroot
-# mount --bind / /mnt/rawroot
-# cd /mnt/rawroot
-# tar cvpf - . | (cd /mnt/newroot; tar xpf -)
-</pre>}}
+{{RootCmd|mkdir /mnt/rawroot}}
+{{RootCmd|mount --bind / /mnt/rawroot}}
+{{RootCmd|cd /mnt/rawroot}}
+{{RootCmd|tar cvpf - . | (cd /mnt/newroot; tar xpf -)}}
 
-Copy over the /home and other files as necessary.  In this particular install, /usr/portage/distfiles had been a softlink to a directory on the old /home filesystem.  If it was to have been split off from a physical directory instead, the transfer from the new root subvolume's usr/portage/distfiles to the newdistfiles subvolume is effectively a move between filesystems that would involve a copy and then a delete.  It would be more efficient to make judicious use of the -exclude switch on tar when doing the initial copy to the new mirror set.
+In this particular install, /usr/portage/distfiles had been a softlink to a directory on the old /home filesystem.  If it was to have been split off from a physical directory instead, the transfer from the new root subvolume's usr/portage/distfiles to the newdistfiles subvolume is effectively a move between filesystems that would involve a copy and then a delete.  It would be more efficient to make judicious use of the -exclude switch on tar when doing the initial copy to the new mirror set.
 
 ==== Edit Config on New Mirror ====
 
-Edit the grub.conf and fstab on the new mirror set to reflect the way things should look when the new mirror set becomes the boot set.  That includes editing /etc/mdadm.conf to assemble only the /dev/md1 device now.  It's also probably cleaner to do a mountpoint for /distfiles as shown and then have /usr/portage/distfiles be a softlink to it.
+We edit the /etc/fstab on the new mirror set to reflect the way things should look when the new mirror set becomes the boot set.  It's also probably cleaner to do a mountpoint for /distfiles as shown and then have /usr/portage/distfiles be a softlink to it.
 
-{{Code|/etc/fstab changes on new mirror|<pre>
+{{File|/etc/fstab|  as it appears on /mnt/newroot mirror|<pre>
 /dev/md1                /boot           ext3    defaults,noatime                1 2
 #/dev/md2		/		ext4		defaults,noatime	0 1
 #/dev/md3		/home		ext4		defaults,noatime	0 1
@@ -265,41 +265,22 @@ LABEL=BTRFSMIRROR	/distfiles	btrfs	defaults,noatime,autodefrag,subvol=distfiles	
 LABEL=BTRFSMIRROR	/vm		btrfs	defaults,noatime,compress=lzo,subvol=vm	0 0
 </pre>}}
 
-Generate a new mdadm.conf file to include the new /dev/md5 /boot mirror but then edit it to rename that to /dev/md1.  The other existing arrays are stubbed out, but the information is there in case the old mirror set is put back on again.
+We generate a new mdadm.conf file to include the new /dev/md5 /boot mirror but then edit it to rename that to /dev/md1.  The other existing arrays are stubbed out, but the information is there in case the old mirror set is put back on again.
 
-{{Code|new mdadm.conf|<pre>
-# cd /mnt/newroot/etc
-# mdadm --detail --scan >mdadm.conf
-(edit as noted)
-# cat mdadm.conf
+{{RootCmd|cd /mnt/newroot/etc}}
+{{RootCmd|mdadm --detail --scan >mdadm.conf}}
+{{File|/etc/mdadm.conf|  on /mnt/newroot edited as noted|<pre>
 #ARRAY /dev/md1 metadata=0.90 UUID=a4e5e7b8:b2ce2666:78a9b883:5f5f67d5
 #ARRAY /dev/md2 metadata=0.90 UUID=881a4c3b:3cc63489:78a9b883:5f5f67d5
 #ARRAY /dev/md3 metadata=1.2 name=whatever:3 UUID=9be86c4f:2b0a9e82:b70f0ccc:1eb9b458
 #ARRAY /dev/md4 metadata=1.2 name=whatever:4 UUID=3f51c3cd:64b9aefa:957dde49:e1130638
 ARRAY /dev/md1 metadata=0.90 UUID=651f4200:d2f48834:c68863d8:e9942ea0
-
 </pre>}}
 
-If this was a simple one disk based btrfs root filesystem the following process would probably work just fine.  Edit the new grub.conf to use the new btrfs based root filesystem.  Use rootflags to pull in the mount options from your new fstab for the root device.  Because we had used a label BTRFSMIRROR when making the new mirror set, we can pass that as the root to have the kernel automatically scan for and find the default volume.
+==== Creating the Initial Ram Filesystem ====
+We will have to use an initial ram filesystem and an embedded init to mount the mirror set.  Following the wiki entry for [[Early Userspace Mounting]], we create the following files in /usr/src/linux/initramfs
 
-{{Code|grub.conf on new boot mirror|<pre>
-default 0
-timeout 6
-splashimage=(hd0,0)/boot/grub/splash.xpm.gz
-
-title Gentoo Linux 3.8.13-gentoo
-root (hd0,0)
-kernel /boot/kernel-3.8.13-gentoo root=LABEL=BTRFSMIRROR rootflags=defaults,noatime,compress=lzo,autodefrag,subvol=root selinux=0
-
-#title Gentoo Linux 3.8.13-gentoo
-#root (hd0,0)
-#kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2 selinux=0
-
-</pre>}}
-
-However it turns out the kernel panics when it gets around to working with /rootfs.  So we will have to use an initial ram filesystem and an embedded init to mount the mirror set.  Following the wiki entry for [[Early Userspace Mounting]], we create the following files in /usr/src/linux/initramfs
-
-{{File|initramfs_list|files to go into the initial ram fs|<pre>
+{{File|initramfs_list|  files to go into the initial ram fs|<pre>
 # directory structure
 dir /proc       755 0 0
 dir /usr        755 0 0
@@ -367,12 +348,14 @@ file	/etc/fstab		/usr/src/linux/initramfs/fstab	644 0 0
 
 </pre>}}
 
-{{File|fstab|minimal fstab for /mnt/root|<pre>
+There's a bit more than minimally necessary there to mount and pivot the root, but it allows us to use the rescue shell in busybox to fsck /boot as necessary and to do btrfs scrub and balance on a cold filesystem if we feel it is necessary.  The following minimalist fstab is the key reason for this initial ram filesystem.  It allows btrfs to locate the root volume by label name and to enable compression and autodefrag on the initial mount.
+
+{{File|fstab|  minimal fstab for /mnt/root|<pre>
 /dev/md1		/boot		ext3		defaults,noatime	1 2
 LABEL=BTRFSMIRROR	/mnt/root	btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=root	0 0
 </pre>}}
 
-{{File|init|initramfs init script|<pre>
+{{File|init|  initramfs init script|<pre>
 #!/bin/busybox sh
 
 rescue_shell() {
@@ -459,14 +442,15 @@ exec switch_root /mnt/root /sbin/init
 
 </pre>}}
 
-'''Note''' - You will probably need to create the /usr/src/linux/initramfs directory before introducing the above files.  
-{{Code||<pre>
-# cd /usr/src/linux
-# scripts/gen_initramfs_list.sh -o /mnt/altboot/initrd_btrfs.cpio.gz /usr/src//linux/initramfs/initramfs_list
-</pre>}}
+'''Note''' - You will probably need to create the /usr/src/linux/initramfs directory before introducing the above files.
+
+The init script here was essentially stolen from the early usermount page and has been hacked up a bit.  It could probably stand some more cleaning and maybe additional smarts.  One might notice that the root and rootflags parameters in the grub.conf appearing below are superfluous because they will be ignored by the init script.  However it is useful to show what mount options are being used and how the mount happens at a glance.  The actual initramfs creation is done as follows.
+
+{{RootCmd|cd /usr/src/linux}}
+{{RootCmd|scripts/gen_initramfs_list.sh -o /mnt/altboot/initrd_btrfs.cpio.gz /usr/src//linux/initramfs/initramfs_list}}
 
 
-{{File|grub.conf|updated grub.conf on /mnt/altboot|<pre>
+{{File|grub.conf|  updated grub.conf on /mnt/altboot|<pre>
 default 0
 timeout 6
 splashimage=(hd0,0)/boot/grub/splash.xpm.gz
@@ -478,11 +462,42 @@ initrd /boot/initrd_btrfs.cpio.gz
 
 </pre>}}
 
-The init script is a hacked up version from the [[Early Userspace Mounting]] and will probably be cleaned up in a later edit.  The mount_root does a btrfs device scan which takes about 5-10 seconds depending on the drives being used.  That is the crucial piece that apparently doesn't get done when grub processes the kernel directive, and thus it can't figure out that btrfs is spanning more than one drive.
+It would be a good idea to balance the new btrfs filesystems before booting into the new mirror set.  It isn't crucial to do it now, but it will speed up performance of the initial boot.  The balance can just as easily be done on the live volumes after the new mirror set is booted.  Balancing everything on the new 2tb set will probably take a good bit of an overnight depending on the amount of space used.
 
-It would be a good idea to balance the new btrfs filesystems before booting into the new mirror set.  It isn't crucial to do it now, but it will speed up performance of the initial boot.  The balance can just as easily be done on the live volumes after the new mirror set is booted.
-{{Cmd
-|btrfs fi balance /mnt/newroot
-|prompt=# 
-|color=blue
-}}
+{{RootCmd|btrfs fi balance /mnt/newroot}}
+{{RootCmd|btrfs fi balance /mnt/newhome}}
+{{RootCmd|btrfs fi balance /mnt/newdistfiles}}
+{{RootCmd|btrfs fi balance /mnt/newvm}}
+
+==== Booting the new system ====
+We take out the old mirror set after poweroff and put them into safe storage.  The new mirror set is moved to become /dev/sda and /dev/sdb.
+
+Once grub has booted into the kernel, the initial set of system messages display for detecting disk drives, etc.  The screen will clear and appear to hang for about 5 to 10 seconds as btrfs scans for system devices.  If the system has a cdrom drive, ignore any warnings about media not being present in /dev/sr0.  Then it will continue to boot after switching in to the real root as noted in the early userspace mounting entry.
+
+If the new btrfs filesystems has not been balanced, performance may be a bit sluggish initially, but things will speed up.  For this example exercise, the most significant thing to notice is the amount of space now available for use.  It is also all part of the same pool shared by the subvolumed filesystems:
+
+{{RootCmd|df|output=<pre>
+Filesystem      1K-blocks       Used  Available Use% Mounted on
+rootfs         3906547216 2506997920 1397527976  65% /
+/dev/sda2      3906547216 2506997920 1397527976  65% /
+tmpfs            12367228       1028   12366200   1% /run
+udev                10240          4      10236   1% /dev
+shm              12367228        608   12366620   1% /dev/shm
+cgroup_root         10240          0      10240   0% /sys/fs/cgroup
+cachedir             4096          4       4092   1% /lib64/splash/cache
+/dev/md1           233225      55809     165375  26% /boot
+/dev/sda2      3906547216 2506997920 1397527976  65% /mnt/btrfsmirror
+/dev/sda2      3906547216 2506997920 1397527976  65% /home
+/dev/sda2      3906547216 2506997920 1397527976  65% /vm
+/dev/sda2      3906547216 2506997920 1397527976  65% /distfiles
+</pre>}}
+
+Most of the space savings probably came from compression of the kvm guest images that were in /vm, but /home and the system root also contribute significant savings.
+
+{{RootCmd|grep btrfs /etc/mtab|output=<pre>
+/dev/sda2 / btrfs rw,noatime,compress=lzo,space_cache,autodefrag 0 0
+/dev/sda2 /mnt/btrfsmirror btrfs rw,noatime 0 0
+/dev/sda2 /home btrfs rw,noatime,compress=lzo,autodefrag,subvol=home 0 0
+/dev/sda2 /vm btrfs rw,noatime,compress=lzo,subvol=vm 0 0
+/dev/sda2 /distfiles btrfs rw,noatime,autodefrag,subvol=distfiles 0 0
+</pre>}}
