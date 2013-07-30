@@ -32,7 +32,7 @@ kernel /boot/kernel-3.8.13-gentoo md=2,/dev/sda2,/dev/sdb2 root=/dev/md2
 * 250mb /boot partition as ext3 with metadata=0.90
 * 1.9gb+ btfs partition with raid1 metadata and data
 
-We are keeping the /boot as a simple software mirror in order to stay with grub-0.97 but will now need to use an initial ram filesystem.  The kernel will otherwise panic when it attempts to mount btrfs filesystems that need to have a btfs device scan done first.  We will be following the writeup for [[Early Userspace Mounting]] to build that filesystem.
+We are keeping the /boot as a simple software mirror in order to stay with grub-0.97 but will now need to use an initial ram filesystem.  The kernel will otherwise panic when it attempts to mount btrfs filesystems that need to have a btrfs device scan done first.  We will be following the writeup for [[Early Userspace Mounting]] to build that filesystem.
 
 Btrfs has been built into the kernel (not a module) along with lzo compression/decompression as that will be used to optimize space utilization and read performance on the system volumes.  Likewise, the raid modules used by mdadm are also builtins.
 
@@ -86,8 +86,7 @@ The default selection of Gzip causes CONFIG_KERNEL_LZO to not be set as shown ab
 cfdisk was used to partition /dev/sdc with the 250mb and remainder partitions by hand.  sfdisk then can be used to apply the same scheme to /dev/sdd
 
 {{RootCmd|sfdisk -d /dev/sdc >/tmp/sdc.txt}}
-{{RootCmd|sfdisk -d /dev/sdc >/tmp/sdc.txt|output=<pre>
-# cat /tmp/sdc.txt
+{{RootCmd|cat /tmp/sdc.txt|output=<pre>
 # partition table of /dev/sdc
 unit: sectors
 
@@ -104,7 +103,7 @@ unit: sectors
 mdadm: size set to 240832K
 mdadm: array /dev/md5 started.
 </pre>}}
-{{RootCmd|cat /proc/mdstat {{|}} grep md5|output=<pre>
+{{RootCmd|cat /proc/mdstat {{!}} grep md5|output=<pre>
 md5 : active raid1 sdd1[1] sdc1[0]
 </pre>}}
 {{RootCmd|mkfs -t ext3 /dev/md5|output=<pre>
@@ -139,7 +138,7 @@ The warning about /boot partition alignment might have been avoided with some mo
 {{RootCmd|mkdir /mnt/altboot}}
 {{RootCmd|mount -t ext3 /dev/md5 /mnt/altboot}}
 {{RootCmd|cd /boot}}
-{{RootCmd|tar cpf - . | (cd /mnt/altboot; tar xpf -)}}
+{{RootCmd|tar cpf - . {{!}} (cd /mnt/altboot; tar xpf -)}}
 Grub must be installed on each of the new mirrors by hand as shown.  That way if the first drive fails, the second drive can be moved down to /dev/sda, and the grub mbr code will have already been set up to make it look the first drive in the device chain.
 {{RootCmd|grub|output=<pre>
 grub> device (hd0) /dev/sdc
@@ -245,7 +244,7 @@ We kick off the root fs transfer and come back after a cup of whatever.  Roughly
 {{RootCmd|mkdir /mnt/rawroot}}
 {{RootCmd|mount --bind / /mnt/rawroot}}
 {{RootCmd|cd /mnt/rawroot}}
-{{RootCmd|tar cvpf - . | (cd /mnt/newroot; tar xpf -)}}
+{{RootCmd|tar cvpf - . {{!}} (cd /mnt/newroot; tar xpf -)}}
 
 In this particular install, /usr/portage/distfiles had been a softlink to a directory on the old /home filesystem.  If it was to have been split off from a physical directory instead, the transfer from the new root subvolume's usr/portage/distfiles to the newdistfiles subvolume is effectively a move between filesystems that would involve a copy and then a delete.  It would be more efficient to make judicious use of the -exclude switch on tar when doing the initial copy to the new mirror set.
 
