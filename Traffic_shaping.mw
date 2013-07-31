@@ -1,0 +1,158 @@
+This article aims to give a basic foundation to start traffic shaping to improve responsiveness (ping, RTT) on internet links. Especially asynchronous links like DSL benefit from this. PING round trip time can be improved as much as 10x during heavy download/upload with this traffic shaping in place.
+ 
+== Installation ==
+=== Prerequisites ===
+You need to configure your Kernel with QoS support. You should add HTB, FQ_CODEL and Ingress queuing disciplines as well as IFB (Intermediate Functional Block device) and U32 match support.
+=== Kernel ===
+You need to activate the following kernel options:
+{{Kernel||<pre>
+[*] Networking support  --->
+    Networking options  --->
+        [*] TCP/IP networking
+        ...
+        [*]   IP: advanced router
+        ...
+        [*]   IP: TCP syncookie support
+        ...
+        <*>   INET: socket monitoring interface
+        <M>     UDP: socket monitoring interface
+        [ ]   TCP: advanced congestion control  --->
+        ...
+        <M>   The IPv6 protocol  --->
+        ...
+        [*] Network packet filtering framework (Netfilter)  --->
+        [*] QoS and/or fair queueing  ---> 
+            <M>   Hierarchical Token Bucket (HTB)
+            <M>   Fair Queue Controlled Delay AQM (FQ_CODEL) 
+            <M>   Ingress Qdisc 
+            <M>   Universal 32bit comparisons w/ hashing (U32)
+
+Device Drivers  --->
+    [*] Networking device support  --->
+        [*] Network core driver support
+            <M>     Intermediate Functional Block support
+</pre>}}
+
+If you have IPv6 support on your network or plan to use IPv6 tunnels, you may set IPv6 Protocol to <M>. You should also enable Netfilter options, which enables the use of iptables firewall.
+
+=== Iproute2 ===
+Install {{Package|sys-apps/iproute2}}:
+{{USEflag|package=sys-apps/iproute2
+|ipv6+yes
+|iptables+yes
+}}
+
+{{Emerge|iproute2}}
+
+The iproute2 package installs the powerful tool called "tc". It is used to control and modify queuing and filters on network links.
+
+Lets begin with a little example:
+{{RootCmd|tc qdisc show dev eth0}}
+
+By default, the pfifo_fast queuing discipline is used by the Linux kernel. It should not be listed by "tc qdisc show".
+
+== Theory ==
+
+There are two modes of traffic shaping, INGRESS and EGRESS. INGRESS handles incoming traffic and EGRESS outgoing traffic. Linux does not support shaping/queuing on INGRESS, but only policing. Therefore IFB exists, which we can attach to the INGRESS queue while we can add any normal queuing like FQ_CODEL as EGRESS queue on the IFB device.
+
+The main reason for traffic shaping is that we cannot control the packet queues or prioritisation made by our ISP or in the external link. By limit our maximum bandwidth to 90% of our link speed we can make sure that any buffers (queues) that our ISP and our external link has will remain empty.
+
+FQ_CODEL is a queuing discipline that is based on AQM (Active Queue Management). It aims to create fair bandwidth for all flows, while attempting to minimise buffers (and hence delays).
+
+The INGRESS shaping below works like this:
+# Create ingress filter on external interface
+# Copy all incoming data to the IFB device
+# Create an EGRESS qdisc on the IFB device and limit the bandwidth to 90%
+# Attach the FQ_CODEL queuing discipline.
+
+== Traffic Shaping Script ==
+It is important that you set your upload and download speeds to about 90% of your maximum link speed. You also need to load all modules beforehand.
+{{RootCmd|modprobe ifb}}
+<pre>## Paths and definitions
+tc=/sbin/tc
+ext=external0
+ext_ingress=ifb0
+int=internal0
+ext_up=800kbit		# Max theoretical up is 1024kbit
+ext_down=7100kbit	# Max theoretical down is 8192kbit
+q=1514                  # Quantum = 1500bytes IP + 14 bytes ethernet.
+
+# Clear old queuing disciplines (qdisc) on the interfaces
+$tc qdisc del dev $ext root
+$tc qdisc del dev $ext ingress
+$tc qdisc del dev $ext_ingress root
+$tc qdisc del dev $ext_ingress ingress
+
+#########
+# INGRESS
+#########
+# Create ingress on external interface
+$tc qdisc  add dev $ext handle ffff: ingress
+
+# Forward all ingress traffic to the IFB device
+$tc filter add dev $ext parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev $ext_ingress
+
+# Create an EGRESS filter on the IFB device
+$tc qdisc add dev $ext_ingress root handle 2: htb default 1
+
+# Add root class HTB with rate limiting
+$tc class add dev $ext_ingress parent 2: classid 2:1 htb rate $ext_down
+$tc class add dev $ext_ingress parent 2:1 classid 2:11 htb rate $ext_up prio 0 quantum $q
+
+# Add FQ_CODEL qdisc with ECN support
+$tc qdisc add dev $ext_ingress parent 2:11 fq_codel quantum $q limit 500 target 5ms interval 100ms ecn
+
+#########
+# EGRESS
+#########
+# Add FQ_CODEL to EGRESS on external interface
+$tc qdisc add dev $ext root handle 1: htb default 1
+$tc class add dev $ext parent 1: classid 2:1 htb rate $ext_up
+$tc class add dev $ext parent 1:1 classid 2:10 fq_codel quantum $q limit 500 target 5ms interval 100ms ecn
+</pre>
+==== Statistics ====
+To see if the new shaping is activated you can do
+{{Cmd|tc -s qdisc show dev ifb0}}
+<pre>qdisc htb 2: root refcnt 2 r2q 10 default 1 direct_packets_stat 14440
+ Sent 21456437 bytes 14440 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc fq_codel 80ea: parent 2:11 limit 500p flows 1024 quantum 1514 target 5.0ms interval 100.0ms ecn
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+  maxpacket 256 drop_overlimit 0 new_flow_count 0 ecn_mark 0
+  new_flows_len 0 old_flows_len 0
+</pre>
+
+{{Cmd|tc -s filter show dev external0 parent ffff:}}
+<pre>filter protocol ip pref 49152 u32
+filter protocol ip pref 49152 u32 fh 800: ht divisor 1
+filter protocol ip pref 49152 u32 fh 800::800 order 2048 key ht 800 bkt 0 terminal flowid ???  (rule hit 1744088 success 1744088)
+  match 00000000/00000000 at 0 (success 1744088 )
+        action order 33: mirred (Egress Redirect to device ifb0) stolen
+        index 28 ref 1 bind 1 installed 50178 sec
+        Action statistics:
+        Sent 2518677030 bytes 1744088 pkt (dropped 0, overlimits 0 requeues 0)
+        backlog 0b 0p requeues 0
+</pre>
+
+{{Cmd|tc -s -d class show dev ifb0}}
+<pre>qdisc htb 2: root refcnt 2 r2q 10 default 1 direct_packets_stat 4530
+ Sent 6630869 bytes 4530 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc fq_codel 80ea: parent 2:11 limit 500p flows 1024 quantum 1514 target 5.0ms interval 200.0ms ecn
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+  maxpacket 256 drop_overlimit 0 new_flow_count 0 ecn_mark 0
+  new_flows_len 0 old_flows_len 0
+</pre>
+
+== Excplicit Congestion Notification (ECN) ==
+You should enable ECN (Explicit Congestion Notification) since FQ_CODEL uses this to notify the internet hosts about congestions (bandwidth over limit).
+{{RootCmd|sysctl -w net.ipv4.tcp_ecn=1}}
+
+== External resources ==
+* [http://www.bufferbloat.net/projects/codel/wiki information about FQ_CODEL qdisc] 
+* [http://www.gentoo-wiki.info/HOWTO_Iptables_and_stateful_firewalls iptables and stateful firewall source article]
+* [http://en.gentoo-wiki.com/wiki/Iptables_and_stateful_firewalls iptables and stateful firewall]
+
+[[Category:Server_and_Security]]
