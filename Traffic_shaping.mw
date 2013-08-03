@@ -63,18 +63,47 @@ The INGRESS shaping below works like this:
 # Copy all incoming data to the IFB device
 # Create an EGRESS qdisc on the IFB device and limit the bandwidth to 90%
 # Attach the FQ_CODEL queuing discipline.
+==  Note ==
+The original version of this page was wildly incorrect, in particular the ingress portion of the shaper didn't work at all. The protocol filter was ip only (no arp, no ipv6), the ifb0 device was not up, the default htb destination was to the direct, not fq_codel qdisc. Also the htb "quantum" is different and has a different purpose than the the fq_codel quantum - the htb quantum is there to lighten the cpu load of htb under higher rates, the fq_codel quantum is there to optimize for different packet sizes....
+
+It was good to know everything that can go wrong on a fq_codel rate shaper... -- dtaht
+
+I generally recomend treating the ecn idea gently on anything but strictly controlled networks (like data centers)
 
 == Traffic Shaping Script ==
-It is important that you set your upload and download speeds to about 90% of your maximum link speed. You also need to load all modules beforehand.
+It is important that you start by setting your upload and download speeds to about 90% of your maximum link speed. After you get satisfying results, you can generally try increasing your upload speed to 95% or higher, and twiddle with download speed. On some links you can get away with 95% too, on some, 85% is safer. ADSL has special framing problems which require usage of the htb STAB parameter (not shown here).
+
+You also need to load all modules beforehand.
+
 {{RootCmd|modprobe ifb}}
-<pre>## Paths and definitions
+{{RootCmd|modprobe sch_fq_codel}}
+{{RootCmd|modprobe act_mirred}}
+<pre>
+#!/bin/sh
+
+## Paths and definitions
 tc=/sbin/tc
-ext=external0
-ext_ingress=ifb0
-int=internal0
-ext_up{{=}}800kbit		# Max theoretical up is 1024kbit
-ext_down{{=}}7100kbit	# Max theoretical down is 8192kbit
-q=1514                  # Quantum = 1500bytes IP + 14 bytes ethernet.
+ext=eth0		# Change for your device!
+ext_ingress=ifb0	# Use a unique ifb per rate limiter!
+			# Set these as per your provider's settings, at 90% to start with
+ext_up=800kbit		# Max theoretical: for this example, up is 1024kbit
+ext_down=7100kbit	# Max theoretical: for this example, down is 8192kbit
+q=1514                  # HTB Quantum = 1500bytes IP + 14 bytes ethernet.
+			# Higher bandwidths may require a higher htb quantum. MEASURE.
+			# Some ADSL devices might require a stab setting.
+
+quantum=300		# fq_codel quantum 300 gives a boost to interactive flows
+			# At higher bandwidths (50Mbit+) don't bother
+
+
+modprobe ifb
+modprobe sch_fq_codel
+modprobe act_mirred
+
+ethtool -K $ext tso off gso off gro off # Also turn of gro on ALL interfaces 
+                                        # e.g ethtool -K eth1 gro off if you have eth1
+					# some devices you may need to run these 
+					# commands independently
 
 # Clear old queuing disciplines (qdisc) on the interfaces
 $tc qdisc del dev $ext root
@@ -85,78 +114,134 @@ $tc qdisc del dev $ext_ingress ingress
 #########
 # INGRESS
 #########
+
 # Create ingress on external interface
-$tc qdisc  add dev $ext handle ffff: ingress
+$tc qdisc add dev $ext handle ffff: ingress
+
+ifconfig $ext_ingress up # if the interace is not up bad things happen
 
 # Forward all ingress traffic to the IFB device
-$tc filter add dev $ext parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev $ext_ingress
+$tc filter add dev $ext parent ffff: protocol all u32 match u32 0 0 action mirred egress redirect dev $ext_ingress
 
 # Create an EGRESS filter on the IFB device
-$tc qdisc add dev $ext_ingress root handle 2: htb default 11
+$tc qdisc add dev $ext_ingress root handle 1: htb default 11
 
 # Add root class HTB with rate limiting
-$tc class add dev $ext_ingress parent 2: classid 2:1 htb rate $ext_down
-$tc class add dev $ext_ingress parent 2:1 classid 2:11 htb rate $ext_up prio 0 quantum $q
 
-# Add FQ_CODEL qdisc with ECN support
-$tc qdisc add dev $ext_ingress parent 2:11 fq_codel quantum $q limit 500 target 5ms interval 100ms ecn
+$tc class add dev $ext_ingress parent 1: classid 1:1 htb rate $ext_down
+$tc class add dev $ext_ingress parent 1:1 classid 1:11 htb rate $ext_down prio 0 quantum $q
+
+
+# Add FQ_CODEL qdisc with ECN support (if you want ecn)
+$tc qdisc add dev $ext_ingress parent 1:11 fq_codel quantum $quantum ecn
 
 #########
 # EGRESS
 #########
 # Add FQ_CODEL to EGRESS on external interface
-$tc qdisc add dev $ext_ingress root handle 1: htb default 11
+$tc qdisc add dev $ext root handle 1: htb default 11
 
 # Add root class HTB with rate limiting
 $tc class add dev $ext parent 1: classid 1:1 htb rate $ext_up
-$tc qdisc add dev $ext parent 1:1 classid 1:11 htb rate $ext_up prio 0 quantum $q
+$tc class add dev $ext parent 1:1 classid 1:11 htb rate $ext_up prio 0 quantum $q
 
-# Add FQ_CODEL qdisc with ECN support
-$tc qdisc add dev $ext_ingress parent 1:11 fq_codel quantum $q limit 500 target 5ms interval 100ms ecn
+# Note: You can apply a packet limit here and on ingress if you are memory constrained - e.g
+# for low bandwidths and machines with < 64MB of ram, limit 1000 is good, otherwise no point
+
+# Add FQ_CODEL qdisc without ECN support - on egress it's generally better to just drop the packet
+# but feel free to enable it if you want.
+
+$tc qdisc add dev $ext parent 1:11 fq_codel quantum $quantum noecn
+
+
 </pre>
 ==== Statistics ====
-To see if the new shaping is activated you can do
-{{Cmd|tc -s qdisc show dev ifb0}}
-<pre>qdisc htb 2: root refcnt 2 r2q 10 default 1 direct_packets_stat 14440
- Sent 21456437 bytes 14440 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc fq_codel 80ea: parent 2:11 limit 500p flows 1024 quantum 1514 target 5.0ms interval 100.0ms ecn
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-  maxpacket 256 drop_overlimit 0 new_flow_count 0 ecn_mark 0
-  new_flows_len 0 old_flows_len 0
+To see if the new shaping is activated you should run some heavy traffic through it, and check your work. This example uses netperf. It is helpful to run multiple instances in both directions to really exercise things.....
+
+{{Cmd|ping -c 70 somewhere > log & }}
+{{Cmd|netperf -l 60 -H somewhere -t TCP_MAERTS &}}
+{{Cmd|netperf -l 60 -H somewhere -t TCP_STREAM &}}
+
+<pre>
+ping -c 25 -H 172.21.2.1 & # watch your ping times go by. Should generally only increase by 10ms max
+root@ida:~/gen# netperf -H 172.21.2.1 -t TCP_MAERTS
+MIGRATED TCP MAERTS TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 172.21.2.1 () port 0 AF_INET : demo
+Recv   Send    Send                          
+Socket Socket  Message  Elapsed              
+Size   Size    Size     Time     Throughput  
+bytes  bytes   bytes    secs.    10^6bits/sec  
+
+ 87380  65536  65536    10.00       6.78   
+root@ida:~/gen# netperf -H 172.21.2.1 -t TCP_STREAM
+MIGRATED TCP STREAM TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 172.21.2.1 () port 0 AF_INET : demo
+Recv   Send    Send                          
+Socket Socket  Message  Elapsed              
+Size   Size    Size     Time     Throughput  
+bytes  bytes   bytes    secs.    10^6bits/sec  
+
+ 87380  16384  16384    10.16       0.75   
+
 </pre>
 
-{{Cmd|tc -s filter show dev external0 parent ffff:}}
-<pre>filter protocol ip pref 49152 u32
-filter protocol ip pref 49152 u32 fh 800: ht divisor 1
-filter protocol ip pref 49152 u32 fh 800::800 order 2048 key ht 800 bkt 0 terminal flowid ???  (rule hit 1744088 success 1744088)
-  match 00000000/00000000 at 0 (success 1744088 )
-        action order 33: mirred (Egress Redirect to device ifb0) stolen
-        index 28 ref 1 bind 1 installed 50178 sec
-        Action statistics:
-        Sent 2518677030 bytes 1744088 pkt (dropped 0, overlimits 0 requeues 0)
-        backlog 0b 0p requeues 0
+Then you can check your work:
+
+{{Cmd|tc -s qdisc show dev eth0}}
+<pre>
+qdisc htb 1: root refcnt 2 r2q 10 default 11 direct_packets_stat 0
+ Sent 4211186 bytes 16165 pkt (dropped 0, overlimits 10147 requeues 0) 
+ backlog 0b 0p requeues 0 
+qdisc fq_codel 801a: parent 1:11 limit 10240p flows 1024 quantum 300 target 5.0ms interval 100.0ms 
+ Sent 4211186 bytes 16165 pkt (dropped 343, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0 
+  maxpacket 1514 drop_overlimit 0 new_flow_count 2234 ecn_mark 0
+  new_flows_len 0 old_flows_len 18
+qdisc ingress ffff: parent ffff:fff1 ---------------- 
+ Sent 24181003 bytes 19329 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0 
+</pre>
+
+{{Cmd|tc -s filter show dev dev eth0 parent ffff:}}
+<pre>
+root@ida:~/gen# tc -s filter show dev eth0 parent ffff:
+filter protocol all pref 49152 u32 
+filter protocol all pref 49152 u32 fh 800: ht divisor 1 
+filter protocol all pref 49152 u32 fh 800::800 order 2048 key ht 800 bkt 0 terminal flowid ??? 
+  match 00000000/00000000 at 0
+	action order 1: mirred (Egress Redirect to device ifb0) stolen
+ 	index 13 ref 1 bind 1 installed 517 sec used 0 sec
+ 	Action statistics:
+	Sent 34015624 bytes 29704 pkt (dropped 0, overlimits 0 requeues 0) 
+	backlog 0b 0p requeues 0 
 </pre>
 
 {{Cmd|tc -s -d class show dev ifb0}}
-<pre>qdisc htb 2: root refcnt 2 r2q 10 default 1 direct_packets_stat 4530
- Sent 6630869 bytes 4530 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc fq_codel 80ea: parent 2:11 limit 500p flows 1024 quantum 1514 target 5.0ms interval 200.0ms ecn
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-  maxpacket 256 drop_overlimit 0 new_flow_count 0 ecn_mark 0
-  new_flows_len 0 old_flows_len 0
+<pre>
+qdisc htb 1: root refcnt 2 r2q 10 default 11 direct_packets_stat 1
+ Sent 23852231 bytes 19336 pkt (dropped 0, overlimits 25453 requeues 0) 
+ backlog 0b 0p requeues 0 
+qdisc fq_codel 8019: parent 1:11 limit 10240p flows 1024 quantum 300 target 5.0ms interval 100.0ms ecn 
+ Sent 23852120 bytes 19335 pkt (dropped 463, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0 
+  maxpacket 1514 drop_overlimit 0 new_flow_count 2170 ecn_mark 0
+  new_flows_len 1 old_flows_len 1
 </pre>
+== Some notes ==
+
+If you see a maxpacket greater than 1514, you have some tso/gso/gro offload on on some interface.
+If you don't see ecn_marking, one side or another of your hosts doesn't have ecn on, or it's disabled 
+as per this script.
+
 
 == Excplicit Congestion Notification (ECN) ==
-You should enable ECN (Explicit Congestion Notification) since FQ_CODEL uses this to notify the internet hosts about congestions (bandwidth over limit).
+You can enable ECN (Explicit Congestion Notification) since FQ_CODEL will this to notify the internet hosts about congestions (bandwidth over limit), without actually dropping the packet.
 {{RootCmd|sysctl -w net.ipv4.tcp_ecn{{=}}1}}
+
+However usage of ecn over the wide internet is kind of dubious, so this script only enables it on ingress, and in these examples, ecn_mark=0 as it is not enabled on the other side of the tested connection.
 
 == External resources ==
 * [http://www.bufferbloat.net/projects/codel/wiki information about FQ_CODEL qdisc] 
 * [http://www.gentoo-wiki.info/HOWTO_Iptables_and_stateful_firewalls iptables and stateful firewall]
 * [http://en.gentoo-wiki.com/wiki/Iptables_and_stateful_firewalls iptables and stateful firewall]
+* [http://www.bufferbloat.net/projects/cerowrt/wiki/Bloat-videos Van Jacobson and others on codel and bufferbloat]
 
 [[Category:Server_and_Security]]
