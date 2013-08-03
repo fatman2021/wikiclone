@@ -1,32 +1,41 @@
 <languages />
 
 <translate>
+<!--T:1-->
 This guide shows you how to set up distcc for cross-compiling across different processor architectures.
 
-== Cross-compiling with distcc ==
+== Cross-compiling with distcc == <!--T:2-->
 
-=== Introduction ===
+=== Introduction === <!--T:3-->
 
+<!--T:4-->
 <code>distcc</code> is a tool that lets you share the burden of software compiling across several networked computers. As long as the networked boxes are all using the same toolchain built for the same processor architecture, no special<code>distcc</code> setup is required. But what do you do if you need to compile for a different architecture using differing computers? This guide will show you how to configure<code>distcc</code> to compile for different architectures. 
 
-=== Emerge the needed utilities ===
+=== Emerge the needed utilities === <!--T:5-->
 
+<!--T:6-->
 First, you will need to emerge <code>crossdev</code> on all the machines that will be involved in the compiling process. <code>crossdev</code> is a tool that makes building cross-architecture toolchains easy. It was originally written by {{Mail|Joshua Kinard}}and was re-written from the ground up by {{Mail|Mike Frysinger}}. Its usage is straightforward: <code>crossdev -t sparc</code> will build a full cross-toolchain targetting the Sparc architecture. This includes binutils, gcc, glibc, and linux-headers. If you need more help, try running <code>crossdev --help</code> . Obviously, you will need to emerge the proper cross-toolchain on all the helper boxes. 
 
+<!--T:7-->
 Next, you will need to emerge <code>distcc</code> on all the machines that will be involved in the process. This includes the box that will run emerge and the boxes with the cross-compilers. Please see the [http://www.gentoo.org//doc/en/distcc.xml Gentoo Distcc Documentation] for more information on setting up and using <code>distcc</code> . 
 
-=== Arch-specific notes ===
+=== Arch-specific notes === <!--T:8-->
 
+<!--T:9-->
 If you are cross-compiling between different subarchitectures for Intel x86 (e.g. i586 and i686), you must still build a full cross-toolchain for the desired CHOST, or else the compilation will fail. This is because i586 and i686 are actually different CHOSTs, despite the fact that they are both considered "x86." Please keep this in mind when you build your cross-toolchains. For example, if the target box is i586, this means that you must build i586 cross-toolchains on your i686 helper boxes. 
 
-=== Configuring distcc to cross-compile correctly ===
+=== Configuring distcc to cross-compile correctly === <!--T:10-->
 
+<!--T:11-->
 In the default distcc setup, cross-compiling will ''not'' work properly. The problem is that many builds just call <code>gcc</code> instead of the full compiler name (e.g. <code>sparc-unknown-linux-gnu-gcc</code> ). When this compile gets distributed to a distcc helper box, the native compiler gets called instead of your shiny new cross-compiler. 
 
+<!--T:12-->
 Fortunately, there is a workaround for this little problem. All it takes is a wrapper script and a few symlinks on the box that will be running <code>emerge</code> . I'll use my Sparc box as an example. Wherever you see <code>sparc-unknown-linux-gnu</code> below, you will want to insert your own CHOST ( <code>x86_64-pc-linux-gnu</code> for an AMD64 box, for example). When you first emerge distcc, the {{Path|/usr/lib/distcc/bin}} directory looks like this: 
 
+<!--T:13-->
 {{Note|The following instructions are to be performed only on the box running the emerge. Do not perform these steps on the helper boxes.}}
 
+<!--T:14-->
 {{RootCmd|cd /usr/lib/distcc/bin
 |ls -l|output=<pre>
 total 0
@@ -40,28 +49,36 @@ lrwxrwxrwx  1 root root 15 Dec 23 20:13 sparc-unknown-linux-gnu-gcc -> /usr/bin/
 </pre>
 }}
 
+<!--T:15-->
 Here is what you want to do: 
 
+<!--T:16-->
 {{RootCmd|rm c++ g++ gcc cc}}
 
+<!--T:17-->
 Next, we'll create the new script on this box. Fire up your favorite editor and create a file with the following text in it, then save it as {{Path|sparc-unknown-linux-gnu-wrapper}} . Remember to change the CHOST (in this case, <code>sparc-unknown-linux-gnu</code> ) to the actual CHOST of the box that will be running the emerge. 
 
+<!--T:18-->
 {{Code|The new wrapper script|<pre>
 #!/bin/bash
 exec /usr/lib/distcc/bin/sparc-unknown-linux-gnu-g${0:$[-2]} "$@"
 </pre>
 }}
 
+<!--T:19-->
 Next, we'll make the script executable and create the proper symlinks: 
 
+<!--T:20-->
 {{RootCmd|chmod a+x sparc-unknown-linux-gnu-wrapper
 |ln -s sparc-unknown-linux-gnu-wrapper cc
 |ln -s sparc-unknown-linux-gnu-wrapper gcc
 |ln -s sparc-unknown-linux-gnu-wrapper g++
 |ln -s sparc-unknown-linux-gnu-wrapper c++}}
 
+<!--T:21-->
 When you're done, {{Path|/usr/lib/distcc/bin}} will look like this: 
 
+<!--T:22-->
 {{RootCmd|ls -l|output=<pre>
 total 4
 lrwxrwxrwx  1 root root 25 Jan 18 14:20 c++ -> sparc-unknown-linux-gnu-wrapper
@@ -75,16 +92,20 @@ lrwxrwxrwx  1 root root 15 Jul 27 10:52 sparc-unknown-linux-gnu-gcc -> /usr/bin/
 </pre>
 }}
 
+<!--T:23-->
 Congratulations; you now have a (hopefully) working cross-distcc setup. 
 
-=== How this works ===
+=== How this works === <!--T:24-->
 
+<!--T:25-->
 When <code>distcc</code> is called, it checks to see what it was called as (e.g. <code>i686-pc-linux-gnu-gcc</code> , <code>sparc-unknown-linux-gnu-g++</code> , etc.) When distcc then distributes the compile to a helper box, it passes along the name it was called as. The distcc daemon on the other helper box then looks for a binary with that same name. If it sees just <code>gcc</code> , it will look for <code>gcc</code> , which is likely to be the native compiler on the helper box, if it is not the same architecture as the box running <code>emerge</code> . When the ''full'' name of the compiler is sent (e.g. <code>sparc-unknown-linux-gnu-gcc</code> ), there is no confusion. 
 
-== Acknowledgements ==
+== Acknowledgements == <!--T:26-->
 
+<!--T:27-->
 We would like to thank the following authors and editors for their contributions to this guide:
 
+<!--T:28-->
 * Andrew Gaffney
 * Joshua Saddler
 </translate>
