@@ -32,133 +32,133 @@
 :* More information about the tests in [[Okupy/Workflow#tests|Workflow]]
 
 == Production environment ==
-* Create the dedicated user that will run okupy (`useradd -m okupy`)
+* Create the dedicated user that will run okupy
+ useradd -m okupy
 * Perform the same setup as for Development environment (using the okupy user)
-* `python manage.py collectstatic` (answer `yes`, using okupy user)
 
 === uWSGI setup ===
-* Install `www-servers/uwsgi` with `USE=python`
-* Copy `/etc/conf.d/uwsgi` to `/etc/conf.d/uwsgi.okupy`
-* Put the following options in `/etc/conf.d/uwsgi.okupy`
+* Install ''www-servers/uwsgi'' with ''USE=python''
+* Copy ''/etc/conf.d/uwsgi'' to ''/etc/conf.d/uwsgi.okupy''
+* Put the following options in ''/etc/conf.d/uwsgi.okupy''
 
-        UWSGI_SOCKET=/home/okupy/okupy.wsgi
-        UWSGI_LOG_FILE=/home/okupy/uwsgi.okupy.log
-        UWSGI_DIR=/home/okupy/identity.gentoo.org
-        UWSGI_USER=okupy
-        UWSGI_GROUP=okupy
-        # buffer-size is necessary to pass SSL certificates
-        UWSGI_EXTRA_OPTIONS='--buffer-size 65536 --plugins python27 --wsgi okupy.wsgi'
+  UWSGI_SOCKET=/home/okupy/okupy.wsgi
+  UWSGI_LOG_FILE=/home/okupy/uwsgi.okupy.log
+  UWSGI_DIR=/home/okupy/identity.gentoo.org
+  UWSGI_USER=okupy
+  UWSGI_GROUP=okupy
+  # buffer-size is necessary to pass SSL certificates
+  UWSGI_EXTRA_OPTIONS='--buffer-size 65536 --plugins python27 --wsgi okupy.wsgi'
 
-* Symlink `/etc/init.d/uwsgi.okupy` to `/etc/init.d/uwsgi`
-* `/etc/init.d/uwsgi.okupy start`
+* Symlink ''/etc/init.d/uwsgi.okupy'' to ''/etc/init.d/uwsgi'', and start it:
+ ln -s /etc/init.d/uwsgi.okupy /etc/init.d/uwsgi
+ /etc/init.d/uwsgi.okupy start
 
 === NGINX setup ===
 
-* Install `www-servers/nginx`
-* Copy the server certificates and private keys to `/etc/ssl/nginx/`
+* Install ''www-servers/nginx''
+ emerge -av www-servers/nginx
+* Copy the server certificates and private keys to ''/etc/ssl/nginx/''
 * Concatenate all the allowed CA certificates for client auth:
-
-        cat /etc/ssl/* > /etc/ssl/nginx/all_certs.pem
-
-* Add the following options in `/etc/nginx/nginx.conf`
-
-        http {
-            ssl_session_cache  shared:SSL:10m;
-
-            upstream okupy {
-                # connect to uWSGI
-                server unix:///home/okupy/okupy.wsgi;
-            }
-
-            server {
-                listen 0.0.0.0;
-                server_name identity.tampakrap.gr;
-
-                access_log /var/log/nginx/localhost.access_log main;
-                error_log /var/log/nginx/localhost.error_log info;
-
-                root /var/www/localhost/htdocs;
-
-                # redirect all http traffic to https://
-                location / {
-                    rewrite     ^ https://$http_HOST$request_uri permanent;
-                }
-            }
-
-            server {
-                listen 0.0.0.0:443;
-                server_name identity.tampakrap.gr;
-
-                ssl on;
-                # certificates for the main domain
-                ssl_certificate /etc/ssl/nginx/identity_tampakrap_gr_cacert.crt;
-                ssl_certificate_key /etc/ssl/nginx/identity_tampakrap_gr.key;
-                ssl_session_timeout 10m;
-
-                access_log /var/log/nginx/localhost.ssl_access_log main;
-                error_log /var/log/nginx/localhost.ssl_error_log info;
-
-                root /var/www/localhost/htdocs;
-
-                location /static {
-                    alias /home/identity/identity.gentoo.org/static;
-                }
-
-                location / {
-                    uwsgi_pass okupy;
-                    include /etc/nginx/uwsgi_params;
-                }
-            }
-
-            server {
-                listen 0.0.0.0:443;
-                server_name auth.identity.tampakrap.gr;
-
-                ssl on;
-                # certificates for auth. subdomain
-                ssl_certificate /etc/ssl/nginx/auth_identity_tampakrap_gr_cacert.crt;
-                ssl_certificate_key /etc/ssl/nginx/auth_identity_tampakrap_gr.key;
-                ssl_client_certificate /etc/ssl/nginx/all_certs.pem;
-
-                # verify_client == ask for user certificate
-                ssl_session_timeout 30s;
-                ssl_verify_client optional;
-
-                access_log /var/log/nginx/localhost.ssl_access_log main;
-                error_log /var/log/nginx/localhost.ssl_error_log info;
-
-                root /var/www/localhost/htdocs;
-
-                location /static {
-                    alias /home/identity/identity.gentoo.org/static;
-                }
-
-                location / {
-                    uwsgi_pass okupy;
-                    include /etc/nginx/uwsgi_params;
-
-                    # pass certificate verification result
-                    # and the certificate (so we could extract e-mails)
-                    uwsgi_param SSL_CLIENT_VERIFY $ssl_client_verify;
-                    uwsgi_param SSL_CLIENT_RAW_CERT $ssl_client_raw_cert;
-                }
-            }
-        }
+ cat /etc/ssl/* > /etc/ssl/nginx/all_certs.pem
+* Add the following options in ''/etc/nginx/nginx.conf''
+ http {
+     ssl_session_cache  shared:SSL:10m;
+ 
+     upstream okupy {
+       # connect to uWSGI
+       server unix:///home/okupy/okupy.wsgi;
+     }
+ 
+     server {
+         listen 0.0.0.0;
+         server_name identity.tampakrap.gr;
+ 
+         access_log /var/log/nginx/localhost.access_log main;
+         error_log /var/log/nginx/localhost.error_log info;
+ 
+         root /var/www/localhost/htdocs;
+ 
+         # redirect all http traffic to https://
+         location / {
+             rewrite     ^ https://$http_HOST$request_uri permanent;
+         }
+     }
+ 
+     server {
+         listen 0.0.0.0:443;
+         server_name identity.tampakrap.gr;
+ 
+         ssl on;
+         # certificates for the main domain
+         ssl_certificate /etc/ssl/nginx/identity_tampakrap_gr_cacert.crt;
+         ssl_certificate_key /etc/ssl/nginx/identity_tampakrap_gr.key;
+         ssl_session_timeout 10m;
+ 
+         access_log /var/log/nginx/localhost.ssl_access_log main;
+         error_log /var/log/nginx/localhost.ssl_error_log info;
+ 
+         root /var/www/localhost/htdocs;
+ 
+         location /static {
+             alias /home/identity/identity.gentoo.org/static;
+         }
+ 
+         location / {
+             uwsgi_pass okupy;
+             include /etc/nginx/uwsgi_params;
+         }
+     }
+ 
+     server {
+         listen 0.0.0.0:443;
+         server_name auth.identity.tampakrap.gr;
+ 
+         ssl on;
+         # certificates for auth. subdomain
+         ssl_certificate /etc/ssl/nginx/auth_identity_tampakrap_gr_cacert.crt;
+         ssl_certificate_key /etc/ssl/nginx/auth_identity_tampakrap_gr.key;
+         ssl_client_certificate /etc/ssl/nginx/all_certs.pem;
+ 
+         # verify_client == ask for user certificate
+         ssl_session_timeout 30s;
+         ssl_verify_client optional;
+ 
+         access_log /var/log/nginx/localhost.ssl_access_log main;
+         error_log /var/log/nginx/localhost.ssl_error_log info;
+ 
+         root /var/www/localhost/htdocs;
+ 
+         location /static {
+             alias /home/identity/identity.gentoo.org/static;
+         }
+ 
+         location / {
+             uwsgi_pass okupy;
+             include /etc/nginx/uwsgi_params;
+ 
+             # pass certificate verification result
+             # and the certificate (so we could extract e-mails)
+             uwsgi_param SSL_CLIENT_VERIFY $ssl_client_verify;
+             uwsgi_param SSL_CLIENT_RAW_CERT $ssl_client_raw_cert;
+         }
+     }
+ }
 
 == Additional ==
 === virtualenv ===
-* `emerge virtualenv` (replace this command with an equivalent in case you are working in a non-Gentoo distro)
-* `virtualenv .virtualenv`
-* `source .virtualenv/bin/activate`
-* The `.virtualenv` directory is already in `.gitignore`, so please prefer this name
-* `deactivate` will exit the virtual environment
+* Install virtualenv (replace the following command with an equivalent in case you are working in a non-Gentoo distro)
+ emerge -av dev-python/virtualenv
+ `virtualenv .virtualenv`
+ `source .virtualenv/bin/activate`
+* The ''.virtualenv'' directory is already in ''.gitignore'', so please prefer this name
+* ''deactivate'' will exit the virtual environment
 
 === OpenLDAP ===
 ==== OpenLDAP Server ====
 * (TODO)
 
 ==== OpenLDAP client only ====
-* We have a testing instance on `ldap://evidence.tampakrap.gr`
+* We have a testing instance on ''ldap://evidence.tampakrap.gr''
 * Contact [tampakrap](http://github.com/tampakrap) to get the certificates and the rootDN credentials
 * Install OpenLDAP package:
  * In Gentoo: `USE="minimal" emerge -av openldap`
