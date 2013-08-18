@@ -1,0 +1,189 @@
+For system and network monitoring, the Nagios tool is a popular choice amongst various free software users. This guide helps you discover Nagios and how you can integrate it with your existing Gentoo infrastructure.
+
+== Introduction ==
+
+=== System Monitoring ===
+
+Single system users usually don't need a tool to help them identify the state of their system. However, when you have a couple of systems to administer, you will require an overview of your systems' health: do the partitions still have sufficient free space, is your CPU not overloaded, how many people are logged on, are your systems up to date with the latest security fixes, etc. 
+
+System monitoring tools, such as the Nagios software we discuss here, offer an easy way of dealing with the majority of metrics you want to know about your system. In larger environments, often called "enterprise environments", the tools aggregate the metrics of the various systems onto a single location, allowing for centralized monitoring management. 
+
+=== About Nagios ===
+
+The [http://www.nagios.org Nagios] software is a popular software tool for host, service and network monitoring for Unix (although it can also capture metrics from the Microsoft Windows operating system family). It supports: 
+
+* obtaining metrics for local system resources, such as diskspace, CPU usage, memory consumption, ...
+* discovering service availability (such as SSH, SMTP and other protocols),
+* assuming network outages (when a group of systems that are known to be available on a network are all unreachable),
+and more. 
+
+Basically, the Nagios software consists of a core tool (which manages the metrics), a web server module (which manages displaying the metrics) and a set of plugins (which obtain and send the metrics to the core tool). 
+
+=== About this Document ===
+
+The primary purpose of this document is to introduce you, Gentoo users, to the Nagios software and how you can integrate it within your Gentoo environment. The guide is not meant to describe Nagios in great detail - I leave this up to the documentation editors of Nagios itself. 
+
+== Setting Up Nagios ==
+
+=== Installing Nagios ===
+
+Before you start installing Nagios, draw out and decide which system will become your master Nagios system (i.e. where the Nagios software is fully installed upon and where all metrics are stored) and what kind of metrics you want to obtain. You will not install Nagios on every system you want to monitor, but rather install Nagios on the master system and the TODO on the systems you want to receive metrics from. 
+
+Install the Nagios software on your central server: 
+
+{{Emerge|nagios}}
+
+Follow the instructions the ebuild displays at the end of the installation (i.e. adding <code>nagios</code> to your active runlevel, configuring web server read access and more). 
+
+Really. Read it. 
+
+=== Restricting Access to the Nagios Web Interface ===
+
+The Nagios web interface allows for executing commands on the various systems monitored by the Nagios plugins. For this purpose (and also because the metrics can have sensitive information) it is best to restrict access to the interface. 
+
+For this purpose, we introduce two access restrictions: one on IP level (from what systems can a user connect to the interface) and a basic authentication one (using the username / password scheme). 
+
+First, edit {{Path|/etc/apache2/modules/99_nagios3.conf}} and edit the <code>allow from</code> definitions: 
+
+{{Code|Allow from definitions|<pre>
+## (Example allowing access from the local host and the local network)
+Order allow,deny
+Allow from 127.0.0.1 192.168.1.1/24
+</pre>
+}}
+
+Next, create an Apache authorization table where you define the users who have access to the interface as well as their authorizations. The authentication definition file is called {{Path|.htaccess}} and contains where the authentication information itself is stored. 
+
+{{Code|Example .htaccess file|<pre>
+AuthName "Nagios Access"
+AuthType Basic
+AuthUserFile /etc/nagios/auth.users
+Require valid-user
+</pre>
+}}
+
+Place this file inside the {{Path|/usr/share/nagios/htdocs}} and {{Path|/usr/lib/nagios/cgi-bin}} directories. 
+
+Create the {{Path|/etc/nagios/auth.users}} file with the necessary user credentials. By default, the Gentoo nagios ebuild defines a single user called <code>nagiosadmin</code> . Let's create that user first: 
+
+{{RootCmd|htpasswd2 -c /etc/nagios/auth.users nagiosadmin
+|chown nagios:nagios /etc/nagios/auth.users}}
+
+=== Accessing Nagios ===
+
+Once Nagios and its dependencies are installed, fire up Apache and Nagios: 
+
+{{RootCmd|/etc/init.d/nagios start
+|/etc/init.d/apache2 start}}
+
+Next, fire up your browser and connect to [http://localhost/nagios http://localhost/nagios] . Log on as the <code>nagiosadmin</code> user and navigate to the ''Host Detail'' page. You should be able to see the monitoring states for the local system. 
+
+== Installing Client Daemons ==
+
+
+=== Introduction ===
+
+There are various methods available to monitor remote hosts. 
+
+# Use the ''NRPE'' daemon on the remote host and have Nagios communicate to this daemon using the {{Path|check_nrpe}} plugin
+# Use a password-less SSH connection to execute the command remotely
+# Trap SNMP events and create Nagios alerts from it
+
+We focus on using the NRPE method as it is the most popular one and leave the other methods as an interesting excercise. 
+
+=== Installing NRPE ===
+
+With NRPE, each remote host runs a daemon (the NRPE deamon) which allows the main Nagios system to query for certain metrics. One can run the NRPE daemon by itself or use an inetd program. I'll leave the inetd method as a nice exercise to the reader and give an example for running NRPE by itself. 
+
+First install the NRPE plugin: 
+
+{{Emerge|nagios-nrpe}}
+
+Next, edit {{Path|/etc/nagios/nrpe.cfg}} to allow your main Nagios system to access the NRPE daemon and customize the installation to your liking. Another important change to the {{Path|nrpe.cfg}} file is the list of commands that NRPE supports. For instance, to use <code>nagios-nrpe</code> version 2.12 with Nagios 3, you'll need to change the paths from {{Path|/usr/nagios/libexec}} to {{Path|/usr/lib/nagios/plugins}} . Finally, launch the NRPE daemon: 
+
+{{RootCmd|/etc/init.d/nrpe start}}
+
+Finally, we need to configure the main Nagios system to connect to this particular NRPE instance and request the necessary metrics. To introduce you to Nagios' object syntax, our next section will cover this a bit more throroughly. 
+
+=== Configuring a Remote Host ===
+
+{{Note|The following hands-on tutorial is an example, used to introduce the user to Nagios' object model. Do not see this as the "Best Practice" for configuring Nagios.}}
+
+First, edit {{Path|/etc/nagios/nagios.cfg}} and place a <code>cfg_dir</code> directive. This will tell Nagios to read in all object configuration files in the said directory - in our example, the directory will contain the definitions for remote systems. 
+
+{{Code|Editing /etc/nagios/nagios.cfg|<pre>
+cfg_dir=/etc/nagios/objects/remote
+</pre>
+}}
+
+Create the directory and start with the first file, {{Path|nrpe-command.cfg}} . In this file, we configure a Nagios command called <code>check_nrpe</code> which will be used to trigger a plugin (identified by the placeholder <code>$ARG1$</code> ) on the remote system (identified by the placeholder <code>$HOSTADDRESS$</code> ). The <code>$USER1$</code> variable is a default pointer to the Nagios installation directory (for instance, {{Path|/usr/nagios/libexec}} ). 
+
+{{RootCmd|nano /etc/nagios/objects/remote/nrpe-command.cfg|output=<pre>
+define command {
+  command_name check_nrpe
+  command_line $USER1$/check_nrpe -H $HOSTADDRESS$ -c $ARG1$
+}
+</pre>
+}}
+
+Next, create a file {{Path|nrpe-hosts.cfg}} where we define the remote host(s) to monitor. In this example, we define two remote systems: 
+
+{{RootCmd|nano /etc/nagios/objects/remote/nrpe-hosts.cfg|output=<pre>
+define host {
+  use linux-server
+  host_name webber
+  alias Gentoo Linux Web Server
+  address 192.168.2.1
+}
+  
+define host {
+  use linux-server
+  host_name isync
+  alias Gentoo Linux RSync server
+  address 192.168.2.2
+}
+</pre>
+}}
+
+Finally, define the service(s) you want to check on these hosts. As a prime example, we run the system load test and disk usage plugins: 
+
+{{RootCmd|nano /etc/nagios/objects/remote/nrpe-services.cfg|output=<pre>
+define service {
+  use generic-service
+  host_name webber,isync
+  service_description Current Load
+  check_command check_nrpe!check_load
+}
+  
+define service {
+  use generic-service
+  host_name webber,isync
+  service_description Root Partition
+  check_command check_nrpe!check_disk
+}
+</pre>
+}}
+
+That's it. If you now check the service details on the Nagions monitoring site you'll see that the remote hosts are connected and are transmitting their monitoring metrics to the Nagios server. 
+
+=== Using Passwordless SSH Connection ===
+
+Just as we did by creating the <code>check_nrpe</code> command, we can create a command that executes a command remotely through a passwordless SSH connection. We leave this up as an interesting exercise to the reader. 
+
+A few pointers and tips: 
+
+* Make sure the passwordless SSH connection is set up for a dedicated user (definitely not root) - most checks you want to execute do not need root privileges anyway
+* Creating a passwordless SSH key can be accomplished with <code>ssh-keygen</code> , you install a key on the destination system by adding the public key to the {{Path|.ssh/authorized_keys}} file
+
+== More Resources ==
+
+=== Adding Gentoo Checks ===
+
+It is quite easy to extend Nagios to include Gentoo-specific checks, such as security checks (GLSAs). Gentoo developer Wolfram Schlich has a <code>check_glsa.sh</code> script [http://dev.gentoo.org/~wschlich/misc/nagios/nagios-plugins-extra/nagios-plugins-extra-4/plugins/ available] amongst others. 
+
+=== Nagios Resources ===
+
+*  [http://www.gentoo.org/ http://www.nagios.org] , the official Nagios website
+*  [http://www.gentoo.org/ http://www.nagiosexchange.org] , where you can find Nagios plugins and addons
+*  [http://www.gentoo.org/ http://www.nagiosforge.org] , where developers host Nagios addon projects
+*  [http://www.gentoo.org/ http://www.nagioswiki.org] , for more information and tutorials on Nagios
