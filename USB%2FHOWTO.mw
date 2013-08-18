@@ -1,0 +1,251 @@
+This document helps a user setup USB on a Gentoo system and configure various USB devices as well.
+
+== Introduction ==
+
+=== What is USB? ===
+
+USB stands for Universal Serial Bus and is basically an external interface standard that enables communication between the computer and various other peripherals. Some of the most commonly used USB devices today are keyboards, mice, pen drives, digital cameras, external CD & DVD writers, printers etc. 
+
+There are currently two versions of USB in use, i.e. USB 1.1 and USB 2.0. Since USB has always been backward compatible with its previous versions, USB 2.0 is backwards compatible with USB 1.1. The latest USB devices are typically USB 2.0 compatible. USB 2.0 supports a maximum data transmission speed of 480 Mbps or 60 MBps and this is the major difference between the two standards. Another advantage with USB is that the devices are all ''hot-pluggable'' , which means that you do not have to restart your system in order for you to be able to use these devices. 
+
+=== A Technical Perspective ===
+
+Before we go onto the exact configuration options in the kernel, it would be apt to look at USB in a little more detail. If you're in a hurry or want to skip this section, please go to the kernel section. 
+
+A USB system has a host controller, hubs, a ''root hub'' amongst others and can support up to 127 USB devices including the hubs. The host controller is nothing but the hardware interface between the USB device and the operating system. There are a couple of HCI (Host Controller Interface) in use today and they are the OHCI (Open HCI) by Compaq, UHCI (Universal HCI) and EHCI (Enhanced HCI), both from Intel. The OHCI/UHCI are the two industry standard USB 1.1 interfaces whereas the EHCI is for USB 2.0. 
+
+The hardware vendor provides an interface for the programmer that allows the system to interact with the hardware and this is called the HCD or Host Controller Device. It is through this HCD that the device interacts with the system software. The following diagram should make things easier to comprehend. 
+
+{{Code|General USB Architecture|<pre>
+# Software consists of other components as well like the device driver, but for the sake of simplicity, they are not shown
+  
+    + ----  Hardware  ----   + ----  Software  ---- +
+    |                        |                      |
+    | [USB Dev] -+-> {EHCI} -+--->  ( EHCD )        |
+    |            |           |                      |  User
+    |            `-> {UHCI} -+--->  ( UHCD )        |
+    |                        |                      |
+    + ----  Hardware  ----   + ----  Software  ---- +
+</pre>
+}}
+
+A USB device can either use a custom driver or use one already present in the system and this is based on the concept of a device ''class'' . This means that if a device belongs to a certain ''class'' , then other devices belonging to the same ''class'' can make use of the same device driver. Some of these ''classes'' are the USB HID (Human Interface Devices) class which covers input devices like keyboards and mice, the USB Mass Storage devices class which covers devices like pen drives, digital cameras, audio players etc and the USB CDC (Communication Devices Class) which essentially covers USB modems and similar devices. 
+
+=== What's on your machine? ===
+
+It is very simple to find out whether your machine has USB 2.0 support or not. We make use of the <code>lspci</code> command for this purpose. 
+
+{{Note|The <code>lspci</code> tool is a part of the <code>sys-apps/pciutils</code> package. If you do not have this installed, please <code>emerge pciutils</code> . Please note that you have to be root while running the <code>lspci</code> command.}}
+
+Example for a USB 1.1 compliant system (not the UHCI in the output):
+
+{{RootCmd|lspci -v {{!}} grep USB|output=<pre>
+0000:00:04.2 USB Controller: Intel Corp. 82371AB/EB/MB PIIX4 USB (rev 01) (prog-if 00 [UHCI])
+</pre>}}
+
+A system that is USB 2.0 compliant, note the EHCI and UHCI:
+
+{{RootCmd|lspci -v {{!}} grep USB|output=<pre>
+00:1d.0 USB Controller: Intel Corp. 82801DB USB (Hub #1) (rev 01) (prog-if 00 [UHCI])
+00:1d.1 USB Controller: Intel Corp. 82801DB USB (Hub #2) (rev 01) (prog-if 00 [UHCI])
+00:1d.2 USB Controller: Intel Corp. 82801DB USB (Hub #3) (rev 01) (prog-if 00 [UHCI])
+00:1d.7 USB Controller: Intel Corp. 82801DB USB EHCI Controller (rev 01) (prog-if 20 [EHCI])
+</pre>
+}}
+
+So using the <code>lspci</code> command, we can find out if the system supports USB 2.0. This is useful as we will be enabling the corresponding options in the kernel. 
+
+== Kernel Configuration ==
+
+=== Getting the kernel ===
+
+First emerge the kernel sources of your choice. Here we'll use the <code>gentoo-sources</code> . For more information on the various kernel sources available on Portage, please look up the [http://www.gentoo.org//doc/en/gentoo-kernel.xml Gentoo Linux Kernel Guide] . 
+
+{{Emerge|gentoo-sources}}
+
+Now, lets get on with the task of configuring the kernel. 
+
+{{RootCmd|cd /usr/src/linux
+|make menuconfig}}
+
+{{Note|The above example assumes that {{Path|/usr/src/linux}} symlink points to the kernel sources you want to use. Please ensure the same before proceeding.}}
+
+=== Config options for the kernel ===
+
+Now we will look at some of the options we will have to enable in the kernel to ensure proper USB support for our devices. 
+
+{{Note|Examples in this document will show configuration options for basic USB support as well as those needed commonly, for example a USB mass storage device (most cameras and USB pen drives). If you have a specific USB device that needs to be configured, please look up your device's manual or search online to see if that device has support built-in into the kernel or custom drivers that you can use. Please note that for the sake of ease, all examples have the options compiled into the kernel. If you would like to have a modular kernel, ensure that you note down the various modules and adjust your config files accordingly.}}
+
+{{Kernel|make menuconfig options|<pre>
+Device Drivers  --->
+  SCSI device support  --->
+  
+## (Although SCSI will be enabled automatically when selecting USB Mass Storage,
+we need to enable disk support.)
+---   SCSI support type (disk, tape, CD-ROM)
+<*>   SCSI disk support
+  
+## (Then move back a level and go into USB support)
+USB support  --->
+  
+## (This is the root hub and is required for USB support.
+If you'd like to compile this as a module, it will be called usbcore.)
+<*> Support for Host-side USB
+  
+## (Select at least one of the HCDs. If you are unsure, picking all is fine.)
+--- USB Host Controller Drivers
+<*> EHCI HCD (USB 2.0) support
+< > OHCI HCD support
+<*> UHCI HCD (most Intel and VIA) support
+  
+## (Moving a little further down, we come to CDC and mass storage.)
+< > USB Modem (CDC ACM) support
+<*> USB Printer support
+<*> USB Mass Storage support
+  
+## (If you have a USB Network Card like the RTL8150, you'll need this)
+USB Network Adapters  --->
+    <*> USB RTL8150 based ethernet device support (EXPERIMENTAL)
+  
+## (If you have a serial to USB converter like the Prolific 2303, you'll need this)
+USB Serial Converter support  --->
+    <*> USB Serial Converter support
+    <*> USB Prolific 2303 Single Port Serial Driver (NEW)
+</pre>
+}}
+
+If you have a USB keyboard, mouse, joystick, or any other input device, you need to enable HID support. Go back one level to "Device drivers" and enable HID support as shown: 
+
+{{Code|Enabling HID support|<pre>
+Device Drivers --->
+  [*] HID Devices  --->
+    <*>   USB Human Interface Device (full HID) support
+</pre>
+}}
+
+Now that your options are set, you can (re)compile the kernel and USB support should be functional once you reboot into the new kernel. You can now proceed to [[#postkern]] and see if everything is working as it should. 
+
+== Seeing USB at work ==
+
+=== dmesg is your friend! ===
+
+The time has finally come to play with those USB devices :) So let's get started. In this chapter, we'll see how the system responds to various USB devices. We'll start by plugging in a USB 512 MB Memory Stick/Pen Drive. You could use some other similar mass storage device. We will primarily use <code>dmesg</code> to see what is happening and how the system responds to the device. 
+
+{{Note|<code>dmesg</code> will generally give a lot of output up front before coming to the info we need, as it reads the kernel ring buffer that has all the boot up messages as well. The output in the following examples have only the relevant portion(s) and extra spaces in between to enable better readability. If needed please use a<code>dmesg | more</code> or<code>dmesg | less</code> to see the output better in your system.}}
+
+Plug in Memory Stick into available USB port and then..
+
+{{RootCmd|dmesg {{!}} less|output=<pre>
+## (The device is picked up as a USB 1.1 and allocated an address. Also says what HCD it is using.)
+usb 1-1: new full speed USB device using uhci_hcd and address 2
+  
+## (SCSI emulation automatically kicks in)
+scsi0 : SCSI emulation for USB Mass Storage devices
+usb-storage: device found at 2
+  
+## (Now the device information including model number is retrieved)
+usb-storage: waiting for device to settle before scanning
+  Vendor: JetFlash  Model: TS512MJF2A        Rev: 1.00
+  Type:   Direct-Access                      ANSI SCSI revision: 02
+SCSI device sdb: 1003600 512-byte hdwr sectors (514 MB)
+  
+## (The write-protect sense is EXPERIMENTAL code in the later kernels)
+sdb: Write Protect is off
+sdb: Mode Sense: 0b 00 00 08
+sdb: assuming drive cache: write through
+SCSI device sdb: 1003600 512-byte hdwr sectors (514 MB)
+/dev/scsi/host0/bus0/target0/lun0: p1
+Attached scsi removable disk sdb at scsi0, channel 0, id 0, lun 0
+Attached scsi generic sg0 at scsi0, channel 0, id 0, lun 0,  type 0
+usb-storage: device scan complete
+## (At this point, the device is generally accessible by mounting /dev/sdb1)
+  
+## (When the device is disconnected, the system acknowledges the same)
+usb 1-1: USB disconnect, address 2
+</pre>
+}}
+
+Once the device is connected and mounted, you can access it like a normal hard disk. Usual operations like <code>cp</code> , <code>mv</code> , <code>rm</code> , etc work fine. You could also create a filesystem on the USB stick/format it. 
+
+{{RootCmd|mount /dev/sdb1 /mnt/usb
+|df -h|output=<pre>
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/sda8             9.4G  7.5G  1.9G  80% /
+/dev/sda9              11G  8.1G  2.4G  78% /usr
+none                  189M     0  189M   0% /dev/shm
+/dev/sdb1             490M   34M  457M   7% /mnt/usb
+</pre>
+}}
+
+{{Note|Digital cameras can be accessed the same way as memory sticks. I have a Nikon Coolpix 5200 and this is the way I access it. Cameras these days usually have two modes to transfer pictures; USB mass storage and PTP (Picture Transfer Protocol). The camera is set to USB mass storage mode and hence the procedure is exactly the same as that of accessing a memory stick because of which I have not explained in detail about it. Please note that this may NOT work in all cases and with all digital cameras that have USB support.}}
+
+How would a USB mouse show up in case you had one? It will show up as an HID device. 
+
+{{RootCmd|dmesg {{!}} grep USB|output=<pre>
+drivers/usb/input/hid-core.c: v2.0:USB HID core driver
+usb 1-1: new low speed USB device using address 2
+input: USB HID v1.10 Mouse [Logitech USB-PS/2 Optical Mouse] on usb-0000:00:07.2-1
+</pre>
+}}
+
+Another nifty command you can use to see the status of your USB ports is <code>lsusb</code> . This is part of <code>sys-apps/usbutils</code> and will be covered in the next chapter. 
+
+== Userspace USB ==
+
+=== Nifty tools ===
+
+So far we've seen how much support exists on the kernel/system side for USB on Linux. Now we'll take a peek into what kind of support is provided by Gentoo for USB in the userspace. 
+
+One of the most useful tools around is <code>lsusb</code> . This lists all the usb devices connected to the system. Installing it is a breeze. 
+
+{{Emerge|usbutils}}
+
+Once installed, you can just run <code>lsusb</code> to get simple info on the USB devices attached to the machine. 
+
+{{Note|You have to be root in most cases to run <code>lsusb</code> .}}
+
+{{Warning|<code>lsusb</code> reads the information for the USB devices from {{Path|/proc/bus/usb}} . If you have not enabled that in your kernel, chances are that<code>lsusb</code> may not work at all. Please ensure you have {{Path|/proc}} filesystem support enabled in your kernel and that<code>usbfs</code> is mounted at {{Path|/proc/bus/usb}} (which should happen automatically).}}
+
+{{RootCmd|lsusb|output=<pre>
+## (This is the 512 MB Memory Stick from Transcend)
+Bus 001 Device 003: ID 0c76:0005 JMTek, LLC. USBdisk
+## (This is the Optical Mouse)
+Bus 001 Device 002: ID 046d:c00e Logitech, Inc. Optical Mouse
+## (This is the root hub)
+Bus 001 Device 001: ID 0000:0000
+</pre>
+}}
+
+If you are one of those types who love to see lots of information, you have the option of running <code>lsusb -v</code> . Try that and see the amount of info it gives out. Another good option is that <code>lsusb</code> dumps the current physical USB hierarchy as a tree and thus makes it easier to understand the exact device map. The command is <code>lsusb -t</code> . For example, 
+
+{{RootCmd|lsusb -t|output=<pre>
+Bus#  1
+`-Dev#   1 Vendor 0x0000 Product 0x0000
+  |-Dev#   2 Vendor 0x046d Product 0xc00e
+  `-Dev#   3 Vendor 0x0c76 Product 0x0005
+</pre>
+}}
+
+You can easily correlate the outputs of <code>lsusb</code> and <code>lsusb -t</code> , which helps debugging as well as understanding how USB works. 
+
+== And thanks to... ==
+
+=== References ===
+
+A good number of online documents helped me during the development of this document and there are some that are highly technical but truly interesting. I thought they all deserve some credit, so here we go! 
+
+* [http://www.usb.org The Official USB Website]
+* [http://www.usb.org/about/faq The USB FAQ]
+* [http://h18000.www1.hp.com/productinfo/development/openhci.html Compaq's OHCI Standard] 
+* [http://developer.intel.com/technology/usb/uhci11d.htm Intel's UHCI Standard] 
+* [http://www.intel.com/technology/usb/ehcispec.htm Intel's EHCI Standard] 
+
+=== Other Interesting Links ===
+
+* [https://wiki.gentoo.org/wiki/LiveUSB/HOWTO Gentoo Linux LiveUSB HOWTO]
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Shyam Mani
