@@ -1,0 +1,145 @@
+This HOWTO explains how to create a Gentoo Linux LiveUSB or, in other words, how to emulate an x86 or AMD64 Gentoo Linux LiveCD using a USB flash drive.
+
+== Introduction ==
+
+=== The LiveUSB ===
+
+This HOWTO explains how to create a ''Gentoo Linux LiveUSB'' or, in other words, how to emulate an x86 or AMD64 Gentoo Linux LiveCD using a USB flash drive. This is particularly useful for installing Gentoo Linux on a modern laptop with no CD-ROM drive. 
+
+{{Note|The <code>sys-boot/unetbootin</code> package provides a much easier alternative to create a bootable USB stick from any bootable CD image.}}
+
+Although the instructions found in this document aim at emulating a Gentoo Linux LiveCD using a USB flash drive, they should work for any arbitrary block device as long as you adjust the device names accordingly. 
+
+=== Prerequisites ===
+
+In order to use a Gentoo Linux LiveUSB you need the following: 
+
+* Bootable USB flash drive with at least 1GB
+* i686 or x86_64 computer with support for booting from USB
+
+You will also need access to the following for creating the LiveUSB: 
+
+* A computer running Gentoo Linux (or alternatively another Linux distribution)
+
+== Preparing the USB flash drive ==
+
+=== Partitioning the drive ===
+
+{{Warning|These instructions will erase all data from the USB flash drive. Make sure to backup your data first.}}
+
+{{Important|This HOWTO assumes that the {{Path|/dev/sdc}} device node corresponds to your USB flash drive. If you have other SCSI-like devices make sure to use the correct device node.}}
+
+Create a FAT16 partition on your USB flash drive and mark it bootable using <code>fdisk</code> . An example partitioning scheme can be seen below: 
+
+{{Note|If your key is 4GB or larger, use partition type <code>b</code> (W95 FAT32).}}
+
+{{RootCmd|fdisk -l /dev/sdc|output=<pre>
+Disk /dev/sdc: 2063 MB, 2063597056 bytes
+255 heads, 63 sectors/track, 250 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+  
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdc1   *           1         250     2008124+   6  FAT16
+</pre>
+}}
+
+=== Creating the filesystem ===
+
+Create a FAT16 filesystem on the USB flash drive using <code>mkdosfs</code> : 
+
+{{Note|If your key is 4GB or larger, use <code>-F 32</code> to create a FAT32 filesystem.}}
+
+{{Emerge|emerge -av sys-fs/dosfstools}}
+
+{{RootCmd|mkdosfs -F 16 /dev/sdc1|output=<pre>
+mkdosfs 2.11 (12 Mar 2005)
+</pre>
+}}
+
+=== Installing a Master Boot Record ===
+
+Install the precompiled Master Boot Record (MBR) from <code>syslinux</code> on the USB flash drive: 
+
+{{Emerge|sys-boot/syslinux}}
+
+{{RootCmd|dd if{{=}}/usr/share/syslinux/mbr.bin of{{=}}/dev/sdc|output=<pre>
+0+1 records in
+0+1 records out
+304 bytes (304 B) copied, 0.0162317 s, 18.7 kB/s
+</pre>
+}}
+
+== Copying the files to your key ==
+
+=== Mounting the Gentoo Linux Installation CD ===
+
+Download the Gentoo Weekly Minimal Install CD for your architecture from your local Gentoo Linux [http://www.gentoo.org//main/en/where.xml mirror] site and mount the ISO image on {{Path|/mnt/cdrom}} as shown below: 
+
+{{Code|Mounting the Gentoo Linux Installation CD ISO image|<pre>
+## (Create the /mnt/cdrom mount point if needed)
+# mkdir -p /mnt/cdrom
+# mount -o loop,ro -t iso9660 /path/to/iso.iso /mnt/cdrom
+</pre>
+}}
+
+{{Note|If you receive a ''Could not find any loop device'' error message when mounting the iso, you need to enable the <code>Loopback device support</code> option in your kernel configuration.}}
+
+=== Mounting the LiveUSB ===
+
+Mount the newly formatted USB flash drive on {{Path|/mnt/usb}} as shown below: 
+
+{{RootCmd|mkdir -p /mnt/usb
+|mount -t vfat /dev/sdc1 /mnt/usb}}
+
+=== Copying the files ===
+
+Copy the files from the Gentoo Linux Installation CD to the LiveUSB. The files need to be reordered a bit as we will be using the <code>syslinux</code> bootloader instead of <code>isolinux</code> : 
+
+{{RootCmd|cp -r /mnt/cdrom/* /mnt/usb
+|mv /mnt/usb/isolinux/* /mnt/usb
+|mv /mnt/usb/isolinux.cfg /mnt/usb/syslinux.cfg
+|rm -rf /mnt/usb/isolinux*
+|mv /mnt/usb/memtest86 /mnt/usb/memtest}}
+
+You can now unmount the ISO image: 
+
+{{RootCmd|umount /mnt/cdrom}}
+
+=== Adjusting the bootloader configuration ===
+
+Adjust the syslinux configuration file using <code>sed</code> as shown below. The <code>slowusb</code> parameter will introduce some extra delays before attempting to mount the filesystem. This is needed to allow the USB flash drive to settle upon detection. 
+
+{{RootCmd|sed -i -e "s:cdroot:cdroot slowusb:" -e "s:kernel memtest86:kernel memtest:" /mnt/usb/syslinux.cfg}}
+
+== Installing a bootloader ==
+
+=== Unmounting the drive ===
+
+Make sure you unmount the USB flash drive before installing the bootloader: 
+
+{{RootCmd|umount /mnt/usb}}
+
+=== Installing syslinux ===
+
+Finally install the <code>syslinux</code> bootloader on the USB flash drive: 
+
+{{RootCmd|syslinux /dev/sdc1}}
+
+{{Important|You will need to rerun <code>syslinux /dev/sdc1</code> each time you modify the {{Path|syslinux.cfg}} file for the configuration changes to take affect.}}
+
+{{Note|If this is the first time you have used syslinux, you will need to edit {{Path|/etc/mtools/mtools.conf}} on your host. Simply commenting out <code>SAMPLE FILE</code> will suffice for the purpose of this guide.}}
+
+== Using the LiveUSB ==
+
+=== Booting ===
+
+Insert the USB flash drive and turn on the computer, making sure the BIOS is set to boot from USB. If all goes well you should be presented with a standard syslinux prompt. 
+
+You should be able to follow the generic installation instructions found in the [http://www.gentoo.org//doc/en/handbook/ Gentoo Handbook] from here on. 
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* brix
+* neysx
