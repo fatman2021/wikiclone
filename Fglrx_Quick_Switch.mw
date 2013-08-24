@@ -50,15 +50,16 @@ To save ourselves from having to swap configuration files around all the time, w
 ===== /etc/X11/xinit/xserverrc =====
  #!/bin/sh
  
- if `lsmod | grep -q "^drm\b"`; then
- 	eselect opengl set xorg-x11
- 	exec /usr/bin/X -nolisten tcp "$@"
- else
+ if lsmod | grep -q "^fglrx\b"; then
  	eselect opengl set ati
  	exec /mnt/fglrx/usr/bin/X -config fglrx.conf -nolisten tcp "$@"
+ else
+ 	eselect opengl set xorg-x11
+ 	exec /usr/bin/X -nolisten tcp "$@"
  fi
 
-This should be enough for startx. lightdm needs the following adjustment. I'm afraid I don't know about other display managers. They may just work.
+In hybrid system setups, drm is needed by i915 (intel) module so the grep expression was changed from "^drm\b" to "^fglrx\b" and branches swapped.
+This should be enough for startx. lightdm and gdm need the following adjustments. I'm afraid I don't know about other display managers. They may just work.
 
 ===== /etc/lightdm/lightdm.conf =====
  ...
@@ -67,6 +68,18 @@ This should be enough for startx. lightdm needs the following adjustment. I'm af
  xserver-command=/etc/X11/xinit/xserverrc
  
  ...
+
+===== /etc/X11/gdm/custom.conf =====
+ ...
+
+ [server-Standard]
+ command=/etc/X11/xinit/xserverrc -audit 0 
+
+ ...
+ # There is a graphical tool for gdm setup that can be reached 
+ # from the gdm greeter screen. Aside from "server-Standard" 
+ # there are two more option groups where the path to /usr/bin/X 
+ # can be replaced by the xserverrc script, as needed.
 
 If you haven't already done so, you now need to have the '''radeon''' and '''drm''' drivers built as modules rather than built into the kernel. These are the '''CONFIG_DRM_RADEON''' and '''CONFIG_DRM''' options respectively. The framebuffer drivers can remain built in.
 
