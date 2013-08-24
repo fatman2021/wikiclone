@@ -1,1 +1,95 @@
+Recently it has been made possible to run it via [[Wine]].
 
+Check [http://www.compholio.com/wine-compholio/ the “Compholio” Wine patches page] & [http://fds-team.de/cms/articles/2013-08/pipelight-using-silverlight-in-linux-browsers.html the FDS-Team Pipelight page] for the latest information. At the time of this writing, Wine version 1.7.0 seemed to be targeted.
+
+==Preconfiguring==
+
+===xattr===
+File system extended attributes are used to keep the precious DRM working, so you’ll need support in your kernel as well as your file system mounted explicitly with the option.
+
+====Checking for support====
+Quick check:
+{{cmd|grep user_xattr /etc/mtab}}
+
+More thorough:
+{{cmd|<nowiki>xattr_test=$(mktemp); setfattr -n 'user.testAttr' -v 'attribute value' $xattr_test &> /dev/null; getfattr $xattr_test 2>&1 | grep -q user.testAttr && echo 'It works!' || echo 'No workie!'; rm $xattr_test</nowiki>}}
+
+====Adding support====
+
+In recent kernel versions there doesn’t appear to be an option for ext4 extended attributes, presumably meaning they’re always on already.
+
+{{kernel||<pre style="font-size: inherit;">File systems  --->
+    Ext3 journalling file system support
+[*]     Ext3 extended attributes
+    The Extended 4 (ext4) filesystem
+[*]     Ext4 extended attributes</pre>}}
+
+See [[Kernel/Upgrade]] for in-depth kernel rebuild instructions.
+
+{{file|/etc/fstab||<pre style="font-size: inherit;"># <fs>			<mountpoint>	<type>		<opts>		<dump/pass>
+/dev/sda3		/		ext4		user_xattr	0 1</pre>}}
+
+If you were only missing the option in <code>/etc/fstab</code>:
+{{rootCmd|mount / -o remount}}
+
+===Wine===
+Wine is quite the moving target, so will almost certainly need to be unmasked:
+{{rootCmd|<nowiki>echo 'app-emulation/wine' | tee -a /etc/portage/package.accept_{keywords/netflix,keywords}</nowiki>}}
+
+==Including patches==
+{{rootCmd|mkdir -p /etc/portage/patches/app-emulation/wine}}
+{{rootCmd|<nowiki>wget -P /etc/portage/patches/app-emulation/wine $(wget -qO - 'http://bazaar.launchpad.net/~ehoover/netflix-desktop/trunk/files/head:/wine-patches' | egrep -o '".*?download.*?patch"' | sed 's@"\(.*\)"@http://bazaar.launchpad.net\1@')</nowiki>}}
+
+==Pipelight==
+If you don’t already have a local overlay (note this can interfere with Layman stuff):
+{{rootCmd|<nowiki>echo 'PORTDIR_OVERLAY=/usr/local/portage' >> /etc/portage/make.conf</nowiki>}}
+{{rootCmd|mkdir -p /usr/local/portage/www-plugins/pipelight}}
+{{rootCmd|<nowiki>wget -P /usr/local/portage/www-plugins/pipelight --content-disposition 'https://481596.bugs.gentoo.org/attachment.cgi?id=356458'</nowiki>}}
+{{rootCmd|<nowiki>echo '~www-plugins/pipelight-9999 **' | tee -a /etc/portage/package.accept_{keywords/netflix,keywords}</nowiki>}}
+
+==emerge==
+{{rootCmd|emerge -atv wine crossdev attr}}
+
+==Setup crossdev==
+This will take quite a while:
+{{rootCmd|crossdev -t mingw32}}
+
+==emerge Pipelight==
+{{rootCmd|emerge --digest -atv pipelight}}
+
+==Wine installation==
+This takes a bit, and produces a lot of output:
+{{cmd|<pre style="font-size: inherit;">if [ ! -d ~/.wine-pipelight ]; then
+	export WINEARCH=win32 WINEPREFIX=~/.wine-pipelight
+
+	wget -O /tmp/Silverlight-5.exe \
+	-U 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Trident/6.0)' \
+	'http://www.microsoft.com/getsilverlight/handlers/getsilverlight.ashx?v=5.0'
+
+	wine /tmp/Silverlight-5.exe /q
+
+	export -n WINEARCH WINEPREFIX
+fi</pre>}}
+
+==Pipelight config==
+Needs to be changed a bit:
+{{cmd|<nowiki>cat /usr/share/pipelight/pipelight | sed -e 's@^winePath\(.*\)= .*@winePath\1= /usr/@' -e 's@^gccRuntimeDlls\(.*\)i686.*@gccRuntimeDlls\1mingw32/'$(ls /usr/lib/gcc/mingw32/)'/@' -e 's@^dllPath\(.*\)Silverlight\(.*\)@dllPath\1Microsoft Silverlight\2@g' > ~/.config/pipelight</nowiki>}}
+
+==Firefox, etc.==
+Start Firefox (from terminal for output explaining whether pipelight is going to work or not), and go to http://bubblemark.com/silverlight2.html for a quick check for Silverlight support.
+
+==Netflix==
+Install an extension listed at http://answers.launchpad.net/pipelight/+faq/2351 such as http://addons.mozilla.org/en-us/firefox/addon/uacontrol/ and configure <code>netflix.com</code> to be sent a UA string, such as this one:[http://answers.launchpad.net/pipelight/+faq/2351 *]
+<pre>Mozilla/5.0 (Windows NT 6.1; rv:23.0) Gecko/20131011 Firefox/23.0</pre>
+
+Enjoy improved Netflix.
+
+==Troubleshooting==
+{{rootCmd|eselect opengl list}}
+{{rootCmd|eselect opengl set #}}
+
+==External links==
+*[http://fds-team.de/cms/articles/2013-08/pipelight-using-silverlight-in-linux-browsers.html FDS-Team | Pipelight: using Silverlight in Linux browsers]
+*[http://forums-lb.gentoo.org/viewtopic-t-951092.html Gentoo Forums :: View topic - HOWTO: Install Netflix on Gentoo]
+
+[[Category:Software]]
