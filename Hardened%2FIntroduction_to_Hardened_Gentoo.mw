@@ -1,0 +1,77 @@
+A Primer on Hardened Gentoo.
+
+== Introduction ==
+
+This guide is meant for anyone unsure about the offerings of the Hardened Gentoo project, how to use them together, and what their respective roles in the project are. 
+
+The basic security principle that we emphasize is layers of security. Layers are fundamental in ensuring a users machine is not compromised, and if it is, minimizing the damages done. By combining a series of dissimilar, though security related technologies, we make an attacker jump through additional hoops before a compromise may occur. For this reason we always recommended that you decide what your specific needs are and combine those solutions to protect your system. We will try to explain the options and how they can be used together in this document. 
+
+Hardened Gentoo is not a product or solution in itself, it is merely a project with a group of developers all working toward the same goal of very proactive security. The sub-projects contained in Hardened Gentoo aren't related in any more way than they are hosted within the same project. You might think of it as the same way KDE and GNOME are both part of the desktop project, and both have a common goal but are otherwise unrelated to each other. 
+
+{{Note|Asking for help installing or support of your 'Hardened Gentoo' machine is not clear and should always be clarified by saying you have a SELinux problem, PIE/SSP problem, and so on.}}
+
+== Technologies Offered ==
+
+=== PaX ===
+
+At the heart of the project is PaX. PaX is a kernel patch that allows you to protect against buffer and heap overflows and similar attacks. PaX is your first line of defense. 
+
+Because of badly written software you are always at risk of a compromise because of buffer and heap overflows. Buffer and Heap overflows are the result of unchecked bounds in user input in applications. When an attacker has the ability to give input to an application that is inserted into memory but not checked there exists the possibility of an overflow. Lower level programming languages like C and C++ do not automatically protect from overruns, and the end result is that when a buffer is overrun adjacent executable code can be overwritten with input from the user. This would normally cause the application to crash if the users input isn't understood by the machine. This generally manifests itself as a page fault because the characters that overrun the buffer into the executable area will be treated as an address which probably won't exist. This is the most benign result of an overrun. 
+
+If the attacker knows of an overrun, however, they will have the opportunity to add shellcode to the input and rather than causing the application to crash it will instead execute the instructions they give. This is done because shellcode is how instructions are stored in memory for execution by the processor. Basically shellcode consists of 'opcodes' which translate to assembly routines. An attacker knows these opcodes very well and can create shellcode which allows them to do anything they desire, such as run a root shell and bind it to a port. When this happens the user won't even be aware that it has because the application doesn't crash, instead it starts executing the attackers arbitrary code allowing them to do anything they please. PaX mitigates this problem by randomly placing each function and buffer in an application in memory. This is called ASLR or Address Space Layout Randomization and is the cornerstone of PaX By having random offsets for functions and buffers the attacker is unable to craft an input which will guarantee that the shellcode will be executed (and makes it very difficult since the application will probably crash and be restarted with new random offsets). ASLR is most useful when used with PIE (position independent executable) code but also works with standard executable code, at the cost of overhead. 
+
+PaX also offers the ability for executable segments to be executable and not writable, and likewise writable segments to be writable and not executable. This is called pageexec. On x86 based processors there is no ability to do this on a hardware level since the x86 designers collapsed the read and execute memory flags into 1 to save space. Since a page can either be writable or readable and executable it is not useful to set buffers as non-executable since they would no longer be readable. So on x86 PaX emulates this behavior at a software level, which introduces overhead but is very helpful for security. 
+
+=== PIE/SSP ===
+
+In the interest of clarity, while PIE and SSP are generally grouped in discussion because they are both part of the hardened toolchain, they are indeed different technologies with different purposes. PIE by itself provides no additional security, but when combined with PaX in the kernel provides a powerful tool against overflows. SSP is entirely implemented in userland and protects against stack smashing attacks without the assistance of the kernel. Since these are implemented separately and do different things they are indeed 2 different layers of protection, for example, one attack that might get past PaX, called ret2libc, would be blocked by SSP. 
+
+We have gone through great lengths to provide users with an easy way to build the entire userland with PIE code as to take advantage of ASLR with very little overhead. In addition to PIE our 'hardened' toolchain also provides SSP or stack smashing protection. SSP protects against stack smashing by allocating an area outside of buffers and putting a random, cryptographic canary (or marker) in it. This allows SSP to check whether the canary was overwritten after any write to the buffer and allows it to kill the app if it was overwritten. The hardened toolchain gives users a PIE/SSP userland the easiest possible way. Stages marked with 'hardened' are standard stages built with PIE and SSP, they do not include SELinux/RSBAC/grsecurity access controls. 
+
+=== Mandatory Access Control ===
+
+While PaX is the first layer of protection, perhaps even the second or third if you have firewalls and/or network intrusion detection, it is also recommended that you use access control to further secure your system. It is very important that you realize access control as your '''last''' layer of protection. Access control is very helpful to contain attackers which already got access to your system, or local users. Currently Hardened Gentoo supports 3 access control solutions: SELinux, grsecurity, and RSBAC. 
+
+If you wish to use grsecurity you need not worry about which stages to use as grsecurity requires no userland changes. Simply use the hardened stages and once you are ready to build a kernel use a grsecurity-enabled kernel such as hardened-sources. Once your system is up and running you can use grsecurity's learning mode to build ACL's for your system. 
+
+Similar to grsecurity, RSBAC does not require any userland changes but can be installed after setting up a normal Gentoo installation. RSBAC is supported by the rsbac-sources kernel. Once your system is running you can then choose from the different access control models offered by RSBAC since they are all modules. The RSBAC Gentoo documentation lists the various models offered and provides more information about each one. 
+
+So we've talked about 2 layers that we offer, we have intentions to offer more and will in the future. Examples of additional layers are intrusion detection/prevention, which would be first even before PaX. Encrypted disks and swap which offer protection from 'physical' security breaches. Auditing, which would allow you to see and act upon risks before they become a compromise. Encrypted network traffic and strong authentication are also layers which are very supported in mainline Linux installations and probably won't be focused upon here. 
+
+== Resources ==
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Project
+! Project homepage
+! Gentoo project page
+|- 
+| PaX
+|  [http://pax.grsecurity.net http://pax.grsecurity.net] 
+|  [http://hardened.gentoo.org/pax-quickstart.xml http://hardened.gentoo.org/pax-quickstart.xml] 
+|- 
+| PIE
+| Not Available
+| Not Available
+|- 
+| SSP
+|  [http://www.trl.ibm.com/projects/security/ssp/ http://www.trl.ibm.com/projects/security/ssp/] 
+| Not available
+|- 
+| SELinux
+|  [http://www.nsa.gov/selinux http://www.nsa.gov/selinux] 
+|  [http://hardened.gentoo.org/selinux http://hardened.gentoo.org/selinux] 
+|- 
+| grsecurity
+|  [http://www.grsecurity.net http://www.grsecurity.net] 
+|  [http://hardened.gentoo.org/grsecurity.xml http://hardened.gentoo.org/grsecurity.xml] 
+|-
+|}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Joshua Brindle
+* Adam Mondl
+* Ned Ludd
