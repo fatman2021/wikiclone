@@ -1,0 +1,313 @@
+Frequently Asked Questions that arise on the #gentoo-hardened IRC channel and the gentoo-hardened mailing list.
+
+=== Introduction ===
+
+The following is a collection of questions collected from #gentoo-hardened IRC channel and the gentoo-hardened mailing list. As such, is geared towards answering fast and concisely rather than providing a whole insight on the technologies behind Gentoo Hardened. It is advisable reading the rest of the documentation on the Gentoo Hardened Project page and that on the projects' home pages in order to get a better insight. 
+
+== General Questions ==
+
+=== What exactly is the "toolchain"? ===
+
+The term "toolchain" refers to the combination of software packages commonly used to build and develop for a particular architecture. The toolchain you may hear referred to in the gentoo-hardened IRC channel consists of the GNU Compiler Collection (GCC), binutils, and the GNU C library (glibc). 
+
+=== What should I use: Grsecurity's RBAC or SELinux? ===
+
+The answer to this question is highly subjective, and very dependent on your requisites so the hardened Gentoo project simply tries to lay out each technology and leave the choice up to the user. This decision requires a lot of research that we have hopefully provided clearly in the hardened documentation. However, if you have any specific questions about the security model that each provides, feel free to question the relevant developer in our IRC channel or on the mailing list. 
+
+=== Is it possible to use Grsecurity, SELinux and PaX all at the same time? ===
+
+Yes, this combination is quite possible as PaX and some of Grsecurity's features work with Grsecurity's RBAC and SELinux. The only conflict that arises is you can only use one access control system (be it RBAC or SELinux). 
+
+=== Do I need to pass any flags to LDFLAGS/CFLAGS in order to turn on hardened building? ===
+
+No, the current toolchain implements the equivalent of <code>CFLAGS="-fPIE -fstack-protector-all -D_FORTIFY_SOURCE=2" LDFLAGS="-Wl,-z,now -Wl,-z,relro"</code> automatically through GCC's built-in spec and using the specfiles to disable them which is a more proper solution. For older hardened-gcc users the best approach is switch to the hardened profile and then upgrade following the steps on the [[#hardenedprofile]] 
+
+{{Note|Manually enabling the hardening flags it is not recommended at all.}}
+
+{{Note|Sending a -fno... flag will disable the flag, also -fstack-protector-all and -fstack-protector will interfere when passed directly breaking stuff like glibc.}}
+
+{{Note|Gentoo patches its GCCs to allow specfiles to be passed through an environment variable. Currently several sets of specfiles are installed on Gentoo systems that allow users on supported architectures to easily switch the functionality off and on of the toolchain. To access the specs as the end user you can use the <code>gcc-config</code> utility.}}
+
+=== Can I add -fstack-protector-all or -fstack-protector in the CFLAGS at make.conf? ===
+
+No, they will likely break the building of many packages, amongst others glibc. It's better that you leave the profiles do its job. 
+
+=== How do I turn off hardened building? ===
+
+You can use <code>gcc-config</code> to accomplish this: 
+
+{{RootCmd|gcc-config -l|output=<pre>
+ [1] x86_64-pc-linux-gnu-4.4.4 *
+ [2] x86_64-pc-linux-gnu-4.4.4-hardenednopie
+ [3] x86_64-pc-linux-gnu-4.4.4-hardenednopiessp
+ [4] x86_64-pc-linux-gnu-4.4.4-hardenednossp
+ [5] x86_64-pc-linux-gnu-4.4.4-vanilla
+</pre>}}
+
+To turn off PIE building switch to the hardenednopie profile:
+
+{{RootCmd|gcc-config x86_64-pc-linux-gnu-4.4.4-hardenednopie}}
+
+To turn off SSP building switch to the hardenednossp profile:
+
+{{RootCmd|gcc-config x86_64-pc-linux-gnu-4.4.4-hardenednossp}}
+
+To turn off SSP and PIE building switch to the hardenednopiessp profile:
+
+{{RootCmd|gcc-config x86_64-pc-linux-gnu-4.4.4-hardenednopiessp}}
+
+To turn off all hardened building switch to the vanilla profile:
+
+{{RootCmd|gcc-config x86_64-pc-linux-gnu-4.4.4-vanilla}}
+
+You need to run this on the active sessions to set the changes
+
+{{RootCmd|source /etc/profile}}
+
+{{Note|The previous output will vary according to the gcc version and architecture you use, also the commands required to disable things will vary depending on the output of the first command.}}
+
+Alternatively you can achieve the same by changing your CFLAGS: 
+
+{{Important|Disabling flags manually is not recommended by the team and thus an unsupported option, do this at your own risk.}}
+
+To turn off default SSP building when using the hardened toolchain, append <code>-fno-stack-protector</code> to your CFLAGS. 
+
+{{Note|On gcc 3.4 releases you need to use <code>-fno-stack-protector-all -fno-stack-protector</code>}}
+
+If you want to turn off default PIE building then append <code>-nopie</code> to your <code>CFLAGS</code> and your <code>LDFLAGS</code> (as LDFLAGS is used with no CFLAGS when using gcc to link the object files). 
+
+{{Important|The flag <code>-fno-pic</code> should not be used as it will specifically enable non-PIC code. Using <code>-nopie</code> instead will revert back to vanilla GCC behavior which should be the intended result.}}
+
+If you want to turn off default now binding append <code>-z,lazy</code> to your <code>LDFLAGS</code> . 
+
+If you want to turn off default relro binding append <code>-z,norelro</code> to your <code>LDFLAGS</code> . 
+
+{{Note|Relro is default on binutils so be sure that you want to disable it before doing so.}}
+
+{{Note|If you are interested in using per-package CFLAGS with Portage currently then you may be interested in reading about [http://article.gmane.org/gmane.linux.gentoo.hardened/1204 the script solar has developed to deal with this]}}
+
+=== I just found out about the hardened project; do I have to install everything on the project page in order to install Hardened Gentoo? ===
+
+No, the Hardened Gentoo Project is a collection of subprojects that all have common security minded goals. While many of these projects can be installed alongside one another, some conflict as well such as several of the ACL implementations that Hardened Gentoo offers. 
+
+=== Why don't my programs work when I use CFLAGS="-O3" and hardened gcc? ===
+
+Using the gcc optimization flag <code>-O3</code> has been known to be problematic with stack-smashing protector (SSP) and on vanilla builds in some situations. This optimization flag is not officially supported and is, therefore, discouraged by the hardened team. Compile issues where a user uses <code>CFLAGS="-O3"</code> may be closed as INVALID/CANTFIX and/or ignored. 
+
+=== How do I switch to the hardened profile? ===
+
+To change your profile use eselect to choose it. 
+
+{{Note|Reading part 1 chapter 6 "Installing the Gentoo BaseSystem" on the [http://www.gentoo.org//doc/en/handbook/ Gentoo Handbook] is recommended for better instructions on how to change your profile.}}
+
+{{RootCmd|eselect profile list|output=<pre>
+[1]   default/linux/amd64/10.0
+[2]   default/linux/amd64/10.0/desktop
+[3]   default/linux/amd64/10.0/desktop/gnome *
+[4]   default/linux/amd64/10.0/desktop/kde
+[5]   default/linux/amd64/10.0/developer
+[6]   default/linux/amd64/10.0/no-multilib
+[7]   default/linux/amd64/10.0/server
+[8]   hardened/linux/amd64
+[9]   hardened/linux/amd64/no-multilib
+[10]  selinux/2007.0/amd64
+[11]  selinux/2007.0/amd64/hardened
+[12]  selinux/v2refpolicy/amd64
+[13]  selinux/v2refpolicy/amd64/desktop
+[14]  selinux/v2refpolicy/amd64/developer
+[15]  selinux/v2refpolicy/amd64/hardened
+[16]  selinux/v2refpolicy/amd64/server
+</pre>}}
+
+{{RootCmd|eselect profile set 8}}
+
+Of course replace 8 with the desired hardened profile.
+
+{{Note|The previous output will vary according to the architecture you use, also the commands required to choose the profile will vary depending on the output of the first command.}}
+
+After setting up your profile, you should recompile your system using a hardened toolchain so that you have a consistent base: 
+
+{{RootCmd|emerge --oneshot binutils gcc virtual/libc}}
+
+Make sure the hardened toolchain is being used (gcc version may vary):
+
+{{RootCmd|gcc-config -l|output=<pre>
+ [1] x86_64-pc-linux-gnu-4.4.4 *
+ [2] x86_64-pc-linux-gnu-4.4.4-hardenednopie
+ [3] x86_64-pc-linux-gnu-4.4.4-hardenednopiessp
+ [4] x86_64-pc-linux-gnu-4.4.4-hardenednossp
+ [5] x86_64-pc-linux-gnu-4.4.4-vanilla
+</pre>}}
+
+If the hardened version isn't chosen select it
+
+{{RootCmd|gcc-config x86_64-pc-linux-gnu-4.4.4
+|source /etc/profile}}
+
+Now keep emerging the system
+
+{{RootCmd|emerge -e --keep-going system
+|emerge -e --keep-going world}}
+
+The <code>--keep-going</code> option is added to ensure emerge won't stop in case any package fails to build. If that occurs however, you need to make sure that the remainder of the packages is built. You can check the output of emerge at the end to find out which packages were not rebuilt. 
+
+=== How do I debug with gdb? ===
+
+We have written a [http://www.gentoo.org//proj/en/hardened/hardened-debugging.xml document on how to debug with Gentoo Hardened] , so following the recommendations there should fix your problem. 
+
+=== Why is the jit and orc flag disabled in the hardened profile? ===
+
+JIT means Just In Time Compilation and consist on taking some code meant to be interpreted (like Java bytecode or JavaScript code) compile it into native binary code in memory and then executing the compiled code. This means that the program need a section of memory which has write and execution permissions to write and then execute the code which is denied by PaX, unless the mprotect flag is unset for the executable. As a result, we disabled the JIT use flag by default to avoid complaints and security problems. ORC use Just In Time Compilation (jit). 
+
+You should bear in mind that having a section which is written and then executed can be a serious security problem as the attacker needs to be able to exploit a bug between the write and execute stages to write in that section in order to execute any code it wants to. 
+
+=== How do I enable the jit or orc flag? ===
+
+If you need it, we recommend enabling the flag in a per package basis using <code>/etc/portage/package.use</code> 
+
+{{Code|Example /etc/portage/package.use enabling JIT in some libraries|<pre>
+x11-libs/qt-core jit
+x11-libs/qt-script jit
+x11-libs/qt-webkit jit
+</pre>
+}}
+
+Anyway, you can enable the use flag globally using <code>/etc/make.conf</code> 
+
+{{Code|Example /etc/make.conf with JIT enabled|<pre>
+CFLAGS="-O2 -pipe -fomit-frame-pointer -march=native"
+CXXFLAGS="${CFLAGS}"
+# WARNING: Changing your CHOST is not something that should be done lightly.
+# Please consult http://www.gentoo.org/doc/en/change-chost.xml before changing.
+CHOST="x86_64-pc-linux-gnu"
+# These are the USE flags that were used in addition to what is provided by the
+# profile used for building.
+#If you have more uses adding jit to the end should suffice
+USE="jit"
+  
+MAKEOPTS="-j2"
+  
+GENTOO_MIRRORS="ftp://ftp.udc.es/gentoo/"
+  
+SYNC="rsync://rsync.europe.gentoo.org/gentoo-portage"
+</pre>
+}}
+
+
+{{Important|Remember that if you enable JIT or ORC code on PaX you may need to disable mprotect on the binaries using such code, either by them selves or through libraries. Check the [[#paxjavajit]]}}
+
+== PaX Questions ==
+
+=== Where is the homepage for PaX? ===
+
+That is [http://pax.grsecurity.net the homepage for PaX] . 
+
+=== What Gentoo documentation exists about PaX? ===
+
+Currently the only Gentoo documentation that exists about PaX is a [http://www.gentoo.org//proj/en/hardened/pax-quickstart.xml PaX quickstart guide] . 
+
+=== How do PaX markings work? ===
+
+PaX markings are a way to tell PaX which features should enable (or disable) for a certain binary. 
+
+Features can either be enabled, disabled or not set. Enabling or disabling them will supersede the kernel action, so a binary with a feature enabled will always use the feature and one with a feature disabled won't ever used it. 
+
+When the feature status is not set the kernel will choose whether to enable or disable it. By default, the hardened kernel will enable those features with only two exceptions, the feature is not supported by the architecture/kernel or PaX is running in Soft Mode. In those two cases, it will be disabled. 
+
+
+{{Note|In order to have Soft Mode, your kernel should have that feature enabled and you should enable it either passing <code>pax_softmode=1</code> in the kernel cmdline or setting to 1 the option in <code>/proc/sys/kernel/pax/softmode</code> .}}
+
+=== I keep getting the message: "error while loading shared libraries: cannot make segment writable for relocation: Permission denied."  What does this mean? ===
+
+Text relocations are a way in which references in the executable code to addresses not known at link time are solved. Basically they just write the appropriate address at runtime marking the code segment writable in order to change the address then unmarking it. This can be a problem as an attacker could try to exploit a bug when the text relocation happens in order to be able to write arbitrary code in the text segment which would be executed. As this also means that code will be loaded on fixed addresses (not be position independent) this can also be exploited to pass over the randomization features provided by PaX. 
+
+As this can be triggered for example by adding a library with text relocations to the ones loaded by the executable, PaX offers the option CONFIG_PAX_NOELFRELOCS in order to avoid them. This option is enabled like this: 
+
+{{Kernel|Menuconfig Options|<pre>
+-> Security options
+  -> PaX
+    -> Enable various PaX features
+      -> Non-executable pages
+        [*] Restrict mprotect()
+        [*]   Allow ELF text relocations
+</pre>
+}}
+
+If you are using the gentoo hardened toolchain, typically compiling your programs will create PIC ELF libraries that do not contain text relocations. However, certain libraries still contain text relocations for various reasons (often ones that contain assembly that is handled incorrectly). This can be a security vulnerability as an attacker can use non-PIC libraries to execute his shellcode. Non-PIC libraries are also bad for memory consumption as they defeat the code sharing purpose of shared libraries. 
+
+To disable this error and allow your program to run, you must sacrifice security and allow runtime code generation for that program. The PaX feature that allows you to do that is called MPROTECT. You must disable MPROTECT on whatever executable is using the non-PIC library. 
+
+To check your system for textrels, you can use the program <code>scanelf</code> from <code>app-misc/pax-utils</code> . For information on how to use the <code>pax-utils</code> package please consult the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml Gentoo PaX Utilities Guide] . 
+
+{{Note|Recent versions of <code>sys-apps/portage</code> (>=2.0.53) scan for text relocations and print a warning or even abort the merge process, depending on the <code>FEATURES</code> you have set in your {{Path|/etc/make.conf}} .}}
+
+=== Ever since I started using PaX I can't get Java/JIT code working, why? ===
+
+As part of its design, the Java virtual machine creates a considerable amount of code at runtime which does not make PaX happy. Although, with current versions of portage and java, portage will mark the binaries automatically, you still need to enable PaX marking so PaX can do an exception with them and have paxctl installed so the markings can be applied to the binaries (an reemerge them so they are applied). 
+
+This of course can't be applied to all packages linking with libraries with JIT code, so if it doesn't, there are two ways to correct this problem: 
+
+{{Kernel|Enable the marking on your kernel|<pre>
+-> Security options
+  -> PaX
+    -> Enable various PaX features
+      -> PaX Control
+        [*] Use ELF program header marking
+</pre>
+}}
+
+{{Emerge|paxctl}}
+
+When you already have <code>paxctl</code> emerged you can do: 
+
+{{RootCmd|paxctl -pemrxs /path/to/binary}}
+
+This option will slightly modify the ELF header in order to correctly set the PAX flags on the binaries. 
+
+{{Note|If you are running PaX in conjunction with an additional security implementation such as Grsecurity's RBAC, or SELinux you should manage PaX using the kernel hooks provided for each implementation.}}
+
+The other way is using your security implementation to do this using the kernel hooks. 
+
+=== Can I disable PaX features at boot? ===
+
+Although this is not advised except when used to rescue the system or for debugging purposes, it is possible to change a few of PaX behaviours on boot via the kernel command line. 
+
+Passing <code>pax_nouderef</code> in the kernel cmdline will disable uderef which can cause problems on certain virtualization environments and cause some bugs (at times) at the expense leaving the kernel unprotected against unwanted userspace dereferences. 
+
+Passing <code>pax_softmode=1</code> in the kernel cmdline will enable the softmode which can be useful when booting a not prepared system with a PaX kernel. In soft mode PaX will disable most features by default unless told otherwise via the markings. In a similar way, <code>pax_softmode=0</code> will disable the softmode if it was enabled in the config. 
+
+== Grsecurity Questions ==
+
+=== Where is the homepage for Grsecurity? ===
+
+That is the [http://www.grsecurity.net homepage for Grsecurity] . 
+
+=== What Gentoo documentation exists about Grsecurity? ===
+
+The most current documentation for Grsecurity is a [http://www.gentoo.org//proj/en/hardened/grsecurity.xml Grsecurity2 quickstart guide] . 
+
+=== How does TPE work? ===
+
+We have written a [http://www.gentoo.org//proj/en/hardened/grsec-tpe.xml document with some information on how TPE works in the different settings] . 
+
+=== Can I use Grsecurity with a recent kernel not on the Gentoo main tree? ===
+
+Usually we release a new version of hardened sources not long after a new PaX/Grsecurity patch is released, so the best option is just waiting a bit for the kernel team to adapt the patches and then test them. Remind that we won't support kernel sources not coming from the portage tree. 
+
+== SELinux Questions ==
+
+=== Where can I find SELinux related frequently asked questions? ===
+
+There is a [http://www.gentoo.org//proj/en/hardened/selinux-faq.xml SELinux specific FAQ] . 
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Adam Mondl
+* solar
+* Guillaume Destuynder
+* The PaX Team
+* klondike
+* Magnus Granberg
+* Anthony G. Basile
