@@ -1,0 +1,70 @@
+In this document we study the ways to do proper binary debugging when using a hardened kernel and toolcahin with PaX/Grsec, PIE and SSP.
+
+== Solving the '??' issue. ==
+
+When debugging you'll probably have found that <code>GDB</code> may not show the addresses showing instead a stream of lines with '''??''' where the symbol should be. This can be caused by two different things. 
+
+The first cause is that your <code>GDB</code> version is too old and is unable to realize that the addresses are relative. This should be fixed in the current stable versions of <code>GDB</code> so you should try to upgrade it. Other workaround is applying solution 3. 
+
+The second reason is that your hardened kernel may be hidding the mappings. This is a known problem and [http://forums.grsecurity.net/viewtopic.php?f=1&t=2467 has been fixed upstream] so it will be fixed on further releases of <code>hardened-sources</code> . Anyway, until the fix reaches the tree and is stabilized, you can apply any of the solutions. 
+
+=== Solution 1: Disabling RANDMMAP on the binary ===
+
+One solution is disabling the RANDMMAP feature with <code>paxctl</code> for that particular binary. Doing this will make Grsec disable the mapping protection for that binary as it makes no sense protecting it then. This means a more secure environment but also getting away from the way the binary would be executed on the real environment. 
+
+{{RootCmd|paxctl -r binary}}
+
+=== Solution 2: Disabling the option to hide mappings ===
+
+Other fix is disabling the option that hides the addresses on the PaX protected executables to avoid attacks based on that information. This option may make the things easier for an attacker until it is enabled again although also means that the environment will be the most similar possible to the real execution environment. 
+
+{{Kernel|Disabling the mapping hiding.|<pre>
+Address Space Protection --->
+ [ ] Remove addresses from /proc/<pid>/[smaps|maps|stat]
+</pre>
+}}
+
+=== Solution 3: Linking a non PIE binary ===
+
+A last solution is disabling the last pie linking stage while compiling using <code>-nopie</code> . All previous compilation can still use <code>-fPIE</code> as normal (which is also the default with the hardened compiler) so that your executable is as close as possible to the real thing as long as the final link must create a regular executable.Try adding <code>-nopie</code> to LDFLAGS if you're building with emerge. 
+
+== Using breakpoints ==
+
+You may find that PaX may prevent <code>GDB</code> from setting software breakpoints, depending on how the kernel is configured. This includes the breakpoint at main which you need to get started. There are two workarounds with different effects and constraints to to solve this. 
+
+=== Solution 1: Removing the RANDEXEC and MPROTECT flags ===
+
+The first solution is making PaX disable the RANDEXEC and MPROTECT features for the binary to be debugged. To do this you have to set with <code>paxctl</code> the <code>m</code> and <code>x</code> flags on the executable. The <code>x</code> flag is set by default, so it should suffice to do: 
+
+{{RootCmd|/sbin/paxctl -m binary}}
+
+After that <code>GDB</code> should be able to add software breakpoints on the binary, if it still can't try disabling the SEGMEXEC and PAGEEXEC features (flags <code>s</code> and <code>p</code> respectively). 
+
+{{RootCmd|/sbin/paxctl -ps binary}}
+
+Below we'll expose what's happening on a lower level when you add a software breakpoint, and why PaX disallows this. You need to know a bit about how processors work in order to understand it. This is not needed to solve your problem so feel free to ignore it. 
+
+When the debugger adds a soft breakpoint it changes the instruction on the executable memory image so it is a breakpoint instruction (on x86 and amd64 they are the <code>bp</code> and <code>bu</code> instructions). This instruction halts the processor and gives the control back to the debugger and has the advantage that it can be set in an unlimited number of points on the program. As PaX disallows writes in executable memory for security reasons it is impossible for the debugger to modify the code and add the breakpoint. 
+
+=== Solution 2: Using hardware breakpoints ===
+
+Another solution is using hardware breakpoints, they don't require any changes on PaX behavior, but they are usually limited (for example to a maximum of 4 on x86 and amd64 including address watchpoints) and also have the problem that they require the program to be already running in order to be added (although there is some WIP to fix this in <code>GDB</code> ). 
+
+To use them just use the <code>hbreak</code> instead of the <code>break</code> command. 
+
+Below we'll expose what's happening on a lower level when you add a hardware breakpoint. You need to know a bit about how processors work in order to understand it. This is not needed to solve your problem so feel free to ignore it. 
+
+When the debugger adds a hardware breakpoint it changes some of the processor registers (on x86 and amd64 they are the Dr registers) so the processor halts when a certain address is accessed (either for reading, writing or execution). As a result this implies that no data has to be written in memory solving the soft breakpoints problem, but also limits the number of available breakpoints. 
+
+== Restoring the file after debugging ==
+
+After debugging you may want to restore the system to its normal state, if you used <code>paxctl</code> you can reset the flags to default using the <code>-z</code> flag. Since the -z flags will zero all the flags also want to keep trampoline emulation disabled. This is done with the <code>-e</code> flag. 
+
+{{RootCmd|paxctl -ze binary}}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* klondike
+* Hugo Mildenberger
