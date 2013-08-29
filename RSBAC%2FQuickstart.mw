@@ -1,0 +1,225 @@
+This document will guide you through the installation of the RSBAC on Gentoo Linux
+
+== Introduction ==
+
+This guide will help you to install RSBAC on Gentoo Linux. It is assumed that the users have read the [http://www.gentoo.org/intro.xml Introduction] and the [http://www.gentoo.org/overview.xml Overview] already, so that they knows what is RSBAC and its main concepts. 
+
+== Installation of the RSBAC enabled kernel ==
+
+=== Emerging the RSBAC kernel ===
+
+This step is pretty straight forward, thanks to the way Gentoo handles kernel installations. Start by emerging the rsbac-sources kernel from your portage. 
+
+{{Note|There are two rsbac-sources kernel available: one is for the 2.4 kernel branch, the other is for the newer 2.6 kernel branch.}}
+
+{{Emerge|rsbac-sources}}
+
+{{RootCmd|rm /etc/make.profile
+|ln -s /usr/portage/profiles/default-linux/x86/2005.0/2.4/ /etc/make.profile
+|echo "sys-kernel/hardened-sources rsbac" >> /etc/portage/package.use
+|emerge hardened-sources}}
+
+{{Important|It is advised to enable softmode on your first RSBAC kernel. It allows you to turn off the RSBAC enforcement in one reboot, for testing or in case something goes wrong. Only turn it off once you are sure of what you are doing, or of course, for a production kernel.}}
+
+=== Configuring the RSBAC kernel ===
+
+We will now configure the kernel. It is recommended that you enable the following options, in the "Rule Set Based Access Control (RSBAC)" category: 
+
+{{Kernel|Configuring and compiling the RSBAC kernel|<pre>
+## Under "General RSBAC options"
+[*] RSBAC proc support
+[*] Check on init
+[*] Support transactions
+[*]   Randomize transaction numbers
+[*] RSBAC debugging support
+(400) RSBAC default security officer user ID
+  
+## Under "User management"
+[*] User management
+## Be sure to enable SHA1 in the Crypto API
+Under "Cryptographic options" of the general kernel configuration, tick
+[*]   SHA1 digest algorithm
+  
+[*]     Use Crypto API Digest SHA1 (NEW)
+  
+## Under "RSBAC networking options"
+[*] RSBAC network support
+[*]     Net device control
+[ ]         Treat virtual devices as individuals
+[*]         Individual network device logging
+[*]     Net object control (sockets)
+[*]         Control UNIX address family
+[*] Also intercept network object read and write
+[*]         Individual network object logging
+  
+## (Do not turn on "RSBAC Maintenance Kernel", use softmode instead)
+  
+## Under "Decision module (policy) options"
+[*] Support for Registration of decision modules (REG)
+[*]     Build REG sample modules
+----------------------------
+[*] RSBAC support for DAZuko policy ## (For malware/antivirus scanning)
+DAZ Policy Options  --->
+     (604800)     Scanning result lifetime in seconds
+  
+## For each different policy/module you support you should check it's protection for AUTH module
+and User Management module
+[*] RSBAC support for FF policy
+[*] RSBAC support for RC policy
+[*] RSBAC support for AUTH policy
+## Please turn learning option off on production kernels. It is only used while setting up your RSBAC system.
+AUTH Policy Options  --->
+    [*]   AUTH learning mode support 
+[*] RSBAC support for ACL policy
+[*] RSBAC support for Linux Caps (CAP) policy
+[*] RSBAC support for JAIL policy
+[*] RSBAC support for PAX policy
+[*] RSBAC support for System Resources (RES) policy
+  
+## Under "Softmode and switching"
+[ ] RSBAC policies switchable
+[*] RSBAC soft mode ## (Turn that off on production kernels)
+[*]     Individual module softmode support
+  
+## Under "Logging": all except "Log to remote UDP network socket"
+unless you want to log to remote machine
+  
+## Under "RSBAC symlink redirection"
+[*]   RSBAC symlink redirection
+[*]     Add remote IP address
+[*]       Add user ID number
+[*]       Add RC role number
+  
+## Under "Other RSBAC options"
+[*] Intercept sys_read and sys_write
+[*] Intercept Semaphore IPC operations
+[*] Control DAC process owner (seteuid, setfsuid)
+[*] Hide processes in /proc
+[*] Support freezing of RSBAC configuration
+[*] RSBAC check sys_syslog
+</pre>
+}}
+
+{{Note|If you plan to run a X Window server (such as X.org or XFree86), please also enable <code>"[*] X support (normal user MODIFY_PERM access to ST_ioports)"</code> . Please also see [http://www.gentoo.org//proj/en/hardened/hardenedxorg.xml Using Xorg on Hardened Gentoo]}}
+
+We will now configure PaX which is a complement of the RSBAC hardened kernel. It is also recommended that you enable the following options, in the "Security options ---> PaX" section. 
+
+{{Kernel|Configuring PaX kernel options|<pre>
+[*] Enable various PaX features
+PaX Control  --->
+    [*] Support soft mode ## (Turn that option off on a production kernel)
+    [ ] Use legacy ELF header marking
+    [ ] Use ELF program header marking
+        Use ELF program header marking MAC system integration (direct)  --->
+        (X) hook
+  
+Non-executable pages  --->
+    [*] Enforce non-executable pages (NEW)
+    [*]   Paging based non-executable pages
+## (You usually want to select the PAGEEXEC method on x86 since on newer PaXs,
+revert to SEGMEXEC if you are having issues)
+    [*]   Segmentation based non-executable pages (NEW)
+    [*] Restrict mprotect()
+    [ ]   Disallow ELF text relocations ## (This option breaks too much applications as of now)
+  
+Address Space Layout Randomization  --->
+    [*] Address Space Layout Randomization
+    [*]   Randomize user stack base
+    [*]   Randomize mmap() base
+</pre>
+}}
+
+{{Note|You should refer to the [http://pax.grsecurity.net PaX] website for more information about PaX.}}
+
+{{Note|You must use the RSBAC admin utilities to manage PaX, instead of chpax or paxctl with your RSBAC kernel. You will be able to move to the PaX item and set the usual PaX flags.}}
+
+{{RootCmd|rsbac_fd_menu /path/to/the/target/item
+|attr_set_file_dir FILE /path/to/the/target/item pax_flags [pmerxs]}}
+
+You can now compile and install the kernel as you would do with a normal one concerning the other options. 
+
+{{Important|It is strongly suggested to build a second kernel without the softmode options, neither the AUTH option, in order to use in a production environment. Only do that once you finished testing and setting up policies, as it'll remove the possiblity of switching off the access control system.}}
+
+== Installation of the RSBAC admin utilities ==
+
+In order to administrate your RSBAC enabled Gentoo, some userspace utilites are required. Those are included in the rsbac-admin package and it needs to be installed. 
+
+{{Emerge|rsbac-admin}}
+
+Once emerged, the package will have created a new user account on your system (secoff, with uid 400). He will become the security administrator during the first boot. This is the only user, who is able to change the RSBAC configuration. He will commonly be called the Security Officer. 
+
+{{Important|Please set-up a ''secure'' password for the secoff user.}}
+
+{{RootCmd|passwd secoff}}
+
+== First boot ==
+
+At the first boot, login into the system won't be possible, due to the AUTH module ''restricting'' the programs privileges. To overcome this problem please boot into softmode using the following kernel parameter (in your lilo or grub configuration): 
+
+{{Code|Softmode kernel parameter|<pre> rsbac_softmode </pre>
+}}
+
+The login application is managing user logins on the system. It needs rights to setuid, which we will now give: 
+
+Login as the Security Officer (secoff) and allow logins to be made by enterering the following command: 
+
+{{RootCmd|rsbac_fd_menu /bin/login
+|attr_set_fd AUTH FILE auth_may_setuid 1 /bin/login}}
+
+As an alternative, if softmode isn't enabled, you can also use the following kernel parameter in order to allow login at boot time: 
+
+{{RootCmd|rsbac_auth_enable_login}}
+
+== Learning mode and the AUTH module ==
+
+=== Creating a policy for OpenSSH ===
+
+Because there is almost no policy made yet (except the one generated during the first boot), the AUTH module does not allows uid changes. 
+
+Thanks to the intelligent learning mode there is an easy way to alleviate this new problem: The AUTH module can automagically generate the necessary policy by watching services while they start up, and note the uids they are trying to switch to. For example to teach the AUTH module about the uids needed by sshd (OpenSSH daemon), do the following: 
+
+{{Important|Make sure that sshd or the daemon you will use the learn mode with isn't running already before enabling learn mode.}}
+
+Enable the learning mode for sshd:
+
+{{RootCmd|attr_set_file_dir AUTH FILE `which sshd` auth_learn 1}}
+
+Start the service
+
+{{RootCmd|/etc/init.d/sshd start}}
+
+Disable the learning mode
+
+{{RootCmd|attr_set_file_dir AUTH FILE `which sshd` auth_learn 0}}
+
+{{Note|One should also login to the system before switching the learning mode off, because sshd will also attempt to change it's uids when the user will login in.}}
+
+Now sshd should be working as expected again, ''congratulations'' , you made your first policy :) The same procedure can be used on every other daemon you will need. 
+
+{{Note|As an alternative to enable the learning mode for each daemon of application you will need, you might want to enable the global learning mode (which will learn about everything running, globally, as it name tells).}}
+
+You can enable the global learning mode by issuing this kernel parameter at boot time: 
+
+{{RootCmd|rsbac_auth_learn}}
+
+== Further information ==
+
+It is also strongly suggested that you subscribe to the [http://www.gentoo.org//main/en/lists.xml gentoo-hardened mailing-list] . It is generally a low traffic list, and RSBAC announcements for Gentoo will be available there. We also recommend you to subscribe to the [http://rsbac.org/mailman/listinfo/rsbac/ RSBAC mailing-list] . Please also check the [http://www.gentoo.org//proj/en/hardened/hardenedfaq.xml hardened FAQ] as your questions might already be covered in this document. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+| Links:
+| [http://www.rsbac.org RSBAC Official site]
+|- 
+| IRC channels:
+| [http://www.gentoo.org/irc://irc.freenode.org/gentoo-hardened #gentoo-hardened]
+| [http://www.gentoo.org/irc://irc.freenode.org/rsbac #rsbac]
+|-
+|}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Michal Purzynski
+* Guillaume Destuynder
