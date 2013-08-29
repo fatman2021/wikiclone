@@ -1,0 +1,80 @@
+Understanding the impact of text relocations and explaining the use of PIC in shared libraries
+
+== Excerpt ==
+
+This technical documentation tries to explain and evaluate the technical background and the performance benefit or likewise penalty of PIC (Position Independent Code). 
+
+The goal should be achieved by illustrating an easy to follow learning path to understand text relocations and why they are imposing a security risk and a speed penalty to running applications. 
+
+To enhance the reading comfort for beginners, it is not covering stack layouts, the technical details of starting functions and discussing internal toolchain processings during building and executing programs. We are aware of the fact that this document may put a smile on the face of experienced readers due to the sometimes barely justified oversimplification of technical internals. 
+
+== Introduction to PIC - (Position Independent Code) ==
+
+PIC code differs from traditional code in the method it will perform access to function code and data objects/variables through an indirect accessing table. This table is called the "Global Offset Table" because it contains the addresses of code functions and data objects exported by a shared library. 
+
+The dynamic loader modifies the GOT slots to resemble the current memory address for every exported symbol in the library. When the dynamic loader has completed, the GOT contains full absolute addresses for each symbol reference constructed from the load address (PT_LOAD) of the shared library that contains these symbols plus their offset inside this shared library. 
+
+== Using PIC for building shared libraries ==
+
+Besides for using position independent executables (see PIE-SSP docs, PaX specs files using -shared and Jelinek binutils patches for -pie support), the natural reason for using "-fPIC" (position independent code) is the use in shared dynamic libraries. This makes the overall footprint of all dynamically linked ELF executables on the system as small as possible, while it also prevents possible code duplication and actively reduces requirements on memory and file system. 
+
+A unique characteristic of a typical shared library is that it can be located anywhere in the process memory layout. Because of this, the contents of the shared library are not accessed directly but via clearly exported definitions in symbol tables during building. Today, shared libraries can be easily implemented by incorporating this key advantage of the ELF standard. Making libraries larger, smaller or moving around functions in the library is very easy as long as the symbol table to access the functions does not change. 
+
+During building, The linker is only responsible for setting up exported symbols of the library in question. Telling the object code that it needs to be position independent is the task of the preprocessor and the compiler. Here, the role of the Makefiles and the CFLAGS/LDFLAGS feeding the compiler with instructions becomes visible. The preprocessor is adding special definitions ("__PIC__" "__pic__") and the compiler is using "-fPIC" or "-fpic" depending on the data access model. Hopefully, when there is no PIC unaware assembler in the source code, these flags are generating the object code needed for position independence. The object code needs to be generated PIC for successfully opening the doors to position independent relocation of the library, created from the PIC .o relocatable objects. 
+
+== Relocations in the TEXT segment of shared libraries used by dynamically linked executables ==
+
+This chapter is going to explain the reasons why relocations in the TEXT segment of a library, also called "text relocations", must be avoided by designers of shared libraries. 
+
+The performance penalty of text relocations is the reason that every shared library object code should be generated with -fPIC or -fpic, depending on the addressing range of the data that is used. Otherwise the library is considered not "clean". 
+
+A text relocation is a memory address in the "LOAD READ-EXECUTE" text segment of a shared library where text segment means the segment that contains the program code. Such a nonPIC text segment often contains large amounts of memory addresses that need to be "patched" (manipulated, modified, corrected) with the runtime location of functions and data. This is performed by the dynamic loader (ld.so in glibc) during startup of the dynamically linked executable and invocation of these libraries in the process space. The reason that the dynamic loader needs to spend so much time "patching" memory addresses (relocations) was stated above: a unique characteristic of a typical shared library is that it can be located anywhere in the process memory layout. 
+
+So the dynamic loader is the key to the "located anywhere" functionality: it recognizes and reorganizes the memory addresses that need to be refurbished and applies the change to these locations. This means that the dynamic loader will be responsible for relocating the memory address. For example, in a non-PIC compiled libmpeg3 library there are roughly 6000 memory locations left inside the shared library to point to some 200-300 functions and data referred by the instructions. 
+
+== Using prelink and LD_BIND_NOW ==
+
+Using prelink somehow mitigates the performance-intensive relocation process to a one-time operation: the relocation is satisfied and prematurely resolved/patched inside the binaries and the nonPIC shared libraries. This can be reached with using a program like prelink that is working on the actual files and modifying the relocations and GOT slots in the executables and libraries directly, thus saving the dynamic loader a lot of work during actually starting and running the executable. While dealing with executables, note that prelink inserts a "hint" into the PT_LOAD segment of every shared library to make the kernel load it at the expected address. 
+
+Bear in mind that not all relocations are resolved at startup time. When LD_BIND_NOW is not used, the lazy binding for libraries somehow tries to minimize the overhead to a more timely fashion by only relocating symbols at their first invocation during program flow. The environment variable LD_BIND_NOW (and the ld switch "-z now") tries to address this problem for slow machines by moving all needed relocations to be done at startup of a binary, invoking much much slower startup times but later making the binary run more fluently on slower machines because relocations are satisfied now :-) But you should be careful and know that using LD_BIND_NOW is not recommended on machines where responsiveness is an issue, clicking on an icon in KDE or GNOME and waiting 20 seconds for evolution to start is sometimes inacceptable by users. In doubt, use prelink! 
+
+== More about negative side effects of text relocations in shared libraries ==
+
+There are two drawbacks of nonPIC shared libraries currently. 
+
+There is a moderate security risk on nonPIC libraries containing text relocations. The TEXT pages for shared libraries cannot be marked READONLY by the kernel starting the binary and mapping in ELF segments and libraries. 
+
+There is also a memory overhead and performance penalty: data and code cannot be shared amongst processes via COW. COW means "copy on write", this uses the same readonly memory pages for all instances of the same binary and for all processes referring to the same used libraries. Using COW, readonly memory pages for shared libraries and executables need not to be recreated for new processes in their memory until they are are about to be changed by the new process, like for patching in text relocations by the dynamic loader, this is all implemented transparently in the virtual memory management of the Linux kernel. 
+
+== So, why not use -fPIC building as default for all applications? ==
+
+So why not compile all applications with -fPIC if it has so much advantages? The impact of "-fPIC" on certain arches like AMD64 can be tolerated due to the true PIC-oriented data and code addressing scheme and is even necessary on several (considered broken) architectures that refuse to build certain applications without -fPIC (errors with nonPIC relocation types on PARISC). There is only one official method to add flags like "-fPIC" to ebuilds: using the flag-o-matic eclass and "append-flags". However, it is not a good idea to enable "-fPIC" in global CFLAGS or create ebuilds that automatically add the "-fPIC" flag independent of the situation and architecture it is applied. There are people referring to a noticeable performance penalty when running executables containing position independent code compared to executables incorporating normally compiled object code. 
+
+Normally, the setup of the PIC register takes about three assembler commands per function that is entered and additional overhead of 1-2 assembler commands per accessed symbol (code function or data object). Thus, we have the inverted situation for normal executables that the invocation of the "-fPIC" flag is doing the exact opposite like in shared libraries. Instead of giving us speed for low memory profile by saving memory via COW and making text relocations unnecessary, the additional overhead in the addressing mode is imposing a speed penalty on our executable. 
+
+Why does a normal dynamically linked executable (not position independent shared executable) need no text relocations and PIC addressing? Because the kernel (in a normal world) always moves it to the same location in process memory when started, making it unnecessary for the dynamic loader to address any TEXT relocations in the normal executable: because there are none! We have learned that only shared libraries are located at a given, freely choosen, address space in the process memory of the dynamically linked executable. So, in the text segment of a "fixed load location" normal executable there are no TEXT segment relocations because all addresses are at the same location in memory during every invocation of the program. The addressing of data and functions inside the executable are provided via relative and absolute relocations in a common used set of platform-dependent, performance oriented assembler commands. 
+
+While the architectures supported by Gentoo are quite differently addressing memory, they all share the same characteristic: direct non-PIC-aware addressing is always cheaper (read: faster) than PIC addressing. For example the RISC (Reduced Instruction Set) architectures sparc, ppc and hppa sometimes use more than one assembler command issuing several more opcodes to do what x86 does with a single variable length assembler command, loading a full 32-Bit address for example. Only the AMD64 seems to support some kind of "emulation" mode where it does not seem to make a difference if PIC or normal addressing is used for referring code functions and data to access. 
+
+== Conclusion ==
+
+The only way that time-wasting text relocations are imposed on a process, leading to the dynamic loader having to work overtime, are with using nonPIC dynamically shared libraries. 
+
+For normal executables that are dynamically linked to these shared libraries, the executables themselves need not to be using -fPIC for building the object code they consist of. These executables simply do not need the PIC addressing mode for their functions and data and will use the PLT (Process Linkage Table) and the GOT (Global Offset Table) anyway for addressing external data in shared libraries. 
+
+== References ==
+
+
+* [http://www.gentoo.org/pic-guide.xml Introduction to Position Independent Code]
+* [http://www.iecc.com/linker/ Linkers and Loaders] by Levine (the Levine book)
+* [http://people.redhat.com/drepper/dsohowto.pdf How to Write Shared Libraries] by Ulrich Drepper
+
+I would like to say personal thanks to the PaX team for supporting us with an extraordinary and outstanding commitment to our toolchain issues! 
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Alexander Gabert
+* Ned Ludd
+* The PaX team
