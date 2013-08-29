@@ -1,0 +1,260 @@
+Handbook for proper GNU Stack management in ELF systems
+
+== Introduction ==
+
+With the rise of mainstream consumer machines with hardware stack protection (e.g. the [http://en.wikipedia.org/wiki/NX_bit NX bit] on amd64), we developers have to be doubly sure that our packages build with the correct stack settings. Keep in mind that stack protection is an issue for all architectures, not just x86 or amd64. 
+
+The purpose of this document is to help package maintainers fix their packages when they break. We will be focusing our attention on the GNU_STACK ELF marking. ELF is simply a file format which all modern linux distros use. An ELF can be an executable (say {{Path|/bin/ls}} ) or a library (say {{Path|/lib/libncurses.so}} ). GNU_STACK is just an ELF program header which tells the system how to control the stack when the ELF is loaded into memory. 
+
+Before getting started, you should read through the Wikipedia entry on the [http://en.wikipedia.org/wiki/NX_bit NX bit] . You can skip it of course if you're already familiar with the concept of executable versus non-executable stacks. 
+
+== Causes of executable stack markings ==
+
+ELF files end up with executable stack markings in one of three ways: 
+
+# GCC generates code that uses executable stack
+# an object built from assembler source includes a marking indicating to the linker that it needs an executable stack (the GNU-stack note set for executable stack)
+# an object built from assembler source is missing the GNU-stack note; a very common occurrence especially for code expected to work on many platforms
+
+GCC generates code to be executed on the stack when it implements a [http://gcc.gnu.org/onlinedocs/gccint/Trampolines.html trampoline for nested functions] . To remove the need for an executable stack in this case, it is necessary to rewrite the code another way. Sometimes this is relatively easy, other times not. 
+
+If an assembler source file includes a GNU-stack note that indicates it needs an executable stack, presumably this is by design. Again, in order to remove the need for an executable stack, the code probably needs to be rewritten. 
+
+If an assembler source contains no GNU-stack note, the system by default assumes that an executable stack may be required. However, usually if there's no GNU-stack note, this is simply because the author didn't include one, rather than the code actually needing an executable stack. 
+
+In the first two cases above, the executable stack marking is correct, and should only be removed by rewriting the code to eliminate the executable stack requirement. Such rewriting has to be considered on a case-by-case basis and is outside the scope of this document, at least for now. Here we focus on the third case, where the upstream author has not indicated whether the assembler object needs an executable stack; fixing this means adding the GNU-stack note to the source to indicate an executable stack is not necessary. 
+
+
+== Finding ELFs that ask for an executable stack ==
+
+Before you can start fixing something, you have to make sure it's broken first, right? For this reason, we've developed a suite of tools named [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities] . If you are not familiar with these utilities, you should read the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities Guide] now. Gentoo users can simply do <code>emerge pax-utils</code> . Non-Gentoo users should be able to find a copy of the source tarball in the {{Path|distfiles}} on a [http://www.gentoo.org//main/en/mirrors.xml Gentoo Mirror] . Once you have the PaX Utilities setup on your system, we can start playing around with <code>scanelf</code> . 
+
+Let's see if your system has any ELFs that want an executable stack. 
+
+{{Cmd|scanelf -lpqe|output=<pre>
+RWX --- ---  /usr/lib/opengl/xorg-x11/lib/libGL.so.1.2
+RWX --- ---  /usr/lib/libcrypto.so.0.9.7
+RWX --- ---  /usr/lib/libmp.so.3.1.7
+RWX --- ---  /usr/lib/libSDL-1.2.so.0.7.2
+RWX --- ---  /usr/lib/libsmpeg-0.4.so.0.1.3
+RWX --- ---  /usr/lib/libImlib2.so.1.2.0
+RWX --- ---  /usr/lib/libOSMesa.so.4.0
+RWX --- ---  /usr/lib/libxvidcore.so.4.1
+RWX --- ---  /usr/lib/libgmp.so.3.3.3
+RWX --- ---  /usr/bin/mencoder
+RWX --- ---  /usr/bin/Xorg
+RWX --- ---  /usr/bin/mplayer
+</pre>
+}}
+
+We really only need to look at the first column (which corresponds to the ELF GNU_STACK markings). Most of the time, if we fix that field, all the others fall into place. As we can see above, many files are marked with an executable stack ( ''RWX'' ). We want to make sure all files are marked with ''RW-'' . The large majority of the time this means the package was compiled incorrectly, so not much will have to be done with patching up the source code. 
+
+== What needs to be fixed ==
+
+We now know what files need to be fixed, but what source files are causing this breakage? The only way to find this out is to compile the package and analyze the object files before they are combined into the final executable or library. 
+
+=== Fixing smpeg ===
+
+So we first have to compile smpeg before we can analyze it. 
+
+{{Cmd|ebuild /usr/portage/media-libs/smpeg/smpeg-0.4.4-r6.ebuild clean unpack compile
+|cd /var/tmp/portage/smpeg-0.4.4-r6/work/smpeg-0.4.4/}}
+
+Now we need to look at each object file and see if it has a ''.note.GNU-stack'' ELF section. Chances are, the object which is causing us trouble lacks this section completely. In that case, the compiler will assume that the ELF should not be restricted at all and mark it as ''RWX'' . The <code>scanelf</code> utility will display output slightly different when presented with an object that is missing the ELF section. The '''!WX''' below means that "Oh no, the GNU-stack is missing and write/execute permissions will be used by default!" 
+
+{{Cmd|scanelf -qeR .|output=<pre>
+!WX --- ---  ./video/mmxflags_asm.o
+!WX --- ---  ./video/mmxflags_asm.lo
+!WX --- ---  ./video/mmxidct_asm.o
+!WX --- ---  ./video/mmxidct_asm.lo
+</pre>
+}}
+
+Sure enough, these objects lack the ''.note.GNU-stack'' ELF section and they are linked into the final {{Path|libsmpeg.so}} library. If we were to patch the source files {{Path|video/mmxflags_asm.S}} and {{Path|video/mmxidct_asm.S}} so that they contain ''.note.GNU-stack'' , everything would be peachy. 
+
+=== Check objects by hand ===
+
+For fun, lets see how we could use the more common <code>readelf</code> utility (which is part of the ''binutils'' package). 
+
+This is what the output should look like, notice the .note.GNU-stack line
+
+{{Cmd|readelf -S plaympeg.o|output=<pre>
+There are 12 section headers, starting at offset 0x256c:
+  
+Section Headers:
+  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
+  [ 0]                   NULL            00000000 000000 000000 00      0   0  0
+  [ 1] .text             PROGBITS        00000000 000040 001ede 00  AX  0   0 16
+  [ 2] .rel.text         REL             00000000 0030c0 000728 08     10   1  4
+  [ 3] .data             PROGBITS        00000000 001f20 000000 00  WA  0   0  4
+  [ 4] .bss              NOBITS          00000000 001f20 000000 00  WA  0   0  4
+  [ 5] .rodata.str1.4    PROGBITS        00000000 001f20 0003db 01 AMS  0   0  4
+  [ 6] .rodata.str1.1    PROGBITS        00000000 0022fb 0001c9 01 AMS  0   0  1
+  [ 7] .note.GNU-stack   PROGBITS        00000000 0024c4 000000 00      0   0  1
+  [ 8] .comment          PROGBITS        00000000 0024c4 00003e 00      0   0  1
+  [ 9] .shstrtab         STRTAB          00000000 002502 000067 00      0   0  1
+  [10] .symtab           SYMTAB          00000000 00274c 0005e0 10     11   9  4
+  [11] .strtab           STRTAB          00000000 002d2c 000394 00      0   0  1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings)
+  I (info), L (link order), G (group), x (unknown)
+  O (extra OS processing required) o (OS specific), p (processor specific)
+</pre>}}
+
+Notice how there is no .note.GNU-stack section here
+
+{{Cmd|readelf -S video/mmxidct_asm.o|output=<pre>
+There are 8 section headers, starting at offset 0x738:
+  
+Section Headers:
+  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
+  [ 0]                   NULL            00000000 000000 000000 00      0   0  0
+  [ 1] .text             PROGBITS        00000000 000034 0005ee 00  AX  0   0  4
+  [ 2] .rel.text         REL             00000000 000a4c 0000f0 08      6   1  4
+  [ 3] .data             PROGBITS        00000000 000630 0000d8 00  WA  0   0 16
+  [ 4] .bss              NOBITS          00000000 000708 000000 00  WA  0   0  4
+  [ 5] .shstrtab         STRTAB          00000000 000708 000030 00      0   0  1
+  [ 6] .symtab           SYMTAB          00000000 000878 000120 10      7  17  4
+  [ 7] .strtab           STRTAB          00000000 000998 0000b1 00      0   0  1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings)
+  I (info), L (link order), G (group), x (unknown)
+  O (extra OS processing required) o (OS specific), p (processor specific)
+</pre>
+}}
+
+== How to fix the stack (in theory) ==
+
+When you compile source code normally, gcc takes care of adding the GNU_STACK markings so that the final object code is not marked with an executable stack unless it actually needs it. However, if you compile assembly code, gcc will not automatically add GNU_STACK markings. So, the most common source of executable stacks in ELF binaries are packages which include raw assembly code. Note that we're not talking about inline assembly code, but rather files like ''.S'' which are written in pure assembler. 
+
+We can either patch each source file written in assembler and send the fixes upstream, or we can be lazy and simply force the package build system to assemble the source files with the GNU as option ''--noexecstack'' (but this is highly discouraged). 
+
+The advantage to patching the code is that it's easy to do, it's portable, and we can usually convince upstream to add it to their packages with little fuss. The disadvantage to patching is that we may have to patch many many files. 
+
+The advantage to just using ''--noexecstack'' is that you can simply add it to your ebuild and be done. The disadvantage is that the option isn't very portable (it won't work with non-GNU systems, and it probably won't even work with all GNU systems), and we can't really convince upstream to make this change. Thus, the only people who see the benefit here is Gentoo users. You gotta think big baby! 
+
+== How to fix the stack (in practice) ==
+
+=== Patching ===
+
+The great thing about patching is that you can copy and paste this stuff everywhere. Just make sure the code will be preprocessed (e.g. the source file is named with ''.S'' and not ''.s'' ). Stick these code snippets at the end of the source file, recompile, and do a jig. 
+
+{{Code|Stack markings for GNU as (arch-independent)|<pre>
+#if defined(__linux__) && defined(__ELF__)
+.section .note.GNU-stack,"",%progbits
+#endif
+</pre>
+}}
+
+{{Code|Stack markings for NASM/YASM (x86/amd64-only)|<pre>
+%ifidn __OUTPUT_FORMAT__,elf
+section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
+%ifidn __OUTPUT_FORMAT__,elf32
+section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
+%ifidn __OUTPUT_FORMAT__,elf64
+section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
+</pre>
+}}
+
+=== Compiling with --noexecstack ===
+
+Often times you only need to add the following code in your ebuild. You must first be sure that the code does not actually require an executable stack as forcing this flag will break the package otherwise. 
+
+{{Important|Please rethink patching before using this option. Patching source code benefits a lot more people which is the goal of OSS.}}
+
+{{Code|Using --noexecstack|<pre>
+# This line goes at the top of your ebuild
+inherit flag-o-matic
+  
+# This line goes before CFLAGS is used (either by the ebuild or by econf/emake)
+append-flags -Wa,--noexecstack
+</pre>
+}}
+
+On the off chance that you cannot assemble the files, you can tell the linker to disable execstack stack. 
+
+{{Code|Using -z noexecstack|<pre>
+# This line goes at the top of your ebuild
+inherit flag-o-matic
+  
+# This line goes before LDFLAGS is used (either by the ebuild or by econf/emake)
+append-ldflags -Wl,-z,noexecstack
+</pre>
+}}
+
+=== If all else fails ... ===
+
+If all else fails, ask around on #gentoo-dev on the irc server irc.freenode.net. Or send an e-mail to the [http://www.gentoo.org/main/en/lists.xml gentoo-dev mailing list] . If no one can seem to answer your question, give me a poke either on irc (nickname SpanKY/vapier) or via {{Mail|e-mail}}. 
+
+== Arch Status ==
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Arch
+! Status
+|- 
+| alpha
+| fully supported (gcc-4.4.x/glibc-2.11)
+|- 
+| amd64
+| fully supported
+|- 
+| arm
+| fully supported (gcc-4.1.x/glibc-2.5)
+|- 
+| blackfin
+| fully supported (gcc-4.3+)
+|- 
+| hppa
+| gcc-3.4.x does not generate .note.GNU-stack
+|- 
+| ia64
+| fully supported (gcc-3.4.4+)
+|- 
+| m68k
+| fully supported (gcc-3.4.x)
+|- 
+| mips
+| gcc-3.4.x does not generate .note.GNU-stack
+|- 
+| ppc
+| fully supported (gcc-4.4.x/glibc-2.11)
+|- 
+| ppc64
+| fully supported (gcc-4.4.x/glibc-2.11)
+|- 
+| s390
+| fully supported
+|- 
+| s390x
+| fully supported
+|- 
+| sh
+| fully supported (gcc-3.4.x/glibc-2.5)
+|- 
+| sparc
+| fully supported
+|- 
+| x86
+| fully supported
+|-
+|}
+
+== References ==
+
+* thanks to the [http://pax.grsecurity.net/ PaX team] for holding my hand
+* Roland McGrath's [http://www.redhat.com/archives/fedora-devel-list/2003-November/msg00838.html brain dump]
+* [http://en.wikipedia.org/wiki/NX_bit NX bit] Wikipedia entry
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Mike Frysinger
+* Ned Ludd
+* The PaX team
+* Kevin F. Quinn
+* Francisco Blas Izquierdo Riera
