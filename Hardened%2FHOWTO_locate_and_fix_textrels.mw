@@ -1,0 +1,620 @@
+A guide for tracking down and fixing .text relocations (TEXTRELs)
+
+== Introduction ==
+
+You should make sure to read the [http://www.gentoo.org/pic-guide.xml Introduction to Position Independent Code] before tackling this guide. 
+
+This guide is x86-centric for now. The reason being, the majority of broken object files are due to poorly written x86 assembly stemming from the simple fact that the x86 architecture has so few registers. Other architectures have a large enough register set that they can reserve a register as the "PIC register" without incurring a performance hit. Every architecture has to be mindful of PIC and its implications, x86 just happens to be the dominant architecture at the moment in the 'desktop' world of open source. 
+
+We will update for non-x86 as we acquire details and useful examples. 
+
+== Finding broken object code ==
+
+Before you can start fixing something, you got to make sure it's broken first, right? For this reason, we've developed a suite of tools named [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities] . If you are not familiar with these utilities, you should read the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities Guide] now. Gentoo users can simply do <code>emerge pax-utils</code> . Non-Gentoo users should be able to find a copy of the source tarball in the {{Path|distfiles}} on a [http://www.gentoo.org//main/en/mirrors.xml Gentoo Mirror] . Once you have the PaX Utilities setup on your system, we can start playing around with <code>scanelf</code> . 
+
+Keep in mind that although these utilities are named PaX Utilities, they certainly do not require PaX or anything else like that on your system. The name is a historical artifact and want of a better name, has stuck. 
+
+Let's see if your system has any broken files. 
+
+{{Cmd|scanelf -lpqt|output=<pre>
+TEXTREL  /usr/lib/opengl/xorg-x11/lib/libGL.so.1.2
+TEXTREL  /usr/lib/libSDL-1.2.so.0.7.2
+TEXTREL  /usr/lib/libdv.so.4.0.2
+TEXTREL  /usr/lib/libsmpeg-0.4.so.0.1.3
+TEXTREL  /usr/lib/libOSMesa.so.4.0
+TEXTREL  /usr/lib/libxvidcore.so.4.1
+</pre>
+}}
+
+Ideally, scanelf should not display anything, but on an x86 system, this is rarely the case. Here we can see six libraries with TEXTRELs in them. To quickly find out what package these files come from, Gentoo users can <code>emerge portage-utils</code> and use <code>qfile</code> . 
+
+{{Cmd|qfile `scanelf -qylpF%F#t`|output=<pre>
+media-libs/libdv (/usr/lib/libdv.so.4.0.2)
+media-libs/libsdl (/usr/lib/libSDL-1.2.so.0.7.2)
+media-libs/smpeg (/usr/lib/libsmpeg-0.4.so.0.1.3)
+media-libs/xvid (/usr/lib/libxvidcore.so.4.1)
+x11-base/xorg-x11 (/usr/lib/opengl/xorg-x11/lib/libGL.so.1.2)
+x11-base/xorg-x11 (/usr/lib/libOSMesa.so.4.0)
+</pre>
+}}
+
+Now that we know the offenders, we have a choice. We can file a bug upstream (who generally don't care unless you can provide a fix), file a bug in the [http://bugs.gentoo.org/ Gentoo Bugzilla] (which is a nice lazy cop out), or we can fix it ourselves (that is why you're reading this guide right?). You should double check that the package version you have installed is the latest upstream has to offer and the latest version your distro has to offer. Who knows, maybe you can get lucky and someone else has already fixed it. If you wish to get feedback on your work, feel free to contact the {{Mail|Gentoo hardened team}}. 
+
+=== "False" Positives ===
+
+Sometimes you may come across a package which contains a mountain of TEXTRELs with seemingly no relation to assembler. This may simply be because the objects were not properly compiled with the appropriate PIC flag. The fix is quite simple: make sure every object file that is linked into the final shared object is compiled with the appropriate PIC flag (typically -fPIC). 
+
+For example, let's look at the silc-plugin package. It builds up a few modules, but only compiles some of the objects with -fPIC that are linked into the final libsilc_core.so module. The output of scanelf here is quite extensive! 
+
+{{Cmd|scanelf -qT /usr/lib/irssi/modules/libsilc_core.so {{!}} wc -l|output=<pre>
+10734
+</pre>}}
+
+{{Cmd|scanelf -qT /usr/lib/irssi/modules/libsilc_core.so|output=<pre>
+...
+  libsilc_core.so: silc_client_ftp_ask_name [0xD542C] in silc_client_receive_new_id [0xD5380]
+  libsilc_core.so: silc_client_run_one [0xD55CA] in silc_client_receive_new_id [0xD5380]
+  libsilc_core.so: silc_id_payload_parse [0xD5842] in silc_client_packet_parse_type [0xD57B0]
+  libsilc_core.so: fgetc@@GLIBC_2.0 [0xD5857] in silc_client_packet_parse_type [0xD57B0]
+...
+</pre>
+}}
+
+A TEXTREL on glibc's fgetc() function!? Either people are calling fgetc() from assembler (and should be shot), or something else is going on. A good rule of thumb is that if it seems like just about every function/variable reference causes a TEXTREL and it is all done in C code, then the file was not built as PIC. Just review the build output and see if the command to compile it was invoked with -fPIC. If not, go fix the build system as you do not need to dig into the source. Dodged the bullet this time! 
+
+== Dissecting broken object code ==
+
+So we have identified some broken libraries, and we want to fix them. The trouble is, shared library code can be huge. They can have thousands of functions which come from thousands of object files and thousands of source code files which total megabytes in size (source code and compiled objects). Where the hell do we start!? Once again, Mighty Mouse^W^W <code>scanelf</code> is here to save the day. Before we dive into source code, lets check out a few libraries. 
+
+=== Dissect libsmpeg ===
+
+{{Cmd|scanelf -qT /usr/lib/libsmpeg-0.4.so.0.1.3|output=<pre>
+  libsmpeg-0.4.so.0.1.3: (memory/fake?) [0x2FB3C] in cpu_flags [0x2FB10]
+  libsmpeg-0.4.so.0.1.3: (memory/fake?) [0x2FB42] in cpu_flags [0x2FB10]
+  libsmpeg-0.4.so.0.1.3: (memory/fake?) [0x2FB55] in IDCT_mmx [0x2FB48]
+  libsmpeg-0.4.so.0.1.3: (memory/fake?) [0x2FB84] in IDCT_mmx [0x2FB48]
+  /usr/lib/libsmpeg-0.4.so.0.1.3
+</pre>
+}}
+
+The output here tells us that the ''cpu_flags'' and the ''IDCT_mmx'' functions are to blame for our TEXTRELs. The first field indicates that this is poor usage of memory references. Unfortunately, the symbolic name of the memory being referenced has not been retained in the object code (probably because the code is hand written assembly), so we need to do a little more digging. This is where the offset addresses come in to play along with the <code>objdump</code> utility from the ''binutils'' package. The first address (e.g. 0x2FB3C) is the offset of the TEXTREL while the second address is the offset of the function (e.g. 0x2FB10). Get used to this because the behavior of not retaining the symbol name is quite common. 
+
+{{Cmd|objdump -d /usr/lib/libsmpeg-0.4.so.0.1.3|output=<pre>
+...
+   2fb0f:       90                      nop
+  
+0002fb10 <cpu_flags>:
+   2fb10:       9c                      pushf
+   2fb11:       58                      pop    %eax
+...
+   2fb32:       60                      pusha
+   2fb33:       b8 01 00 00 00          mov    $0x1,%eax
+   2fb38:       0f a2                   cpuid
+   2fb3a:       89 15 d0 d3 03 00       mov    %edx,0x3d3d0
+   2fb40:       61                      popa
+   2fb41:       a1 d0 d3 03 00          mov    0x3d3d0,%eax
+   2fb46:       c3                      ret
+   2fb47:       90                      nop
+...
+</pre>
+}}
+
+As you can see here, the two lines picked out in the body of ''cpu_flags'' have absolute memory references. In this case, they both refer to memory location ''0x3d3d0'' . Since this object code may be loaded into any address, using an aboslute reference obviously won't fly. That means everytime libsmpeg is loaded into memory, the dynamic loader has to rewrite the ''0x3d3d0'' to the actual calculated address on the fly. 
+
+=== Dissect libdv ===
+
+{{Cmd|scanelf -qT /usr/lib/libdv.so.4.0.2|output=<pre>
+  libdv.so.4.0.2: (memory/fake?) [0x14AA9] in dv_parse_ac_coeffs_pass0 [0x14A84]
+  libdv.so.4.0.2: (memory/fake?) [0x14C28] in dv_parse_ac_coeffs_pass0 [0x14A84]
+  libdv.so.4.0.2: (memory/fake?) [0x14C8A] in dv_parse_video_segment [0x14C6F]
+  libdv.so.4.0.2: (memory/fake?) [0x14CA6] in dv_parse_video_segment [0x14C6F]
+  libdv.so.4.0.2: (memory/fake?) [0x15248] in _dv_idct_block_mmx [0x15210]
+  libdv.so.4.0.2: (memory/fake?) [0x152BE] in _dv_idct_block_mmx [0x15210]
+  libdv.so.4.0.2: (memory/fake?) [0x1583D] in _dv_dct_88_block_mmx [0x157F8]
+  libdv.so.4.0.2: (memory/fake?) [0x15847] in _dv_dct_88_block_mmx [0x157F8]
+  libdv.so.4.0.2: (memory/fake?) [0x15F91] in _dv_dct_248_block_mmx [0x15F58]
+  libdv.so.4.0.2: (memory/fake?) [0x15FE6] in _dv_dct_248_block_mmx [0x15F58]
+  libdv.so.4.0.2: (memory/fake?) [0x163D3] in _dv_rgbtoycb_mmx [0x163C8]
+  libdv.so.4.0.2: (memory/fake?) [0x163DD] in _dv_rgbtoycb_mmx [0x163C8]
+  libdv.so.4.0.2: dv_vlc_class_index_mask [0x149A7] in dv_decode_vlc [0x14998]
+  libdv.so.4.0.2: dv_vlc_class_index_rshift [0x149B0] in dv_decode_vlc [0x14998]
+  libdv.so.4.0.2: dv_vlc_classes [0x149B9] in dv_decode_vlc [0x14998]
+  libdv.so.4.0.2: dv_vlc_index_mask [0x149C4] in dv_decode_vlc [0x14998]
+  libdv.so.4.0.2: sign_mask [0x149EB] in dv_decode_vlc [0x14998]
+  libdv.so.4.0.2: sign_mask [0x14A5D] in __dv_decode_vlc [0x14A1C]
+  libdv.so.4.0.2: sign_mask [0x14B82] in dv_parse_ac_coeffs_pass0 [0x14A84]
+  libdv.so.4.0.2: dv_vlc_class_lookup5 [0x14A2F] in __dv_decode_vlc [0x14A1C]
+  libdv.so.4.0.2: dv_parse_ac_coeffs_pass0 [0x14E03] in dv_parse_video_segment [0x14C6F]
+  libdv.so.4.0.2: dv_parse_ac_coeffs [0x14E51] in dv_parse_video_segment [0x14C6F]
+  libdv.so.4.0.2: dv_quant_offset [0x14E69] in _dv_quant_88_inverse_x86 [0x14E5C]
+  libdv.so.4.0.2: dv_quant_offset [0x14FB3] in _dv_quant_x86 [0x14FA4]
+  /usr/lib/libdv.so.4.0.2
+</pre>
+}}
+
+Again, we can see that many functions (like ''dv_parse_ac_coeffs_pass0'' and ''_dv_idct_block_mmx'' ) have absolute memory references. What we also see is that a bunch of functions which refer to variables. For example, ''dv_decode_vlc'' misuses the variable ''dv_vlc_class_index_mask'' while ''dv_parse_video_segment'' misuses the variable ''dv_parse_ac_coeffs'' . Much easier to locate the problem in the source code when you have the symbol name. 
+
+=== Dissect libSDL ===
+
+{{Cmd|scanelf -qT /usr/lib/libSDL-1.2.so.0.7.2|output=<pre>
+  libSDL-1.2.so.0.7.2: (memory/fake?) [0x4E213] in _ConvertMMXpII32_24RGB888 [0x4E210]
+  libSDL-1.2.so.0.7.2: (memory/fake?) [0x4E29E] in _ConvertMMXpII32_16RGB565 [0x4E29B]
+  libSDL-1.2.so.0.7.2: (memory/fake?) [0x4E3F6] in _ConvertMMXpII32_16BGR555 [0x4E3F3]
+  libSDL-1.2.so.0.7.2: (memory/fake?) [0x4E402] in _ConvertMMXpII32_16RGB555 [0x4E3FF]
+  libSDL-1.2.so.0.7.2: (memory/fake?) [0x4E555] in _Hermes_X86_CPU [0x4E529]
+  libSDL-1.2.so.0.7.2: _copy_row [0x316A2] in SDL_SoftStretch [0x313C0]
+  libSDL-1.2.so.0.7.2: _mmxreturn [0x4E4FB] in _ConvertMMXpII32_16RGB555 [0x4E3FF]
+  libSDL-1.2.so.0.7.2: _x86return [0x4E590] in _ConvertX86p16_16BGR565 [0x4E560]
+  libSDL-1.2.so.0.7.2: _x86return [0x4EE99] in _ConvertX86p32_16BGR555 [0x4EDCA]
+  libSDL-1.2.so.0.7.2: _x86return [0x4EF4D] in _ConvertX86p32_8RGB332 [0x4EE9D]
+  /usr/lib/libSDL-1.2.so.0.7.2
+</pre>
+}}
+
+Doesn't seem to be anything new here. Poor memory usage in functions like ''_ConvertMMXpII32_24RGB888'' and no symbol name which means it's probably pure hand written assembler. The ''SDL_SoftStretch'' function misuses the symbol ''_copy_row'' and since the symbol name has been retained, it's probably inline assembly code. 
+
+== Finding the broken source code ==
+
+We've identified the functions and sometimes the variables which are causing us such headaches. Before we can actually fix them though, we have to narrow down the source code to the offending lines. Since we know the function names and either the symbol name or a relative position in the function, we should be able to focus our efforts quite easily. 
+
+=== libsmpeg source dive ===
+
+Let's start with libsmpeg. We know that both the ''cpu_flags'' and ''IDCT_mmx'' functions are broken. But where are they defined? 
+
+{{Cmd|tar zxf smpeg-0.4.4.tar.gz
+|cd smpeg-0.4.4.tar.gz
+|grep -Rl cpu_flags *|output=<pre>
+video/mmxflags_asm.S
+video/parseblock.cpp
+</pre>}}
+
+{{Cmd|grep cpu_flags video/mmxflags_asm.S|output=<pre>
+.globl cpu_flags
+        .type    cpu_flags,@function ## <-- here is what we want
+cpu_flags:
+        jz cpu_flags.L1   # Processor is 386
+        je cpu_flags.L1
+cpu_flags.L1:
+        .size    cpu_flags,.Lfe1-cpu_flags
+</pre>}}
+
+{{Cmd|grep -Rl IDCT_mmx *|output=<pre>
+video/parseblock.cpp
+video/mmxidct_asm.S
+</pre>}}
+
+{{Cmd|grep IDCT_mmx video/mmxidct_asm.S|output=<pre>
+.globl IDCT_mmx
+        .type    IDCT_mmx,@function ## <-- here is what we want
+IDCT_mmx:
+        .size    IDCT_mmx,.Lfe1-IDCT_mmx
+</pre>
+}}
+
+As we suspected, both the ''cpu_flags'' and the ''IDCT_mmx'' functions are written in pure assembly code. This makes tracking down the unamed memory reference easier because the source code should closely match the output of <code>objdump</code> . If we review the output from earlier, we know the ''cpuid'' instruction is used. Since it isn't a common instruction, we search for it in the source code. 
+
+{{Cmd|grep -A 8 cpuid video/mmxflags_asm.S|output=<pre>
+        cpuid
+  
+        movl %edx,flags
+  
+        popa
+  
+        movl flags,%eax
+  
+cpu_flags.L1:
+</pre>
+}}
+
+In GNU assembler, registers are prefixed with a ''%'' and constants are prefixed with a ''$'' , that ''flags'' looks suspicious. It also lines up well with the <code>objdump</code> output from earlier. So what is ''flags'' ? 
+
+{{Cmd|grep -C 2 flags video/mmxflags_asm.S|output=<pre>
+.data
+        .align 16
+        .type    flags,@object
+flags: .long 0
+  
+.text
+</pre>
+}}
+
+Seems ''flags'' is a data variable local to {{Path|mmxflags_asm.S}} which functions access with absolute memory references rather than relative. Now we are pretty much done. That's all there is to it. We started with the library {{Path|libsmpeg.so}} and tracked it back to the function ''cpu_flags'' and the variable ''flags'' in the {{Path|video/mmxflags_asm.S}} file. That wasn't so hard now was it? :) 
+
+If we analyze the ''IDCT_mmx'' function, we find a similar trend. 
+
+{{Code|IDCT_mmx snippets|<pre>
+## [Local variables]
+.data
+    .align 8
+    .type   x4546454645464546,@object
+    .size   x4546454645464546,8
+x4546454645464546:
+    .long   0x45464546,0x45464546
+  
+    .align 8
+    .type   x61f861f861f861f8,@object
+    .size   x61f861f861f861f8,8
+x61f861f861f861f8:
+    .long   0x61f861f8,0x61f861f8
+  
+    .align 8
+    .type    scratch1,@object
+    .size    scratch1,8
+scratch1:
+    .long 0,0
+  
+## [Absolute memory references]
+.text
+...
+    psraw $1, %mm5          /* t90=t93 */
+    pmulhw x4546454645464546,%mm0   /* V35 */
+    psraw $1, %mm2          /* t97 */
+...
+    psubsw %mm2, %mm1       /* V32 ; free mm2 */
+    pmulhw x61f861f861f861f8,%mm1   /* V36 */
+    psllw $1, %mm7          /* t107 */
+...
+    movq 8*3(%esi), %mm7
+    psraw $4, %mm4
+    movq %mm2, scratch1     /* out1 */
+</pre>
+}}
+
+=== libSDL source dive ===
+
+Again, before we jump into how to fix these, lets analyze a few more source files to get a better handle on identifying problematic code. 
+
+{{Code|Broken _ConvertMMXpII32_24RGB888 in libSDL code|<pre>
+## [objdump of _ConvertMMXpII32_24RGB888 memory reference]
+0004e210 <_ConvertMMXpII32_24RGB888>:
+   4e210:       0f 6f 35 50 55 05 00    movq   0x55550,%mm6
+   4e217:       0f ef ff                pxor   %mm7,%mm7
+  
+## [_ConvertMMXpII32_24RGB888 is defined in src/hermes/mmxp2_32.asm]
+	SECTION .data
+ALIGN 8
+;; Constants for conversion routines
+mmx32_rgb888_mask dd 00ffffffh,00ffffffh
+...
+	SECTION .text
+_ConvertMMXpII32_24RGB888: ## start of function 0x4E210
+        ; set up mm6 as the mask, mm7 as zero
+        movq mm6, qword [mmx32_rgb888_mask] ## memory reference 0x4E213
+        pxor mm7, mm7
+</pre>
+}}
+
+Simple enough, the ''_ConvertMMXpII32_24RGB888'' function refers to the ''mmx32_rgb888_mask'' variable. 
+
+{{Code|Broken SDL_SoftStretch in libSDL code|<pre>
+## [SDL_SoftStretch is defined in src/video/SDL_stretch.c]
+int SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect,
+                    SDL_Surface *dst, SDL_Rect *dstrect)
+{
+...
+#ifdef __GNUC__
+            __asm__ __volatile__ (
+            "call _copy_row"
+            : "=&D" (u1), "=&S" (u2)
+            : "0" (dstp), "1" (srcp)
+            : "memory" );
+#else
+</pre>
+}}
+
+Another straight forward bug. An absolute reference to the ''_copy_row'' variable in assembly. If we were to let gcc handle the ''_copy_row'' reference instead though ... 
+
+== How to write PIC (in theory) ==
+
+=== Rules of thumb ===
+
+Now we know what broken code looks like. We can point out issues in code and confidently declare "that crap is broken". While this is a good thing, it certainly doesn't help much if no one knows how it's supposed to be written. Let's start with some rules of thumb. 
+
+General rules 
+
+* Do not mix PIC and non-PIC object code
+* Shared libraries contain PIC objects
+* Static libraries contain non-PIC objects (normal/non-PIE systems only)
+* Let gcc figure out the details whenever possible (e.g. inline asm)
+* Use the stack for loading of large masks instead of variables
+* Do not clobber the PIC register when generating PIC objects
+
+x86-specific rules 
+
+* Use @GOT relocations when using external symbols
+* Use @GOTOFF relocations when using local symbols
+
+=== PIC registers by architecture ===
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! arch
+! register
+|- 
+| blackfin
+| P3
+|- 
+| frv
+| GR15
+|- 
+| hppa
+| r19
+|- 
+| x86
+| ebx
+|-
+|}
+
+== Cookie cutter PIC fixes ==
+
+=== Don't use the PIC register ===
+
+If you come across code which uses the PIC register in some inline assembly, one fix may be to simply use a different register. For example, the x86 architecture has 6 general purpose registers ( ''eax'' , ''ebx'' , ''ecx'' , ''edx'' , ''esi'' , ''edi'' ). If the code uses just ''eax'' and ''ebx'' , just change all references to ''ebx'' to ''ecx'' and you're done! 
+
+A cleaner fix might be to just let gcc allocate the registers accordingly. If the inline assembly doesn't actually care which registers it uses, change the references from ''ebx'' to ''r'' in the clobber list, and refer to the variable by number. 
+
+Or, if the assembly uses an instruction which always clobbers ''ebx'' (e.g. ''cpuid'' ), simply hide the value in another register (like ''esi'' ). 
+
+If all else fails, you can fall back to the slow push/pop ''ebx'' on the stack method. 
+
+{{Code|Just don't use the PIC register|<pre>
+## /* change this code from */
+asm("
+    mov %0, %%eax
+    mov %1, %%ebx
+    add %%eax, %%ebx
+    " : : "m"(input1), "m"(input2) : "eax" "ebx");
+  
+## /* to this functionality equivalent version */
+asm("
+    mov %0, %%eax
+    mov %1, %%ecx
+    add %%eax, %%ecx
+    " : : "m"(input1), "m"(input2) : "eax" "ecx");
+</pre>
+}}
+
+{{Code|Let gcc allocate registers|<pre>
+## /* change this code from */
+asm("
+    mov %2, %%eax
+    mov %3, %%ebx
+    add %%eax, %%ebx
+    " : "=a"(output1) "=b"(output2) : "m"(input1), "m"(input2));
+  
+## /* to this functionality equivalent version */
+asm("
+    mov %2, %0
+    mov %3, %1
+    add %0, %1
+    " : "=r"(output1) "=r"(output2) : "m"(input1), "m"(input2));
+</pre>
+}}
+
+{{Code|Hide the PIC register|<pre>
+asm("cpuid" : : : "eax", "ebx", "ecx", "edx");
+  
+## /* can be written to hide ebx */
+asm("
+    movl %%ebx, %%edi
+    cpuid
+    movl %%edi, %%ebx
+    " : : : "eax", "ecx", "edx", "edi");
+  
+## /* or a slower version using the stack */
+asm("
+    pushl %%ebx
+    cpuid
+    popl %%ebx
+    " : : : "eax", "ecx", "edx");
+</pre>
+}}
+
+=== MMX/SSE masks ===
+
+A lot of x86 MMX/SSE code loads bitmasks from local variables since they need to fill up a register which is larger (MMX/64bits or SSE/128bits) than the native bitsize (x86/32bits). They do this by defining the mask in consecutive bytes in memory and then having the cpu load the data from the memory region. 
+
+One way to get around this is by being creative with the stack. Rather than use an absolute memory reference for the mask, push a bunch of 32bit values onto the stack and use the address specified by the ''esp'' register. Once you're finished, just add a constant to ''esp'' rather than popping off since you don't care about the actual values once they are loaded into the MMX/SSE registers. 
+
+{{Code|Load masks into registers via stack|<pre>
+## /* Load masks from memory (causes TEXTRELs) */
+	.data
+m0X000000: .byte   0,   0,   0,   0,   0,   0, 255,   0
+	.text
+movq	m0X000000, %mm5
+  
+## /* Load mask from stack (no TEXTRELs)*/
+pushl	$0x00FF0000
+pushl	$0x00000000
+movq	(%esp), %mm5
+addl	8, %esp
+</pre>
+}}
+
+=== Let gcc worry about it ===
+
+A lot of inline assembly is written with the symbol names placed right in the code. Rather than trying to write custom code to handle PIC in assembly, just let gcc worry about it. Pass in the symbol via the input operand list as a memory constraint ("m") and gcc will handle all the rest. 
+
+{{Code|How to make gcc worry about it|<pre>
+unsigned long long a_mmx_mask = 0xf8007c00ffea0059ULL;
+void somefunction()
+{
+	## /* Common (but incorrect) method for loading masks */
+	asm("pmullw a_mmx_mask, %%mm0" : : );
+  
+	## /* The correct way is to let gcc do it */
+	asm("pmullw %0, %%mm0" : : "m"(a_mmx_mask));
+}
+</pre>
+}}
+
+If your get a warning/error about one of the memory inputs needing to be an lvalue, then this usually means you're trying to pass in a pointer to an array/structure rather than the memory location itself. Fixing this may be as simple as dereferencing the variable in the constraint list rather than in the assembly itself. 
+
+=== Thunk it in assembly ===
+
+Hand written assembly sometimes need to access variables (whether they be local or global). Since none of the previous tricks will work, you just need to grind your teeth and dig in to write real PIC references yourself using the GOT. Make sure you keep in mind the first rule of thumb: Do not mix PIC and non-PIC object code. This probably will require the hand written assembly be preprocessed before it is assembled, so an assembly source file with a ''.s'' suffix will not work. It needs to be ''.S'' . 
+
+Also keep in mind that using @GOTOFF will return the variable while using @GOT will return a pointer to the variable. So accessing a variable with @GOT will require two steps. 
+
+{{Code|How to refer to variables via the GOT|<pre>
+#ifdef __PIC__
+  
+# undef __i686 /* gcc builtin define gets in our way */
+# define MUNG_LOCAL(sym)   sym ## @GOTOFF(%ebx)
+# define MUNG_EXTERN(sym)  sym ## @GOT(%ebx)
+# define DEREF_EXTERN(reg) movl (reg), reg
+# define INIT_PIC() \
+	call __i686.get_pc_thunk.bx ; \
+	addl $_GLOBAL_OFFSET_TABLE_, %ebx
+  
+#else
+  
+# define MUNG_LOCAL(sym)   sym
+# define MUNG_EXTERN(sym)  sym
+# define DEREF_EXTERN(reg)
+# define INIT_PIC()
+  
+#endif
+  
+...
+some_function:
+...
+	## /* needs to be before first memory reference */
+	INIT_PIC()
+...
+	movl MUNG_EXTERN(some_external_variable), %eax
+	DEREF_EXTERN(%eax)
+...
+	movl %eax, MUNG_LOCAL(some_local_variable)
+...
+  
+#ifdef __PIC__
+	.section .gnu.linkonce.t.__i686.get_pc_thunk.bx,"ax",@progbits
+.globl __i686.get_pc_thunk.bx
+	.hidden  __i686.get_pc_thunk.bx
+	.type    __i686.get_pc_thunk.bx,@function
+__i686.get_pc_thunk.bx:
+	movl (%esp), %ebx
+	ret
+#endif
+</pre>
+}}
+
+{{Note|Usage of ''ebx'' as the register to do relative addressing is not required, it is just common convention. The above examples could just as easily be done by using ''ecx'' or ''edx'' .}}
+
+Since we hide the PIC details behind the preprocessor define ''__PIC__'' , we know that the correct code will be generated for both the PIC and non-PIC cases. 
+
+The ''__i686.get_pc_thunk.bx'' function is a standard method for acquiring the address of the GOT at runtime and storing the result in ''ebx'' . The funky name is what gcc uses by convention when generating PIC objects, so we too use the same name. The ''@GOT'' and ''@GOTOFF'' notation tells the assembler where to find the variables in memory. The ''.section .gnu.linkonce.t'' is useful because it tells the linker to only include one instance of this function in the final object code. So if you have multiple files which declare this same function which are compiled and linked into the same final library, the linker will discard all duplicate instances of the function thus saving space (which is always a good thing). 
+
+== How to fix broken PIC (in practice) ==
+
+So if the previous code snippets were broken, what should they look like you may wonder. Well let's find out. 
+
+=== Fix libsmpeg ===
+
+{{Code|Fixing cpu_flags in libsmpeg by rewriting it|<pre>
+## [Non-PIC Version]
+.type flags,@object
+flags: .long 0
+...
+	pusha
+	movl $1,%eax
+	cpuid
+	movl %edx,flags
+	popa
+	movl flags,%eax
+  
+  
+## [PIC Version]
+	pushl %ebx
+	movl $1,%eax
+	cpuid
+	movl %edx,%eax
+	popl %ebx
+</pre>
+}}
+
+{{Code|Fixing IDCT_mmx in libsmpeg by using relative addressing|<pre>
+## [Non-PIC Version]
+	pmulhw x5a825a825a825a82, %mm1
+  
+  
+## [PIC Version]
+#ifdef __PIC__
+# undef __i686 /* gcc define gets in our way */
+	call __i686.get_pc_thunk.bx
+	addl $_GLOBAL_OFFSET_TABLE_, %ebx
+#endif
+...
+	pmulhw x5a825a825a825a82@GOTOFF(%ebx), %mm1
+...
+#ifdef __PIC__
+	.section .gnu.linkonce.t.__i686.get_pc_thunk.bx,"ax",@progbits
+.globl __i686.get_pc_thunk.bx
+	.hidden  __i686.get_pc_thunk.bx
+	.type    __i686.get_pc_thunk.bx,@function
+__i686.get_pc_thunk.bx:
+	movl (%esp), %ebx
+	ret
+#endif
+</pre>
+}}
+
+=== Fix libSDL ===
+
+{{Code|Fixing _ConvertMMXpII32_24RGB888 in libSDL|<pre>
+## [Non-PIC Version]
+mmx32_rgb888_mask dd 00ffffffh,00ffffffh
+...
+	movq mm6, qword [mmx32_rgb888_mask]
+  
+  
+## [PIC Version]
+%macro _push_immq_mask 1
+	push dword %1
+	push dword %1
+%endmacro
+%macro load_immq 2
+	_push_immq_mask %2
+	movq %1, [esp]
+%endmacro
+%define mmx32_rgb888_mask 00ffffffh
+...
+	load_immq mm6, mmx32_rgb888_mask
+	CLEANUP_IMMQ_LOADS(1)
+</pre>
+}}
+
+{{Code|Fixing SDL_SoftStretch in libSDL|<pre>
+## [Non-PIC Version]
+	__asm__ __volatile__ (
+		"call _copy_row"
+		: "=&D" (u1), "=&S" (u2)
+		: "0" (dstp), "1" (srcp)
+		: "memory" );
+  
+  
+## [PIC Version]
+	__asm__ __volatile__ (
+		"call *%4"
+		: "=&D" (u1), "=&S" (u2)
+		: "0" (dstp), "1" (srcp), "r" (&_copy_row)
+		: "memory" );
+</pre>
+}}
+
+== References ==
+
+* thanks to the PaX team for holding my hand
+* [http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html GCC Inline Assembly HOWTO]
+* [http://nasm.sourceforge.net/ NASM] 's Documentation on [http://nasm.sourceforge.net/doc/html/nasmdoc6.html#section-6.5.2 ELF shared libraries]
+* Linkers and Loaders [http://www.iecc.com/linker/linker08.html chapter 8] and [http://www.iecc.com/linker/linker10.html chapter 10]
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Mike Frysinger
+* Ned Ludd
+* The PaX team
+* Kevin F. Quinn
