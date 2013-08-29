@@ -1,0 +1,2414 @@
+TPE tends to be one of the harder to understand parts of GRSecurity as options like invert GID can be confusing at times. In this documents we explain how each possible TPE setup behaves and summarize it with the results of a simple test suite.
+
+== Introduction ==
+
+Trusted Path Execution (TPE) is a protection which restricts the execution of files under certain circumstances determined by their path. Using it will make privilege escalation harder when an account restricted by TPE is compromised as the attacker won't be able to execute custom binaries which are not in the trusted path. 
+
+You can also enable a weaker restriction which will prevent race conditions on code executed by non root users. This weaker condition makes non-root users able to run only executables on directories owned by them or root and writeable only by the owner. 
+
+To explain how TPE works we will first explain what each kernel option does, and then show the results with an example. 
+
+{{Note|Bare in mind that TPE just makes file execution more restrictive so files without the execute permission will be non executable regardless of the TPE status.}}
+
+== The different setups ==
+
+=== No TPE ===
+
+Here TPE is disabled. So it won't won't affect the executable permissions. 
+
+{{Code|Setup 1 (No TPE)|<pre>
+-> Security options
+  -> Grsecurity
+    -> Grsecurity
+      -> Executable Protections
+        [ ] Trusted Path Execution (TPE)
+</pre>
+}}
+
+=== Basic TPE ===
+
+Here we use the minimal setup of TPE. With it all the users in the group with the indicated GID (100 by default) will be able to execute only files in root owned directories writable only by root (and nothing more). 
+
+{{Kernel|Setup 2 (Basic)|<pre>
+-> Security options
+  -> Grsecurity
+    -> Grsecurity
+      -> Executable Protections
+        [*] Trusted Path Execution (TPE)
+        [ ]   Partially restrict all non-root users
+        [ ]   Invert GID option
+        (100)   GID for untrusted users
+</pre>
+}}
+
+=== TPE with with partial restrictions ===
+
+Now we also enable the partial restriction, this means that now aside from the previous restriction, we now add another for the non-root users not affected by it which will allow execution only in root owned directories writable only by root and directories owned by the executing user which aren't group writable nor world writable (and nothing more). 
+
+{{Kernel|Setup 3 (with partial retriction)|<pre>
+-> Security options
+  -> Grsecurity
+    -> Grsecurity
+      -> Executable Protections
+        [*] Trusted Path Execution (TPE)
+        [*]   Partially restrict all non-root users
+        [ ]   Invert GID option
+        (100)   GID for untrusted users
+</pre>
+}}
+
+=== TPE with with inverted gid match ===
+
+Now, we enabled the invert GID option, so now all the users not in the group with the indicated GID (100 by default) will be able to execute only files in root owned directories writable only by root (and nothing more). 
+
+{{Kernel|Setup 4 (with inverted GID match)|<pre>
+-> Security options
+  -> Grsecurity
+    -> Grsecurity
+      -> Executable Protections
+        [*] Trusted Path Execution (TPE)
+        [ ]   Partially restrict all non-root users
+        [*]   Invert GID option
+        (100)   GID for trusted users
+</pre>
+}}
+
+=== TPE with with partial restrictions and inverted gid match ===
+
+Again we also enable the partial restriction, this means that now aside from the previous restriction, we now add another for the non-root users not affected by it which will allow execution only in root owned directories writable only by root and directories owned by the executing user which aren't group writable nor world writable (and nothing more). 
+
+{{Kernel|Setup 5 (with inverted GID match and partial restriction)|<pre>
+-> Security options
+  -> Grsecurity
+    -> Grsecurity
+      -> Executable Protections
+        [*] Trusted Path Execution (TPE)
+        [*]   Partially restrict all non-root users
+        [*]   Invert GID option
+        (100)   GID for trusted users
+</pre>
+}}
+
+== Testing the different restrictions ==
+
+To make things even clearer we have executed a small test suite on each of the possible setups. 
+
+=== The test suite ===
+
+The test suite consist of a series of directories with different names each with different permissions and ownership. These directories have exactly the same contents: a set of files again with different permissions and ownership each. The files are just a simple bash script printing OK. 
+
+{{Code|Example directory structure|<pre>
+.:
+total 48
+drwxr-xr-x 2 root  root  4096 ene  6 22:51 01
+drwxr-xrwx 2 root  root  4096 ene  6 22:51 02
+drwxrwxr-x 2 root  root  4096 ene  6 22:51 03
+drwxrwxrwx 2 root  root  4096 ene  6 22:51 04
+drwxr-xr-x 2 user1 user1 4096 ene  6 22:51 05
+drwxr-xrwx 2 user1 user1 4096 ene  6 22:51 06
+drwxrwxr-x 2 user1 user1 4096 ene  6 22:51 07
+drwxrwxrwx 2 user1 user1 4096 ene  6 22:51 08
+drwxr-xr-x 2 user2 user2 4096 ene  6 22:51 09
+drwxr-xrwx 2 user2 user2 4096 ene  6 22:51 10
+drwxrwxr-x 2 user2 user2 4096 ene  6 22:51 11
+drwxrwxrwx 2 user2 user2 4096 ene  6 22:51 12
+  
+./01:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./02:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./03:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./04:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./05:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./06:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./07:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+   
+./08:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./09:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./10:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./11:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+  
+./12:
+total 48
+-rwxrwxrwx 1 root  root  22 ene  6 22:59 01
+-rwxr-xrwx 1 root  root  22 ene  6 22:59 02
+-rwxrwxr-x 1 root  root  22 ene  6 22:59 03
+-rwxr-xr-x 1 root  root  22 ene  6 22:59 04
+-rwxrwxrwx 1 user2 user2 22 ene  6 22:59 05
+-rwxr-xrwx 1 user2 user2 22 ene  6 22:59 06
+-rwxrwxr-x 1 user2 user2 22 ene  6 22:59 07
+-rwxr-xr-x 1 user2 user2 22 ene  6 22:59 08
+-rwxrwxrwx 1 user1 user1 22 ene  6 22:59 09
+-rwxr-xrwx 1 user1 user1 22 ene  6 22:59 10
+-rwxrwxr-x 1 user1 user1 22 ene  6 22:59 11
+-rwxr-xr-x 1 user1 user1 22 ene  6 22:59 12
+</pre>
+}}
+
+{{Note|For commodity this files and a small testrunning script <code>trytpe</code> are provided in a [http://www.gentoo.org//proj/en/hardened/grsec-tpedemo.tar.bz2 compressed tar.bz2 archive] . Remember to keep the permissions when extracting it.}}
+
+=== Example Results ===
+
+Below are the results for each execution attempt on each of the presented setups. user1 is in the group set by the GID, while user2 isn't. A YES means the file indicated was executable by the indicated user in the indicated setup. A NO means the permission to execute the file was denied. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Directory
+! File
+! Setup 1
+! Setup 2
+! Setup 3
+! Setup 4
+! Setup 5
+|- 
+! user1
+! user2
+! user1
+! user2
+! user1
+! user2
+! user1
+! user2
+! user1
+! user2
+|- 
+! 01
+! 01
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 02
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 03
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 04
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 05
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 06
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 07
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 08
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 09
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 10
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 11
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 01
+! 12
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 02
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 02
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 05
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 05
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 06
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 06
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 01
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 02
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 03
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 04
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 05
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 06
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 07
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 08
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 09
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 10
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 11
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+! 12
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|-
+|}
+
+== Conclusion ==
+
+As we can see the results are not dependent on the files ownership or permissions but on the directories ones. Below is a summed up more readable table. Remember thaat user1 is in the group set by the GID, while user2 isn't and that a YES means the files in the dir were executable by the indicated user in the indicated setup. A NO means the permission to execute the files was denied. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Directory
+! Permissions
+! Owner
+! Group
+! Setup 1
+! Setup 2
+! Setup 3
+! Setup 4
+! Setup 5
+|- 
+! user1
+! user2
+! user1
+! user2
+! user1
+! user2
+! user1
+! user2
+! user1
+! user2
+|- 
+! 01
+| drwxr-xr-x
+| root
+| root
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+| YES
+|- 
+! 02
+| drwxr-xrwx
+| root
+| root
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 03
+| drwxrwxr-x
+| root
+| root
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 04
+| drwxrwxrwx
+| root
+| root
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 05
+| drwxr-xr-x
+| user1
+| user1
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| YES
+| NO
+|- 
+! 06
+| drwxr-xrwx
+| user1
+| user1
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 07
+| drwxrwxr-x
+| user1
+| user1
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 08
+| drwxrwxrwx
+| user1
+| user1
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 09
+| drwxr-xr-x
+| user2
+| user2
+| YES
+| YES
+| NO
+| YES
+| NO
+| YES
+| YES
+| NO
+| NO
+| NO
+|- 
+! 10
+| drwxr-xrwx
+| user2
+| user2
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 11
+| drwxrwxr-x
+| user2
+| user2
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|- 
+! 12
+| drwxrwxrwx
+| user2
+| user2
+| YES
+| YES
+| NO
+| YES
+| NO
+| NO
+| YES
+| NO
+| NO
+| NO
+|-
+|}
+
+We have shown how TPE makes file execution more restrictive. We also have shown that the partial setting will apply to all the user not matched by the GID condition. And we finally showed that TPE restrictions only depend on the permissions and ownership of the directory containing the executable and not on the ones of the executable itself, so an executable owned by other user can still be modified by that user. 
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Francisco Blas Izquierdo Riera
