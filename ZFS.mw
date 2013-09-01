@@ -69,27 +69,16 @@ The echo's only need to be run once, but the emerge needs to be run every time y
 ZFS includes already all programs to manage the hardware and the file systems, there are no additional tools needed.
 
 === Preparation ===
-To go through the different commands and scenarios we can create virtual hard drives using loopback devices.<br/>
-First we need to make sure the loopback module is loaded. If you want to play around with partitions, use the following option:
-{{RootCmd|modprobe -r loop
-|modprobe loop max_part{{=}}63}}
-{{Note|You cannot reload the module, if it is built into the kernel.}}
-The following commands create 2GB image files in /var/lib/zfs_img/ that we use as our hard drives (uses ~8GB disk space):
+ZFS supports the use of either block devices or files. Administration is the same in both cases, but for production use, the ZFS developers recommend the use of block devices (preferably whole disks).To go through the different commands and scenarios we can use files in place of block devices.
+The following commands create 2GB sparse image files in /var/lib/zfs_img/ that we use as our hard drives. This uses at most 8GB disk space, but in practice will use very little because only written areas are allocated:
 
 {{RootCmd|mkdir /var/lib/zfs_img
-|dd if{{=}}/dev/null of{{=}}/var/lib/zfs_img/zfs0.img bs{{=}}1024 seek{{=}}2097152
-|dd if{{=}}/dev/null of{{=}}/var/lib/zfs_img/zfs1.img bs{{=}}1024 seek{{=}}2097152
-|dd if{{=}}/dev/null of{{=}}/var/lib/zfs_img/zfs2.img bs{{=}}1024 seek{{=}}2097152
-|dd if{{=}}/dev/null of{{=}}/var/lib/zfs_img/zfs3.img bs{{=}}1024 seek{{=}}2097152}}
+|truncate -s 2G /var/lib/zfs_img/zfs0.img
+|truncate -s 2G /var/lib/zfs_img/zfs1.img
+|truncate -s 2G /var/lib/zfs_img/zfs2.img
+|truncate -s 2G /var/lib/zfs_img/zfs3.img
 Now we check which loopback devices are in use:
-{{RootCmd|losetup -a}}
-We assume that all loopback devices are available and create our hard drives:
-{{RootCmd|losetup /dev/loop0 /var/lib/zfs_img/zfs0.img
-|losetup /dev/loop1 /var/lib/zfs_img/zfs1.img
-|losetup /dev/loop2 /var/lib/zfs_img/zfs2.img
-|losetup /dev/loop3 /var/lib/zfs_img/zfs3.img}}
-We have now /dev/loop[0-3] as four hard drives available
-{{Note|On the next reboot, all the loopback devices will be released and the folder /var/lib/zfs_img can be deleted}}
+{{Note|On pool export, all of the files will be released and the folder /var/lib/zfs_img can be deleted}}
 
 === Zpools ===
 The program /usr/sbin/zpool is used with any operation regarding ''zpools''.
@@ -115,7 +104,7 @@ To import (mount) the zpool named ''zfs_test'' root on /mnt/gentoo, use this com
 
 ==== One Hard Drive ====
 Create a new zpool named ''zfs_test'' with one hard drive:
-{{RootCmd|zpool create zfs_test /dev/loop0}}
+{{RootCmd|zpool create zfs_test /var/lib/zfs_img/zfs0.img}}
 The zpool will automatically be mounted, default is the root file system aka /zfs_test
 {{RootCmd|zpool status}}
 To delete a zpool use this command:
@@ -124,7 +113,7 @@ To delete a zpool use this command:
 
 ==== MIRROR Two Hard Drives ====
 In ZFS you can have several harddrives in a MIRROR, where equal copies exist on each storage. This increases the performance and redundancy. To create a new zpool named ''zfs_test'' with two hard drives as MIRROR:
-{{RootCmd|zpool create zfs_test mirror /dev/loop0 /dev/loop1}}
+{{RootCmd|zpool create zfs_test mirror /var/lib/zfs_img/zfs0.img /var/lib/zfs_img/zfs1.img}}
 {{Note|of the two hard drives only 2GB are effective useable so ''total_space * 1/n''}}
 {{RootCmd|zpool status}}
 To delete the zpool:
@@ -133,7 +122,7 @@ To delete the zpool:
 ==== RAIDZ1 Three Hard Drives ====
 RAIDZ1 is the equivalent to RAID5, where data is written to the first two drives and a parity onto the third. You need at least three hard drives, one can fail and the zpool is still ONLINE but the faulty drive should be replaced as soon as possible.<br/>
 To create a pool with RAIDZ1 and three hard drives:
-{{RootCmd|zpool create zfs_test raidz1 /dev/loop0 /dev/loop1 /dev/loop2}}
+{{RootCmd|zpool create zfs_test raidz1 /var/lib/zfs_img/zfs0.img /var/lib/zfs_img/zfs1.img /var/lib/zfs_img/zfs2.img}}
 {{Note|of the three hard drives only 4GB are effective useable so ''total_space * (1-1/n)''}}
 {{RootCmd|zpool status}}
 To delete the zpool:
@@ -142,7 +131,7 @@ To delete the zpool:
 ==== RAIDZ2 Four Hard Drives ====
 RAIDZ2 is the equivalent to RAID6, where data is written to the first two drives and a parity onto the next two. You need at least four hard drives, two can fail and the zpool is still ONLINE but the faulty drives should be replaced as soon as possible.<br/>
 To create a pool with RAIDZ2 and four hard drives:
-{{RootCmd|zpool create zfs_test raidz2 /dev/loop0 /dev/loop1 /dev/loop2 /dev/loop3}}
+{{RootCmd|zpool create zfs_test raidz2 /var/lib/zfs_img/zfs0.img /var/lib/zfs_img/zfs1.img /var/lib/zfs_img/zfs2.img /var/lib/zfs_img/zfs3.img}}
 {{Note|of the four hard drives only 4GB are effective useable so ''total_space * (1-2/n)''}}
 {{RootCmd|zpool status}}
 To delete the zpool:
@@ -151,68 +140,87 @@ To delete the zpool:
 ==== Spares/Replace vdev ====
 You can add ''hot-spares'' into your zpool. In case a failure, those are already installed and available to replace faulty vdevs.
 In this example, we use RAIDZ1 with three hard drives and a zpool named ''zfs_test'':
-{{RootCmd|zpool add zfs_test spare /dev/loop3
+{{RootCmd|zpool add zfs_test spare /var/lib/zfs_img/zfs3.img
 |zpool status}}
-The status of /dev/loop3 will stay AVAIL until it is set to be ''online'', now we let /dev/loop0 fail:
+The status of /dev/loop3 will stay AVAIL until it is set to be ''online'', now we let /var/lib/zfs_img/zfs0.img fail:
 {{RootCmd
-|zpool offline zfs_test /dev/loop0
+|zpool offline zfs_test /var/lib/zfs_img/zfs0.img
 |zpool status
-|output=<pre>NAME        STATE     READ WRITE CKSUM
-zfs_test    DEGRADED     0     0     0
-  raidz1-0  DEGRADED     0     0     0
-    loop0   OFFLINE      0     0     0
-    loop1   ONLINE       0     0     0
-    loop2   ONLINE       0     0     0
-spares
-  loop3     AVAIL
-</pre>}}
-We replace /dev/loop0 with our spare /dev/loop3:
-{{RootCmd
-|zpool replace zfs_test /dev/loop0 /dev/loop3
-|zpool status
-|output=<pre>pool: zfs_test
- state: DEGRADED
-status: One or more devices has been taken offline by the administrator.
-        Sufficient replicas exist for the pool to continue functioning in a
-        degraded state.
-action: Online the device using 'zpool online' or replace the device with
-        'zpool replace'.
- scrub: resilver completed after 0h0m with 0 errors on Sun Aug 21 22:29:22 2011
-config:
-
-        NAME         STATE     READ WRITE CKSUM
-        zfs_test     DEGRADED     0     0     0
-          raidz1-0   DEGRADED     0     0     0
-            spare-0  DEGRADED     0     0     0
-              loop0  OFFLINE      0     0     0
-              loop3  ONLINE       0     0     0  46.5K resilvered
-            loop1    ONLINE       0     0     0
-            loop2    ONLINE       0     0     0
-        spares
-          loop3      INUSE     currently in use
-
-errors: No known data errors
-</pre>}}
-{{Note|the file system got automatically resilvered onto /dev/loop3 and the zpool was all the time online}}
-Now we remove the failed vdev /dev/loop0 and start a manual scrubbing:
-{{RootCmd
-|zpool detach zfs_test /dev/loop0 && zpool scrub
-|zpool status
-|output=<pre>pool: zfs_test
+|output=<pre>  pool: zfs_test
  state: ONLINE
- scrub: scrub completed after 0h0m with 0 errors on Sun Aug 21 22:37:52 2011
+  scan: none requested
 config:
 
-        NAME        STATE     READ WRITE CKSUM
-        zfs_test    ONLINE       0     0     0
-          raidz1-0  ONLINE       0     0     0
-            loop3   ONLINE       0     0     0
-            loop1   ONLINE       0     0     0
-            loop2   ONLINE       0     0     0
+        NAME                           STATE     READ WRITE CKSUM
+        zfs_test                       ONLINE       0     0     0
+          raidz1-0                     ONLINE       0     0     0
+            /var/lib/zfs_img/zfs0.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs1.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs2.img  ONLINE       0     0     0
+        spares
+          /var/lib/zfs_img/zfs3.img
 
 errors: No known data errors
 </pre>}}
+We replace /var/lib/zfs_img/zfs0.img with our spare /var/lib/zfs_img/zfs3.img:
+{{RootCmd
+|zpool replace zfs_test /var/lib/zfs_img/zfs0.img /var/lib/zfs_img/zfs3.img
+|zpool status
+|output=<pre>  pool: zfs_test
+ state: ONLINE
+  scan: resilvered 62K in 0h0m with 0 errors on Sun Sep  1 15:41:41 2013
+config:
 
+        NAME                             STATE     READ WRITE CKSUM
+        zfs_test                         ONLINE       0     0     0
+          raidz1-0                       ONLINE       0     0     0
+            spare-0                      ONLINE       0     0     0
+              /var/lib/zfs_img/zfs0.img  ONLINE       0     0     0
+              /var/lib/zfs_img/zfs3.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs1.img    ONLINE       0     0     0
+            /var/lib/zfs_img/zfs2.img    ONLINE       0     0     0
+        spares
+          /var/lib/zfs_img/zfs3.img      INUSE     currently in use
+
+errors: No known data errors
+</pre>}}
+The original vdev will be automatically removed asynchronously. Later you will see it leave the zpool status outpt:
+{{RootCmd
+|zpool status
+|output=<pre>   pool: zfs_test
+ state: ONLINE
+  scan: resilvered 62K in 0h0m with 0 errors on Sun Sep  1 15:41:41 2013
+config:
+
+        NAME                           STATE     READ WRITE CKSUM
+        zfs_test                       ONLINE       0     0     0
+          raidz1-0                     ONLINE       0     0     0
+            /var/lib/zfs_img/zfs3.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs1.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs2.img  ONLINE       0     0     0
+
+errors: No known data errors
+</pre>}}
+{{Note|ZFS automatically resilvered onto /var/lib/zfs_img/zfs0.img and the zpool had no downtime}}
+
+Now we start  a manual scrub:
+{{RootCmd
+|zpool scrub zfs_test
+|zpool status
+|output=<pre>  pool: zfs_test
+ state: ONLINE
+  scan: scrub repaired 0 in 0h0m with 0 errors on Sun Sep  1 15:57:31 2013
+config:
+
+        NAME                           STATE     READ WRITE CKSUM
+        zfs_test                       ONLINE       0     0     0
+          raidz1-0                     ONLINE       0     0     0
+            /var/lib/zfs_img/zfs3.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs1.img  ONLINE       0     0     0
+            /var/lib/zfs_img/zfs2.img  ONLINE       0     0     0
+
+errors: No known data errors
+</pre>}}
 ==== Zpool Version Update ====
 With every update of {{Package|sys-fs/zfs}}, you are likely to also get a more recent ZFS version. Also the status of your zpools will indicate a warning that a new version is available and the zpools could be upgraded.<br/>
 To display the current version on a zpool:
