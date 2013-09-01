@@ -41,9 +41,21 @@ Add zfs to the boot runlevel to mount all zpools on boot:
 |test-suite++no
 }}
 
-=== Tweak ===
-Per default ZFS uses as much memory as available for its [[Wikipedia:Adaptive replacement cache|ARC]] cache. It should not be less than 512MB and a good value is 1/4 of available memory. This property can only be set during module loading, to restrict how much memory should be used to 512MB:
+=== ARC ===
+ZFSOnLinux uses [[Wikipedia:Adaptive replacement cache|ARC]] page replacement algorithm instead of the Last Recently Used page replacement algorithm used by other filesystems. This has a better hit rate (and therefore provides better performance. The implementation of ARC in ZFS differs from the original paper in that the amount of memory used as cache can vary. This permits memory used by ARC to be reclaimed when the system is under memory pressure (via the kernel's shrinker mechanism) and grow when the system has memory to spare. The minimum and maximum amount of memory allocated to ARC varies based on your system memory. The default minimum is 1/32 of all memory, or 64MB, whichever is more. The default maximum is the larger of 1/2 of system memory or 64MB.
+
+The manner in which Linux accounts for memory used by ARC differs from memory used by the page cache. Specifically, memory used by ARC is included under "used" rather than "cached" in the output used by the `free` program. This in no way prevents the memory from being released when the system is low on memory. However, it can give the impression that ARC (and by extension ZFS) will use all of system memory if given the opportunity.
+
+==== Adjusting ARC memory usage ====
+The minimum and maximum memory usage of ARC is tunable via zfs_arc_min and zfs_arc_max respectively. These properties can be set any of three ways. The first is at runtime (new in 0.6.2):
+{{RootCmd|echo 536870912 >> /sys/module/zfs/parameters/zfs_arc_max}}
+{{Note|This sysfs value became writable in ZFSOnLinux 0.6.2. Changes through sysfs do not persist across boots. Also, the value in sysfs will be 0 when this value has not been manually configured. The current setting can be viewed by looking at c_max in /proc/spl/kstat/zfs/arcstats}}
+The second is via /etc/modprobe.d/zfs.conf.
 {{RootCmd|echo "options zfs zfs_arc_max{{=}}536870912" >> /etc/modprobe.d/zfs.conf}}
+{{Note|If using genkernel to load ZFS, this value must be set before genkernel is run to ensure that the file is copied into the initramfs.}}
+The third is on the kernel commandline by specifying "zfs.zfs_arc_max=536870912" (for 512MB).
+
+Similarly, the same can be done to adjust zfs_arc_min.
 
 == Installing into the kernel directory (for static installs) ==
 This example uses 9999, but just change it to the latest ~ or stable (when that happens) and you should be good.
