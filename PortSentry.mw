@@ -1,0 +1,114 @@
+PortSentry is part of SentryTools. This daemon will watch unused ports for activity and depending on how it is configured take action upon excessive access to watched ports.<br />
+The configuration file presented in this guide is setup to block addresses which are picked up & then log them to a log file in /var/log/portsentry.block.log<br />
+A good example of portsentry in action, is that if someone were to portscan your machine they would be blocked from the machine & unable to perform further scanning or make attempts at exploiting the machines vulnerabilities.<br />
+Often times before an intrusion attempt, one might first scan a machine to look for potential security holes, making this program your defender on the front lines of the cyber battlefield.
+==Installing PortSentry==
+You will need to make a keyword change in order to install portsentry, this can be done by adding to your package.accept_keywords with the following command.
+<pre>echo '>=net-analyzer/portsentry-1.2-r1 ~amd64' >> /etc/portage/package.accept_keywords</pre>
+
+After you have made the required keyword changes, you can move onto emerging the portsentry ebuild.
+<pre>emerge -av net-analyzer/portsentry</pre>
+
+==Configuring PortSentry==
+
+/etc/portsentry/portsentry.conf
+<pre>TCP_PORTS="1,7,9,11,15,70,79,80,109,110,111,119,138,139,143,512,513,514,515,540,635,1080,1524,2000,2001,4000,4001,5742,6000,6001,6667,12345,12346,20034,27665,30303,32771,32772,32773,32774,31337,40421,40425,49724,54320"
+UDP_PORTS="1,7,9,66,67,68,69,111,137,138,161,162,474,513,517,518,635,640,641,666,700,2049,31335,27444,34555,32770,32771,32772,32773,32774,31337,54321"
+#
+# Use these if you just want to be aware:
+#TCP_PORTS="1,11,15,79,111,119,143,540,635,1080,1524,2000,5742,6667,12345,12346,20034,27665,31337,32771,32772,32773,32774,40421,49724,54320"
+#UDP_PORTS="1,7,9,69,161,162,513,635,640,641,700,37444,34555,31335,32770,32771,32772,32773,32774,31337,54321"
+#
+# Use these for just bare-bones
+#TCP_PORTS="1,11,15,110,111,143,540,635,1080,1524,2000,12345,12346,20034,32771,32772,32773,32774,49724,54320"
+#UDP_PORTS="1,7,9,69,161,162,513,640,700,32770,32771,32772,32773,32774,31337,54321"
+
+ADVANCED_PORTS_TCP="65355"
+ADVANCED_PORTS_UDP="65355"
+ADVANCED_EXCLUDE_TCP="80,113,139"
+ADVANCED_EXCLUDE_UDP="520,138,137,67"
+
+IGNORE_FILE="/etc/portsentry/portsentry.ignore"
+HISTORY_FILE="/etc/portsentry/portsentry.history"
+BLOCKED_FILE="/etc/portsentry/portsentry.blocked"
+
+RESOLVE_HOST = "0"
+
+BLOCK_UDP="2"
+BLOCK_TCP="2"
+
+KILL_ROUTE="/sbin/iptables -I INPUT -s $TARGET$ -j DROP && echo "$TARGET$:$PORT$" >> /var/log/portsentry.block.log"
+
+#KILL_HOSTS_DENY="ALL: $TARGET$ : DENY"
+
+# Format Two: New Style - The format used when extended option
+# processing is enabled. You can drop in extended processing
+# options, but be sure you escape all '%' symbols with a backslash
+# to prevent problems writing out (i.e. \%c \%h )
+#
+#KILL_HOSTS_DENY="ALL: $TARGET$ : DENY"
+
+###################
+# External Command#
+###################
+# This is a command that is run when a host connects, it can be whatever
+# you want it to be (pager, etc.). This command is executed before the 
+# route is dropped or after depending on the KILL_RUN_CMD_FIRST option below
+#
+#
+# I NEVER RECOMMEND YOU PUT IN RETALIATORY ACTIONS AGAINST THE HOST SCANNING 
+# YOU!
+#
+# TCP/IP is an *unauthenticated protocol* and people can make scans appear out 
+# of thin air. The only time it is reasonably safe (and I *never* think it is 
+# reasonable) to run reverse probe scripts is when using the "classic" -tcp mode. 
+# This mode requires a full connect and is very hard to spoof.
+#
+# The KILL_RUN_CMD_FIRST value should be set to "1" to force the command 
+# to run *before* the blocking occurs and should be set to "0" to make the 
+# command run *after* the blocking has occurred. 
+#
+#KILL_RUN_CMD_FIRST = "0"
+#
+#
+#KILL_RUN_CMD="/some/path/here/script $TARGET$ $PORT$"
+
+
+#####################
+# Scan trigger value#
+#####################
+# Enter in the number of port connects you will allow before an 
+# alarm is given. The default is 0 which will react immediately.
+# A value of 1 or 2 will reduce false alarms. Anything higher is 
+# probably not necessary. This value must always be specified, but
+# generally can be left at 0. 
+#
+# NOTE: If you are using the advanced detection option you need to
+# be careful that you don't make a hair trigger situation. Because
+# Advanced mode will react for *any* host connecting to a non-used
+# below your specified range, you have the opportunity to really 
+# break things. (i.e someone innocently tries to connect to you via 
+# SSL [TCP port 443] and you immediately block them). Some of you
+# may even want this though. Just be careful.
+#
+SCAN_TRIGGER="0"
+
+######################
+# Port Banner Section#
+######################
+#
+# Enter text in here you want displayed to a person tripping the PortSentry.
+# I *don't* recommend taunting the person as this will aggravate them.
+# Leave this commented out to disable the feature
+#
+# Stealth scan detection modes don't use this feature
+#
+PORT_BANNER="** UNAUTHORIZED ACCESS PROHIBITED *** YOUR CONNECTION ATTEMPT HAS BEEN LOGGED. GO AWAY."
+
+# EOF</pre>
+
+==Starting PortSentry==
+To start portsentry simply run
+<pre>/etc/init.d/portsentry start</pre>
+You will also want to add portsentry to your startup with
+<pre>rc-update add portsentry default</pre>
