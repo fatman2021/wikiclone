@@ -69,6 +69,40 @@ virtual/opengl
 net-misc/networkmanager
 </pre>}}
 
+==== 32-bit chroot on amd64 ====
+
+The emul-linux-x86-* packages are binaries, and are not kept very well up-to-date. For this reason, you will probably experience better performance and compatibility with games on 64 bit linux if you run in a 32 bit chroot.
+
+
+{{Cmd
+|mkdir /usr/local/steam32 && cd /usr/local/steam32
+|wget http://distfiles.gentoo.org/releases/x86/autobuilds/current-stage3/stage3-i686-20130827.tar.bz2 && tar -xvpf stage3*.tar.bz2
+|mkdir usr/portage && mkdir usr/local/portage
+|mount --rbind /usr/portage portage && mount --rbind /dev dev && mount --rbind /sys sys && mount -t proc none proc
+|cp /etc/resolv.conf etc
+|git clone https://github.com/anyc/steam-overlay usr/local/portage/steam-overlay
+|echo PORTDIR_OVERLAY{{=}}"/usr/local/portage/steam-overlay" >> etc/portage/make.conf && grep VIDEO_CARDS /etc/portage/make.conf >> etc/portage/make.conf && echo ">{{=}}media-libs/mesa-9.2 ~x86" >>etc/portage/package.accept_keywords
+|chroot .
+|useradd -m steam && usermod -a -G video steam && usermod -a -G audio steam
+|USE{{=}}"steamruntime" emerge -av steam-meta alsa-utils libtxc_dxtn dbus mesa# you'll have to autounmask-write, etc-update, to set keywords/useflags then actually emerge
+}}
+
+Then create a wrapper script to chroot in, su to steam user, then run steam. 
+
+{{File|/usr/local/bin/steam32|Wrapper for steam32 '''amd64'''|<pre>
+CHROOT_DIR=/usr/local/steam32
+
+mount --rbind /dev $CHROOT_DIR/dev 
+mount --rbind /sys $CHROOT_DIR/sys
+mount -t proc none $CHROOT_DIR/proc
+[ ! -f $CHROOT_DIR/var/run/dbus.pid ] && chroot $CHROOT_DIR dbus-launch --system
+chroot $CHROOT_DIR su steam -c "dbus-launch steam"
+umount -l $CHROOT_DIR/dev
+umount -l $CHROOT_DIR/sys
+umount -l $CHROOT_DIR/proc
+
+</pre>}}
+
 === Kernel ===
 You need [[tmpfs]] activated in your kernel and {{Path|/dev/shm}} mounted.
 {{Note|/dev/shm should be automatically mounted by the devfs initscript, however you can do so explicitly and with additional options via fstab.}}
@@ -170,8 +204,16 @@ If you want to wipe out your current steam installation and reinstall steam with
 
 == Games Troubleshooting ==
 
+If you have issues on 64 bit, it's because emul-linux-x86-* are typically very out of date. 
+
+You can try using a 32-bit chroot.
+
 === Team Fortress 2 ===
 If you only get a black screen for 1-2 seconds, try adding "-nojoy" to Game->Properties->"Set Launch Options".
+
+=== Dota 2 ===
+
+If you notice [https://github.com/ValveSoftware/Dota-2/issues/683 lots of black textures], it's because the mesa driver is out of date, until version 9.1.6 or higher is released as part of emul-linux-x86-opengl, you will have to resort to using a 32 bit chroot.
 
 == Further help ==
 Before you ask anywhere else, refer to the [https://forums.gentoo.org/viewtopic-t-930354.html gentoo forum thread]. Post your solutions and update this wiki page if someone confirms. Please don't remove content without [[Talk:Steam|Discussion]] unless it's wrong content.
