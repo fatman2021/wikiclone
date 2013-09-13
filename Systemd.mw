@@ -10,7 +10,7 @@ The following configuration directories are both used by OpenRC and systemd:
 * {{Path|/etc/sysctl.d}},
 * {{Path|/etc/binfmt.d}}
 -->
-== Installation ==
+== Pre-installation Configuration==
 {{Note|If you're updating from <{{=}}sys-apps/systemd-203 check the [[/upgrade|upgrade subpage]].}}
 
 ===Kernel===
@@ -72,31 +72,38 @@ The {{Path|/run}} directory is used by systemd and other applications as a non-p
 
 The systemd package will create {{Path|/run}} directory itself. However, please note that this change will trigger automatic mounting of it in [[OpenRC]] as well, and may trigger using it by different software packages.
 
-==={{Path|/etc/mtab}}
+==={{Path|/etc/mtab}}===
 
 Upstream only supports {{Path|/etc/mtab}} file being a symlink to {{Path|/proc/self/mounts}}. This has caused in the past problems problems with ''mount -o user'' and NFS mounts. On the other hand, not creating it will cause problems with ''mount'' ({{bug|434090}}) and ''df'' ({{bug|477240}}).
 
 To create the symlink, run:
 {{RootCmd|ln -sf /proc/self/mounts /etc/mtab}}
 
-It is necessary to install {{Package|sys-apps/systemd}} ''before'' enabling the flag. Otherwise, circular dependencies will prevent Portage from continuing.
-Install {{Package|sys-apps/systemd}}:
-{{Emerge|systemd}}
+=== Ensure /usr is present at boot time ===
+Splitted /usr isn't supported and, then, you need to get it mounted at boot time. For that, you will need to follow [http://www.gentoo.org/doc/en/initramfs-guide.xml Official Initramfs Gentoo Guide]. If you want to know more about initramfs and tools for preparing it, you can also see [[Initramfs|wiki page about it]].
 
-Enable the USE flag ''systemd'' for systemd-specific libraries and features like socket activation or session tracking. Also disable ''consolekit'' as it is not needed and could cause conflicts:
+== Installation ==
+
+You need to both install {{Package|sys-apps/systemd}} and to set the ''systemd'' USE flag.
+Moreover, to avoid potential Portage conflicts you need to disable the ''consolekit'' USE flag as well.
+
+The easiest method is to do all this at once specifically.
+Adjust the USE flags in
 {{File|/etc/portage/make.conf||<pre>
 USE="... systemd -consolekit ..."
 </pre>}}
-{{Warning|Some packages '''no longer support OpenRC''' after enabling the ''systemd'' flag}}
+and then execute
 
-After setting this you want to update your system so the changes take effect:
 {{Emerge|params+=--changed-use --deep|@world}}
+
+Portage will install {{Package|sys-apps/systemd}} as part of this emerge
+
+{{Warning|Some packages may now '''no longer support OpenRC'''}}
 
 == Configuration ==
 systemd supports a few system configuration files to set the most basic system details.
 
-=== Ensure /usr is present at boot time ===
-Splitted /usr isn't supported and, then, you need to get it mounted at boot time. For that, you will need to follow [http://www.gentoo.org/doc/en/initramfs-guide.xml Official Initramfs Gentoo Guide]. If you want to know more about initramfs and tools for preparing it, you can also see [[Initramfs|wiki page about it]].
+
 
 === Hostname ===
 A tool called ''hostnamectl'' exists for editing {{Path|/etc/hostname}} and {{Path|etc/machine-info}}. To change hostname, run:
