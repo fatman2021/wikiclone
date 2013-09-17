@@ -1,5 +1,11 @@
 {{Stub}}
 
+== Introduction ==
+
+A network bridge can be used to connect two independent network segments at layer 2 level (much like a router).  Common applications include transparent proxying, transparent filtering (using [[iptables]]) and saving money on hardware as some mainboards come with two PHY interfaces.  For this how-to, eth0 and eth1 are used but of course they can be replaced by whatever you need.  
+
+The way bridging works on Linux is that a bridging device is created (brX) that contains at least two network devices as ports (e.g. ethX or pppX).  As the bridge works on layer 2, no IP addresses are needed on the port devices - on a typical setup, the bridging device itself will receive the IP (e.g. via DHCP).
+
 == Kernel ==
 {{Kernel||<pre>
 [*] Networking support  --->
@@ -14,19 +20,19 @@ Install {{Package|net-misc/bridge-utils}}:
 == Host Configuration ==
 First, we need to add the bridge device to the {{Path|/etc/conf.d/net}} file. As an example, bridge configuration with DHCP:
 
-{{Note|Note that it is important to include 'setfd 0' and 'sethello 10' in order to bring the interface up quickly.  Other values will cause a delay after the guest starts, before the guest's networking will function.}}
+{{Note|Note that it is important to include 'setfd 0' and 'sethello 10' in order to bring the interface up quickly.  Other values will cause a delay after the guest starts, before the guest's networking will function.  This in turn could prevent DHCP from working.}}
 
 {{File|/etc/conf.d/net||<pre>
-#host
-config_eth0="192.168.0.3 netmask 255.255.255.0"
-route_eth0="default via 192.168.0.1" #gateway
+# bridge ports defined empty to avoid DHCP being run for their configuration
+config_eth0="null"
+config_eth1="null"
 
-# bridge (some guest)
+# bridge
 config_br0="dhcp"
 brctl_br0="setfd 0
 sethello 10
 stp off"
-bridge_br0="eth0"
+bridge_br0="eth0 eth1"
 </pre>}}
 
 More documentation can be found in {{Path|/usr/share/doc/openrc-*/net.example}}.
@@ -40,26 +46,10 @@ Next, create the init script and start the interface as follows:
 Finally, to make sure the bridge is automatically set up on subsequent boots, run:
 {{RootCmd|rc-update add net.br0 default}}
 
-To grant the guest access to the internet, you will need to use iptables. If it's not installed, first emerge {{Package|net-firewall/iptables}}:
-{{Emerge|iptables}}
+== External Resources ==
 
-Allow ip forwarding in your {{Path|/etc/sysctl.conf}} or with the following command:
-{{RootCmd|echo 1 > /proc/sys/net/ipv4/ip_forward}}
-
-Add the iptables rules to grand masqueraded access to the internet. For example (substitute 'eth0' with your external facing physical interface):
-{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source ''your_eth0_ipaddr''}}
-
-This is equivalent to:
-<pre>
-EXTIF=eth0 # external facing physical interface
-IP=`ifconfig $EXTIF|grep 'inet addr'|cut -d ':' -f2|cut -d ' ' -f1`
-iptables -t nat -A POSTROUTING -o $EXTIF -j SNAT --to-source $IP
-</pre>
-
-Save the configuration and ensure it is restored at boot:
-{{RootCmd
-|/etc/init.d/iptables save
-|rc-update add iptables default
-}}
+* [http://www.linuxfoundation.org/collaborate/workgroups/networking/bridge Official Linux network bridge documentation]
+* [http://www.tldp.org/HOWTO/Ethernet-Bridge-netfilter-HOWTO.html Generic Linux network bridge how-to]
+* [http://www.gentoo-wiki.info/Bridging Article on the inofficial gentoo wiki with VLAN and iptables examples]
 
 [[Category:Network management]]
