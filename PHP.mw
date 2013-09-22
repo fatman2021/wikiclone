@@ -42,7 +42,86 @@ You can also set more than one. Note that the php slot is named "5.4" and the co
 After setting this you want to update your system so the changes take effect:
 {{Emerge|params+=--changed-use --deep|@world}}
 
-=== Configure Apache to work with PHP ===
+=== Nginx ===
+
+To install Nginx is as easy as emerging it: 
+
+{{Emerge|nginx|}}
+
+{{Warning|If you have configured a custom <code>NGINX_MODULES_HTTP</code> , make sure that the <code>fastcgi</code> module is enabled.}}
+Once Nginx has been installed, modify the server section of {{Path|/etc/nginx/nginx.conf}} to look something like this: 
+
+{{File|/etc/nginx/nginx.conf||<pre>
+<snip>
+        server {
+                listen 127.0.0.1;
+                server_name localhost;
+ 
+                access_log /var/log/nginx/localhost.access_log main;
+                error_log /var/log/nginx/localhost.error_log info;
+ 
+                root /var/www/localhost/htdocs;
+ 
+                location ~ .php$ {
+                        fastcgi_pass 127.0.0.1:9000;
+                        include fastcgi.conf;
+                }
+        }
+<snip>
+</pre>
+}}
+
+Now just start the related services and you should have a working site 
+
+{{RootCmd
+|/etc/init.d/nginx start
+|/etc/init.d/php-fpm start
+}}
+
+
+=== lighttpd ===
+
+
+{{Warning|Interestingly enough, you do NOT want the <code>php</code> USE flag for <code>www-servers/lighttpd</code> . It could actually break the build.}}
+Make sure that lighttpd is build with support for fastcgi and that the php USE flag is disabled 
+
+{{File|/etc/portage/package.use||<pre>
+www-servers/lighttpd fastcgi -php
+</pre>
+}}
+
+Lighttpd ships with a default FastCGI config file, but unfortunately, it is written to work with the old PHP FCGI SAPI only, instead of a general FCGI setup. Since we disabled the php USE flag, it won’t be included, and rightly so. However it does provide a good foundation for a configuration file that can be used with FPM. 
+
+Edit {{Path|/etc/lighttpd/mod_fastcgi.conf}} so that it looks something like this: 
+
+
+
+{{File|/etc/lighttpd/mod_fastcgi.conf||<pre>
+server.modules += ("mod_fastcgi")
+fastcgi.server = ( ".php" =>
+  ( "localhost" =>
+    (
+      "host" => "127.0.0.1",
+      "port" => "9000"
+    )
+  )
+)
+</pre>
+}}
+
+Note the <code>host</code> and <code>port</code> parts. 
+
+Since Gentoo ships with a perfectly working copy of a <code>php-fpm.ini</code> file, located in {{Path|/etc/php/fpm-php5/php-fpm.ini}} , and init-script, all you need to do now is to start the services: 
+
+
+
+{{RootCmd
+|/etc/init.d/php-fpm start
+|/etc/init.d/lighttpd start
+}}
+
+
+=== Apache (mod_php) ===
 
 To configure Apache to load your PHP5 module (mod_php), you have to add <code>-D PHP5</code> to <code>APACHE2_OPTS</code> variable in {{Path|/etc/conf.d/apache2}} . 
 
