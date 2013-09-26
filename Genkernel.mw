@@ -192,6 +192,59 @@ Create an etherboot image)
 Finally, copy this kernel to your TFTP server. The details are architecture-dependent and are beyond the scope of this guide. Please refer to the documentation for your platform.
 
 === NFS setup ===
+To setup a NFS share that contains the Installation CD, use the loop device to mount the ISO image and then copy the contents of the CD into the NFS share. As a nice extra, genkernel's initrd scripts will extract all tar.gz files located in the '''/nfs/livecd/add/''' directory. All you have to do here is copy the '''modules-X.Y.Z.tar.gz''' archive to the '''/nfs/livecd/add/''' directory.
+
+{{Code|Preparing the NFS share|<pre>
+(This assumes that /nfs/livecd is an exported NFS share)
+# mount /tmp/gentoo-livecd.iso /mnt/cdrom -o loop
+# cp -p /mnt/cdrom /nfs/livecd
+# umount /mnt/cdrom
+
+(Copy the modules.tar.gz into /add)
+# mkdir /nfs/livecd/add
+# cp /tmp/modules-X.Y.Z.tar.gz /nfs/livecd/add
+</pre>
+
+=== DHCP setup ===
+The netboot images will ask your DHCP server for an IP as well as a root-path parameter. Both can be specified per host using a MAC address to identify machines:
+
+{{Code|Sample client dhcpd.conf setup| <pre>
+
+Code Listing 4.7: Sample client dhcpd.conf setup
+...
+
+host netbootableMachine {
+         hardware ethernet 11:22:33:44:55:66;
+         fixed-address 192.168.1.10;
+         option root-path "192.168.1.2:/nfs/livecd";
+}
+# Here, 192.168.1.2 is the NFS server
+# While 192.168.1.10 will be the IP address of the netbooted machine
+...
+</pre>}}
+
+=== Netbooting Instructions ===
+Netbooting itself is again very platform-specific. The important part is to specify the '''ip=dhcp''' and '''init=/linuxrc''' parameters on the kernel command line, as this will bring up the network interface and tell the initrd scripts to mount the Installation CD via NFS. Here are some platform-specific tips:
+
+{{Code| Netbooting Instructions|<pre>
+# Etherboot - insert the etherboot disk into the drive and reboot
+# The kernel command line was specified when the image was constructed
+
+# Sparc64 - Hit Stop-A at the boot prompt
+ok boot net ip=dhcp init=/linuxrc
+
+# PXE - Setup pxelinux (part of syslinux),
+then create a pxelinux.cfg/default along the lines of:
+
+DEFAULT gentoo
+TIMEOUT 40
+PROMPT 1
+
+LABEL gentoo
+    KERNEL kernel-X.Y.Z
+    APPEND initrd=initrd-X.Y.Z root=/dev/ram0 init=/linuxrc ip=dhcp
+
+</pre> }}
 
 [[Category:Kernel]]
 [[Category:Initramfs]]
