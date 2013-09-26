@@ -685,6 +685,45 @@ grub2-bios-setup: error: If you really want blocklists, use --force.
 This error means, that grub could not find the usual gap between the MBR and first partition of a disk. It is possible that the disk does not have this gap. Some tools format disks (e.g. LiveUSB disk installer) so that the first partition starts at sector 1 instead of 2048. Repartitioning the disk can fix this.
 Some visualization-based blockdevices can also cause problems. See http://bbs.archlinux.org/viewtopic.php?pid=581760#p581760
 
+==== Embedding area is unusually small ====
+
+If you receive this error, it means that there is not enough room at the beginning of your disk before the first partition:
+
+{{RootCmd|grub2-install /dev/sda
+|output=<pre>
+grub2-install: warn: Your embedding area is unusually
+small. core.img won't fit in it.
+grub2-install: warn: Embedding is not possible. GRUB can
+only be installed in this setup by using blocklists. However,
+blocklists are UNRELIABLE and their use is discouraged.
+grub2-install: error: will not proceed with blocklists.
+</pre>}}
+
+In general this is going to be a bit of trouble to fix. You will need to resize one or more patitions to leave some free space at the beginning of your drive. The [http://gparted.sourceforge.net/livecd.php gParted liveCD] is recommended.
+
+If you are lucky however, your swap partition is the first one on the disk, e.g. /dev/sda1. In that case, you can simply wipe out your swap space and repartition it on the fly.
+
+Begin by disabling the swap partition and launching ''fdisk'':
+
+{{RootCmd|swapoff /dev/sda1
+|fdisk /dev/sda}}
+
+This should bring you to the ''fdisk'' prompt, where the following commands can be used to shrink the first partition on /dev/sda:
+
+* 'x' - extra functionality
+* 'b' - move beginning of data in a partition
+* '1' - Choose the first partition
+* '4096' - New beginning of data (1-8000369, default 63)
+* 'w' - write table to disk and exit
+A number smaller than 4096 may work, but 4096 worked for the author.
+
+Next, reformat the swap partition, and re-enable it:
+
+{{RootCmd|mkswap /dev/sda1
+|swapon /dev/sda1}}
+
+You should now be able to install grub onto /dev/sda.
+
 == External resources ==
 * [https://www.gnu.org/software/grub/manual/grub.html GNU GRUB 2 manual page]
 * [http://www.rodsbooks.com/gdisk/bios.html Legacy BIOS issues with GPT article]
