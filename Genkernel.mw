@@ -132,5 +132,61 @@ The magic lies in genkernel's linuxrc script: it will try to netmount the Instal
 To enable support for netbooting, include the following options while configuring the kernel:
 
 First, the kernel image must include the drivers for your Network Interface Cards (NIC). Normally, drivers for such devices will be compiled as modules. However, it is essential (for netbooting) that you have such drivers compiled directly into the kernel image and not as modules.
+
+{{Code|Configuring a 2.6.x series kernel to support your NIC driver|<pre>
+Device Drivers --->
+   Networking Support --->
+      Ethernet (10 or 100Mbit)  --->
+         [*] Ethernet (10 or 100Mbit)
+         <*>   the driver for your network card
+(Be sure to select <*> and not <M>)</pre>
+ }}
+
+Secondly, we suggest that you enable <code>IP: kernel level autoconfiguration</code> and the <code>IP: DHCP support options</code>. This avoids an unnecessary layer of complexity since the IP address and the NFS path to the Installation CD can be configured on a DHCP server. Of course, this means the kernel command line will remain constant for any machine — which is very important for etherbooting.
+
+{{Code| Configuring a 2.6.x series kernel to support DHCP|<pre>
+Device Drivers --->
+   Networking Support --->
+      Networking options
+         [*] TCP/IP networking--->
+         [*]   IP: kernel level autoconfiguration
+         [*]     IP: DHCP support
+(These options tell the kernel to send a DHCP request at bootup.)</pre>
+ }}
+
+Additionally, you should enable SquashFS because most modern Gentoo Installation CDs require it. Support for SquashFS is not included with the generic kernel source tree. To enable SquashFS, apply the necessary patches to the generic kernel source or install gentoo-sources.
+
+{{Code| Configuring the kernel to support SquashFS|<pre>
+File systems--->
+   Miscellaneous filesystems --->
+      [*] SquashFS 2.X - Squashed file system support</pre>
+ }}
+
+Once the compilation process is completed, create a compressed tarball (tar.gz) that contains the kernel's modules. This step is only necessary if your kernel version does not match the kernel image version on the Installation CD.
+
+{{Code| Creating a compressed tarball containing the kernel modules|<pre>
+(Create a tar.gz containing all the modules)
+# cd /
+# tar -cf /tmp/modules-X.Y.Z.tar.gz /lib/modules/X.Y.Z/</pre>
+ }}
+Depending on your network boot mechanism, you will need to do some of the following steps:
+{{Code|Creating a boot image|<pre>
+Create an etherboot image)
+# emerge mknbi
+# cd /boot
+# mkelf-linux -params="root=/dev/ram0 init=/linuxrc ip=dhcp" kernel... initrd... > etherboot.img
+
+(Create a OpenBoot / SPARC64 TFTP image)
+# emerge sparc-utils
+# cd /boot
+# elftoaout kernel... -o kernel.aout
+# piggyback64 kernel.aout System.map-... initrd-...
+# mv kernel.aout openboot.img (This is the boot image)
+
+(PXE does not need any more steps, the kernel and initrd can be used as is)
+</pre>
+ }}
+
+Finally, copy this kernel to your TFTP server. The details are architecture-dependent and are beyond the scope of this guide. Please refer to the documentation for your platform.
 [[Category:Kernel]]
 [[Category:Initramfs]]
