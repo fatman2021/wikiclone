@@ -116,11 +116,141 @@ Replacing '''--no-install''' with the '''--install''' option allows genkernel to
 {{Note|Don't forget that the {{Path|/etc/genkernel.conf}} file is sourced by the <code>genkernel</code>
  command at startup, and that any option defined there, will be applied, except where a command line option takes precedence over it.}}
 
-== Bootloader Configuration ==
-To allow the '''kernel''' and '''intird''' provided by genkernel to run correctly, you should provide a minimum information in your bootloader s' configuration file :
-:* Add <code> real_root=/dev/sdax</code> ,  to the kernel parameters passed to the kernel image, where /dev/sdax contains your root partition.
-:* If you are using splash, add a suitable mode line such as <code>vga=0x317</code> to the parameters passed to the kernel and also add <code>splash=verbose</code> or <code>splash=silent</code> depending on the verboseness you require from your bootloader.
-:* Add the <code>initrd</code> information as required by the bootloader. Consult the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1&chap=10   Bootloader Configuration Chapter] of the Gentoo Handbook for details on how to make your bootloader initrd-aware.
+{{WIP|author=jaaf  }}
+
+== Using Genkernel  ==
+
+While using genkernel, the user has to be aware of some aspects relating to kernel configuration and kernel image files management and the way the kernel sources are handled by the system.
+
+=== Source Files used by genkernel ===
+After an <code>emerge -u gentoo-sources</code>, whenever new sources are available, a new kernel source directory is created under {{Path|/usr/src/}} to host them. Normally, the active kernel sources directory  is pointed by the <code>/usr/src/linux</code> symlink.
+
+The {{Path|/usr/src}} directory might look like this:
+
+{{Code|ls -l /usr/src|<pre>
+total 16
+lrwxrwxrwx  1 root root   19 21 mars   2013 linux -> linux-3.7.10-gentoo
+drwxr-xr-x 24 root root 4096 25 août  10:39 linux-3.10.7-gentoo
+drwxr-xr-x 20 root root 4096 21 avril 19:42 linux-3.7.10-gentoo
+drwxr-xr-x 21 root root 4096 14 mars   2013 linux-3.7.9-gentoo
+drwxr-xr-x  7 root root 4096 20 avril 17:06 rpm
+
+</pre>}}
+
+The <code>linux</code> symlink can be changed in different ways. 
+:* If the <code>symlink</code> USE flag is set in {{Path|/etc/portage/make.conf}}, the <code>linux</code> symlink is automatically updated to point to the newly emerged sources. 
+:* If the previous USE flag is not set, the user can change the destination of the symlink using  the <code>eselect kernel list</code> command.
+
+Whatever it is, ''genkernel'' always uses the sources pointed by this symlink.
+
+=== Kernel Configuration file used by genkernel ===
+If a kernel compilation has already been run with the active kernel sources, there might be a file inside the {{Path|/etc/kernels}} directory that contains the kernel configuration that has been applied while creating the last bzimage of the kernel. This file is named, for example {{Path|kernel-config-x86_64-3.7.9-gentoo-r1}} where x86_64 might be substituted with your architecture,  3.7.9 might be substituted with the version of the sources you are using and r1 with the release of the sources..
+It is this {{Path|kernel-config-x86_64-3.7.9-gentoo-r1}} file that is used as a starting configuration when running  <code>genkernel --menuconfig all</code>}}.
+
+If it is the first time you run <code>genkernel</code>, or if the previous has not been saved, this file is substituted with a default configuration file that resides into {{Path|usr/share/genkernel/arch/x86_64/kernel-config}} where ''x86_64'' might be substituted with you actual architecture.
+
+=== Saving the compiled configuration ===
+If the <code>save-config</code> genkernel option  is activated, either from the command line or inside {{Path|/etc/genkernel.conf}}, the compiled kernel configuration is saved (with the name given above) into the {{Path|/etc/kernels}} directory. 
+
+{{Warning|One has to be aware, that each time genkernel is run, with the <code>save-config</code> genkernel option set, the configuration file in {{Path|/etc/kernels}} is overridden. Thus, it is highly recommendable to rename this file before running genkernel in order to preserve it. }}
+
+=== Installing the kernel and initramfs into the /boot directory ===
+The '''all''' action specified when invoking genkernel, ask <code>genkernel</code> to install the kernel image and the initramfs into the {{Path|/boot}} directory. In order to do it in a convenient manner,  set the following in your {{Path|/etc/genkernel.conf}}:
+
+{{Code| Setting up kernel and initramfs auto-saving in /etc/genkernel.conf|<pre>
+# Mount BOOTDIR automatically if it is not mounted?
+MOUNTBOOT="yes"
+
+# Save the new configuration in /etc/kernels upon
+# successful compilation
+SAVE_CONFIG="yes"
+
+# Make symlinks in BOOTDIR automatically?
+SYMLINK="yes"
+
+# Add new kernel to grub?
+#BOOTLOADER="grub"
+
+
+</pre>}}
+
+* The first parameter speaks by itself.
+* The second parameter tells genkernel to save the compiled kernel configuration into  {{Path|/etc/kernels/}}
+* The last two options tell genkernel to automatically update the grub configuration. In practice, the following happens:
+:* if a previous kernel image with the same name already exist, it is renamed by appending .old to its name. A symlink kernel.old is automatically created that points to it.
+:* the new kernel takes the place of any kernel with the same name into {{Path|/boot}}. If it is the first time a kernel is compiled, a symlink kernel is automatically created that points to the new kernel.
+
+After running <code>genkernel --menuconfig all</code>, the {{Path|/boot}} directory might look like this:
+
+{{Code||<pre>
+jaaf@localhost ~ $ ls -al /boot
+total 41336
+drwxr-xr-x  3 root root    4096 20 avril 17:23 .
+drwxr-xr-x 24 root root    4096 15 sept. 12:31 ..
+lrwxrwxrwx  1 root root       1 24 févr.  2013 boot -> .
+drwxr-xr-x  2 root root    4096 24 févr.  2013 grub
+lrwxrwxrwx  1 root root      40 20 avril 17:23 initramfs -> initramfs-genkernel-x86_64-3.7.10-gentoo
+-rw-r--r--  1 root root 1314412 20 avril 17:23 initramfs-genkernel-x86_64-3.7.10-gentoo
+-rw-r--r--  1 root root 1313548 21 mars   2013 initramfs-genkernel-x86_64-3.7.10-gentoo.old
+-rw-r--r--  1 root root 1295344 25 févr.  2013 initramfs-genkernel-x86_64-3.7.9-gentoo
+-rw-r--r--  1 root root 3310324 25 févr.  2013 initramfs-genkernel-x86_64-3.7.9-gentoo.old
+lrwxrwxrwx  1 root root      44 20 avril 17:23 initramfs.old -> initramfs-genkernel-x86_64-3.7.10-gentoo.old
+lrwxrwxrwx  1 root root      37 20 avril 17:23 kernel -> kernel-genkernel-x86_64-3.7.10-gentoo
+-rw-r--r--  1 root root 4866656 20 avril 17:23 kernel-genkernel-x86_64-3.7.10-gentoo
+-rw-r--r--  1 root root 4866560 21 mars   2013 kernel-genkernel-x86_64-3.7.10-gentoo.old
+-rw-r--r--  1 root root 4552288 25 févr.  2013 kernel-genkernel-x86_64-3.7.9-gentoo
+-rw-r--r--  1 root root 3400736 25 févr.  2013 kernel-genkernel-x86_64-3.7.9-gentoo.old
+lrwxrwxrwx  1 root root      41 20 avril 17:23 kernel.old -> kernel-genkernel-x86_64-3.7.10-gentoo.old
+jaaf@localhost ~ $
+</pre>}}
+=== Configuring the bootloader ===
+You can use the symlinks presented above in your bootloader's configuration, so that, even if your new kernel is not bootable, you can always boot on the old one. 
+
+To allow the kernel and intird provided by genkernel to run correctly, you should provide a minimum information in your bootloader s' configuration file :
+
+:* Add real_root=/dev/sdax , to the kernel parameters passed to the kernel image, where /dev/sdax contains your root partition.
+:* If you are using splash, add a suitable mode line such as vga=0x317 to the parameters passed to the kernel and also add splash=verbose or splash=silent depending on the verboseness you require from your bootloader.
+:* Add the initrd information as required by the bootloader. Consult the Bootloader Configuration Chapter of the Gentoo Handbook for details on how to make your bootloader initrd-aware.
+Here is how the {{Path|grub.conf}} file might look.
+
+{{Code|An example of grub.conf file |<pre>
+# This is a sample grub.conf for use with Genkernel, per the Gentoo handbook 
+ # http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1&chap=10#doc_chap2 
+ # If you are not using Genkernel and you need help creating this file, you 
+ # should consult the handbook. Alternatively, consult the grub.conf.sample that 
+ # is included with the Grub documentation. 
+ 
+ default 0 
+ timeout 5
+ splashimage=(hd1,0)/boot/grub/splash.xpm.gz 
+ 
+ title Gentoo Linux 
+ root (hd0,6) 
+ kernel /boot/kernel initrd=/dev/ram0 real_root=/dev/sda7 rootfstype=ext4  
+ initrd /boot/initramfs
+ 
+ title Gentoo Linux old kernel 
+ root (hd0,6) 
+ kernel /boot/kernel.old initrd=/dev/ram0 real_root=/dev/sda7 rootfstype=ext4 
+ initrd /boot/initramfs.old 
+
+</pre>}}
+
+=== Preserving your working files ===
+* The first file to preserve is the kernel configuration file in {{Path|/etc/kernels/}. If you didn't change the source prior to the recompilation of your kernel, the previously used name for this file will be used anew. It is the reason why you should ever rename the previous configuration file with a name of your own.
+
+* The second important thing is to preserve you already bootable kernel and initramfs. The way to accomplish this depends on the context:
+
+# If the last kernel you compiled, is bootable, running <code>genkernel</code> anew will rename this kernel and initramfs images to {{Path|kernel-genkernel-ARCH-X.Y.Z-gentoo-rx.old}} and create a new {{Path|kernel-genkernel-ARCH-X.Y.Z-gentoo-rx}}. This mean that even if your new kernel is not bootable, you will always be able to boot the old one.
+# If the last kernel you compiled is not bootable and sources haven't changed since you compiled a bootable one, prior to run <code>genkernel</code> anew, first delete the new kernel, remove the .old suffix from the last bootable one. If you don't do so and the kernel you compile is not bootable for the second time, your bootable {{Path|kernel-genkernel-ARCH-X.Y.Z-gentoo-rx.old}} will be kicked out by the renaming of the non bootable {{Path|kernel-genkernel-ARCH-X.Y.Z-gentoo-rx}}, letting you with an unbootable system. Please have the same reasoning for initramfs.
+
+=== Using previous kernel configuration while changing the sources ===
+You can use you previous configuration using the '''make oldconfig''' option in your {{Path|/etc/genkernel.conf}} as follows:
+{{Code|Setting up make oldconfig into /etc/genkernel.conf|<pre>
+# Run 'make oldconfig' before compiling this kernel?
+OLDCONFIG="yes"
+</pre>}}
+This method is advisable if you  change the sources from '''kernel-genkernel-ARCH-version-gentoo-rx''' to '''kernel-genkernel-ARCH-version-gentoo-rx+1''', not for '''kernel-genkernel-ARCH-version-gentoo''' to '''kernel-genkernel-ARCH-version+1-gentoo''' because too much changes into the configuration structure might happen and a lot of information could be lost.
 
 == Network Booting with Genkernel ==
 === Network Booting with Genkernel from an Installation CD ===
