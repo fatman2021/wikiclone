@@ -1,0 +1,77 @@
+[http://cr.yp.to/djbdns.html djbdns] is Daniel J. Bernstein (DJB)'s
+suite of DNS tools. It includes both a caching nameserver (dnscache)
+and an authoritative one (tinydns) amongst other things.
+
+== Components ==
+
+=== tinydns ===
+
+[http://cr.yp.to/djbdns/tinydns.html Tinydns] is an authoritative nameserver. If you run DNS servers for your own domains, tinydns can do that.
+
+=== dnscache ===
+
+[http://cr.yp.to/djbdns/dnscache.html Dnscache] is a caching-only nameserver. It can perform lookups recursively, or by forwarding them to a (list of) upstream nameservers.
+
+Why is the caching daemon separate from the authoritative one, unlike BIND? [http://cr.yp.to/djbdns/separation.html The importance of separating DNS caches from DNS servers].
+
+=== axfrdns ===
+
+[http://cr.yp.to/djbdns/axfrdns.html Axfrdns] serves zone
+transfers. These days, zone transfers are rarely used legitimately, so
+the daemon runs separately (from, say, tinydns) for security purposes.
+
+There is an associated client, [http://cr.yp.to/djbdns/axfr-get.html axfr-get].
+
+=== The rest ===
+
+These two are rarely used. See the official docs for more information.
+
+* [http://cr.yp.to/djbdns/walldns.html walldns], [http://cr.yp.to/djbdns/wall.html How to set up a reverse DNS wall]
+* [http://cr.yp.to/djbdns/rbldns.html rbldns], use [http://www.corpit.ru/mjt/rbldnsd.html rbldnsd] instead
+
+== Daemontools ==
+
+The djbdns daemons all use a service monitor called [http://cr.yp.to/daemontools.html daemontools] to start and monitor themselves. They sidestep the Gentoo RC (/etc/init.d) system entirely.
+
+The program that starts/monitors each daemon is called '''svscan''', and the daemontools ebuild will create an init script for it. So usually, you'll want to,
+
+{{RootCmd|rc-update add svscan default}}
+
+At this point, svscan will run on boot, but do nothing. To have it start any daemons, you need to create symlinks to those daemons' directories in the '''/service''' directory. For example,
+
+{{RootCmd|ln -s /var/dnscache /service/dnscache}}
+
+After this, daemontools will handle the rest.
+
+== Installation ==
+
+All parts of djbdns can be installed with,
+
+{{RootCmd|emerge djbdns}}
+
+After the installation, you'll need to run a configuration command according to the documentation:[http://cr.yp.to/djbdns/axfrdns-conf.html axfrdns-conf], [http://cr.yp.to/djbdns/run-cache-x-home.html dnscache], [http://cr.yp.to/djbdns/run-server.html tinydns].
+
+Gentoo creates users for these three daemons automatically, so if you just want to get started, you can run one or more of the following commands, depending on which daemons you're going to use:
+
+{{RootCmd|axfrdns-conf tinydns dnslog /var/axfrdns /var/tinydns $ip
+|dnscache-conf dnscache dnslog /var/dnscache $ip
+|tinydns-conf tinydns dnslog /var/tinydns $ip}}
+
+You'll need to replace $ip in the commands above with the ip address
+on which the server will run.
+
+You will also need to inform daemontools of the new services. If you used the commands above,
+
+{{RootCmd|ln -s /var/axfrdns /service/axfrdns
+|ln -s /var/dnscache /service/dnscache
+|ln -s /var/tinydns /service/tinydns}}
+
+== Patches ==
+
+Djbdns is no longer being developed upstream. All changes now come in
+the form of patches, most of which will ''not'' be incorporated into
+the ebuild. Below is a list of patches that work on Gentoo. The djbdns
+ebuild support user patches, so to apply these, simply add them to
+'''/etc/portage/patches/net-dns/djbdns'''.
+
+* [http://michael.orlitzky.com/code/releases/djbdns-1.05-CVE-2012-1911.patch CVE-2012-1191 Fix] (by Peter Conrad). References: [http://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2012-1191 CVE-2012-1191], [https://bugs.gentoo.org/show_bug.cgi?id=404959 Gentoo bug #404959].
