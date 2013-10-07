@@ -523,6 +523,16 @@ To check the history of commands that were executed:
 Monitor I/O activity on all zpools (refreshes every 6 seconds):
 {{RootCmd|zpool iostat 6}}
 
+== Caveat ==
+
+* Swap: due to how ZFS and the Linux kernel are designed, if you use ZFS on Linux you need to use swap, it makes it easier to manage high memory pressure situations. That's still true if you never needed swap and have large amounts of RAM available. Don't place it on a ZVOL (at least until [https://github.com/zfsonlinux/zfs/issues/1526 #1526] is fixed).
+* High memory usage despite a low zfs_arc_max: ZFS on Linux currently suffers of memory fragmentation, which may lead ARC to exceed the limit you set with zfs_arc_max. You can't do much about it. Recent versions of ZFS on Linux include the arcstats.py script which allows you to monitor ARC usage. Here's a dirty one-liner to get an idea of how much memory is allocated without strict need:
+  {{RootCmd|<nowiki>cat /proc/spl/kmem/slab | sed 's/\s\+/ /g' | cut -f 3,4 -d' ' | sed 's/ /-/' | tail -n +3 | bc | sort -n | sed 's/$/ +/' | xargs echo | sed 's/\+\s*$//' | bc</nowiki>}}
+* Release memory disabling ARC: if you want to free some memory you can disable ARC on the whole pool for a short period of time, to reset the cache. Beware, when you do it, since all the reads/writes will go directly to the disk.
+  {{RootCmd|zfs set primarycache{{=}}none zfs_test|zfs set primarycache{{=}}all zfs_test}}
+* Release memory simulating heavy load: if you need to allocate big amounts of memory in a shot, you might have a problem, since ZFS might not be able to release it in time, resulting in an out-of-memory error. To force ZFS to release memory you can simulate high memory pressure using stress (app-benchmarks/stress). You can start with 10 workers and increase their number until you obtain the desired effect:
+  {{RootCmd|stress -m 10}}
+
 == External resources ==
 * [http://zfs-fuse.net/ zfs-fuse.net]
 * [http://zfsonlinux.org/ ZFS for Linux]
