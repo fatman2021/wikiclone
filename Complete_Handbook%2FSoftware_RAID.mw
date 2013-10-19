@@ -3,16 +3,73 @@
 == Software RAID ==
 
 === Introduction ===
+Redundant Array of Inexpensive Disks (RAID) is a technology to combine multiple disks to improve the reliability and/or performance. There is hardware RAID, implemented by the controller on your motherboard or specific extention cards, and there is software RAID, implemented by the kernel. 
+
+{{Note|Be aware that a reliable RAID does not take away the need for a backup!}}
 
 === Advantages ===
+The main advantages of RAID are reliability and/or performance improvements.
+
+There are quite some difference between soft- and hardware RAID. These are things like cost, performance, overhead and flexibility. Of course software RAID comes cheapest. Another advantage of soft- over hardware RAID is that you can easily move you RAID set to another (Linux) computer. With hardware RAID you will depend on the Vendor.
 
 === Disadvantages ===
+RAID usually takes more disk space then it delivers. E.g. a RAID-1 set of 2 3TB disks delivers you a 3TB RAID disk, that is a waist of 50%.
+
+* The time it takes to synchronize you RAID disk (initially and when they need to rebuild).
+* The extra effort to manage and monitor your RAID disks. Nothing is more frustrating then loosing the 2nd disk from your 3 disk RAID-5 set after you did not notice the first disk was out-of-order for months already :-(
 
 == Setting up software RAID ==
 
 === Installing the tools ===
+Start with your kernel configuration. After all, the kernel does most of the work:
+{{Kernel||<pre>
+[*] Device Drivers  --->
+    <*> Multiple devices driver support (RAID and LVM)
+        <*> RAID support
+            [*] Autodetect RAID arrays during kernel boot
+
+            If you want to combine multiple disks or partitions to one (bigger) device:
+                <*> Linear (append) mode
+
+            If you want to increase IO performance by striping data across multiple disks (at the expense of reliability):
+                <*> RAID-0 (striping) mode
+
+            If you want to increase reliability by mirroring data across multiple disks (at the expense of less storage capacity):
+                <*> RAID-1 (mirroring) mode
+
+            If you want to combine the previous two options (for whatever reason):
+                <*> RAID-10 (mirrored striping) mode
+
+            If you want to combine 3 or more disks for reliability and performance:
+                <*> RAID-4/RAID-5/RAID-6 mode
+</pre>}}
+
+Get the proper RAID admin tool:
+{{RootCmd|emerge mdadm}} 
+
+Make sure your RAID disks are started and stopped: 
+{{RootCmd|rc-update add mdraid boot}} 
 
 === Using software RAID ===
+To create a simple mirrored disk, make sure you have two partitions that have the same size and bring them together in your first RAID-1 disk:
+{{RootCmd|mdadm --create /dev/md0 --level{{=}}1 --raid-devices{{=}}2 /dev/sdd1 /dev/sde1}}
+
+The disks in the mirror will now be synchronized (also when there is no data or file system yet). you can check the status like this:
+{{Cmd|cat /proc/mdstat|output=<pre>Personalities : [raid1] 
+md1 : active raid1 sde2[1] sdd2[0]
+      1900953472 blocks super 1.2 [2/2] [UU]
+      [======>..............]  resync = 31.6% (600768512/1900953472) finish=819.4min speed=26444K/sec
+      
+md0 : active raid1 sde1[1] sdd1[0]
+      52395904 blocks super 1.2 [2/2] [UU]
+      
+unused devices: <none>
+</pre>}}
+
+Create you filesystem-of-chooise:
+{{RootCmd|mkfs.ext4 /dev/md0}}
+
+and off you go.
 
 === Software RAID for root file system ===
 ==== Boot using GRUB 2.x ====
@@ -26,5 +83,7 @@ When using [[GRUB2|GRUB 2.x]] and the root file system is located on a software 
 == See also ==
 
 == External resources ==
+* The [[wikipedia:Mdadm|mdadm page on Wikipedia]]
+* The [https://raid.wiki.kernel.org/index.php/Linux_Raid Linux-raid kernel list]
 
 [[Category:Complete Handbook]]
