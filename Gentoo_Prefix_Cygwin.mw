@@ -1,0 +1,531 @@
+==Preface: Prefix on Cygwin==
+How to bootstrap Gentoo Prefix on Cygwin?
+===Overview===
+At the beginning you find some general advices and how to set up Cygwin. Those chapters that cover the bootstrapping process are diveded into a "Walkthrough" followed by "Issue" handlings in case if something goes wrong.<br />
+As recommended by the Prefix team follow the [http://www.gentoo.org/proj/en/gentoo-alt/prefix/bootstrap-solaris.xml Solaris Process]. Be advised to follow that document in parallel in a second browser view. This wiki page is kind of an overlay.<br />
+{{Note|Running Prefix on Interix is the way recommended by the Prefix team.<br />
+The team considers Cygwin not as stable as Interix.<br />
+If you want good support choose the well established way to run Prefix on Interix.<br />
+Prefix on Cygwin is definitly experimental. It's your personal advanture.}}
+===What is this?===
+For the beginning this is rather a log of a single users efforts to install Gentoo Prefix on Cygwin. There is no report that anybody has done that successfully before, but [http://www.mail-archive.com/gentoo-osx@lists.gentoo.org/msg00746.html Nimish Pachapurkar got quite far]. Maybe he did it, we don't know.<br />
+There was also a project "Gentoo on Cygwin" which is unmaintained as of 2008. Note the difference to "Gentoo Prefix on Cygwin". "Gentoo Prefix on Cygwin" is not a project itself but simply a try to run the well maintained "Gentoo Prefix" sources on Cygwin. However the [http://www.gentoo-wiki.info/HOWTO_Gentoo_on_Cygwin old project] may give some solutions where matters get difficult.<br />
+So this is a work of progress by nature. If the little pioneer gives up half the way, his experiences should not fully be lost. Hence, here they go in the hope that they may be of use for others that follow his trail.
+===Why?===
+By running Prefix on Cygwin you get the same runtime environment on Windows that you can also have on Linux or Mac. It brings much more options than a Java runtime environment and it requires less resources than a virtual machine. Additionally you can compile any program yourself by using Gentoos mature emerge installer. Finally all this happens in the userspace and makes you independent from the admin. Nothing compares to this.
+==General issue handling==
+Before you start with bootstrapping have a look a this general strategies when you run into trouble. Having this strategies in mind will save you a lot of time.
+===First aid===
+Try this as far as the directories or files are already istalled.
+<pre>
+* Assure your windows editor files are all set to unix format. 
+* close open files while emerging
+* source ~/bootstrap.rc
+* env-update && source ~/gentoo/etc/profile
+* hash -r
+* Cygwin: rebaseall
+</pre>
+===Cygwin issues===
+====Cygwin instablilites====
+Sometimes compiling a package breaks and you can't figure out the reason. Emerge it a second time to see if it again breaks in the same point. If it goes through or breaks in a different point it was an instability. If it always breaks in the same point look for a different reason.
+====Rebasing Cygwin packages====
+Windows/Cygwin have often troubles with memory addresses of freshly installed DLL, especially with those of Perl and Python. Strange errors of cryptic addresses would occur when you do the first emerge, because emerge uses Python. The solution is to "rebase" all DLL. The "rebaseall" script writes new addresses into all installed DLL incremently, so that conflicts are avoided in future.<br />
+<br />
+Close all terminals and open a windows command shell (cmd):
+<pre>
+P:/cygwin/bin/ash /bin/rebaseall
+exit
+exit
+</pre>
+This only rebases DLL installed with "setup.exe". It uses lists of installed DLL to know what to rebase.<br />
+It's also sensible to 'rebase' one DLL, to avoid closing all Cygwin windows, especially if it's outside Cygwin's rebaseall path.
+<pre>
+/tmp/build $ rebase -s somewhere/one.dll
+</pre>
+Even if it complains about not being able to rebase some DLLs in /bin, simply ignore it and continue.
+====Rebasing self compiled DLL====
+=====Checking DLL=====
+Example how to check DLL of a program:
+<pre>
+ldd bin/bash.exe
+   ntdll.dll => /cygdrive/c/Windows/system32/ntdll.dll (0x76ed0000)
+   kernel32.dll => /cygdrive/c/Windows/system32/kernel32.dll (0x75fe0000)
+   cygncurses5.dll => /home/prefix/gentoo/usr/bin/cygncurses5.dll (0x69400000)
+   cygwin1.dll => /usr/bin/cygwin1.dll (0x61000000)
+   [...]     
+</pre>
+Addresses below 0x60000000 are suspicious. You likely need to run rebase or reemerge.<br />
+There is also a GUI program to dislplay DLL dependencies: [http://www.dependencywalker.com Dendency Walker].
+=====Creating user list of DLL=====
+Create a script to generate <code>rebase.lst</code>.
+<pre>
+MRL='/home/prefix/makerebaselist.sh'
+touch $MRL && chmod +x $MRL
+
+echo '#/bin/bash' >> $MRL
+echo 'BASE=/home/prefix' >> $MRL
+echo 'rm $BASE/rebase.lst' >> $MRL
+echo 'find $BASE/gentoo/bin/ -name *.dll -o -name *.so >> $BASE/rebase.lst' >> $MRL
+echo 'find $BASE/gentoo/lib/ -name *.dll -o -name *.so >> $BASE/rebase.lst' >> $MRL
+echo 'find $BASE/gentoo/usr/bin -name *.dll -o -name *.so >> $BASE/rebase.lst' >> $MRL
+echo 'find $BASE/gentoo/usr/lib -name *.dll -o -name *.so >> $BASE/rebase.lst' >> $MRL
+</pre>
+Running the script:
+<pre>
+~/makerebaselist.sh
+</pre>
+Result:
+<pre>
+~/rebase.lst
+</pre>
+=====Rebase all with user list=====
+Use the -T option to set the user list. Open a windows command shell (cmd):
+<pre>
+P:/cygwin/bin/ash
+/bin/rebaseall -T /home/prefix/rebase.lst
+</pre>
+====General troubleshouting====
+If a Cygwin package makes trouble, reinstall it and run "rebaseall".
+===Gentoo issues===
+====Strategies to debug====
+*Emerge packages one-by-one: <code>emerge --oneshot --ask xxx-yyy/zzz</code>
+*Execute single emerge steps: <code>ebuild path/to/ebuild [configure|compile|install|merge]</code>
+*Go to work directory and try: <code>./configure</code> followed by <code>make</code> and <code>make install</code>.
+====QA complaints: explicit EPREFIX but target not found====
+Symptom:
+<pre>
+QA Notice: the following files use invalid (possible non-prefixed) shebangs:
+some/path:/shebang/path (explicit EPREFIX but target not found)
+</pre>
+Reason: This was a [http://bugs.gentoo.org/show_bug.cgi?id=334271 meanwhile fixed bug]. Reason is <code>nano -w /home/prefix/gentoo/usr/lib/portage/bin/misc-functions.sh</code> in function <code>install_qa_check_prefix()</code>:
+<pre>
+# does the shebang start with ${EPREFIX}, and does it exist?
+if [[ ${line[0]} == ${EPREFIX}/* ]] ; then
+  if [[ ! -e ${ROOT}${line[0]} && ! -e ${D}${line[0]} ]] ; then                   ## <---- This line. ##
+    # hmm, refers explicitly to $EPREFIX, but doesn't exist,
+    # if it's in PATH that's wrong in any case
+</pre>
+Solution: Fabian Groffen writes: Ok, I see, <code>${ROOT%/}</code> is probably the right thing to use here. Same for <code>${D}</code>, should be <code>${D%/}</code>.
+====QA complaints: in PATH but target not found====
+Symptom:
+<pre>
+QA Notice: the following files use invalid (possible non-prefixed) shebangs:
+some/path:/shebang/path (in PATH but target not found)
+...
+</pre>
+Reason: A package has missing <code>${EPREFIX}</code> in the first line of some bash scripts.<br />
+Workaround: Disable death penalty for shebang issues. Interpreters are usually found in PATH.<br />
+End of <code>nano -w ~/gentoo/usr/lib/portage/bin/misc-functions.sh</code> function <code>install_qa_check_prefix()</code>:
+<pre>
+install_qa_check_prefix() {
+[...]
+#           die "Aborting due to QA concerns: invalid shebangs found"
+    fi
+}
+</pre>
+====QA complaints of missing gen_usr_ldscript====
+<pre>
+* QA Notice: Missing gen_usr_ldscript for libbz2.so
+[...]
+*      [[
+</pre>
+Workaround: Disable this quality check. We don't need gen_usr_ldscript at all on windows.<br />
+Lines 438 of <code>~/gentoo/usr/lib/portage/bin/misc-functions.sh</code>:
+<pre>
+# [[ ${abort} == "yes" ]] && die "add those ldscripts"
+</pre>
+====unable to read SONAME====
+Symptom:
+<pre>
+gen_usr_ldscript: unable to read SONAME from libiconv.so
+</pre>
+Reason: <code>gen_usr_ldscript</code> doesn't cover cygwin and the default case doesn't work.<br />
+Solution: Don't use this for Cygwin. Simply return for now. Edit <code>nano -w /home/prefix/gentoo/usr/portage/eclass/toolchain-funcs.eclass</code> line 518:
+<pre>
+gen_usr_ldscript() {
+   return 0
+}
+XXXgen_usr_ldscript() {
+</pre>
+====Collisions====
+Sympton: Collisions while installing a package.<br />
+Reason: Often a previous installation did break.<br />
+Solution:
+<pre>
+env FEATURES="-collision-protect" CHOST="i686-pc-cygwin" emerge --oneshot --nodeps libiconv
+</pre>
+====cannot find *.so or *.dll====
+Symptom: a package can't find it's library<br />
+Reason: On windows shared libraries have to be in PATH.<br />
+Solution: Extend the PATH. See [[#extend_PATH_for_shared_libries]] and [[#Profile_setup]].
+====Warnings you can ignore====
+<pre>
+* QA Notice: Package has poor programming practices which may compile
+*            fine but exhibit random runtime failures.
+* src/pch.c:116: warning: implicit declaration of function "setmode"
+</pre>
+<pre>
+/home/prefix/gentoo/usr/lib/portage/bin/ebuild-helpers/prepstrip: line 98: scanelf: command not found
+/home/prefix/gentoo/usr/lib/portage/bin/ebuild-helpers/prepstrip: line 186: scanelf: command not found
+</pre>
+<pre>
+gcc: unrecognized option '-R/home/prefix/gentoo/usr/lib'
+gcc: unrecognized option '-R/home/prefix/gentoo/lib'
+</pre>
+<pre>
+[something] seems to ignore the --datarootdir setting
+</pre>
+==Installing Cygwin==
+Cygwin comes with a full featured installer that explains itself. http://www.cygwin.org/setup.exe
+===Space and pathes===
+Before installing Cygwin consider the pathname. Create a windows user account without whitespace in the username. Not all scripts can handle whitespace in pathes. Have enough free space, minimum 4 GB, take 10 GB if available.<br />
+Let's assume you choose "prefix" as username and you install Cygwin on P:\cygwin (mnemo for Prefix Cygwin).
+<pre>
+Windows perspective: P:\cygwin\home\prefix
+Cygwin perspective:  /home/prefix
+</pre>
+===User and permissions===
+Install Cygwin from the same windows account that you will use to run it. This way you avoid some trouble with user permissions and administration.
+===Basical packages===
+<pre>
+gcc4, wget, make, patch, python
+</pre>
+For fast edits from the shell install an editor of your choice:
+<pre>
+vim, nano, pico, ... 
+</pre>
+Install a terminal that supports copy&paste:
+<pre>
+mintty
+</pre>
+{{Note|Have a native windows editor available. ALWAYS set format to unix or your scriprts will break mysteriously! For example use [http://notepad-plus-plus.org Notepad++] and in the menu set "Format > Convert to unix".}}
+==Initial bootstrapping==
+===Walkthrough Part I===
+====$BASE, $EPREFIX and $OVERLAY====
+Define directories:
+<pre>
+export BASE=${HOME}
+export EPREFIX=${HOME}/gentoo
+export OVERLAY=${HOME}/overlay
+</pre>
+You can play with this.
+====.bashrc setup====
+To set up your environment write this variables to <code>.bashrc</code>.
+<pre>
+echo " alias ls='ls -hF --color=tty'"  >> ${HOME}/.bashrc
+echo " alias ll='ls -al'"  >> ${HOME}/.bashrc
+echo "BASE='${BASE}'" >> ${HOME}/.bashrc
+echo "EPREFIX='${EPREFIX}'" >> ${HOME}/.bashrc
+echo "OVERLAY='${OVERLAY}'" >> ${HOME}/.bashrc
+echo 'export PATH="${EPREFIX}/lib:${EPREFIX}/usr/lib:${EPREFIX}/usr/bin:${EPREFIX}/bin:${EPREFIX}/tmp/usr/bin:${EPREFIX}/tmp/bin:/usr/bin:/bin"' >> ${HOME}/.bashrc
+source ${HOME}/.bashrc
+</pre>
+====Download bootstrap-prefix.sh====
+The initial bootsstrapping is done by bootstrap-prefix.sh. Fetch it, rename it, and make it executable.
+<pre>
+cd ${BASE} && wget http://overlays.gentoo.org/proj/alt/browser/trunk/prefix-overlay/scripts/bootstrap-prefix.sh?format=txt
+mv ${BASE}/bootstrap-prefix.sh* ${BASE}/bootstrap-prefix.sh
+chmod +x ${BASE}/bootstrap-prefix.sh
+</pre>
+====Tree setup====
+<pre>
+${BASE}/bootstrap-prefix.sh ${EPREFIX} tree
+</pre>
+Check that the portage tree has been sucessfully unpacked to <code>ls -al ${EPREFIX}/usr/portage</code>. A lot of directories in there?
+====Skip tmp dir setup====
+Use the Cygwin binaries and skip steps that install binaries in <code>tmp</code>.
+<pre>
+# ${BASE}/bootstrap-prefix.sh ${EPREFIX} tmp [...]
+</pre>
+====Portage setup====
+<pre>
+${BASE}/bootstrap-prefix.sh ${EPREFIX} portage
+</pre>
+<code>less ${EPREFIX}/etc/make.globals</code>: It has been prepared for bootstrapping.<br />
+<code>ls -al ${EPREFIX}/etc/</code>: A symlink make.profile was generated which points to <code>${EPREFIX}/usr/portage/profiles/prefix/cygwin/1.7/x86</code>.<br />
+<code>less ${OVERLAY}/profiles/prefix/cygwin/make.defaults</code>: Some values have automatically been added for: <code>CPPFLAGS</code>, <code>LDFLAGS</code>, <code>USE</code>, <code>FEATURES</code>.
+====Profile setup====
+<pre>
+# make sure to be using bash, not zsh, as it doesn't expand the quotes in the following commands correctly
+file=${EPREFIX}/etc/make.conf
+# Empty the file
+:> $file
+echo 'CFLAGS="-O2 -pipe"' >> $file
+echo 'CXXFLAGS="${CFLAGS}"' >> $file
+echo 'MAKEOPTS="-j3"'     >> $file
+# Extend PATH to find libraries on Windows
+echo 'DEFAULT_PATH="${DEFAULT_PATH}:'"${EPREFIX}/lib:${EPREFIX}/usr/lib"'"' >> $file
+# The base profile sets ACCEPT_KEYWORDS=x86 and we don't have that in prefix.
+echo 'ACCEPT_KEYWORDS="-x86 ~x86-linux"'  >> $file
+# Fix -R warnings
+echo 'LDFLAGS="-L${EPREFIX}/usr/lib -L${EPREFIX}/lib"' >> $file
+</pre>
+{{Note|There is no RPATH on Windows. See [[http://bugs.gentoo.org/show_bug.cgi?id=336653 Bug 336653]].}}
+====Overlay setup====
+To customize some ebuilds create an overlay.
+<pre>
+mkdir -p ${OVERLAY}/profiles
+echo "Cygwin overlay" > ${OVERLAY}/profiles/repo_name
+mkdir -p ${EPREFIX}/etc
+echo "PORTDIR_OVERLAY='${OVERLAY}'" >> ${EPREFIX}/etc/make.conf
+</pre>
+===Issues===
+None in this part.
+==Oneshot emergings==
+===Walkthrough Part II===
+====Cygwin installations====
+<code>Run setup.exe</code> to install following packages:
+<pre>
+* automake (autoconf and perl will be included)
+* sources of coreutils
+* libiconv
+</pre>
+====Fix QA complaints====
+See: [[#QA_complaints:_explicit_EPREFIX_but_target_not_found]], [[#QA_complaints:_in_PATH_but_target_not_found]], [[#QA_complaints_of_missing_gen_usr_ldscript]]
+<pre>
+ file=${EPREFIX}/usr/lib/portage/bin/misc-functions.sh
+
+ sed -i 's/${ROOT}${line/${ROOT%\/}${line/' $file
+ sed -i 's/${D}${line/${D%\/}${line/' $file
+
+ sed -i 's/\(.*die.*invalid shebangs.*\)/#\1/' $file
+
+ sed -i 's/\(.*add those ldscripts.*\)/#\1/' $file
+</pre>
+====Disable gen_usr_ldscript====
+Edit <code>nano -w ${EPREFIX}/usr/portage/eclass/toolchain-funcs.eclass</code> line 518:
+<pre>
+gen_usr_ldscript() {
+       return 0;
+}
+XXXgen_usr_ldscript() {
+</pre>
+====emerge sed====
+<pre>
+emerge --oneshot sed
+</pre>
+You should have done rebaseall after you have installed python. If not do it now to be able to run emerge.<br />
+results:
+<pre>
+bin/sed.exe
+</pre>
+====emerge ncurses====
+<pre>
+emerge --oneshot ncurses
+</per>
+results:
+<pre>
+usr/lib/libform.a
+usr/lib/libform.dll.a
+usr/lib/libmenu.a
+usr/lib/libmenu.dll.a
+usr/lib/libncurses++.a
+usr/lib/libncurses.a
+usr/lib/libncurses.dll.a
+usr/lib/libpanel.a
+usr/lib/libpanel.dll.a
+</pre>
+<pre>
+usr/bin/captoinfo.exe -> tic.exe*
+usr/bin/clear.exe*
+usr/bin/cygform5.dll*
+usr/bin/cygmenu5.dll*
+usr/bin/cygncurses5.dll*
+usr/bin/cygpanel5.dll*
+usr/bin/infocmp.exe*
+usr/bin/infotocap.exe -> tic.exe*
+usr/bin/ncurses5-config*
+usr/bin/reset.exe -> tset.exe*
+usr/bin/tic.exe*
+usr/bin/toe.exe*
+usr/bin/tput.exe*
+usr/bin/tset.exe*
+</pre>
+====emerge bash====
+<pre>
+emerge --oneshot bash
+</pre>
+results:
+<pre>
+bin/bash.exe
+</pre>
+====emerge wget====
+<pre>
+emerge --oneshot wget
+</pre>
+results:
+<pre>
+usr/bin/wget.exe
+</pre>
+====emerge baselayout-prefix====
+<pre>
+emerge --oneshot --nodeps baselayout-prefix
+</pre>
+results:
+<pre>
+sbin/depscan.sh  
+sbin/env-update.sh  
+sbin/functions.sh  
+sbin/runscript.sh
+</pre>
+<pre>
+etc/env.d/00basic
+etc/env.d/99basic
+etc/profile
+</pre>
+====update ~/.bashrc====
+Now we source ${EPREFIX}/etc/profile when entering a shell.
+<pre>
+echo "source ${EPREFIX}/etc/profile" >> ${HOME}/.bashrc
+source ${HOME}/.bashrc
+</pre>
+====extend PATH for shared libries====
+In windows shared libraries are searched in PATH.
+<pre>
+echo "PATH=\"${EPREFIX}/usr/lib:${EPREFIX}/lib:${EPREFIX}/opt/bin:${EPREFIX}/usr/sbin:${EPREFIX}/sbin\"" >> ${EPREFIX}/etc/env.d/00basic
+env-update && source ${EPREFIX}/etc/profile
+echo "PATH: $PATH"
+</pre>
+The DEFAULT_PATH has already been set in [[#Profile_setup]]
+====emerge xz-utils====
+<pre>
+emerge --oneshot xz-utils
+</pre>
+results:
+<pre>
+usr/lib/liblzma.dll.a
+usr/lib/liblzma.la
+usr/bin/cyglzma-0.dll
+usr/bin/lz*
+usr/bin/xz*
+</pre>
+Note: Only few installed programs have an .exe suffix.
+====emerge m4====
+<pre>
+emerge --oneshot m4
+</pre>
+results:
+<pre>
+/usr/bin/m4.exe
+</pre>
+====emerge flex====
+<pre>
+emerge --oneshot flex
+</pre>
+results:
+<pre>
+usr/bin/flex.exe
+usr/bin/lex
+usr/lib/libfl.a
+usr/lib/libfl_pic.a
+usr/include/FlexLexer.h
+</pre>
+====emerge bison====
+<pre>
+emerge --oneshot bison
+</pre>
+results:
+<pre>
+usr/bin/bison.exe
+usr/bin/yacc
+usr/bin/yacc.bison
+</pre>
+====emerge gnuconfig====
+<pre>
+emerge --oneshot gnuconfig
+</pre>
+results:
+<pre>
+usr/share/gnuconfig/config.guess
+usr/share/gnuconfig/config.sub
+</pre>
+====emerge binutils-config====
+<pre>
+emerge --oneshot --nodeps binutils-config
+</pre>
+results:
+<pre>
+usr/bin/binutils-config
+usr/lib/misc/binutils-config/binutils-config.h
+usr/lib/misc/binutils-config/create-ldwrapper
+usr/lib/misc/binutils-config/libbinutils-config.a
+</pre>
+====emerge binutils====
+Check Cygwins libiconv is already installed.
+<pre>
+ls /usr/lib/libiconv.la && emerge --oneshot binutils
+</pre>
+results:
+<pre>
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/addr2line.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/ar.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/as.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/c++filt.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/dlltool.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/dllwrap.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/elfedit.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/gprof.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/ld.bfd.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/ld.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/nm.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/objcopy.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/objdump.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/ranlib.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/readelf.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/size.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/strings.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/strip.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/windmc.exe
+usr/i686-pc-cygwin1.7/binutils-bin/2.20.51.0.8/windres.exe
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/include/ansidecl.h
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/include/bfd.h
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/include/bfdlink.h
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/include/dis-asm.h
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/include/libiberty.h
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/include/symcat.h
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/ldscripts/i386pe.x
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/ldscripts/i386pe.xa
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/ldscripts/i386pe.xbn
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/ldscripts/i386pe.xn
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/ldscripts/i386pe.xr
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/ldscripts/i386pe.xu
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/libbfd.a
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/libbfd.la
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/libiberty.a
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/libopcodes.a
+usr/lib/binutils/i686-pc-cygwin1.7/2.20.51.0.8/libopcodes.la
+</pre>
+====emerge gmp====
+<pre>
+emerge --oneshot gmp
+</pre>
+results:
+<pre>
+usr/include/gmp.h
+usr/include/gmpxx.h
+usr/lib/libgmp.a
+usr/lib/libgmp.la
+usr/lib/libgmpxx.a
+usr/lib/libgmpxx.la
+</pre>
+====emerge mpfr====
+<pre>
+emerge --oneshot mpfr
+</pre>
+results:
+<pre>
+usr/include/mpf2mpfr.h
+usr/include/mpfr.h
+usr/lib/libmpfr.a
+usr/lib/libmpfr.la
+</pre>
+====emerge gcc-config====
+<pre>
+emerge --oneshot gcc-config
+</pre>
+results:
+<pre>
+usr/bin/gcc-config
+usr/lib/misc/gcc-config.exe
+</pre>
+[[Category:Core system]]
