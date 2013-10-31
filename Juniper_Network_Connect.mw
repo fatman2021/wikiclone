@@ -1,0 +1,58 @@
+There are various site that discuss getting Juniper's "Network Connect" to work, particularly under a 64-bit system.
+see
+
+http://forums.gentoo.org/viewtopic-t-494883-start-0.html
+
+http://ubuntuforums.org/showthread.php?t=232607&page=45&p=11189826#post11189826
+
+https://wiki.archlinux.org/index.php/Juniper_VPN 
+
+http://www.gentoo-wiki.info/Juniper
+
+http://techydodo.wordpress.com/2012/01/17/cracking-the-juniper-network-connect-problem-on-linux-64-bit/
+
+http://www.scc.kit.edu/scc/net/juniper-vpn/linux/
+
+http://mad-scientist.net/juniper.html
+
+and 
+http://makefile.com/.plan/2009/10/juniper-vpn-64-bit-linux-an-unsolved-mystery/ helped the most.
+
+However none worked for me.
+
+====
+Here is what worked for me as of Oct 2013:
+
+My target requires login via a web page, and they have multiple pages on the portal for different groups. The vpn client would not start automatically, or complete when mannually invoked using ncsvc.
+
+Possible requirements: SUN Java JRE (both 64 and 32 bit versions) with nsplugin , eg 
+
+-app-emulation/emul-linux-x86-java and 
+
+-dev-java/sun-jre-bin
+
+Probably also openssl and others. I already had everything installed except the 32 bit java with nsplugin.
+
+====
+# Go to the network portal web page, and examine page source for REALM
+
+# Login through web portal, attmpt to intiate network connect.
+Software downloads and installs into ~/.juniper_network/network_connect/
+examine the cookies for the site and find DSID. This will have to be refreshed each time.
+
+# cd into this directory.
+
+# get the certificate, eg
+<pre>openssl s_client -connect portal.example.net:443 -showcerts < /dev/null 2> /dev/null {{!}}  openssl x509 -outform der > cert.der
+</pre>
+# compile the lbncui.so into an executable file 
+<pre>gcc -m32 -Wl,-rpath,`pwd` -o ncui libncui.so</pre>
+
+# then execute:
+<pre>./ncui -h portal.example.net -u USERNAME -p PASSWORD -r REALM -f cert.der -l 5 -L 5 -U https://portal.example.net/dana-na/auth/url_0/welcome.cgi -c DSID=COOKIE-VALUE-FOR-DSID</pre>
+
+where https://portal.example.net/dana-na/auth/url_0/welcome.cgi is the full path to the login page on the portal.
+
+with any luck you'll be connected. there should be a TUN device listed with ifconfig.
+
+Happy computing!
