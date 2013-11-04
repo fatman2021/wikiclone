@@ -57,6 +57,45 @@ title=Start without Networking
 kernel (hd0,0)/boot/kernel-3.7.10-gentoo-r1 root=/dev/sda3 softlevel=nonetwork
 </pre>}}
 
+== Dependency behaviour ==
+Changing the default dependencies of init scripts, might be needed to fit more complex setups. See {{Path|/etc/rc.conf}} for how to change the default behaviour; notice the ''rc_depend_strict'' option. In addition, next networking examples show how flexible OpenRC can be.
+
+; ''Multiple network interfaces (example)''
+The [[SSH|SSH service]] must come up with the internal network, for instance ''eth0'' and never ''wlan0''.
+
+Change "net" to "net.eth0":
+{{File|/etc/init.d/sshd||<pre>
+#need net
+need net.eth0
+</pre>}}
+
+; ''Multiple network interfaces in multiple runlevels (example)''
+The SSH service must start with ''eth0'' (not ''wlan0'') in "default" runlevel, but in "office" runlevel it must start with ''wlan0'' (not ''eth0'').
+
+Keep the default:
+{{File|/etc/rc.conf||<pre>
+#rc_depend_strict="YES"
+</pre>}}
+Comment out the default dependency:
+{{File|/etc/init.d/sshd||<pre>
+#need net
+</pre>}}
+Make additional symlinks to ''sshd'' with the network interface names:
+{{RootCmd|ln -s sshd /etc/init.d/sshd.eth0
+|ln -s sshd /etc/init.d/sshd.wlan0}}
+Settings are read from {{Path|/etc/conf.d/sshd.eth0}} and {{Path|/etc/conf.d/sshd.wlan0}} now:
+{{RootCmd|cp /etc/conf.d/sshd /etc/conf.d/sshd.eth0
+|cp /etc/conf.d/sshd /etc/conf.d/sshd.wlan0}}
+Add the dependencies:
+{{RootCmd|echo <nowiki>'rc_need="net.eth0"'</nowiki> >> /etc/conf.d/sshd.eth0
+|echo <nowiki>'rc_need="net.wlan0"'</nowiki> >> /etc/conf.d/sshd.wlan0
+|echo <nowiki>'rc_need="net"'</nowiki> >> /etc/conf.d/sshd}}
+In this example ''net.eth0'' and ''net.wlan0'' read their settings from {{Path|/etc/conf.d/net}}, or {{Path|/etc/conf.d/net.office}} depending on the active runlevel. Add all runscripts to the different runlevels:
+{{RootCmd|rc-update add sshd.eth0 default
+|rc-update add sshd.wlan0 office
+|rc-update add net.eth0 default office
+|rc-update add net.wlan0 default office}}
+
 == Prefix usage ==
 [http://www.gentoo.org/proj/en/gentoo-alt/prefix Gentoo Prefix] installs Gentoo within an offset, known as a prefix, allowing users to install Gentoo in another location in the filesystem hierarchy, hence avoiding conflicts. Next to this offset, Gentoo Prefix runs unprivileged, meaning no root user or rights are required to use it.
 
