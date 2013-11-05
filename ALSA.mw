@@ -175,6 +175,7 @@ ac=hwac3,hwdts,hwmpa,spdifac3,spdifeac3,spdifaac,spdifdts,spdifmpa,spdifthd,dts,
 You should now be able to pass through (and enjoy) almost any Dolby or DTS signal through S/PDIF to your reciever.
 
 ==== Encode to A/52 ====
+===== Upmix Two Channel Audio to a A/52 Multi-channel Audio Stream =====
 To similate A/52 encoded audio from normal one or two channel audio streams or files, ALSA can upmix using it's A/52 plugin.  (A/52 is also known as AC-3 or Dolby Digital encoding.)
 
 A/52 upmixing preferred when playing computer games or watching video without Dolby/DTS encoded material, such as older Movies.  Many sound card manufacturers provide their applications with a feature for software upmixing to Dolby Digital, and recommend enabling this upmixing when listening to such media, except for Music.
@@ -208,6 +209,40 @@ ctl.surroundaudio {
 </pre>}}
 
 {{Cmd|speaker-test -Dsurroundaudio -c 6}}
+
+===== Encode PCM 5.1 24 Bit Audio into a A/52 16 Bit Audio Stream (For Streaming via S/PDIF) =====
+Also known as, encoding PCM 5.1 audio stream into a compressed Dolby Digital stream for playing over S/PDIF.  No real need to use this if you're using HDMI, as HDMI can handle the bandwith of a PCM 5.1 audio stream.  S/PDIF Toslink has also supposedly been upgrade to do so also, but most hardware has yet to be upgraded to the new specifications, and some doubt it will ever happen.  (Personally, I think HDMI is evil and only gives me problems, with little benefit.) 
+
+For some reason, the previous .asoundrc section previously mentioned doesn't work with PCM 5.1 streams.  Another issue I run into with 24 bit PCM 5.1 audio streams, they require downmixing from S24_LE to S16_LE bit format.  Reason being, 24 bit is a common format for most media, however receivers can sometimes only decode 16 or 32 bit audio.  Also, the S/PDIF can only handle 16 bit audio when encoding to multi-channel formats such as A/52, for the time being until S/PDIF TosLink hardware specifications are upgraded.
+
+The following .asoundrc excerpt will encode a PCM 5.1 24 bit stream into a 16 bit A/52 stream, for streaming over S/PDIF.
+
+{{File|{$HOME/.asoundrc}||<pre>
+#####
+# Description: This will make it possible to use a52 with PulseAudio out of 
+#          the box. It may be useful for other use cases. Just include 
+#          this in your ~/.asoundrc .
+
+pcm.a52 {
+    @args [ CARD ]
+    @args.CARD {
+               type string
+               default 0
+    }
+    type plug
+    slave {
+           pcm {
+               type a52
+               card $CARD
+               bitrate 640 # default 448
+           }
+    # Convert to S16 bit format, per SPDIF spec
+    format S16_LE # Required for current S/PDIF spec
+    }
+}
+</pre>}}
+
+{{Cmd|aplay -D pcm.a52 /home/me/Music/Led_Zeppelin/Celegration_Day/PCM51-24bit/*.wav}}
 
 === JACK Audio Connection Kit ===
 Jack provides an additional layer, to the already low latency ALSA drivers and applications, and further it guarantees a constant sound latency and synchronous operation of all its clients. Jack can only use one sound card at a time, and will provide separated outputs and inputs for each audio channel of the sound card. Jack further provides the ability to view, manipulate or pipe audio streams, both hardware and software streams, in a similar manner we use cables to interface different audio equipments. As example, [http://jamin.sourceforge.net JAMin] can intercept an audio stream before exporting the stream to anther audio application and/or through analog or S/PDIF outputs.  The Jack user owned daemon, is usually started using [http://qjackctl.sourceforge.net/ qjackctl].  The qjackctl utility provides many other functions including audio stream connections.
