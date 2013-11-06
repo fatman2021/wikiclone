@@ -79,31 +79,10 @@ Next, fire up your browser and connect to [http://localhost/nagios http://localh
 
 == Monitoring nodes ==
 There are various methods available to monitor nodes. 
-# Poll hosts with [[SNMP]]
-# Receive SNMP traps send by nodes and create alerts from it
 # Collect data using {{Path|check_nrpe}} plugin where ''NRPE'' daemon is available on ssh hosts 
 # Use a password-less SSH connection to execute the command remotely
-
-=== Using SNMP method ===
-With SNMP each node runs a SNMP daemon, not every node will offer SSH and NRPE monitoring, as a example network infrastructure often offers only to monitor via SNMP.
-
-====Configuring nodes====
-Configure SNMP access on remote nodes as explained in [[SNMP]] wiki article.
-Start SNMP daemon on remote node
-{{RootCmd|/etc/init.d/snmpd start}}
-
-====Configuring polling server====
-On server configure {{Path|/etc/nagios/resources.cfg}}, add the "SNMP community" used on remote nodes:
-
-{{File|/etc/nagios/resources.cfg||<pre>
-[...]
-USER161$=my-own-SNMP-community
-[...]
-</pre>
-}}
-
-emerge {{Package|net-analyzer/nagios-plugins}}
-{{Emerge|net-analyzer/nagios-plugins}}
+# Poll hosts with [[SNMP]]
+# Receive SNMP traps send by nodes and create alerts from it
 
 === Using NRPE method ===
 With NRPE, each remote host runs a daemon (the NRPE deamon) which allows the main Nagios system to query for certain metrics. One can run the NRPE daemon by itself or use an inetd program. I'll leave the inetd method as a nice exercise to the reader and give an example for running NRPE by itself. 
@@ -179,7 +158,6 @@ define service {
 That's it. If you now check the service details on the Nagions monitoring site you'll see that the remote hosts are connected and are transmitting their monitoring metrics to the Nagios server. 
 
 ==== Using Passwordless SSH Connection ====
-
 Just as we did by creating the <code>check_nrpe</code> command, we can create a command that executes a command remotely through a passwordless SSH connection. We leave this up as an interesting exercise to the reader. 
 
 A few pointers and tips: 
@@ -187,13 +165,51 @@ A few pointers and tips:
 * Make sure the passwordless SSH connection is set up for a dedicated user (definitely not root) - most checks you want to execute do not need root privileges anyway
 * Creating a passwordless SSH key can be accomplished with <code>ssh-keygen</code> , you install a key on the destination system by adding the public key to the {{Path|.ssh/authorized_keys}} file
 
-== More Resources ==
+=== Using SNMP method ===
+With SNMP each node runs a SNMP daemon, not every node will offer SSH and NRPE monitoring, as a example network infrastructure often offers only to monitor via SNMP.
 
+====Configuring nodes====
+Configure SNMP access on remote nodes as explained in [[SNMP]] wiki article.
+Start SNMP daemon on remote node
+{{RootCmd|/etc/init.d/snmpd start}}
+
+====Configuring polling server====
+On server configure {{Path|/etc/nagios/resources.cfg}}, add the "SNMP community" used on remote nodes:
+
+{{File|/etc/nagios/resources.cfg||<pre>
+[...]
+USER161$=my-own-SNMP-community
+[...]
+</pre>
+}}
+
+emerge {{Package|net-analyzer/nagios-plugins}}
+{{Emerge|net-analyzer/nagios-plugins}}
+
+Define a SNMP check for remote hosts, getting the usage of remote hard disk. notice the usage of '''$USER161$''' in that check:
+{{File|/etc/nagios/objects/commands/chec_snmp_disk.cfg||<pre>
+define command{
+        command_name    check_snmp_disk
+        command_line    $USER1$/check_snmp_disk.pl -H $HOSTADDRESS$ -C $USER161$ -m $ARG1$ -s
+        }
+</pre>}}
+
+Test the previously defined check, as nagios user
+{{Note|Don't gather SNMP data as root, not even once, in normal nagios operation it could lead not being able to write temporary files and folders using a SNMP check as user ''nagios''}}
+{{RootCmd|su - nagios}}
+These commands are runs as the '''nagios''' system user:
+{{Cmd|cd /usr/lib/nagios/plugins}}
+Possible output from example host '''gentoo''', showing a WARNING state, the target rootfilesystem '''/''' exceeds the defined warning level '''80'''%
+{{Cmd|./check_snmp_disk_monitor.pl -H gentoo -C my-own-SNMP-community -m / -s -w 80 -c 90|output=<pre>
+Disk WARNING - 85% used on /|/,124223229952,105289957376
+</pre>}}
+
+== More Resources ==
 === Adding Gentoo Checks ===
 
 It is quite easy to extend Nagios to include Gentoo-specific checks, such as security checks (GLSAs). Gentoo developer Wolfram Schlich has a <code>check_glsa.sh</code> script [http://dev.gentoo.org/~wschlich/misc/nagios/nagios-plugins-extra/nagios-plugins-extra-4/plugins/ available] amongst others. 
 
-=== Nagios Resources ===
+== External resources ==
 
 *  [http://www.nagios.org the official Nagios website]
 *  [http://www.nagiosexchange.org Nagios Exchange], where you can find Nagios plugins and addons
