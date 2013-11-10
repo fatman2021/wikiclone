@@ -1,8 +1,8 @@
 {{warning|These instructions install unreviewed code from Pipelight upstream.}}
 
-Recently it has been made possible to run it via [[Wine]].
+Recently it has been made possible to use Netflix in linux via [[Wine]] with good performance.
 
-Check [http://www.compholio.com/wine-compholio/ the “Compholio” Wine patches page] & [http://fds-team.de/cms/articles/2013-08/pipelight-using-silverlight-in-linux-browsers.html the FDS-Team Pipelight page] for the latest information. At the time of this writing, Wine version 1.7.0 seemed to be targeted.
+Check [http://www.compholio.com/wine-compholio/ the “Compholio” Wine patches page] & [http://fds-team.de/cms/articles/2013-08/pipelight-using-silverlight-in-linux-browsers.html the FDS-Team Pipelight page] for the latest information. At the time of this writing, Wine version 1.7.5 seemed to be targeted, which is not currently in portage.
 
 ==Preconfiguring==
 
@@ -35,12 +35,7 @@ If you were only missing the option in <code>/etc/fstab</code>:
 {{rootCmd|mount / -o remount}}
 
 ===Wine===
-Wine is quite the moving target, so will almost certainly need to be unmasked:
-{{rootCmd|<nowiki>echo 'app-emulation/wine' | tee -a /etc/portage/package.accept_{keywords/netflix,keywords}</nowiki>}}
-
-==Including patches==
-{{rootCmd|mkdir -p /etc/portage/patches/app-emulation/wine}}
-{{rootCmd|<nowiki>wget -P /etc/portage/patches/app-emulation/wine $(wget -qO - 'http://bazaar.launchpad.net/~pipelight/netflix-desktop/wine-compholio/files/head:/patches/' | egrep -o '".*?download.*?patch"' | sed 's@"\(.*\)"@http://bazaar.launchpad.net\1@')</nowiki>}}
+Until wine-1.7.5 is added to Portage, it is necessary to install and patch wine manually. Up to date instructions can be found [http://fds-team.de/cms/pipelight-compile-wine.html here]
 
 ==Pipelight==
 If you don’t already have a local overlay (note this can interfere with Layman stuff):
@@ -49,8 +44,10 @@ If you don’t already have a local overlay (note this can interfere with Layman
 {{rootCmd|<nowiki>wget -qO - 'https://481596.bugs.gentoo.org/attachment.cgi?id=356458' | sed 's/\(EGIT_REPO_URI\)/EGIT_COMMIT="v0.1-4"\n\1/' > /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild</nowiki>}}
 {{rootCmd|<nowiki>echo '~www-plugins/pipelight-9999 **' | tee -a /etc/portage/package.accept_{keywords/netflix,keywords}</nowiki>}}
 
+Manual build instructions for pipelight can be found [http://fds-team.de/cms/pipelight-installation.html here]
+
 ==emerge==
-{{rootCmd|emerge -atv wine crossdev attr}}
+{{rootCmd|emerge -atv crossdev attr}}
 
 ==Setup crossdev==
 This will take quite a while:
@@ -58,6 +55,14 @@ This will take quite a while:
 
 ==emerge Pipelight==
 {{rootCmd|emerge --digest -atv pipelight}}
+
+{{note|I have found that I get a compile error in pluginloader.c regarding "_controlfp_s(&control_word, _CW_DEFAULT, MCW_PC);". I was able to simply comment that 4 line block of code out and continue compiling:
+ebuild /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild compile
+ebuild /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild install
+ebuild /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild qmerge
+A proper solution would be welcome.
+}}
+
 
 ==Wine installation==
 This takes a bit, and produces a lot of output:
@@ -75,7 +80,9 @@ fi</pre>}}
 
 ==Pipelight config==
 Needs to be changed a bit:
-{{cmd|<nowiki>cat /usr/share/pipelight/pipelight | sed -e 's@^winePath\(.*\)= .*@winePath\1= /usr/@' -e 's@^gccRuntimeDlls\(.*\)i686.*@gccRuntimeDlls\1mingw32/'$(ls /usr/lib/gcc/mingw32/)'/@' -e 's@^dllPath\(.*\)Silverlight\(.*\)@dllPath\1Microsoft Silverlight\2@g' > ~/.config/pipelight</nowiki>}}
+{{cmd|<nowiki>cat /usr/share/pipelight/pipelight | sed -e 's@^winePath\(.*\)= .*@winePath\1= /usr/local/@' -e 's@^gccRuntimeDlls\(.*\)i686.*@gccRuntimeDlls\1mingw32/'$(ls /usr/lib/gcc/mingw32/)'/@' -e 's@^dllPath\(.*\)Silverlight\(.*\)@dllPath\1Microsoft Silverlight\2@g' > ~/.config/pipelight</nowiki>}}
+
+At this point, double check your config "~/.config/pipelight" to make sure the paths are correct, specifically the Silverlight path. You may have have to disable the graphics driver check by setting graphicDriverCheck = /bin/true.
 
 ==Firefox, etc.==
 Start Firefox (from terminal for output explaining whether pipelight is going to work or not), and go to http://bubblemark.com/silverlight2.html for a quick check for Silverlight support.
@@ -92,6 +99,9 @@ Enjoy improved Netflix.
 *Check paths & other variables in <code>~/.config/pipelight</code> (or if nonexistant, <code>/usr/share/pipelight/pipelight</code>)
 {{rootCmd|eselect opengl list}}
 {{rootCmd|eselect opengl set #}}
+
+=== Audio ===
+If you use Pulseaudio but find that wine32 is trying to load 64-bit pulseaudio drivers, consider the solution found in this [http://forums.gentoo.org/viewtopic-p-7060060.html here]
 
 ==See also==
 *[http://bugs.gentoo.org/481596 Bug 481596 - use Silverlight apps in browser using Wine]
