@@ -1,3 +1,4 @@
+== Intro ==
 There are various site that discuss getting Juniper's "Network Connect" to work, particularly under a 64-bit system.
 see
 
@@ -18,12 +19,10 @@ http://mad-scientist.net/juniper.html
 and 
 http://makefile.com/.plan/2009/10/juniper-vpn-64-bit-linux-an-unsolved-mystery/ helped the most.
 
-However none worked for me.
+However you may have to mix and match bits from any of those.
 
-====
-Here is what worked for me as of Oct 2013:
-
-My target requires login via a web page, and they have multiple pages on the portal for different groups. The vpn client would not start automatically, or complete when mannually invoked using ncsvc.
+== Prerequisites ==
+Here is documentation of a working setup as of Oct 2013 on a target network that requires login via a web page, and they have multiple pages on the portal for different groups, client version 7.1. The vpn client would not start automatically, or complete when mannually invoked using ncsvc.
 
 Possible requirements: SUN Java JRE (both 64 and 32 bit versions) with nsplugin , eg 
 
@@ -33,7 +32,7 @@ Possible requirements: SUN Java JRE (both 64 and 32 bit versions) with nsplugin 
 
 Probably also openssl and others. I already had everything installed except the 32 bit java with nsplugin.
 
-====
+== Stepwise ==
 # Go to the network portal web page, and examine page source for REALM
 
 # Login through web portal, attmpt to intiate network connect.
@@ -54,5 +53,51 @@ examine the cookies for the site and find DSID. This will have to be refreshed e
 where https://portal.example.net/dana-na/auth/url_0/welcome.cgi is the full path to the login page on the portal.
 
 with any luck you'll be connected. there should be a TUN device listed with ifconfig.
+
+== Split tunneling ==
+
+http://www.digitalinternals.com/124/20090430/workaround-for-juniper-vpn-split-tunneling-restriction/  and its commentors have some methods to achieve split tunneing.
+
+using an LD_PRELOAD to preload a custom library to redirect reads to /proc/net/route to another file seem promising, but proved problematic on a 64-bit client.
+
+Patching the ncsvc binary can disable the route monitoring function, allowing one to change routes as needed manually or by script. Without patching, a route monitor may be in place that will disconnect if routes are changed.
+
+There are probably many ways to achieve, but one tested it to convert a conditional jump statement in the route monitoring routings:
+
+#make backup copy of ncsvc
+#open ncsvc in disasembler
+#search for text "no routes to monitor" in the disassembly
+#a few lines up should be something that looks like
+<pre>.text:0805CC9F                 mov     [ebp+var_19], 0
+.text:0805CCA3                 cmp     dword ptr [eax+60h], 0
+.text:0805CCA7                 jnz      loc_805CE1A
+.text:0805CCAD                 sub     esp, 8
+.text:0805CCB0                 push    offset aNoRoutesToMoni ; "no routes to monitor"</pre>
+
+#the jnz (or possibly jne) signals the program to jump if the previous step is not zero (or equal). Change this to invert the conditional, ie jump if zero (or equal).
+#To do so, look at the hexdump for this bit of code. Depending on your debugger, you may be able to change it within the program, or else open up the ncsvc binary in  a hexeditor and find the corresponding bits.
+# The bits will likely be either start with 75 ?? ?? or 0F 85 ?? ??
+# change the 75 to 74, or 85 to 84.
+# save and test.
+
+=== Sample route ====
+In order to achieve desirerd access to vpn resources, local lan resources, amd internet resources, possible post-connect commands:
+
+Consider ncsvc gave original default gw has a higher metric, added a second default with a lower metirc, and target vpn resources are on 10.0.0.0 and 170.0.0.0 (besides principal resources, check the vpn network's dns servers etc)
+<pre>
+route del default
+route del default
+route add default gw 192.168.1.1 metric 2
+route del 192.168.1.0 dev eth0
+route del -net 192.168.1.0 netmask 255.255.255.0 dev eth0
+route del -net 192.168.1.0 gw 10.78.193.5 netmask 255.255.255.0
+route add -net 192.168.1.0 netmask 255.255.255.0 dev eth0
+
+route add -net 170.0.0.0  netmask 255.0.0.0 gw 10.78.193.5 dev tun0
+route add -net 10.0.0.0  netmask 255.0.0.0 gw 10.78.193.5 dev tun0
+
+echo "nameserver 192.168.1.1" >> /etc/resolv.conf
+</pre>
+
 
 Happy computing!
