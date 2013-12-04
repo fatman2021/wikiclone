@@ -18,10 +18,90 @@ Update your zfs layout to something like this:
 
 It is needed to create layout that will not colide on both systems.
 
+Boot partition looks like this:
+
+ root@robert-notebook ~ # ll /bootdir
+ total 33668
+ -rw-r--r--  1 root  wheel  2476465 Oct 30 00:02 System.map-3.10.7-gentoo-r1
+ -rw-r--r--  1 root  wheel    91809 Oct 30 00:02 config-3.10.7-gentoo-r1
+ drwxr-xr-x  2 root  wheel     1024 Nov 27 22:27 grub/
+ -rw-r--r--  1 root  wheel  2950360 Nov 27 17:57 initramfs.xz
+ drwx------  2 root  wheel    12288 Apr 30  2011 lost+found/
+ -rw-r--r--  1 root  wheel  3403920 Oct 30 00:02 vmlinuz-3.10.7-gentoo-r1
+
+
 == Create ZFS datasets ==
 
+First we need to create zfs layout for freebsd
 
+ zfs create rpool/FREEBSD
+ zfs create rpool/FREEBSD/ports
+ zfs create rpool/FREEBSD/ports/distfiles
+ zfs create rpool/FREEBSD/ports/packages
+ zfs create rpool/FREEBSD/root 
+
+ zfs set atime=off rpool/FREEBSD
+ zfs set compression=lz4
+ zfs set compression=off rpool/FREEBSD/ports/distfiles
+ zfs set compression=off rpool/FREEBSD/ports/packages
+
+== Unpack FreeBSD tarballs ==
+
+ cd /rpool/FREEBSD/
+ wget ftp://ftp.freebsd.org/pub/FreeBSD/releases/amd64/9.2-RELEASE/base.txz
+ wget ftp://ftp.freebsd.org/pub/FreeBSD/releases/amd64/9.2-RELEASE/kernel.txz
+ wget ftp://ftp.freebsd.org/pub/FreeBSD/releases/amd64/9.2-RELEASE/ports.txz
+
+ cd root
+ xzcat ../base.txz | tar -xv
+ xzcat ../kernel.txz | tar -xv
+ ln -s /rpool/FREEBSD/ports usr/ports
+ xzcat ../ports.txz | tar -xv
+
+== Prepare boot directory ==
+
+Copy boot contents to boot partition.
+
+  mkdir /boot/boot
+  cd /rpool/FREEBSD/root
+  mv boot/* /boot/boot/
+  mkdir bootdir
+  rmdir boot
+  ln -s bootdir boot
+
+Set new boot parition in new fstab.
+
+  echo '/dev/ada0s1 /bootdir ext2fs rw 0 1' > etc/fstab
+
+== Setup FreeBSD files ==
+
+These settings are needed to make FreeBSD boot. 
+For other options check freebsd handbook.
+
+ echo 'zfs_load="YES"' > /boot/boot/loader.conf
+ echo 'vfs.root.mountfrom="zfs:rpool/FREEBSD/root"' >> /boot/boot/loader.conf
+ echo 'ext2fs_load="YES"' >> /boot/boot/loader.conf
+
+Set some variables to rc.conf
+
+ echo 'hostname="xxx"' > etc/rc.conf
+
+== Setup grub ==
+
+Since I use grub-legacy, this apply to it. But not much different in grub-2.
+
+Set menu entry in grub:
+
+ title FreeBSD
+ root (hd0,0)
+ kernel /boot/loader
+
+== Finish ==
+
+Now if everything will goes well, you can reboot to new FreeBSD installation.
+For other setups consult freebsd handbook/wiki/forums. 
 
 == References ==
 
 https://wiki.freebsd.org/RootOnZFS/UFSBoot
+http://www.freebsd.org/doc/handbook
