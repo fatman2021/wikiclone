@@ -1,0 +1,95 @@
+== Models ==
+There are 3 models overall: 13", 15"-intel-only, 15"-nvidia+intel
+
+== Installation Steps ==
+The systemrescuecd 4 works fine, pending a caveat due the SSD triggering a strange behaviour with sata.
+
+ [  126.963413] ata1.00: exception Emask 0x0 SAct 0xf SErr 0x0 action 0x6 frozen
+ [  126.963418] ata1.00: failed command: READ FPDMA QUEUED
+ [  126.963422] ata1.00: cmd 60/08:00:a0:59:7b/00:00:69:00:00/40 tag 0 ncq 4096 in
+ [  126.963422]          res 40/00:00:00:4f:c2/00:00:00:00:00/00 Emask 0x4 (timeout)
+ [  126.963423] ata1.00: status: { DRDY }
+ [  126.963425] ata1.00: failed command: WRITE FPDMA QUEUED
+ [  126.963427] ata1.00: cmd 61/08:08:e8:27:15/00:00:39:00:00/40 tag 1 ncq 4096 out
+ [  126.963427]          res 40/00:00:00:00:00/00:00:00:00:00/00 Emask 0x4 (timeout)
+ [  126.963429] ata1.00: status: { DRDY }
+ [  126.963430] ata1.00: failed command: WRITE FPDMA QUEUED
+ [  126.963432] ata1.00: cmd 61/88:10:e8:68:3e/00:00:56:00:00/40 tag 2 ncq 69632 out
+ [  126.963432]          res 40/00:00:00:00:00/00:00:00:00:00/00 Emask 0x4 (timeout)
+ [  126.963433] ata1.00: status: { DRDY }
+ [  126.963434] ata1.00: failed command: READ FPDMA QUEUED
+ [  126.963437] ata1.00: cmd 60/88:18:c8:3a:6e/00:00:38:00:00/40 tag 3 ncq 69632 in
+ [  126.963437]          res 40/00:00:00:00:00/00:00:00:00:00/00 Emask 0x4 (timeout)
+ [  126.963438] ata1.00: status: { DRDY }
+ [  126.963441] ata1: hard resetting link
+ [  127.291561] ata1: SATA link up 6.0 Gbps (SStatus 133 SControl 300)
+ [  127.291930] ata1.00: unexpected _GTF length (8)
+ [  127.292627] ata1.00: unexpected _GTF length (8)
+ [  127.292837] ata1.00: configured for UDMA/133
+ [  127.292842] ata1.00: device reported invalid CHS sector 0
+ [  127.292844] ata1.00: device reported invalid CHS sector 0
+ [  127.292845] ata1.00: device reported invalid CHS sector 0
+ [  127.292847] ata1.00: device reported invalid CHS sector 0
+ [  127.292853] ata1: EH complete
+
+Setting the queue_size to 1 workarounds it:
+
+ echo 1 > /sys/block/sda/device/queue_depth
+
+== Bootloader ==
+
+Refind which is a fork of Refit and is being actively development and maintained. For installation see follow below link 
+ http://www.rodsbooks.com/refind/installing.html#installsh
+
+== Kernel ==
+
+Configure your kernel as normal, but add the following options for EFI Stub:
+
+Processor type and features  --->
+    [*] EFI runtime service support 
+    [*]   EFI stub support
+
+Processor type and features  --->
+    [*] Built-in kernel command line
+    (root=/dev/sda4)
+
+Make sure the root= line on your kernel command line configuration is correct. More details about Kernel configuration for EFI stub are here: [[ EFI stub kernel ]]
+
+This assumes you do not need an initramfs. I do not use one. If you do, the EFI stub method may not be the easiest method. But it can still be done, refer to the [[ EFI_stub_kernel ]] page.
+
+Also, add the following Kernel options for driver support:
+
+These options are in addition to the standard options you would select for Intel based PC's
+
+Drivers, Input, Generic Input, Mouse:
+ CONFIG_MOUSE_BCM5974=y (For trackpad support)
+
+Drivers, Hardware monitoring
+ CONFIG_SENSORS_APPLESMC (Motion, light sensor, kbd backlight)
+
+Drivers, Graphics Support:
+ CONFIG_DRM_I915=y (Intel 8xx/9xx/HD Graphics)
+
+Drivers, Graphics, Backlight, Lowlevel Backlight:
+ CONFIG_BACKLIGHT_APPLE=y (screen backlight)
+
+Drivers, X86 Platform Specific
+ CONFIG_APPLE_GMUX=y
+
+Ensure the following options are NOT set (required for proper Broadcom wireless):
+ CONFIG_MAC80211=n (Networking support, Wireless)
+ CONFIG_B43=n (Drivers, Network Device, Wireless LAN)
+ CONFIG_BRCMFMAC=n (Drivers, Network device, Wireless LAN)
+ CONFIG_SSB=n (Drivers, Sonics Silicon Backplane)
+
+Drivers, Multimedia support, Media USB
+ CONFIG_USB_VIDEO_CLASS=m (Webcam)
+
+Drivers, Sound, ALSA, PCI:
+ CONFIG_SND_HDA_INTEL=m (Should be built as a module to set the option, see below)
+ CONFIG_SND_HDA_CODEC_HDMI=m
+ CONFIG_SND_HDA_CODEC_CIRRUS=m
+
+The normal make install works since refind would pick up your kernel directly.
+
+[[Category:Laptops]]
