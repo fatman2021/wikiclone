@@ -14,4 +14,64 @@ Alternatively, a window manager, such as LXDM, may be used.
 * Text Editor : {{Package|app-editors/leafpad}}
 * LXDE Display Manager : {{Package|lxde-base/lxdm}}
 
+===Taking screenshots with xwd===
+There are many ways to take screenshots in LXDE, but all require some work. 
+Solution below uses xwd to capture screenshots, imagemagick's convert to save them to png, and 
+notify-send to send a notification to desktop.
+See {{Package|x11-apps/xwd}}, {{Package|media-gfx/imagemagick}}, {{Package|xfce-extra/xfce4-notifyd}}.
+It places screenshots in $HOME/screenshots/.
+
+First create key bindings:
+{{File|~/.config/openbox/lxde-rc.xml||<pre>
+...
+</keyboard>
+  ...
+  <!-- taking screenshots -->
+  <keybind key="Print">
+    <action name="Execute">
+      <command>/usr/local/bin/screenshot.sh</command>
+    </action>
+  </keybind>
+  <keybind key="A-Print">
+    <action name="Execute">
+      <command>/usr/local/bin/screenshot.sh window</command>
+    </action>
+  </keybind>
+  ...
+</keyboard>
+...
+</pre>}}
+Then create and make executable the following simple script:
+{{File|/usr/local/bin/screenshot.sh||<pre>
+FOLDER="$HOME/screenshots/"
+
+if [ ! -d "${FOLDER}" ]; then
+  mkdir ${FOLDER}
+fi
+
+
+DATE=$(date +%Y-%m-%d@%H.%M.%S)
+FNAME="${FOLDER}screenshot-${DATE}.png"
+C=0
+while [ -f "${FNAME}" ] ; do
+    FNAME="${FOLDER}screenshot-${DATE}.${C}.png"
+    let C++
+done
+
+echo "huj" > ${FNAME}
+
+if [ "$1" != "window" ]; then
+  if xwd -root | convert - "${FNAME}"; then
+    notify-send "Desktop screenshot saved!" "Desktop screenshot was saved as:\n ${FNAME}"
+  else
+    notify-send "Desktop screenshot could not be saved!" "There was an error."
+  fi
+else
+  if xwd | convert - "${FNAME}"; then
+    notify-send "Window screenshot saved!" "Window screenshot was saved as:\n ${FNAME}"
+  else
+    notify-send "Window screenshot could not be saved!" "There was an error."
+  fi
+fi
+</pre>}}
 [[Category:Desktop environment]]
