@@ -11,6 +11,12 @@ Edit /etc/portage/package.use and add "dev-lang/php mysql mysqli postgres" to PH
 dev-lang/php mysql mysqli postgres
 </pre>}}
 
+PHP5 notes:
+
+dev-lang/php5 must be built with pcre and session USE flags.
+
+If you rebuild php5 changing flags you will need to restart apache2.
+
 {{Emerge|apache mysql php}}
 
 Scroll up into the emerge log and setup the root user for mysql running the command printed.
@@ -47,35 +53,54 @@ where <FQDN_hostname> is the FQDN (fully qualified domain name) hostname of your
 
 If you do not have the vhosts USE flag set, then webapp-config will get run for you during the emerge.
 
-==== MySQL ====
-It is a good idea to setup an unprivileged mysql user and database for joomla.
+==== Create Drupal database ====
+Drupal requires a bit of setup to get working. So here's what you'll need to do. Copy this script to your drupal/ directory. [Where is the drupal/ directory?]
+File: drupal-script
 
-{{RootCmd
-|mysql -u root -p
-|output=<pre>
-mysql> CREATE DATABASE IF NOT EXISTS `joomla` DEFAULT CHARACTER SET `utf8` COLLATE `utf8_unicode_ci`;
-mysql> CREATE USER 'joomla'@'localhost' IDENTIFIED BY 'dbpass!!! change me';
-mysql> GRANT LOCK TABLES, SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER ON `joomla`.* TO 'joomla'@'localhost' IDENTIFIED BY 'dbpass!!! change me';
-mysql> \q
-</pre>}}
+USE mysql;
+INSERT INTO user (host, user, password, select_priv, insert_priv, update_priv) VALUES ('localhost', 'drupal', PASSWORD('passwd'), 'Y', 'Y', 'Y'); 
+CREATE database drupal;
+USE drupal;
+GRANT ALL PRIVILEGES ON drupal.* TO drupal@'%' IDENTIFIED BY 'passwd';
+FLUSH privileges;
 
-In the web page enter joomla for username and joomla for database
+Where 'passwd' is the password required to log in as the MySQL user.
 
-Press next
+Then execute the script:
 
-*Step 3
+# mysql -u root -p < drupal-script
 
-==== Ftp ====
-Select no for now.
+This will create a new user 'drupal' and a database 'drupal' for your Drupal site and load the drupal database scheme.
+Note: For Drupal 5.2: There is not an install script, to install pick your browser to http://localhost/drupal/install.php
 
-*Step4
+==== Configure Drupal base options ====
+Before you can run Drupal, you must set the database URL and the base URL to the web site. Open the configuration file and edit the line to match the database defined in the previous steps:
+File: /var/www/localhost/htdocs/drupal/sites/default/settings.php
 
-Delete the install directory, and go to http://127.0.0.1/joomla/index.php to see your website, and http://127.0.0.1/joomla/administrator/index.php to administer your website.
+username and passwords are the ones you used with the GRANT command in mysql.
 
-== Extensions ==
+$db_url = 'mysql://drupal:passwd@localhost/drupal';
 
-Drupal can be crafted into many things with extensions.  It can be used for forums, chat, classified ads, web stores, blogs, guest books, and more.
+Drupal will make all links start with this, so make sure you are using something accessible to everyone. If you are installing drupal somewhere other than the root directory, add a slash followed by your directory within the quotation. Never leave a slash at the end.
 
-[http://extensions.joomla.org/extensions joomla extensions]
+$base_url = 'http://www.example.com';
+
+==== Add Drupal entry to cron ====
+Many Drupal modules have periodic tasks that must be triggered by a cron job. To activate these tasks, you must call the cron page. This will pass control to the modules and the modules will decide if and what they must do.
+
+The following example crontab line will activate the cron script on the hour (you can edit the crontab with crontab -e:
+
+0 * * * * wget -O - -q http://localhost/cron.php
+
+
+You can now point your browser to http://localhost/install.php .. your drupal database will be setup, and you are ready to go!!
+
+== Installing Drupal modules ==
+
+Installing and configuring modules for Drupal is a lot of fun. You can browse the list at http://drupal.org/project/Modules . Untar the packages to drupal/modules but remember, you have to update the database manually for most modules! Installation instructions come with the tar package.
+
+For example, if you want to install the Daily module, and your user for mysql is drupal:
+
+$ mysql -u drupal -ppassword drupal < daily.mysql
 
 [[Category:Web application]]
