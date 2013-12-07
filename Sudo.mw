@@ -133,6 +133,92 @@ You should know that <code>sudo</code> does not alter the <code>${PATH}</code> v
 <!--T:33-->
 {{Cmd|sudo /usr/sbin/emerge-webrsync}}
 
+=== Basic Syntax with LDAP === 
+
+When using sudo with LDAP, sudo will read configuration from LDAP Server as well.
+So you will need to edit two files.
+
+{{File|/etc/ldap.conf.sudo|Please chmod 400 when done|<pre>
+# See ldap.conf(5) and README.LDAP for details
+# This file should only be readable by root
+
+# supported directives: host, port, ssl, ldap_version
+# uri, binddn, bindpw, sudoers_base, sudoers_debug
+# tls_{checkpeer,cacertfile,cacertdir,randfile,ciphers,cert,key
+
+host ldap.example.com
+port 389
+
+base dc=example,dc=com
+
+uri ldap://ldap.example.com/
+#uri ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock
+
+ldap_version 3
+#ssl start_tls
+
+sudoers_base ou=SUDOers,dc=example,dc=com
+#sudoers_debug 2
+
+bind_policy soft
+</pre>}}
+
+{{File|/etc/nsswitch.conf|Please add the sudoers line|<pre>
+sudoers:     ldap files
+</pre>}}
+
+Also you will need to add in the following LDAP Entry for Sudo.
+{{Note|It was design so that the Sudo another branch on top of the tree for security reason. So you can have a different access right from ldap to read/write to this branch}}
+{{Code|Ldap Entry for Sudo|<pre>
+version: 1
+DN: ou=SUDOers,dc=example,dc=com
+objectClass: organizationalUnit
+objectClass: top
+objectClass: domainRelatedObject
+associatedDomain: example.com
+ou: SUDOers
+
+DN: cn=defaults,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: defaults
+description: Default sudoOption's go here
+sudoOption: env_reset
+
+DN: cn=root,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: root
+sudoCommand: ALL
+sudoHost: ALL
+sudoUser: root
+
+DN: cn=%wheel,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: %wheel
+sudoCommand: ALL
+sudoHost: ALL
+sudoOption: !authenticate
+sudoUser: %wheel
+</pre>}}
+
+
+{{Code|Ldap Entry for wheel Group|<pre>
+version: 1
+DN: cn=wheel,ou=Group,dc=example,dc=com
+objectClass: top
+objectClass: posixGroup
+cn: wheel
+description: Wheel Group
+gidNumber: 10
+memberUid: useradmin1
+memberUid: root
+</pre>}}
+
+The configuration on the sudoer on LDAP are similar to files with some different. Please read more about Sudo with LDAP on the link below.<ref name="test">[http://www.sudo.ws/sudo/sudoers.ldap.man.html]Sudoers LDAP man Page</ref>
+<references />
+
 === Using Aliases === <!--T:34-->
 
 <!--T:35-->
