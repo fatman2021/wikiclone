@@ -8,12 +8,12 @@ This guide introduces the migration of Samba3 to Samba4 with LDAP on Gentoo boxe
 
 
 {{Warning|
-Don't not test migration in your production environment, Once a Windows client finds and connects to the new server, it is not possible to go back! the windows client will never talk to your samba 3 server even if you remove/downgrade the samba 4 Server.
+Do not test migration in your production environment, Once a Windows client finds and connects to the new server, it is not possible to go back! the windows client will never talk to your samba 3 server even if you remove/downgrade the samba 4 Server.
 So make sure you thoroughly test your migration on a virtual environment and how your clients react before you activate your new server in your production environment! 
 }}
 
 
-== Samba DNS Planing ==
+=== Samba DNS Planing ===
 * Moving from samba3 to samba AD is not easy due to the fact that the idea wasn't the same.
 * Samba AD required you to have a resolvable DNS.
 * MS suggest to use a FQDN as an AD Server as it is easily scalable in future.
@@ -21,7 +21,7 @@ So make sure you thoroughly test your migration on a virtual environment and how
 
 Thus we would hope that you use the following suggestion.
 
-=== FQDN subdomain DNS setup ===
+==== FQDN subdomain DNS setup ====
 Example you own "company.com" and it is hosting by your web hosting company.
 
 {| class="wikitable"
@@ -53,7 +53,8 @@ Samba AD and internal subdomain DNS setup
 |-
 | samba4-1.headoffice.location1.company.com. || Samba AD FQDN
 |}
-in the above example, NETBIOS NAME: HEADOFFICE
+in the above example:<br />
+NETBIOS NAME: HEADOFFICE
 
 '''''So the most important setup.'''''
 
@@ -68,32 +69,67 @@ DOMAINNAME ( NT Style )  COMPANY<br />
 # In case if there are Branch Site, the Branch AD FQDN can be another subdomain: ''samba4-2.branch_CA.company.com.''
 # We can also make the subdomain public if need and that make this design future proof.
 
+=== Python 2.7 ABI ===
+Run the following command to check if python2.7 is ABI
+
+{{RootCmd|eselect python list|output=<pre>
+Available Python interpreters:
+  [1]   python2.7 *
+  [2]   python3.2
+</pre>}}
+
+If the result are not the same run the following command
+
+{{RootCmd|eselect python set 1}}
+
+=== Checking SambaSID for duplication ===
+
+We will now check for SambaSID duplication
+You can use the following code which is from the samba ClassUpgrade/HOWTO <ref name="classicupgrade">[https://wiki.samba.org/index.php/Samba4/samba-tool/domain/classicupgrade/HOWTO]https://wiki.samba.org/index.php/Samba4/samba-tool/domain/classicupgrade/HOWTO</ref>
+{{Code||<pre>
+#!/usr/bin/python
+# A quick and dirty python script that checks for duplicat SID's using slapcat.
+import os
+ 
+data = os.popen("slapcat | grep sambaSID", 'r')
+line = []
+ 
+def anydup(thelist):
+        dups = list(set([x for x in thelist if thelist.count(x) > 1]))
+        for i in dups:
+                print "Duplicate id: ", i
+ 
+for each_line in data:
+        line.append(each_line.strip())
+ 
+anydup(line)
+</pre>}}
+
+
+
 == Getting Started with Samba4 ==
 
 === Getting Samba4 ===
 Samba4 is already in portage, however it is still mask and there are some bugs related to it. <br />
 A few of them are affecting us. Make the patch in and run your ebuild.
 # {{Bug|490872}} Mit-krb5 conflict with hemidal issue, resolve using internal hemidal library.
-# {{Bug|491002}} LDAP Schema Missing after Samba4 install. (Fixed)
 
 The 1st bugs are very important if you cannot remove the dependency of having mit-Krb5 (in most case)<br />
 Please apply the patch and make your own ebuild.<br />
-
-2nd patch is optional as you can still copy the samba.schema somewhere over the internet. Fixed<br />
 
 For more on samba4 bugs please have a look on the bugs tracker below.<br />
 {{Bug|489762}} Samba4 unmask bugs tracker.
 
 {{USEflag|package=net-fs/samba
 |acl++Yes
-|addns
+|addns++Yes
 |ads++Yes
 |aio
 |avahi
 |caps
 |cluster
 |client
-|cups
+|cups++Yes
 |debug
 |dmapi
 |doc
@@ -115,3 +151,9 @@ For more on samba4 bugs please have a look on the bugs tracker below.<br />
 }}
 
 {{Emerge|{{=}}net-fs/samba-4.1.2}}
+
+
+
+
+
+ <references />
