@@ -14,6 +14,20 @@ El paquete <code>app-admin/sudo</code> permite al administrador del sistema otor
 
 Con <code>sudo</code> puede hacer una lista completa de "quién" puede ejecutar una aplicación determinada. Si estableciera el bit setuid, cualquier usuario podría ejecutar la aplicación (o cualquier usuario de un grupo en concreto, dependiendo de los permisos empleados). Puede (e incluso debería) exigir al usuario que proporcione una contraseña cuando éste quiera ejecutar la aplicación. 
 
+=== Emerge Sudo ===
+{{USEflag|package=app-admin/sudo
+|ldap
+|nls
+|pam++Yes
+|offensive
+|skey
+|selinux
+|sendmail
+}}
+
+{{Emerge|sudo}}
+
+
 === Registrar la Actividad ===
 
 Una ventaja adicional de <code>sudo</code> es que registra cualquier intento (satisfactorio o no) de ejecución de una aplicación. Esto es de gran utilidad si le quiere seguir la pista al que hizo ese error fatal que le llevó diez horas arreglar :&#41; 
@@ -28,7 +42,7 @@ Esta herramienta se asegura que no haya dos administradores del sistema editando
 
 Esta guía pretende ser una introducción rápida. El paquete <code>sudo</code> es mucho más potente que lo que aquí se describe. Tiene características especiales para la edición de ficheros como un usuario distinto (<code>sudoedit</code>), se puede correr desde un guión (por lo que puede estar en segundo plano, leer la contraseña desde la entrada estándar en lugar del teclado, ...), etc. 
 
-Por favor, lea las páginas de <code>sudo</code> y <code>sudoers</code> del manual para obtener mayor información. 
+Por favor, lea las páginas de <code>sudo</code> y <code>sudoers</code> del manual para obtener mayor información.
 
 == Sintaxis de Sudoers ==
 
@@ -50,7 +64,7 @@ swift localhost = /usr/bin/emerge
 
 {{Note|El nombre del equipo debe coincidir con lo que devuelve la orden <code>hostname</code>.}}
 
-De todos modos, una '''gran advertencia''': no permita que un usuario corra una aplicación que pueda permitir incrementar los privilegios a otros. Por ejemplo, permitir que los usuarios ejecuten <code>emerge</code> como root puede en efecto otorgarles acceso total como root al sistema, puesto que <code>emerge</code> se puede modificar para cambiar el comportamiento del sistema de ficheros en beneficio del usuario. Si no confía en los usuarios que pueden emplear <code>sudo</code>, no les conceda ningún derecho. 
+De todos modos, una '''gran advertencia''': no permita que un usuario corra una aplicación que pueda permitir incrementar los privilegios a otros. Por ejemplo, permitir que los usuarios ejecuten <code>emerge</code> como root puede en efecto otorgarles acceso total como root al sistema, puesto que <code>emerge</code> se puede modificar para cambiar el comportamiento del sistema de ficheros en beneficio del usuario. Si no confía en los usuarios que pueden emplear <code>sudo</code>, no les conceda ningún derecho.
 
 El nombre de usuario también se puede sustituir por un nombre de grupo. En este caso, debería anteponer el signo <code>%</code> al nombre del grupo. Por ejemplo, para permitir que cualquier usuario del grupo <code>wheel</code> pueda correr <code>emerge</code>: 
 
@@ -88,6 +102,101 @@ La contraseña solicitada por <code>sudo</code> es la del propio usuario. Esto e
 Debería saber que <code>sudo</code> no cambia la variable <code>${PATH}</code>: cualquier orden situada después de <code>sudo</code> se trata desde "su" entorno. Si desea que el usuario corra una herramienta ubicada en, por ejemplo, {{Path|/sbin}} éste debería proporcionar a <code>sudo</code> la ruta completa, algo como: 
 
 {{Cmd|sudo /usr/sbin/emerge-webrsync}}
+
+=== Basic Syntax with LDAP === 
+
+The following use flag is needed for the LDAP support.
+{{USEflag|package=app-admin/sudo
+|ldap++yes
+|pam++Yes
+}}
+
+When using sudo with LDAP, sudo will read configuration from LDAP Server as well.
+So you will need to edit two files.
+
+{{File|/etc/ldap.conf.sudo|Please chmod 400 when done|<pre>
+# See ldap.conf(5) and README.LDAP for details
+# This file should only be readable by root
+  
+# supported directives: host, port, ssl, ldap_version
+# uri, binddn, bindpw, sudoers_base, sudoers_debug
+# tls_{checkpeer,cacertfile,cacertdir,randfile,ciphers,cert,key
+  
+host ldap.example.com
+port 389
+  
+base dc=example,dc=com
+  
+uri ldap://ldap.example.com/
+#uri ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock
+  
+ldap_version 3
+#ssl start_tls
+  
+sudoers_base ou=SUDOers,dc=example,dc=com
+#sudoers_debug 2
+  
+bind_policy soft
+</pre>}}
+
+{{File|/etc/nsswitch.conf|Please add the sudoers line|<pre>
+sudoers:     ldap files
+</pre>}}
+
+Also you will need to add in the following LDAP Entry for Sudo.
+
+{{Note|It was design so that the Sudoers branch are on top of the tree for security reason. So you can have a different access right from ldap to read/write to this branch}}
+
+{{Code|Ldap Entry for Sudo|<pre>
+version: 1
+DN: ou=SUDOers,dc=example,dc=com
+objectClass: organizationalUnit
+objectClass: top
+objectClass: domainRelatedObject
+associatedDomain: example.com
+ou: SUDOers
+  
+DN: cn=defaults,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: defaults
+description: Default sudoOption's go here
+sudoOption: env_reset
+  
+DN: cn=root,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: root
+sudoCommand: ALL
+sudoHost: ALL
+sudoUser: root
+  
+DN: cn=%wheel,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: %wheel
+sudoCommand: ALL
+sudoHost: ALL
+sudoOption: !authenticate
+sudoUser: %wheel
+</pre>}}
+
+
+{{Code|Ldap Entry for wheel Group|<pre>
+version: 1
+DN: cn=wheel,ou=Group,dc=example,dc=com
+objectClass: top
+objectClass: posixGroup
+cn: wheel
+description: Wheel Group
+gidNumber: 10
+memberUid: useradmin1
+memberUid: root
+</pre>}}
+
+The configuration on the sudoer on LDAP are similar to files with some different. Please read more about Sudo with LDAP on the link below.<ref name="test">[http://www.sudo.ws/sudo/sudoers.ldap.man.html]Sudoers LDAP man Page</ref>
+
+<references />
 
 === Utilizar Alias ===
 
