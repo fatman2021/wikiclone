@@ -41,79 +41,89 @@ Do not forget to add nginx to the default runlevel:
 
 {{RootCmd|rc-update add nginx default}}
 
-== Configuration ==
-The nginx configuration is handled by {{Path|/etc/nginx/nginx.conf}}. 
-Example 1 shows a single-site access, without dynamic capabilities (such as [[PHP]]).
+== Operating ==
 
-{{File|/etc/nginx/nginx.conf|Example 1 - Gentoo's default configuration|<pre>
+The nginx package installs a service script allowing administrators to stop, start or restart the service:
+
+{{RootCmd|/etc/init.d/nginx start}}
+
+To verify that nginx is properly running, point your browser to it or use one of the command line web clients (like <code>curl</code>):
+
+{{Cmd|curl http://localhost}}
+
+== Configuration ==
+
+The nginx configuration is handled through the {{Path|/etc/nginx/nginx.conf}} file.
+
+=== Single site access ===
+
+The following example shows a single-site access, without dynamic capabilities (such as [[PHP]]).
+
+{{File|/etc/nginx/nginx.conf|Gentoo's default configuration|<pre>
 user nginx nginx;
 worker_processes 1;
-
+  
 error_log /var/log/nginx/error_log info;
-
+  
 events {
         worker_connections 1024;
         use epoll;
 }
-
+  
 http {
         include /etc/nginx/mime.types;
         default_type application/octet-stream;
-
+  
         log_format main
                 '$remote_addr - $remote_user [$time_local] '
                 '"$request" $status $bytes_sent '
                 '"$http_referer" "$http_user_agent" '
                 '"$gzip_ratio"';
-
+  
         client_header_timeout 10m;
         client_body_timeout 10m;
         send_timeout 10m;
-
+  
         connection_pool_size 256;
         client_header_buffer_size 1k;
         large_client_header_buffers 4 2k;
         request_pool_size 4k;
-
+  
         gzip on;
         gzip_min_length 1100;
         gzip_buffers 4 8k;
         gzip_types text/plain;
-
+  
         output_buffers 1 32k;
         postpone_output 1460;
-
+  
         sendfile on;
         tcp_nopush on;
         tcp_nodelay on;
-
+  
         keepalive_timeout 75 20;
-
+  
         ignore_invalid_headers on;
-
+  
         index index.html;
-
+  
         server {
                 listen 127.0.0.1;
                 server_name localhost;
-
+  
                 access_log /var/log/nginx/localhost.access_log main;
                 error_log /var/log/nginx/localhost.error_log info;
-
+  
                 root /var/www/localhost/htdocs;
         }
 }
 </pre>}}
 
-Start nginx:
-{{RootCmd|/etc/init.d/nginx start}}
-
-Verify nginx is running and responding as configured above:
-{{Cmd|curl http://localhost}}
-
 === Enabling PHP support  ===
-Add following lines to your nginx configuriation to enable PHP support. In this example nginx is exchanging information with the PHP process via a UNIX socket.
-{{File|/etc/nginx/nginx.conf|Example 2 - Enabling PHP support|<pre>
+
+Add the following lines to the nginx configuration to enable PHP support. In this example nginx is exchanging information with the PHP process via a UNIX socket.
+
+{{File|/etc/nginx/nginx.conf|Enabling PHP support|<pre>
 ...
 http {
 ...
@@ -127,41 +137,43 @@ http {
 }
 </pre>}}
 
-Additionally it is needed to build [[PHP]] with FastCGI Process Manager (php-fpm) support enabled.
-Add the fpm USE flag to the {{Package|dev-lang/php}} package: 
+To support this setup, PHP needs to be build with FastCGI Process Manager support (php-fpm), which is handled through the <code>fpm</code> USE flag:
+
 {{RootCmd|echo "dev-lang/php fpm" >> /etc/portage/package.use}}
 
 Rebuild php with the new USE flag enabled.
-{{emerge|dev-lang/php}}
+
+{{Emerge|dev-lang/php}}
  
 {{Note|Using UNIX socket communication is the preferred and recommended configuration}}
-Review the {{Path|/etc/php/fpm-php5.4/php-fpm.conf}} configuration, add following line:
-{{File|/etc/php/fpm-php5.4/php-fpm.conf|Example 3 - Running PHP with UNIX socket support|<pre>
-...
+
+Review the {{Path|/etc/php/fpm-php5.4/php-fpm.conf}} configuration and add following line:
+
+{{File|/etc/php/fpm-php5.4/php-fpm.conf|Running PHP with UNIX socket support|<pre>
 listen = /var/run/php-fpm.socket
-...
 </pre>}}
 
 Start the php-fpm daemon:
+
 {{RootCmd|/etc/init.d/php-fpm start}}
 
-Add php-fpm to the default runlevel 
+Add php-fpm to the default runlevel:
+
 {{RootCmd|rc-update add php-fpm default}}
 
-Reload nginx with changed configuration
+Reload nginx with changed configuration:
+
 {{RootCmd|/etc/init.d/nginx reload}}
 
-=== IP access list ===
-Example 4 shows how to allow access to a particular site ''/nginx_status'' only to 
-* certain hosts f.e. ''192.0.2.1 127.0.0.1''
-* and IP networks ''198.51.100.0/24''
-IP addresses are in CIDR notation, see definition example below:
-{{File|/etc/nginx/nginx.conf|Example 4 - Enabling and configuring an IP access lists for /nginx_status page|<pre>
-...
-http{
-...
+=== Enabling an IP access list ===
+
+The next example shows how to allow access to a particular URL (in this case ''/nginx_status'') only to 
+* certain hosts (e.g. ''192.0.2.1 127.0.0.1'')
+* and IP networks (e.g. ''198.51.100.0/24'')
+
+{{File|/etc/nginx/nginx.conf|Enabling and configuring an IP access lists for /nginx_status page|<pre>
+http {
     server { 
-    ...
             location /nginx_status {
                      stub_status on;
                      allow 127.0.0.1/32;
