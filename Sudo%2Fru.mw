@@ -18,6 +18,20 @@
 
 С <code>sudo</code> Вы можете создать четкий список того, ''кто'' может выполнять определенное приложение. Если Вы установите бит setuid, любой пользователь сможет запустить это приложение (или любой пользователь, принадлежащий к определенной группе, в зависимости от используемых разрешений). Вы можете (и, может, даже должны) потребовать от пользователя указания пароля, в тех случаях когда он хочет запустить приложение. 
 
+=== Emerge Sudo ===
+{{USEflag|package=app-admin/sudo
+|ldap
+|nls
+|pam++Yes
+|offensive
+|skey
+|selinux
+|sendmail
+}}
+
+{{Emerge|sudo}}
+
+
 === Запись Действий в Лог ===
 
 Одним из дополнительных преимуществ <code>sudo</code> является то, что оно может записывать в лог любую попытку (успешную или нет) запустить приложение. Это очень полезно, если Вы хотите отследить кто сделал ту фатальную ошибку, которая заняла 10 часов на исправление :&#41; 
@@ -32,7 +46,7 @@
 
 Это руководство предназначается в качестве быстрого введения. Пакет <code>sudo</code> - гораздо более мощный, чем описано в этом руководстве. Он имеет специальные возможности для редактирования файлов от имени другого пользователя (<code>sudoedit</code>), запуска из сценария (так, чтобы он мог выполняться на заднем плане, считывать пароль со стандартного потока ввода, вместо клавиатуры, ...), и т.д. 
 
-Чтобы получить больше информации, прочтите man-страницы <code>sudo</code> и <code>sudoers</code>. 
+Чтобы получить больше информации, прочтите man-страницы <code>sudo</code> и <code>sudoers</code>.
 
 == Синтаксис Sudoers ==
 
@@ -54,7 +68,7 @@ swift  localhost = /usr/bin/emerge
 
 {{Note/ru|Имя хоста (hostname) должно соответствовать тому, что возвращает команда <code>hostname</code>.}}
 
-Все же, есть одно '''большое предупреждение''': не разрешайте пользователю запускать приложение, которое может позволить повышение привилегий. Например, разрешение пользователям выполнения <code>emerge</code> под учетной записью root может на самом деле предоставить им полный доступ к системе от учетной записи root, потому что <code>emerge</code> можно управлять для изменения реальной файловой системы на выгоду пользователя. Если Вы не доверяете Вашим пользователям <code>sudo</code>, не предоставляйте им никаких прав. 
+Все же, есть одно '''большое предупреждение''': не разрешайте пользователю запускать приложение, которое может позволить повышение привилегий. Например, разрешение пользователям выполнения <code>emerge</code> под учетной записью root может на самом деле предоставить им полный доступ к системе от учетной записи root, потому что <code>emerge</code> можно управлять для изменения реальной файловой системы на выгоду пользователя. Если Вы не доверяете Вашим пользователям <code>sudo</code>, не предоставляйте им никаких прав.
 
 Имя пользователя также может быть заменено на имя группы - в этом случае Вы должны начать имя группы со знака <code>%</code>. К примеру, чтобы разрешить кому-либо в группе <code>wheel</code> запуск <code>emerge</code> : 
 
@@ -91,6 +105,101 @@ Password: ## (Enter the user password, not root!)
 Вам нужно знать, что <code>sudo</code> не изменяет переменную <code>${Path}</code>: любая команда, размещенная Вами после <code>sudo</code>, обрабатывается из ''Вашей'' среды. Если Вы хотите, чтобы пользователь запускал инструменты, к примеру, в {{Path|/sbin}}, он должен предоставить <code>sudo</code> полный путь, подобно тому как: 
 
 {{Cmd|sudo /usr/sbin/emerge-webrsync}}
+
+=== Basic Syntax with LDAP === 
+
+The following use flag is needed for the LDAP support.
+{{USEflag|package=app-admin/sudo
+|ldap++yes
+|pam++Yes
+}}
+
+When using sudo with LDAP, sudo will read configuration from LDAP Server as well.
+So you will need to edit two files.
+
+{{File|/etc/ldap.conf.sudo|Please chmod 400 when done|<pre>
+# See ldap.conf(5) and README.LDAP for details
+# This file should only be readable by root
+  
+# supported directives: host, port, ssl, ldap_version
+# uri, binddn, bindpw, sudoers_base, sudoers_debug
+# tls_{checkpeer,cacertfile,cacertdir,randfile,ciphers,cert,key
+  
+host ldap.example.com
+port 389
+  
+base dc=example,dc=com
+  
+uri ldap://ldap.example.com/
+#uri ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock
+  
+ldap_version 3
+#ssl start_tls
+  
+sudoers_base ou=SUDOers,dc=example,dc=com
+#sudoers_debug 2
+  
+bind_policy soft
+</pre>}}
+
+{{File|/etc/nsswitch.conf|Please add the sudoers line|<pre>
+sudoers:     ldap files
+</pre>}}
+
+Also you will need to add in the following LDAP Entry for Sudo.
+
+{{Note|It was design so that the Sudoers branch are on top of the tree for security reason. So you can have a different access right from ldap to read/write to this branch}}
+
+{{Code|Ldap Entry for Sudo|<pre>
+version: 1
+DN: ou=SUDOers,dc=example,dc=com
+objectClass: organizationalUnit
+objectClass: top
+objectClass: domainRelatedObject
+associatedDomain: example.com
+ou: SUDOers
+  
+DN: cn=defaults,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: defaults
+description: Default sudoOption's go here
+sudoOption: env_reset
+  
+DN: cn=root,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: root
+sudoCommand: ALL
+sudoHost: ALL
+sudoUser: root
+  
+DN: cn=%wheel,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: %wheel
+sudoCommand: ALL
+sudoHost: ALL
+sudoOption: !authenticate
+sudoUser: %wheel
+</pre>}}
+
+
+{{Code|Ldap Entry for wheel Group|<pre>
+version: 1
+DN: cn=wheel,ou=Group,dc=example,dc=com
+objectClass: top
+objectClass: posixGroup
+cn: wheel
+description: Wheel Group
+gidNumber: 10
+memberUid: useradmin1
+memberUid: root
+</pre>}}
+
+The configuration on the sudoer on LDAP are similar to files with some different. Please read more about Sudo with LDAP on the link below.<ref name="test">[http://www.sudo.ws/sudo/sudoers.ldap.man.html]Sudoers LDAP man Page</ref>
+
+<references />
 
 === Использование Псевдонимов ===
 
