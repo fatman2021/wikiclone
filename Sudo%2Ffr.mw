@@ -18,6 +18,20 @@ Le paquet <code>app-admin/sudo</code> permet à l'administrateur du système d'a
 
 Avec <code>sudo</code> vous pouvez établir une liste claire de ''qui'' peut exécuter une application donnée. Si vous utilisiez le bit ''setuid'', n'importe quel utilisateur ( ou n'importe quel utilisateur d'un groupe donné, selon l'autorisation accordée) serait capable d'exécuter cette application. Vous pouvez (et devriez probablement) demander à l'utilisateur de fournir un mot de passe lorsqu'il désire exécuter l'application concernée. 
 
+=== Emerge Sudo ===
+{{USEflag|package=app-admin/sudo
+|ldap
+|nls
+|pam++Yes
+|offensive
+|skey
+|selinux
+|sendmail
+}}
+
+{{Emerge|sudo}}
+
+
 === Journalisation ===
 
 Un avantage supplémentaire de <code>sudo</code>, c'est qu'elle peut tenir un journal de toutes les tentatives (réussies ou pas) d'exécution d'une application. Ceci est très utile si vous voulez garder la trace de qui a commis l'erreur fatale qui vous a demandé 10 heures à réparer. 
@@ -32,7 +46,7 @@ Cet outil garantit que deux administrateurs ne sont pas en train d'éditer ce fi
 
 Ce guide ne prétend être qu'une introduction rapide. Le paquet <code>sudo</code> est beaucoup plus puissant que ce que nous décrivons ici. Il possède des fonctionnalités spéciales pour éditer des fichiers en tant qu'un autre utilisateur (<code>sudoedit</code> ), depuis un script (de telle manière qu'il puisse fonctionner en arrière-plan, lire le mot de passe depuis l'entrée standard plutôt que du clavier,...), etc. 
 
-Reportez-vous aux pages de manuel de  <code>sudo</code> et de <code>sudoers</code> pour une information plus complète. 
+Reportez-vous aux pages de manuel de  <code>sudo</code> et de <code>sudoers</code> pour une information plus complète.
 
 == Syntaxe de sudoers ==
 
@@ -54,7 +68,7 @@ swift  localhost = /usr/bin/emerge
 
 {{Note|Le nom d'hôte doit corresponde à ce que retourne la commande <code>hostname</code>.}}
 
-Un gros '''avertissement''' est cependant de mise : n'autorisez pas un utilisateur à exécuter une application  qui lui permette d'élever ses autorisations. Par exemple, autoriser des utilisateurs à exécuter <code>emerge</code>  en tant que ''root'' peut en effet leur donner un accès complet au système en tant que ''root'' parce qu'<code>emerge</code> peut être manipulé pour changer le système de fichier actif à l'avantage de l'utilisateur. Si vous ne faites pas confiance à vos utilisateurs de  <code>sudo</code>, ne leur donnez aucune autorisation. 
+Un gros '''avertissement''' est cependant de mise : n'autorisez pas un utilisateur à exécuter une application  qui lui permette d'élever ses autorisations. Par exemple, autoriser des utilisateurs à exécuter <code>emerge</code>  en tant que ''root'' peut en effet leur donner un accès complet au système en tant que ''root'' parce qu'<code>emerge</code> peut être manipulé pour changer le système de fichier actif à l'avantage de l'utilisateur. Si vous ne faites pas confiance à vos utilisateurs de  <code>sudo</code>, ne leur donnez aucune autorisation.
 
 Le nom d'utilisateur peut aussi être remplacé par un nom de groupe. Dans ce cas, vous devriez commencer le nom du groupe avec un signe <code>%</code>. Par exemple, pour autoriser n'importe quel utilisateur du groupe <code>wheel</code> à exécuter <code>emerge</code> : 
 
@@ -92,6 +106,101 @@ Le mot de passe requis par  <code>sudo</code> est le propre mot de passe de l'ut
 Vous devriez savoir que <code>sudo</code> ne modifie pas la variable <code>${PATH}</code> : toute commande placée après <code>sudo</code> est traitée dans ''votre'' environnement. Si vous voulez que l'utilisateur exécute un outil dans {{Path|/sbin}} par exemple, il devrait fournir le chemin complet à <code>sudo</code> de cette manière : 
 
 {{Cmd|sudo /usr/sbin/emerge-webrsync}}
+
+=== Basic Syntax with LDAP === 
+
+The following use flag is needed for the LDAP support.
+{{USEflag|package=app-admin/sudo
+|ldap++yes
+|pam++Yes
+}}
+
+When using sudo with LDAP, sudo will read configuration from LDAP Server as well.
+So you will need to edit two files.
+
+{{File|/etc/ldap.conf.sudo|Please chmod 400 when done|<pre>
+# See ldap.conf(5) and README.LDAP for details
+# This file should only be readable by root
+  
+# supported directives: host, port, ssl, ldap_version
+# uri, binddn, bindpw, sudoers_base, sudoers_debug
+# tls_{checkpeer,cacertfile,cacertdir,randfile,ciphers,cert,key
+  
+host ldap.example.com
+port 389
+  
+base dc=example,dc=com
+  
+uri ldap://ldap.example.com/
+#uri ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock
+  
+ldap_version 3
+#ssl start_tls
+  
+sudoers_base ou=SUDOers,dc=example,dc=com
+#sudoers_debug 2
+  
+bind_policy soft
+</pre>}}
+
+{{File|/etc/nsswitch.conf|Please add the sudoers line|<pre>
+sudoers:     ldap files
+</pre>}}
+
+Also you will need to add in the following LDAP Entry for Sudo.
+
+{{Note|It was design so that the Sudoers branch are on top of the tree for security reason. So you can have a different access right from ldap to read/write to this branch}}
+
+{{Code|Ldap Entry for Sudo|<pre>
+version: 1
+DN: ou=SUDOers,dc=example,dc=com
+objectClass: organizationalUnit
+objectClass: top
+objectClass: domainRelatedObject
+associatedDomain: example.com
+ou: SUDOers
+  
+DN: cn=defaults,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: defaults
+description: Default sudoOption's go here
+sudoOption: env_reset
+  
+DN: cn=root,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: root
+sudoCommand: ALL
+sudoHost: ALL
+sudoUser: root
+  
+DN: cn=%wheel,ou=SUDOers,dc=example,dc=com
+objectClass: top
+objectClass: sudoRole
+cn: %wheel
+sudoCommand: ALL
+sudoHost: ALL
+sudoOption: !authenticate
+sudoUser: %wheel
+</pre>}}
+
+
+{{Code|Ldap Entry for wheel Group|<pre>
+version: 1
+DN: cn=wheel,ou=Group,dc=example,dc=com
+objectClass: top
+objectClass: posixGroup
+cn: wheel
+description: Wheel Group
+gidNumber: 10
+memberUid: useradmin1
+memberUid: root
+</pre>}}
+
+The configuration on the sudoer on LDAP are similar to files with some different. Please read more about Sudo with LDAP on the link below.<ref name="test">[http://www.sudo.ws/sudo/sudoers.ldap.man.html]Sudoers LDAP man Page</ref>
+
+<references />
 
 === Utiliser des alias  ===
 
