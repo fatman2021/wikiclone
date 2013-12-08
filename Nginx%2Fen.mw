@@ -1,0 +1,221 @@
+<languages />
+
+{{Lowercase title}}
+{{InfoBox stack
+|{{InfoBox homepage|http://nginx.org/en/|header=true}}
+|{{InfoBox wikipedia}}
+}}
+
+'''nginx''' is a robust, small and high performance [[:Category:Web Servers|web server]] and reverse proxy server. It is a good alternative to the popular available web servers like [[Apache]] and [[lighttpd]].
+
+== Installation ==
+
+Before immediately installing the {{Package|www-servers/nginx}} package, first take a good look at the USE flags for Nginx.
+
+Nginx uses modules to enhance its features. To simplify the maintenance of this modular approach, the nginx ebuild uses expanded USE flags to denote which modules should be installed. HTTP related modules can be enabled through the <code>${NGINX_MODULES_HTTP}</code> variable whereas mail related modules can be enabled through the <code>${NGINX_MODULES_MAIL}</code> variable.
+
+These variables need to be set in {{Path|/etc/portage/make.conf}}. Their description can be found in [http://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/profiles/desc/nginx_modules_http.desc /usr/portage/profiles/desc/nginx_modules_http.desc] and [http://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/profiles/desc/nginx_modules_mail.desc /usr/portage/profiles/desc/nginx_modules_mail.desc].
+
+Other USE flags are:
+
+{{USEflag|package=www-servers/nginx
+|aio
+|debug
+|http+yes
+|http-cache+yes
+|ipv6+yes
+|libatomic 
+|pcre
+|pcre-jit
+|syslog 
+|vim-syntax
+|ssl+yes
+}}
+
+With the USE flags set, install {{Package|www-servers/nginx}}:
+
+{{Emerge|nginx}}
+
+Do not forget to add nginx to the default runlevel:
+
+{{RootCmd|rc-update add nginx default}}
+
+== Operating ==
+
+The nginx package installs a service script allowing administrators to stop, start or restart the service:
+
+{{RootCmd|/etc/init.d/nginx start}}
+
+To verify that nginx is properly running, point your browser to it or use one of the command line web clients (like <code>curl</code>):
+
+{{Cmd|curl http://localhost}}
+
+== Configuration ==
+
+The nginx configuration is handled through the {{Path|/etc/nginx/nginx.conf}} file.
+
+=== Single site access ===
+
+The following example shows a single-site access, without dynamic capabilities (such as [[PHP]]).
+
+{{File|/etc/nginx/nginx.conf|Gentoo's default configuration|<pre>
+user nginx nginx;
+worker_processes 1;
+  
+error_log /var/log/nginx/error_log info;
+  
+events {
+        worker_connections 1024;
+        use epoll;
+}
+  
+http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+  
+        log_format main
+                '$remote_addr - $remote_user [$time_local] '
+                '"$request" $status $bytes_sent '
+                '"$http_referer" "$http_user_agent" '
+                '"$gzip_ratio"';
+  
+        client_header_timeout 10m;
+        client_body_timeout 10m;
+        send_timeout 10m;
+  
+        connection_pool_size 256;
+        client_header_buffer_size 1k;
+        large_client_header_buffers 4 2k;
+        request_pool_size 4k;
+  
+        gzip on;
+        gzip_min_length 1100;
+        gzip_buffers 4 8k;
+        gzip_types text/plain;
+  
+        output_buffers 1 32k;
+        postpone_output 1460;
+  
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+  
+        keepalive_timeout 75 20;
+  
+        ignore_invalid_headers on;
+  
+        index index.html;
+  
+        server {
+                listen 127.0.0.1;
+                server_name localhost;
+  
+                access_log /var/log/nginx/localhost.access_log main;
+                error_log /var/log/nginx/localhost.error_log info;
+  
+                root /var/www/localhost/htdocs;
+        }
+}
+</pre>}}
+
+=== Enabling PHP support  ===
+
+Add the following lines to the nginx configuration to enable PHP support. In this example nginx is exchanging information with the PHP process via a UNIX socket.
+
+{{File|/etc/nginx/nginx.conf|Enabling PHP support|<pre>
+...
+http {
+...
+    server { 
+    ...
+            location ~ \.php$ {
+                       include /etc/nginx/fastcgi.conf;
+                       fastcgi_pass unix:/var/run/php-fpm.socket;
+           }
+    }
+}
+</pre>}}
+
+To support this setup, PHP needs to be build with FastCGI Process Manager support (php-fpm), which is handled through the <code>fpm</code> USE flag:
+
+{{RootCmd|echo "dev-lang/php fpm" >> /etc/portage/package.use}}
+
+Rebuild php with the new USE flag enabled.
+
+{{Emerge|dev-lang/php}}
+ 
+{{Note|Using UNIX socket communication is the preferred and recommended configuration}}
+
+Review the {{Path|/etc/php/fpm-php5.4/php-fpm.conf}} configuration and add following line:
+
+{{File|/etc/php/fpm-php5.4/php-fpm.conf|Running PHP with UNIX socket support|<pre>
+listen = /var/run/php-fpm.socket
+</pre>}}
+
+Start the php-fpm daemon:
+
+{{RootCmd|/etc/init.d/php-fpm start}}
+
+Add php-fpm to the default runlevel:
+
+{{RootCmd|rc-update add php-fpm default}}
+
+Reload nginx with changed configuration:
+
+{{RootCmd|/etc/init.d/nginx reload}}
+
+=== Enabling an IP access list ===
+
+The next example shows how to allow access to a particular URL (in this case ''/nginx_status'') only to 
+* certain hosts (e.g. ''192.0.2.1 127.0.0.1'')
+* and IP networks (e.g. ''198.51.100.0/24'')
+
+{{File|/etc/nginx/nginx.conf|Enabling and configuring an IP access lists for /nginx_status page|<pre>
+http {
+    server { 
+            location /nginx_status {
+                     stub_status on;
+                     allow 127.0.0.1/32;
+                     allow 192.0.2.1/32;
+                     allow 198.51.100.0/24;
+                     deny all;
+             }
+     }
+}
+</pre>}}
+
+== Troubleshooting ==
+
+In case of problems, the following commands can help you troubleshoot the situation.
+
+=== Validate configuration ===
+
+Verify that the running nginx configuration has no errors. 
+
+{{RootCmd|/usr/sbin/nginx -t|output=<pre>
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+</pre>}}
+
+By running <code>nginx</code> with the <code>-t</code> option, it will validate the configuration file without actually starting an nginx daemon.
+
+=== Verify processes are running ===
+
+Check if the nginx processes are running:
+
+{{Cmd|ps aux {{!}} egrep 'nginx{{!}}PID'|output=<pre>
+  PID TTY      STAT   TIME COMMAND
+26092 ?        Ss     0:00 nginx: master process /usr/sbin/nginx -c /etc/nginx/nginx.conf
+26093 ?        S      0:00 nginx: worker proces
+</pre>}}
+
+=== Verify bound addresses and ports ===
+
+Verify nginx daemon is listening on the right TCP port (such as 80 for HTTP or 443 for HTTPS):
+
+{{RootCmd|netstat -tulpen {{!}} grep :80|output=<pre>
+tcp        0      0 127.0.0.1:80            0.0.0.0:*               LISTEN      0          12336835   -26092/nginx: master
+</pre>}}
+
+== External resources ==
+* [http://wiki.nginx.org/Main nginx Wiki][[Category:Web Servers]]
