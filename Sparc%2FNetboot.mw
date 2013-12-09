@@ -2,238 +2,324 @@
 
 <translate>
 
+<!--T:1-->
 Guide for setting up a netboot server for use with the Gentoo/SPARC netboot installation images.
 
-== Introduction ==
+== Introduction == <!--T:2-->
 
+<!--T:3-->
 {{Note|This howto is currently very SPARC-centric and expecting that you will be setting up your netboot server on an existing Gentoo Linux machine.}}
 This document will describe how to setup a network booting environment for a Sun Microsystems SPARC or UltraSPARC based computer. The document assumes that you have an existing Gentoo Linux computer available to act as the netboot server. 
 
+<!--T:4-->
 Both the netboot server and netboot client will need to be on the same network subnet, as the ARP protocol is typically not forwarded across different network subnets. 
 
+<!--T:5-->
 A generic overview of what happens during the netboot process is as follows; 
 
+<!--T:6-->
 # Client machine sends out a reverse ARP (RARP) request to get an IP address
 # A server machine returns a response to the client with the IP address
 # The client then attempts to download a boot image from the RARP server using the TFTP protocol
 # Once the image is downloaded, the netboot client then boots the image
 
+<!--T:7-->
 Based on this overview, we will need to install software for a reverse ARP daemon and a TFTP daemon. 
 
-== Software Installation And Configuration ==
+== Software Installation And Configuration == <!--T:8-->
 
-=== The Reverse ARP Daemon ===
+=== The Reverse ARP Daemon === <!--T:9-->
 
+<!--T:10-->
 A reverse ARP daemon is already installed on your system; it's part of the <code>net-misc/iputils</code> package 
 
+<!--T:11-->
 '''Setting up common rarpd elements''' : {{Path|/etc/ethers}}  
 
+<!--T:12-->
 You will need to setup the {{Path|/etc/ethers}} file. This file indicates which hosts <code>rarpd</code> should respond to when a request is seen, and what address to reply with. 
 
+<!--T:13-->
 The format of {{Path|/etc/ethers}} is the MAC address of the NIC the machine will be netbooting and its hostname. Whitespace delimits the MAC address from the hostname, and each entry should have its own line. The following example is for a host named sparc-netboot.gentoo.org: 
 
+<!--T:14-->
 {{File|/etc/ethers||<pre>
 08:00:20:77:1f:3e  sparc-netboot.gentoo.org
 </pre>
 }}
 
+<!--T:15-->
 {{Note|If a given hexadecimal number in the MAC address starts or is 0, you can chose to omit the first 0 (i.e. 08:00:20:77:1f:3e becomes 8:0:20:77:1f:3e).}}
 If you desire to add additional hosts to {{Path|/etc/ethers}} , you do not need to restart the <code>rarpd</code> services as the file is checked each time a request is received. 
 
+<!--T:16-->
 '''Resolving hostnames''' : {{Path|/etc/hosts}}  
 
+<!--T:17-->
 Since each entry in {{Path|/etc/ethers}} has a hostname, the netboot server needs to be able to resolve the hostname into its IP address. This can be done two ways, {{Path|/etc/hosts}} or the nameserver the netboot server uses. 
 
+<!--T:18-->
 An {{Path|/etc/hosts}} entry for resolving a hostname will look very similar to the one that probably exists from when you installed Gentoo on the netboot server. For our example host, sparc-netboot.gentoo.org, we'll assume that it has an IP address of 10.0.1.15. So the {{Path|/etc/hosts}} entry would look like; 
 
 
+<!--T:19-->
 {{File|/etc/hosts||<pre>
 10.0.1.15  sparc-netboot.gentoo.org
 </pre>
 }}
 
 
+<!--T:20-->
 {{Note|Depending on the environment, you may need to consult your network administrator to get an appropriate IP address or addresses to netboot the host with.}}
 
+<!--T:21-->
 If you use a nameserver, then the DNS server administrator will need to add a record for the hostname, in our example sparc-netboot.gentoo.org, to point to the appropriate IP address. Please consult your DNS server administrator and/or the documentation for the DNS server's DNS software for how to add the entry. 
 
+<!--T:22-->
 {{Note|If both {{Path|/etc/hosts}} and the nameserver have an entry for the host to be netbooted, {{Path|/etc/hosts}} will be used first (granted the order of {{Path|/etc/nsswitch.conf}} has not been changed from the default).}}
 
+<!--T:23-->
 '''Setting up rarpd''' 
 
+<!--T:24-->
 First, we will need to determine the options to use for <code>rarpd</code> . While there are more options than we'll cover here, these options should get you started As there is currently no {{Path|init.d}} script for <code>rarpd</code> , an entry will need to be added to {{Path|/etc/conf.d/local.start}} if you want to enable <code>rarpd</code> services at boot time. A sample entry is as follows: 
 
+<!--T:25-->
 {{File|/etc/conf.d/local.start||<pre>
 /usr/sbin/rarpd -v -e eth0
 </pre>
 }}
 
+<!--T:26-->
 An explanation of the above <code>rarpd</code> options (as taken from the man page): 
 
+<!--T:27-->
 * <code>-v</code> Be verbose
 *  <code>-e</code> Do not check for the presence of a boot image, reply if MAC address resolves to a valid IP address using {{Path|/etc/ethers}} database and DNS
 * eth0 represents the interface <code>rarpd</code> should bind to
 
+<!--T:28-->
 For more options, consult <code>man 8 rarpd</code> . 
 
-=== The tftpd Daemon ===
+=== The tftpd Daemon === <!--T:29-->
 
+<!--T:30-->
 Here there are two options for a TFTP daemon, <code>net-ftp/atftp</code> and <code>net-ftp/tftp-hpa</code> . You only need to install one of the TFTP daemons for proper operation. 
 
+<!--T:31-->
 '''Setting up common tftpd elements''' 
 
+<!--T:32-->
 Each TFTP daemon will need a directory from which to serve files to tftp clients. The directory we will use for this howto will be {{Path|/tftpboot}} . This will appear as the root ( {{Path|/}} ) directory to the clients when requests are received. Additionally, we'll setup the system to run the TFTP daemon with the user and group <code>nobody</code> . 
 
+<!--T:33-->
 If the directory you have chosen does not currently exist, it will need to be created with the <code>mkdir</code> command. The command for the example {{Path|/tftpboot}} is: 
 
+<!--T:34-->
 {{RootCmd|/bin/mkdir /tftpboot}}
 
+<!--T:35-->
 Then we will need to change the owner of {{Path|/tftpboot}} so that it is owned by user nobody and group <code>nobody</code> : 
 
+<!--T:36-->
 {{RootCmd|chown nobody:nobody /tftpboot}}
 
 
-=== The atftp Daemon ===
+=== The atftp Daemon === <!--T:37-->
 
+<!--T:38-->
 First, install the <code>atftp</code> package as follows; 
 
+<!--T:39-->
 {{RootCmd|emerge atftp}}
 
+<!--T:40-->
 After the <code>atftp</code> package has been installed, it will need to be configured. If tftpd services are desired at boot time, an entry to {{Path|/etc/conf.d/local.start}} will need to be added as <code>atftp</code> has no {{Path|init.d}} , <code>inetd</code> or <code>xinetd</code> scripts of its own. If you want to use <code>inetd</code> or <code>xinetd</code> for controlling the tftpd service, please see their respective man pages. 
 
+<!--T:41-->
 Below is an example entry for <code>atftpd</code> in {{Path|/etc/conf.d/local.start}} . 
 
+<!--T:42-->
 {{File|/etc/conf.d/local.start||<pre>
 /usr/sbin/in.tftpd -v --daemon /tftpboot
 </pre>
 }}
 
+<!--T:43-->
 An explanation of the above options (as taken from the man page); 
 
+<!--T:44-->
 *  <code>-v</code> Increase or set the logging level. No args will increase by one the current value. Default is LOG_NOTICE, see syslog(3) for log level. Current value range from 0 (LOG_EMERG) to 7 (LOG_DEBUG)
 *  <code>--daemon</code> Run as a daemon. Do not use this option if atftpd is started by inetd.
 
+<!--T:45-->
 For more options, consult <code>man 8 atftpd</code> . 
 
-=== The tftp-hpa Daemon ===
+=== The tftp-hpa Daemon === <!--T:46-->
 
+<!--T:47-->
 First, install the <code>tftp-hpa</code> package: 
 
+<!--T:48-->
 {{RootCmd|emerge tftp-hpa}}
 
+<!--T:49-->
 <code>tftp-hpa</code> comes with an {{Path|init.d}} and the accompanying {{Path|conf.d}} configuration file. Check to make sure that INTFTPD_PATH and INTFTP_OPTS in {{Path|/etc/conf.d/in.tftpd}} match those below: 
 
+<!--T:50-->
 {{File|/etc/conf.d/in.tftpd||<pre>
 INTFTPD_PATH="/tftpboot"
 INTFTPD_OPTS="-s -v -l ${INTFTPD_PATH}"
 </pre>
 }}
 
+<!--T:51-->
 The TFTP daemon can then be started via the {{Path|init.d}} script: 
 
+<!--T:52-->
 {{RootCmd|/etc/init.d/in.tftpd start}}
 
+<!--T:53-->
 For more options, consult <code>man 8 tftpd</code> . 
 
-== Preparing a tftpboot image for use by a client ==
+== Preparing a tftpboot image for use by a client == <!--T:54-->
 
+<!--T:55-->
 Make sure you have an image you want to use for netbooting. Please check your [http://www.gentoo.org//main/en/mirrors.xml local] Gentoo [http://distfiles.gentoo.org/experimental/sparc/tftpboot/sparc64/ distfiles mirror] for the appropriate image. We'll assume you are planning to boot using the {{Path|gentoo-sparc64-20100128.tftpboot}} image. 
 
+<!--T:56-->
 Once you have an image, copy the image into {{Path|/tftpboot}} : 
 
+<!--T:57-->
 {{RootCmd|cp gentoo-sparc64-20100128.tftpboot /tftpboot
 |chmod 644 /tftpboot/gentoo-sparc64-20100128.tftpboot}}
 
+<!--T:58-->
 Now, when the netboot client makes a TFTP request, it looks for a file that is the hexadecimal number of its current IP address, and on some platforms an {{Path|.ARCH}} suffix. The hexadecimal number should use ''capital'' characters. 
 
+<!--T:59-->
 So for our example IP address, 10.0.1.15, let's look at its hexadecimal equivalent: 
 
+<!--T:60-->
 {{Cmd|printf "%.2X%.2X%.2X%.2X\n" 10 0 1 15}}
 
+<!--T:61-->
 {{Code|Example IP address|<pre>
 decimal       10  0   1   15
 hexadecimal   0A  00  01  0F
 </pre>
 }}
 
+<!--T:62-->
 So for the example netboot client, it would look for a file named {{Path|0A00010F}} when it tftpboots. 
 
+<!--T:63-->
 Iif you are really, really lazy (like me), you can netboot the host to get the filename the client is looking for from the netboot server logs. 
 
+<!--T:64-->
 Make sure that both the <code>rarpd</code> and TFTP daemon you've chosen are currently running, then boot the host as described below in [[#netbootingclient]] . 
 
+<!--T:65-->
 The client will appear to hang after the boot net command is issued. Then on the netboot server, check the system logs for an entry for <code>in.tftpd</code> . 
 
+<!--T:66-->
 An example entry from a netboot server running <code>sysklogd</code> and <code>tftp-hpa</code> looks like: 
 
+<!--T:67-->
 {{Code|Log entry for netboot server|<pre>
 Jan  3 22:48:59 stargazer in.tftpd[8368]: RRQ from 10.0.1.15 filename 0A00010F
 </pre>
 }}
 
+<!--T:68-->
 The filename is shown above after "filename" in the log entry, which in this case is {{Path|0A00010F}} . 
 
+<!--T:69-->
 As a way to keep track of what netboot image you are using, and to allow multiple machines to use the same netboot image, you can use a soft link to create the file with the hexadecimal value. To create this using our sample sparc64 host and the {{Path|gentoo-sparc64-20100128.tftpboot}} , use the following command: 
 
+<!--T:70-->
 {{RootCmd|/bin/ln -s /tftpboot/gentoo-sparc64-20100128.tftpboot /tftpboot/0A00010F}}
 
+<!--T:71-->
 Now everything should be set for netbooting! 
 
-== Netbooting the client ==
+== Netbooting the client == <!--T:72-->
 
+<!--T:73-->
 From OpenBoot PROM (OBP) on the SPARC, enter the command; 
 
+<!--T:74-->
 {{Cmd|boot net|prompt=ok }}
 
+<!--T:75-->
 Other methods for certain machines are: 
 
+<!--T:76-->
 {{Cmd|boot net-tpe|prompt=ok }}
 
+<!--T:77-->
 {{Note|If your system doesn't present you with an OBP at boot time, you will either need to press the Stop and A key, or send a break signal via serial console before the system boots an OS. If your system cannot find an OS, it should either try to boot via the network interface (which is what we want), or leave you at an OBP prompt.}}
 
+<!--T:78-->
 This will initiate the networking booting process. A constantly changing string of hexadecimal digits should appear. When the image has finished loading, the kernel will take over and start the OS booting process. In the case of our sparc64 install image, you will be left at a shell prompt from which you can begin the install process. 
 
-== Troubleshooting ==
+== Troubleshooting == <!--T:79-->
 
+<!--T:80-->
 '''Building the prerequisite software''' 
 
+<!--T:81-->
 If the netboot server is a Gentoo Linux system and experiences problems after installing the rarpd and tftpd packages, please search the [http://forums.gentoo.org Gentoo Forums] and [http://bugs.gentoo.org Gentoo Bugzilla] to see if this problem has been encountered by anyone else. If it has not, or the solutions found do not work, then please open a new bug. 
 
+<!--T:82-->
 '''I've issued the boot net command but it appears to hang.''' 
 
+<!--T:83-->
 This is presumably because the file your system is trying to load from the tftpboot server is not available. On a SPARC system, you would probably see the following: 
 
+<!--T:84-->
 {{Code|Booting appears to hang|<pre>
 Rebooting with command: boot
 Boot device: net  File and args:
 </pre>
 }}
 
+<!--T:85-->
 Double check that the file the client needs does exist in {{Path|/tftpboot}} . You can confirm the filename it is requesting by looking in the system logs. Also, once this file exists, the client will try to load it. Sometimes, when the file is missing originally, it will freeze downloading the file once it appears. To resolve this, just get back to an OBP prompt, and issue the "boot net" command again. The host should then start downloading the tftpboot image and boot the OS. 
 
+<!--T:86-->
 '''I'm trying to netboot, but all I see are "Timeout waiting for ARP/RARP packet" messages.''' 
 
+<!--T:87-->
 This could be due to a few different problems; 
 
+<!--T:88-->
 # Make sure the entry in {{Path|/etc/ethers}} exists for the client in question. If the MAC address is incorrect and/or the netboot server cannot resolve the hostname for the client, it cannot respond with the needed information.
 
+<!--T:89-->
 # Verify that the network hub or switch the netboot server and client are connected to allow RARP traffic to flow freely. If the client's request cannot reach the server, or vice versa, the host will be unable to continue.
 
+<!--T:90-->
 # No one is responding to the RARPD request because no services are listening. Verify that the rarpd service is up and running.
 
+<!--T:91-->
 # The client does not think its NIC has a link to the network hub/switch it is plugged into. Check to see if the NIC and the port on the network hub or switch has a link light. If the link light is on, check to see what the setting of tpe-link-test? is in OBP with the command; <code>printenv tpe-link-test?</code> . You should receive something like {{Path|tpe-link-test? false true}} . The first column represents the parameter name, the second column shows the current value for the the parameter, and the third column shows the default value for the parameter. In the example above, we can see that the current value is false, which means that the client is not checking to see if the client and network hub or switch can establish a link before issuing its RARP request. Often times this can cause the problem.
 
+<!--T:92-->
 To change the value of tpe-link-test? from an OBP prompt, issue the following command: 
 
+<!--T:93-->
 {{Cmd|setenv tpe-link-test? true|prompt=ok |output=<pre>
 tpe-link-test? =      true
 </pre>
 }}
 
+<!--T:94-->
 This shows the value of tpe-link-test? is now true. Try netbooting the client again. 
 
-== Acknowledgements ==
+== Acknowledgements == <!--T:95-->
 
+<!--T:96-->
 We would like to thank the following authors and editors for their contributions to this guide:
 
 </translate>
