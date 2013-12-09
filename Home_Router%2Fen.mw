@@ -1,0 +1,541 @@
+<languages />
+
+
+This document details how to turn an old Gentoo machine into a router for connecting your home network to the internet.
+
+== Introduction ==
+
+Building your own router out of old spare parts has many advantages over buying a pre-made canned router by say Linksys. The biggest one by far is control over the connection. The other advantages are left up to your imagination; just about anything can be done in this scenario, it's just a matter of needing it. 
+
+This guide will show you how to setup Network Address Translation (NAT) on the router (kernel and iptables), add and configure common services (Domain Name System (DNS) via dnsmasq, dhcp via dhcpcd, ADSL via ppp), and conclude with more elaborate and fun things that can be done (port forwarding, traffic shaping, proxies/caching, etc...). 
+
+Before getting started, there's a few basic requirements you must meet. First, you'll need a computer that has at least 2 Network Interface Cards (NICs) in it. Next, you'll need the configuration settings for your internet connection (may include things like IP/DNS/Gateway/username/password). Finally, you'll need a bit of spare time and some Gentoo loving. 
+
+The conventions used in this guide are: 
+
+* eth0 - NIC connected to the Local Area Network (LAN)
+* eth1 - NIC connected to the Wide Area Network (WAN)
+* LAN utilizes the private 192.168.0.xxx network
+* router is hardcoded to the standard 192.168.0.1 IP
+* router is running Linux 2.4 or 2.6; you're on your own with 2.0/2.2
+
+{{Important|Due to security precautions, I would highly suggest you shut down any unneeded services on the router until we have a chance to get the firewall up and rolling. To view the currently running services, just run <code>rc-status</code> .}}
+
+== Kernel setup (know thyself first) ==
+
+Your kernel needs to have the drivers running for both your NICs. To see if your cards are already setup, just run <code>ifconfig</code> . Your output may differ slightly from the following, that's fine. What matters is that the interface shows up at all. 
+
+{{RootCmd|ifconfig -a|output=<pre>
+eth0      Link encap:Ethernet  HWaddr 00:60:F5:07:07:B8
+          BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:0 (0.0 b)  TX bytes:0 (0.0 b)
+          Interrupt:11 Base address:0x9800
+  
+eth1      Link encap:Ethernet  HWaddr 00:60:F5:07:07:B9
+          BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:0 (0.0 b)  TX bytes:0 (0.0 b)
+          Interrupt:10 Base address:0x9400
+</pre>
+}}
+
+If you do not see your two cards showing up and you're not sure what kind of cards you have, try running <code>lspci | grep Ethernet</code> . You can get that from <code>emerge pciutils</code> . Once you have this information, go into your kernel and add support for the correct drivers. 
+
+The next thing you'll need is support for iptables and NAT (and packet shaping if you want). The following list is split up into always required (*), required only for adsl via PPPoE (a), suggested for everyone (x), and only for shaper (s) features. It does not matter whether you build the features into the kernel or as a module so long as when the feature is needed, the correct module(s) are loaded (module loading is left to the reader as a fun exercise however). 
+
+{{Kernel|Network Options|<pre>
+Networking options  --->
+   [*] TCP/IP networking
+      [*] IP: advanced router
+   [*] Network packet filtering (replaces ipchains)
+If you use 2.4.x, you have to enable the following for DHCP:
+   [*] Socket Filtering
+  
+   IP: Netfilter Configuration  --->
+      [*] Connection tracking (required for masq/NAT)
+         [x] FTP protocol support
+         [x] IRC protocol support
+      [*] IP tables support (required for filtering/masq/NAT)
+         [*] IP range match support
+         [x] MAC address match support
+         [*] Multiple port match support
+         [*] Packet filtering
+            [*] REJECT target support
+            [x] REDIRECT target support
+         [*] Full NAT
+            [*] MASQUERADE target support
+         [s] Packet mangling
+            [s] MARK target support
+         [x] LOG target support
+  
+   QoS and/or fair queueing  --->
+      [s] QoS and/or fair queueing
+         [s] HTB packet scheduler
+         [s] Ingress Qdisc
+  
+   [a] PPP (point-to-point protocol) support
+      [a] PPP filtering
+      [a] PPP support for async serial ports
+      [a] PPP support for sync tty ports
+      [a] PPP Deflate compression
+      [a] PPP BSD-Compress compression
+      [a] PPP over Ethernet
+</pre>
+}}
+
+{{Note|Some things may be slightly different in a 2.4 vs 2.6 kernel, but you should be able to figure it out :). Even among 2.6 kernels, these options have a tendency to move around. Good luck!}}
+
+== Hug the WAN (a.k.a. The Internet) ==
+
+=== Intro ===
+
+There are many ways to connect to the internet so I'll just cover the ones I'm familiar with. That leaves us with ADSL (PPPoE) and cable modems (static/dynamic). If there are other methods out there, feel free to write up a little blurb and e-mail me. Feel free to skip any of the following sections in this chapter that don't apply to you. This chapter is just about getting the router connected to the internet via eth1. 
+
+=== ADSL and PPPoE ===
+
+All the fancy PPPoE software that used to be provided by rp-pppoe ( [http://www.roaringpenguin.com/ Roaring Penguin] ) has been integrated into the [http://samba.org/ppp/ standard PPP package] . Simply <code>emerge ppp</code> and you'll be on your way. Remember how I said you'll need username/password information? Well I wasn't lying so I hope you have it now! Load up {{Path|/etc/conf.d/net}} in your favorite editor and set it up. 
+
+Replace 'vla9h924' in the following example with your username and 'boogie' with your password.
+
+{{File|/etc/conf.d/net|Use adsl over eth1 for ppp0|<pre>
+config_ppp0="ppp"
+link_ppp0="eth1"
+plugins_ppp0="pppoe"
+pppd_ppp0="
+  defaultroute
+  usepeerdns
+"
+username_ppp0="vla9h924"
+password_ppp0="boogie"
+</pre>}}
+
+{{RootCmd|ln -s net.lo /etc/init.d/net.ppp0
+|rc-update add net.ppp0 default
+|/etc/init.d/net.ppp0 start}}
+
+{{Warning|When the DSL interface comes up, it will create ppp0. Although your NIC is called eth1, the IP is actually bound to ppp0. From now on, when you see examples that utilize 'eth1', substitute with 'ppp0'.}}
+
+{{Warning|Make sure you change the permissions of the /etc/conf.d/net file so that only root can read/write it since you're sticking your username/password in it.}}
+
+{{Warning|For people transitioning from the <code>rp-pppoe</code> package, or for people who hit weird connection resets, see the MTU section in the Troubleshooting chapter.}}
+
+=== Cable and/or dynamic/static IP ===
+
+If you have a static IP then you will need a few more details than if you have a dynamic IP. For static users, you will need your IP, gateway, and DNS servers. 
+
+Dynamic IP Users:
+
+{{RootCmd|emerge dhcpcd}}
+
+{{File|/etc/conf.d/net|Dynamic IP addresses|<pre>
+config_eth1="dhcp"
+</pre>}}
+
+Static IP Users:
+
+{{File|/etc/conf.d/net|Static IP address configuration|<pre>
+config_eth1="66.92.78.102/24 brd 66.92.78.255"
+routes_eth1="default via 66.92.78.1"
+</pre>}}
+
+{{File|/etc/resolv.conf|Adding DNS information|<pre>
+nameserver 123.123.123.123
+</pre>}}
+
+Dynamic and Static Setup:
+
+{{RootCmd|ln -s net.lo /etc/init.d/net.eth1
+|rc-update add net.eth1 default
+|/etc/init.d/net.eth1 start}}
+
+You should be all set to go now. 
+
+== Hug the LAN (bring along some friends) ==
+
+This step is a breeze compared to the previous one. 
+
+{{File|/etc/conf.d/net||<pre>
+config_eth0="192.168.0.1/24 brd 192.168.0.255"
+</pre>}}
+
+{{RootCmd|rc-update add net.eth0 default
+|/etc/init.d/net.eth0 start}}
+
+== LAN Services (because we're nice people) ==
+
+=== DHCP Server ===
+
+I bet it'd be nice if everyone else in your house could just plug their computers into the network and things would just work. No need to remember mind-numbing details or make them stare at confusing configuration screens! Life would be grand eh? Introducing the Dynamic Host Configuration Protocol (DHCP) and why you should care. 
+
+DHCP is exactly what its name implies. It's a protocol that allows you to dynamically configure other hosts automatically. You run a DHCP server on the router, give it all the information about your network (valid IPs, DNS servers, gateways, etc...), and then when the other hosts start up, they run a DHCP client to automatically configure themselves. No fuss, no muss! For more information about DHCP, you can always visit [http://en.wikipedia.org/wiki/DHCP Wikipedia] . 
+
+We'll use a package called dnsmasq which provides both DHCP and DNS services. For now lets just focus on the DHCP aspect. Note that if you want to run a different DHCP server, you can find another example in the Fun Things chapter. Also, if you wish to tinker with the DHCP server settings, just read the comments in {{Path|/etc/dnsmasq.conf}} . All the defaults should work fine though. 
+
+{{RootCmd|emerge dnsmasq}}
+
+{{File|/etc/dnsmasq.conf||<pre>
+dhcp-range=192.168.0.100,192.168.0.250,72h
+interface=eth0
+</pre>}}
+
+{{RootCmd|rc-update add dnsmasq default
+|/etc/init.d/dnsmasq start}}
+
+Now your little router is a bona-fide DHCP server! Plugin those computers and watch them work! With Windows systems you should go into the TCP/IP Properties and select the 'Obtain an IP address automatically' and 'Obtain DNS server address automatically' options. Sometimes the changes aren't instantaneous, so you may have to open a command prompt and run <code>ipconfig /release</code> and <code>ipconfig /renew</code> . But enough about Windows, let's get back to our favorite penguin. 
+
+=== DNS Server ===
+
+When people want to visit a place on the internet, they remember names, not a string of funky numbers. After all, what's easier to remember, ebay.com or 66.135.192.87? This is where the DNS steps in. DNS servers run all over the internet, and whenever someone wants to visit 'ebay.com', these servers turn 'ebay.com' (what we understand) into '66.135.192.87' (what our computers understand). For more information about DNS, you can always visit [http://en.wikipedia.org/wiki/DNS Wikipedia] . 
+
+Since we're using dnsmasq for our DHCP server, and it includes a DNS server, you've got nothing left to do here! Your little router is already providing DNS to its DHCP clients. Bet you wish everything was this easy ;). 
+
+You're welcome to choose other DNS servers if you're more comfortable with them, but the reason dnsmasq is great is because it was designed to do exactly what we want and nothing more. It's a little DNS caching/forwarding server for local networks. We're not looking to provide DNS for our own domain here, just offer simple DNS services to everyone else on our LAN. 
+
+=== NAT (a.k.a. IP-masquerading) ===
+
+At this point, people on your network can talk to each other and they can look up hostnames via DNS, but they still can't actually connect to the internet. While you may think that's great (more bandwidth for you!), I bet they're not too happy just yet. 
+
+This is where Network Address Translation (NAT) steps in. NAT is a way of connecting multiple computers in a private LAN to the internet when you have a smaller number of public IP addresses available to you. Typically you are given 1 IP by your ISP, but you want to let your whole house connect to the internet. NAT is the magic that makes this possible. For more information about NAT, you can always visit [http://en.wikipedia.org/wiki/NAT Wikipedia] . 
+
+{{Note|Before we get started, make sure you have iptables on your system. Although it is automatically installed on most systems, you may not have it. If you don't, just run <code>emerge iptables</code> .}}
+
+First we flush our current rules
+
+{{RootCmd|iptables -F
+|iptables -t nat -F}}
+
+Setup default policies to handle unmatched traffic
+
+{{RootCmd|iptables -P INPUT ACCEPT
+|iptables -P OUTPUT ACCEPT
+|iptables -P FORWARD DROP}}
+
+Copy and paste these examples ...
+
+{{RootCmd|export LAN{{=}}eth0
+|export WAN{{=}}eth1}}
+
+Then we lock our services so they only work from the LAN:
+
+{{RootCmd|iptables -I INPUT 1 -i ${LAN} -j ACCEPT
+|iptables -I INPUT 1 -i lo -j ACCEPT
+|iptables -A INPUT -p UDP --dport bootps ! -i ${LAN} -j REJECT
+|iptables -A INPUT -p UDP --dport domain ! -i ${LAN} -j REJECT}}
+
+(Optional) Allow access to our ssh server from the WAN:
+
+{{RootCmd|iptables -A INPUT -p TCP --dport ssh -i ${WAN} -j ACCEPT}}
+
+Drop TCP / UDP packets to privileged ports:
+
+{{RootCmd|iptables -A INPUT -p TCP ! -i ${LAN} -d 0/0 --dport 0:1023 -j DROP
+|iptables -A INPUT -p UDP ! -i ${LAN} -d 0/0 --dport 0:1023 -j DROP}}
+
+Finally we add the rules for NAT:
+
+{{RootCmd|iptables -I FORWARD -i ${LAN} -d 192.168.0.0/255.255.0.0 -j DROP
+|iptables -A FORWARD -i ${LAN} -s 192.168.0.0/255.255.0.0 -j ACCEPT
+|iptables -A FORWARD -i ${WAN} -d 192.168.0.0/255.255.0.0 -j ACCEPT
+|iptables -t nat -A POSTROUTING -o ${WAN} -j MASQUERADE}}
+
+Tell the kernel that ip forwarding is OK:
+
+{{RootCmd|echo 1 > /proc/sys/net/ipv4/ip_forward}}
+
+{{RootCmd|for f in /proc/sys/net/ipv4/conf/*/rp_filter ; do echo 1 > $f ; done}}
+
+This is so when we boot we don't have to run the rules by hand.
+
+{{RootCmd|/etc/init.d/iptables save
+|rc-update add iptables default}}
+
+{{File|/etc/sysctl.conf||<pre>
+net.ipv4.ip_forward = 1
+net.ipv4.conf.default.rp_filter = 1
+</pre>}}
+
+If you have a dynamic internet address you probably want to enable this:
+
+{{File|/etc/sysctl.conf||<pre>
+net.ipv4.ip_dynaddr = 1
+</pre>
+}}
+
+Once you've typed out all of that, the rest of your network should now be able to use the internet as if they were directly connected themselves. 
+
+The ip_dynaddr option is useful for dial on demand systems or when your ISP gives out dynamic addresses. This works around the problem where a connection is attempted before the internet interface is fully setup. Really this just provides for a smoother network experience for users behind your router. 
+
+== Fun Things (for a rainy day) ==
+
+=== Intro ===
+
+Believe it or not, you're done :). From here on out, I'll cover a bunch of common topics that may interest you. Everything in this chapter is completely optional. 
+
+=== Port Forwarding ===
+
+Sometimes you would like to be able to host services on a computer behind the router, or just to make your life easier when connecting remotely. Perhaps you want to run a FTP, HTTP, SSH, or VNC server on one or more machines behind your router and be able to connect to them all. The only caveat is that you can only have one service/machine combo per port. For example, there is no practical way to setup three FTP servers behind your router and then try to connect to them all through port 21; only one can be on port 21 while the others would have to be on say port 123 and port 567. 
+
+All the port forwarding rules are of the form <code>iptables -t nat -A PREROUTING [-p protocol] --dport [external port on router] -i ${WAN} -j DNAT --to [ip/port to forward to]</code> . Unfortunately, iptables does not accept hostnames when port forwarding. If you are forwarding an external port to the same port on the internal machine, you can omit the destination port. See the iptables(8) man page for more information. 
+
+{{RootCmd|export LAN{{=}}eth0
+|export WAN{{=}}eth1}}
+
+Forward port 2 to ssh on an internal host:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 2 -i ${WAN} -j DNAT --to 192.168.0.2:22}}
+
+FTP forwarding to an internal host:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 21 -i ${WAN} -j DNAT --to 192.168.0.56}}
+
+HTTP forwarding to an internal host:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 80 -i ${WAN} -j DNAT --to 192.168.0.56}}
+
+VNC forwarding for internal hosts:
+
+{{RootCmd|iptables -t nat -I PREROUTING -p tcp --dport 5900 -i ${WAN} -j DNAT --to 192.168.0.2
+|iptables -t nat -I PREROUTING -p tcp --dport 5901 -i ${WAN} -j DNAT --to 192.168.0.3:5900}}
+
+If you want to VNC in to 192.168.0.3, then just add ':1' to the router's hostname.
+
+SAMBA forwarding to an internal host (excess ports to cover Windows):
+
+{{RootCmd|iptables -t nat -I PREROUTING -p tcp --dport 135 -i ${WAN} -j DNAT --to 192.168.0.2
+|iptables -t nat -I PREROUTING -p tcp --dport 139 -i ${WAN} -j DNAT --to 192.168.0.2
+|iptables -t nat -I PREROUTING -p tcp --dport 445 -i ${WAN} -j DNAT --to 192.168.0.2
+|iptables -t nat -I PREROUTING -p udp --dport 137:138 -i ${WAN} -j DNAT --to 192.168.0.2
+|iptables -t nat -I PREROUTING -p udp --dport 445 -i ${WAN} -j DNAT --to 192.168.0.2}}
+
+Bittorrent forwarding:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 6881:6889 -i ${WAN} -j DNAT --to 192.168.0.2}}
+
+eDonkey/eMule forwarding:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 4662 -i ${WAN} -j DNAT --to 192.168.0.55}}
+
+Game Cube Warp Pipe support:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p udp --dport 4000 -i ${WAN} -j DNAT --to 192.168.0.56}}
+
+Playstation 2 Online support:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 10070:10080 -i ${WAN} -j DNAT --to 192.168.0.11
+|iptables -t nat -A PREROUTING -p udp --dport 10070:10080 -i ${WAN} -j DNAT --to 192.168.0.11}}
+
+Xbox Live:
+
+{{RootCmd|iptables -t nat -A PREROUTING -p tcp --dport 3074 -i ${WAN} -j DNAT --to 192.168.0.69
+|iptables -t nat -A PREROUTING -p udp --dport 3074 -i ${WAN} -j DNAT --to 192.168.0.69
+|iptables -t nat -A PREROUTING -p udp --dport 88 -i ${WAN} -j DNAT --to 192.168.0.69
+</pre>
+}}
+
+{{Note|If you have other common / cool examples, please {{Mail|e-mail me}}.}}
+
+=== Identd (for IRC) ===
+
+Internet Relay Chat utilizes the ident service pretty heavily. Now that the IRC clients are behind the router, we need a way to host ident for both the router and the clients. One such server has been created called <code>midentd</code> . 
+
+{{RootCmd|emerge midentd
+|rc-update add midentd default
+|/etc/init.d/midentd start
+</pre>
+}}
+
+There are a few other ident servers in portage. Depending on your needs, I would recommend checking out <code>oidentd</code> and <code>fakeidentd</code> . 
+
+=== Time Server ===
+
+Keeping your system time correct is essential in maintaining a healthy system. One of the most common ways of accomplishing this is with the Network Time Protocol (NTP) and the ntp package (which provides implementations for both server and client). 
+
+Many people run ntp clients on their computers. Obviously, the more clients in the world, the larger the load the ntp servers need to shoulder. In environments like home networks though, we can help keep the load down on public servers while still providing the proper time to all our computers. As an added bonus, our private updates will be a lot faster for the clients too! All we have to do is run a ntp server on our router that synchronizes itself with the public internet servers while providing the time to the rest of the computers in the network. To get started, simply <code>emerge ntp</code> on the router and edit {{Path|/etc/conf.d/ntp-client}} to your liking.
+
+{{RootCmd|rc-update add ntp-client default}}
+
+{{File|/etc/ntp.conf||<pre>
+restrict default ignore
+restrict 192.168.0.0 mask 255.255.255.0 notrust nomodify notrap
+</pre>}}
+
+These will allow only ntp clients with an IP address in the 192.168.0.xxx range to use your ntp server.
+
+{{RootCmd|rc-update add ntpd default
+|/etc/init.d/ntp-client start
+|/etc/init.d/ntpd start}}
+
+{{Note|You should make sure that you allow inbound and outbound communication on the ntp port (123/udp) when setting up the server. The client just needs outbound access on port 123 over udp.}}
+
+Now, on your clients, have them <code>emerge ntp</code> also. However, we will just run the ntp client so setup is a lot simpler. 
+
+In {{Path|/etc/conf.d/ntp-client}}, change the 'pool.ntp.org' server in the NTPCLIENT_OPTS variable to '192.168.0.1'.
+
+{{RootCmd|rc-update add ntp-client default
+|/etc/init.d/ntp-client start}}
+
+=== Rsync Server ===
+
+For those who run multiple Gentoo boxes on the same lan, you often want to keep from having every machine running <code>emerge sync</code> with remote servers. By setting up a local rsync, you save on both your bandwidth and the Gentoo rsync servers' bandwidth. It's pretty simple to do. 
+
+{{Note|For a much more in-depth rsync guide, please see the official [http://www.gentoo.org//doc/en/rsync.xml#local rsync guide] .}}
+
+Since every Gentoo machine requires rsync, theres no need to emerge it. Edit the default {{Path|/etc/rsyncd.conf}} config file, uncomment the <code>[gentoo-portage]</code> section, and make sure you add an <code>address</code> option. All the other defaults should be fine. 
+
+{{File|/etc/rsyncd.conf||<pre>
+pid file = /var/run/rsyncd.pid
+use chroot = yes
+read only = yes
+address = 192.168.0.1
+  
+[gentoo-portage]
+  path = /mnt/space/portage
+  comment = Gentoo Linux Portage tree
+  exclude = /distfiles /packages
+</pre>
+}}
+
+Then you need to start the service (again, the defaults are OK). 
+
+{{RootCmd|/etc/init.d/rsyncd start
+|rc-update add rsyncd default}}
+
+Only thing left is to set tell your clients to sync against the router. 
+
+{{File|/etc/portage/make.conf|Setup SYNC variable to new rsync server|<pre>
+SYNC="rsync://192.168.0.1/gentoo-portage"
+</pre>
+}}
+
+=== Mail Server ===
+
+Sometimes it's nice to run your own Simple Mail Transfer Protocol (SMTP) server on the router. You may have your own reason for wanting to do so, but I run it so that the users see mail as being sent instantly and the work of retrying/routing is left up to the mail server. Some ISPs also don't allow for mail relaying for accounts that aren't part of their network (like Verizon). Also, you can easily throttle the delivery of mail so that large attachments won't seriously lag your connection for half an hour. 
+
+{{RootCmd|emerge netqmail}}
+
+make sure the output of `hostname` is correct
+
+{{RootCmd|emerge --config netqmail}}
+
+{{RootCmd|iptables -I INPUT -p tcp --dport smtp ! -i ${LAN} -j REJECT
+|ln -s /var/qmail/supervise/qmail-send /service/qmail-send
+|ln -s /var/qmail/supervise/qmail-smtpd /service/qmail-smtpd
+|cd /etc/tcprules.d}}
+
+Edit {{Path|tcp.qmail-smtp}} and add an entry like so to the allow section:
+
+{{File|tcp.qmail-smtp||<pre>
+192.168.0.:allow,RELAYCLIENT=""
+</pre>}}
+
+{{RootCmd|make
+|rc-update add svscan default
+|/etc/init.d/svscan start}}
+
+I'm a huge fan of qmail, but you're free to use a different mta :). When you setup e-mail on the hosts in your network, tell them that their SMTP server is 192.168.0.1 and everything should be peachy. You might want to visit the [http://netqmail.org/ netqmail homepage] for more documentation. 
+
+=== Full DHCP Server ===
+
+Earlier we used dnsmasq to provide DHCP service to all our clients. For most people with a simple small LAN, this is perfect. But you may need something with more features. Thus we turn to a full-featured DHCP server as provided by the [http://www.isc.org/products/DHCP ISC] folks. 
+
+{{RootCmd|emerge dhcp}}
+
+{{File|/etc/dhcp/dhcpd.conf|Here is a simple configuration file|<pre>
+authoritative;
+ddns-update-style interim;
+subnet 192.168.0.0 netmask 255.255.255.0 {
+    range 192.168.0.100 192.168.0.250;
+    default-lease-time 259200;
+    max-lease-time 518400;
+    option subnet-mask 255.255.255.0;
+    option broadcast-address 192.168.0.255;
+    option routers 192.168.0.1;
+    option domain-name-servers 192.168.0.1;
+}
+</pre>}}
+
+In {{Path|/etc/conf.d/dhcpd}} set <code>IFACE</code> to "eth0".
+
+{{RootCmd|rc-update add dhcpd default
+|/etc/init.d/dhcpd start}}
+
+This is the minimal setup required to replace the dnsmasq DHCP functionality that we used earlier. Speaking of which, you did remember to disable the DHCP features in dnsmasq didn't you? If not, you should do so now (just comment out the <code>dhcp-range</code> setting in {{Path|/etc/dnsmasq.conf}} and restart the service). 
+
+=== Connect Another LAN (or two or three or ...) ===
+
+Sometimes you have need of connecting the router to another LAN. Maybe you want to hook up a group of friends temporarily, or you're a neat freak and want to section off different groups of computers, or you're just really really bored. Whatever the reasons, extending the router to other LAN networks should be pretty straightforward. In the following examples, I will assume that this new network is connected via a third ethernet card, namely <code>eth2</code> . 
+
+First you need to configure the interface. Just take the instructions in the [[#doc_chap4_pre1]] and replace <code>eth0</code> with <code>eth2</code> and <code>192.168.0</code> with <code>192.168.1</code> . 
+
+Then you need to tweak dnsmasq to service the new interface. Just edit the {{Path|/etc/conf.d/dnsmasq}} file again and append <code>-i eth2</code> to DNSMASQ_OPTS; using -i multiple times is OK. Then edit {{Path|/etc/dnsmasq.conf}} and add another line like the dhcp-range line in the [[#doc_chap5_pre1]] , replacing <code>192.168.0</code> with <code>192.168.1</code> . Having multiple dhcp-range lines is OK too. 
+
+Finally, see the rules in the [[#doc_chap5_pre2]] and duplicate the rules that have <code>-i ${LAN}</code> in them. You may want to create another variable, say <code>LAN2</code> , to make things easier. 
+
+== Troubleshooting ==
+
+=== Useful Tools ===
+
+If you're having trouble getting your computers to communicate, you may way to try out the following tools (they can all be found in the <code>net-analyzer</code> portage category): 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Utility
+! Description
+|- 
+| wireshark
+| GUI tool to view all raw network data according to filters
+|- 
+| tcpdump
+| Console tool to dump all raw network data according to filters
+|- 
+| iptraf
+| ncurses based IP LAN monitor
+|- 
+| ettercap
+| ncurses based network monitor/control
+|-
+|}
+
+=== DHCP Fails To Start ===
+
+When starting the dhcp init.d script for the first time, it may fail to load but neglect to give you any useful info. 
+
+{{RootCmd|/etc/init.d/dhcp start|output=<pre>
+ * Setting ownership on dhcp.leases ...          [ ok ]
+ * Starting dhcpd ...                            [ !! ]
+</pre>
+}}
+
+The trick is to know where dhcpd is sending its output. Simply browse to {{Path|/var/log}} and read the log files. Since the exact log file depends on the package you are using as a syslog, try running <code>grep -Rl dhcpd /var/log</code> to narrow down the possibilities. Chances are you made a typo in your config file. You could also try running <code>dhcpd -d -f</code> (short for debug / foreground) and debug the error based upon the output. 
+
+=== Incorrect MTU Value ===
+
+If you experience odd errors (such as not being able to access some webpages while others load fine), you may be having Path MTU Discovery trouble. The quick way to test is to run this iptables command: 
+
+{{RootCmd|iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu}}
+
+This will affect all new connections, so just refresh the website you're having problems with in order to test. In case it helps, the standard MTU value for 100mbit ethernet connections is <code>1500</code> ; this value also applies to PPPoA. For PPPoE connections it is <code>1492</code> . For more info, you should read Chapter 15 of the [http://lartc.org/howto/ Linux Advanced Routing & Traffic Control HOWTO]. 
+
+If that command does not work for you, you may want to try putting the rule into the mangle table. Simply add <code>-t mangle</code> to the command. 
+
+=== Unable to connect two machines directly ===
+
+If (for whatever reason) you want to connect two machines directly together without a hub or switch, a regular ethernet cable will likely not work, unless you have an Auto MDI/MDI-X (also known as "autosensing") capable network adapter. You will need a different cable called a crossover cable. This [http://en.wikipedia.org/wiki/Ethernet_crossover_cable Wikipedia] page explains the low level details. 
+
+== Final Notes ==
+
+I have no final notes other than if you experience any troubles with the guide, please contact {{Mail|me}}or file a bug with [http://bugs.gentoo.org/ Gentoo's Bugtracking Website] . If you have some interesting bits you think would enhance this guide, by all means send it my way for inclusion. 
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Mike Frysinger
+
+[[Category:Server and Security]]
