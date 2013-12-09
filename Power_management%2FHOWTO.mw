@@ -2,30 +2,37 @@
 
 <translate>
 
+<!--T:1-->
 In recent years, power management has become one of the differentiating features in the quest for finding the perfect laptop. Yet, the operating system must support the various power saving functionalities too. In this guide, we cover how to setup your Gentoo installation so it manages power-hungry resources in a flexible yet automated manner.
 
-== Introduction ==
+== Introduction == <!--T:2-->
 
-=== About this document... ===
+=== About this document... === <!--T:3-->
 
+<!--T:4-->
 This document describes the setup of power management features on your laptop. Although some of the information in this guide can be applied to power management for servers, it is not the intention of this document to go that route. Please be careful when applying this on a non-laptop system. 
 
+<!--T:5-->
 Within this document, we will focus primarily on the laptop mode tools since it offers a complete set of functionalities. However, we will also refer to other tools that might offer a more detailed approach on individual settings. In such cases, you will need to disable the feature from the laptop mode tools so that both tools do not fight over the same resource control. 
 
-=== About laptop_mode ===
+=== About laptop_mode === <!--T:6-->
 
+<!--T:7-->
 The <code>laptop_mode</code> setting is an in-kernel configuration setting that optimizes I/O, allowing disks to spin down properly (and not be woken up immediately afterwards for queued operations). 
 
-=== About laptop-mode-tools ===
+=== About laptop-mode-tools === <!--T:8-->
 
+<!--T:9-->
 The ''Laptop Mode Tools'' is a software package ( <code>app-laptop/laptop-mode-tools</code> ) which allows the user to optimize power saving functions. It allows managing the <code>laptop_mode</code> setting in the Linux kernel, but has additional features allowing you to tweak other power-related settings on the system. 
 
-== Linux Kernel Configuration ==
+== Linux Kernel Configuration == <!--T:10-->
 
-=== Minimum kernel setup ===
+=== Minimum kernel setup === <!--T:11-->
 
+<!--T:12-->
 There are different kernel sources in Portage. We recommend using <code>gentoo-sources</code> , but if you want advanced hibernation support you might need <code>tuxonice-sources</code> . To enable proper power management features in the Linux kernel, enable at least the following settings: 
 
+<!--T:13-->
 {{Kernel|Minimum kernel setup for Power Management|<pre>
 General setup --->
   [*] Configure standard kernel features (expert users) --->
@@ -53,16 +60,20 @@ Power management and ACPI options --->
 </pre>
 }}
 
+<!--T:14-->
 Don't forget to enable the CPU frequency scaling driver for your CPU, located right after the ''ACPI Processor P-States driver'' mentioned above. 
 
+<!--T:15-->
 Build and install the new kernel (if necessary) and reboot. 
 
-== Using Laptop Mode Tools ==
+== Using Laptop Mode Tools == <!--T:16-->
 
-=== Installation ===
+=== Installation === <!--T:17-->
 
+<!--T:18-->
 It comes to no surprise that installation of the ''Laptop Mode Tools'' software is easily done through <code>emerge laptop-mode-tools</code> . However, this package takes on additional, optional settings through USE flag configuration. So let's first take a look at the supported USE flags and what they mean to the package. 
 
+<!--T:19-->
 {| class="wikitable" style="text-align: left;" 
 |- 
 ! USE flag
@@ -87,52 +98,70 @@ It comes to no surprise that installation of the ''Laptop Mode Tools'' software 
 |-
 |}
 
+<!--T:20-->
 As you can see, there are two USE flags that seem to collide: <code>acpi</code> and <code>apm</code> . So what's the deal there? 
 
+<!--T:21-->
 * The <code>apm</code> USE flag enables support for ''Advanced Power Management'' , an older (before year 2000) standard for power management features within a system.
 * The <code>acpi</code> USE flag enables support for ''Advanced Configuration and Power Interface'' , the successor of APM. All modern laptops support ACPI.
 
+<!--T:22-->
 Depending on your system, you will either need <code>acpi</code> or <code>apm</code> set. In the remainder of this guide, we assume that your laptop is recent enough to use ACPI. 
 
+<!--T:23-->
 So, with the USE flags set, let's install <code>laptop-mode-tools</code> . 
 
+<!--T:24-->
 {{Note|If you have USE{{=}}"acpi" set, the installation will pull in <code>acpid</code> . However, the current stable ACPI daemon (2.0.9) does not support the new ACPI interfaces within the Linux kernel (using the netlink interface). As such, we recommend unmasking <code>sys-power/acpid-2.0.12</code> (or higher). For more information about unmasking packages, please read [http://www.gentoo.org//doc/en/handbook/handbook-amd64.xml?part{{=}}3&chap{{=}}3 Mixing Software Branches] in the Gentoo Handbook.}}
 
+<!--T:25-->
 {{Emerge|laptop-mode-tools}}
 
-=== Configuration ===
+=== Configuration === <!--T:26-->
 
+<!--T:27-->
 Having <code>laptop-mode-tools</code> installed on your system does not automatically enable the power management features that you might need. To configure the package, first take a look at {{Path|/etc/laptop-mode/laptop-mode.conf}} . This is the main configuration file for the package and is pretty well described (through comments). 
 
+<!--T:28-->
 But it is not the only configuration file to work with. The Laptop Mode Tools package supports plugins (or modules) which have their own configuration file(s). These files are located in {{Path|/etc/laptop-mode/conf.d}} and are named after the module they represent (such as {{Path|intel-sata-powermgmt.conf}} ). 
 
+<!--T:29-->
 Now, one of the important settings in each configuration file is if the Laptop Mode Tools package should govern a particular setting or not. This is important when you want to combine <code>laptop-mode-tools</code> with other services like <code>cpufreqd</code> . In this example case, you will need to set <code>CONTROL_CPU_FREQUENCY=0</code> : 
 
+<!--T:30-->
 {{File|/etc/laptop-mode/conf.d/cpufreq.conf||<pre>
 CONTROL_CPU_FREQUENCY=0
 </pre>
 }}
 
+<!--T:31-->
 The next few sections will help you configure <code>laptop-mode-tools</code> to suit your needs. When you are finished, start the <code>laptop_mode</code> service and make sure it is started when you boot up your system. 
 
+<!--T:32-->
 {{RootCmd|/etc/init.d/laptop_mode start
 |rc-update add laptop_mode default}}
 
-=== How does laptop-mode-tools work ===
+=== How does laptop-mode-tools work === <!--T:33-->
 
+<!--T:34-->
 When running the <code>laptop_mode</code> service, the software will check in which state your system is in. The states are defined as: 
 
+<!--T:35-->
 *  ''Battery'' , which is active when the system is running on battery power; the configuration files use the <code>BATT_</code> prefix for settings related to this state
 *  ''AC'' , which is active when the system is running on AC power; the configuration files use the <code>AC_</code> prefix for settings related to this state
 *  ''Laptop Mode'' , which is active when ''laptop mode'' is enabled; the configuration files use the <code>LM_</code> prefix for settings related to this state
 *  ''No Laptop Mode'' , which is active when ''laptop mode'' is disabled; the configuration files use the <code>NOLM_</code> prefix for settings related to this state
 
+<!--T:36-->
 The <code>AC/BATT_</code> and <code>LM/NOLM_</code> prefixes can be combined (so you can have a <code>AC_LM_</code> prefix). 
 
+<!--T:37-->
 When the <code>laptop_mode</code> service is started, it will switch modes based on events that occur (and of course based on the configuration settings). For instance, the setting <code>ENABLE_LAPTOP_MODE_ON_BATTERY=1</code> will make sure that the laptop mode tools switch to ''laptop mode'' when battery power is used. If that is the case, then the settings starting with <code>LM_</code> , <code>LM_BATT_</code> , <code>BATT_LM_</code> and <code>BATT_</code> will be used. 
 
+<!--T:38-->
 To make sure settings to not collide, it is not allowed to have overlapping settigns. In the next example, the first set (for <code>CPU_MAXFREQ</code> ) is valid, but the second one (for <code>CPU_GOVERNOR</code> ) isn't. 
 
+<!--T:39-->
 {{Code|Colliding settings|<pre>
 ## Valid set
 BATT_CPU_MAXFREQ=fastest
@@ -147,40 +176,51 @@ NOLM_CPU_MINFREQ=fastest
 </pre>
 }}
 
-=== Configuring CPU frequency management ===
+=== Configuring CPU frequency management === <!--T:40-->
 
+<!--T:41-->
 The support for CPU frequency management in the laptop mode tools allows switching frequencies. It supports setting the CPU frequency governor, minimum frequency and maximum frequency. The configuration file used here is {{Path|/etc/laptop-mode/conf.d/cpufreq.conf}} . 
 
+<!--T:42-->
 The ''CPU frequency governor'' is a kernel-level policy that defines how the kernel will select the CPU frequency. We already selected the governors we want to use in the kernel configuration earlier. Let's recap: 
 
+<!--T:43-->
 *  <code>performance</code> always picks the highest frequency
 *  <code>powersave</code> always picks the lowest frequency
 *  <code>userspace</code> does not pick anything, but let the user decide (or any process that the user is running that will decide for the user)
 *  <code>ondemand</code> will scale the CPU frequency up to the highest frequency when load is available
 *  <code>conservative</code> will scale the CPU frequency up gradually when load is available
 
+<!--T:44-->
 When switching between AC or battery, or (no) laptop mode, the appropriate governor (as well as its minimum and maximum frequency) is selected. 
 
-=== Configuring display brightness ===
+=== Configuring display brightness === <!--T:45-->
 
+<!--T:46-->
 With {{Path|/etc/laptop-mode/conf.d/lcd-brightness.conf}} , you can have the laptop mode tools govern the brightness of your LCD screen. 
 
+<!--T:47-->
 The file currently uses the {{Path|/proc/acpi/video/VID/LCD/brightness}} file to set brightness values. Recent kernels do not provide this anymore - you will need to adjust this to {{Path|/sys/class/backlight/acpi_video0/brightness}} instead. 
 
+<!--T:48-->
 The values you can use are between 0 and 15, with 0 being the lowest brightness value. 
 
-=== Configuring other services ===
+=== Configuring other services === <!--T:49-->
 
+<!--T:50-->
 An interesting feature of <code>laptop-mode-tools</code> is to support reloading particular services (like the system logger) after switching its configuration file. This is handled through {{Path|/etc/laptop-mode/conf.d/configuration-file-control.conf}} . 
 
+<!--T:51-->
 If enabled, the <code>laptop_mode</code> application will switch the configuration file(s) of the mentioned services with the same file, but suffixed with {{Path|-nolm-ac}} , {{Path|-lm-ac}} or {{Path|-batt}} . It willl then signal or reload the appropriate services so they can use the new configuration file. 
 
-== Using cpufreqd ==
+== Using cpufreqd == <!--T:52-->
 
-=== Installation ===
+=== Installation === <!--T:53-->
 
+<!--T:54-->
 The <code>cpufreqd</code> application allows you to manage CPU frequencies in a more granular approach then what <code>laptop-mode-tools</code> supports. But before we dive into the installation of <code>cpufreqd</code> , let's first look at the USE flags it supports. 
 
+<!--T:55-->
 {| class="wikitable" style="text-align: left;" 
 |- 
 ! USE flag
@@ -213,24 +253,32 @@ The <code>cpufreqd</code> application allows you to manage CPU frequencies in a 
 |-
 |}
 
+<!--T:56-->
 The USE flags <code>acpi</code> , <code>apm</code> and <code>pmu</code> overlap, so you should only have one active. If your laptop is sufficiently recent, <code>acpi</code> is your best bet. If not, <code>apm</code> offers all that is needed. When even APM isn't supported, you can try <code>pmu</code> . 
 
+<!--T:57-->
 With the USE flags configured, it is time to install <code>cpufreqd</code> . 
 
+<!--T:58-->
 {{Emerge|cpufreqd}}
 
-=== Configuration ===
+=== Configuration === <!--T:59-->
 
+<!--T:60-->
 The <code>cpufreqd</code> application monitors the status of the system through several plugins. Based on the feedback it receives from those plugins, it will adjust the policy used to govern the CPU frequency. 
 
+<!--T:61-->
 <code>cpufreqd</code> can be configured by editing {{Path|/etc/cpufreqd.conf}} . It contains three different sections: 
 
+<!--T:62-->
 # The <code>[General]...[/General]</code> section contains general configuration information
 # The <code>[Profile]...[/Profile]</code> section defines the policies that the <code>cpufreqd</code> daemon can switch to. The section is very similar to the information you use when manually setting the CPU frequency policy using <code>cpufreq-set</code> .
 # The <code>[Rule]...[/Rule]</code> section is the work-horse of the <code>cpufreqd</code> daemon, defining when the daemon decides to switch to a different profile.
 
+<!--T:63-->
 Let's take a quick look at an example rule. 
 
+<!--T:64-->
 {{Code|Sample cpufreqd rule|<pre>
 [Profile]
 name=On Demand High
@@ -248,28 +296,35 @@ profile=On Demand High
 </pre>
 }}
 
+<!--T:65-->
 In the above example, <code>cpufreqd</code> will switch the system to the ''On Demand High'' profile (also shown in the above excerpt). This profile by itself uses the <code>ondemand</code> governor with a minimum frequency of 40% (iow, a CPU of 2Ghz will have by this policy a minimum frequency of 800Mhz). 
 
+<!--T:66-->
 As you can see, the <code>cpufreqd</code> application can offer a more granular approach on CPU frequency scaling. But not only that, you can tweak the CPU frequency scaling based on various other metrics available. The default configuration offers a sample rule for when you watch a movie, where you want maximum performance, unless the CPU temperature is getting too high. 
 
+<!--T:67-->
 When you have configured <code>cpufreqd</code> , it is time to start it (and make sure the service is loaded automatically). Make sure that CPU frequency handling by other tools (like <code>laptop-mode-tools</code> ) is disabled! 
 
+<!--T:68-->
 {{RootCmd|rc-update add cpufreqd default
 |/etc/init.d/cpufreqd start}}
 
-== Resources ==
+== Resources == <!--T:69-->
 
-=== Tools ===
+=== Tools === <!--T:70-->
 
+<!--T:71-->
 *  [http://samwel.tk/laptop_mode/ Laptop Mode Tools Homepage] , includes [http://samwel.tk/laptop_mode/laptop_mode About laptop mode] .
 *  [http://www.lesswatts.org/projects/powertop/ PowerTOP] , an interactive application helping users to find out which processes are forcing wakeups on the CPU most often.
 
-=== Articles and Guides ===
+=== Articles and Guides === <!--T:72-->
 
+<!--T:73-->
 * A ThinkWiki article on [http://www.thinkwiki.org/wiki/How_to_reduce_power_consumption How to reduce power consumption] (on Linux). This article offers an exhaustive list of measures one can take. However, it should be noted that the laptop mode tools implements the majority of these (if properly configured).
 
-== Acknowledgements ==
+== Acknowledgements == <!--T:74-->
 
+<!--T:75-->
 We would like to thank the following authors and editors for their contributions to this guide:
 
 </translate>
