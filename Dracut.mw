@@ -252,12 +252,22 @@ For an NBD boot, you need only 3 modules and the nbd dracut module.
 
 
 Booting is done with the following line in your [[Syslinux|PXE config]]. The rd.ip=auto let's it auto detect the NBD settings through DHCP. The NBD boot path is provided to the client through the DHCP option "root-path" with the following value: nbd:<SERVER>:<NBD_PORT>:<FS>
-{{Note|Connecting to name based exports is not documented. A code review of the module suggests that specifying an export name instead of a port number is allowed and can be used to connect to name based exports.}}
+{{Note|Connecting to name based exports is not documented. A code review of the module shows that specifying an export name instead of a port number is allowed and can be used to connect to name based exports.}}
 {{File|/var/lib/tftpboot/pxelinux.cfg/default||<pre>
 ...
  APPEND initrd=initramfs-nbd-only.img rd.ip=auto root=dhcp
 ...
 </pre>}}
+It is also possible to boot from a partititioned nbd device. To do this, the [[Syslinux|PXE config]] needs to include
+* a kernel parameter "nbd.max_part=X" with X>0 to load the nbd module with partition support
+* a root device setting specifying the partition to mount
+* a netroot setting as described above for the root-path.
+{{File|/var/lib/tftpboot/pxelinux.cfg/default||<pre>
+...
+ APPEND initrd=initramfs-nbd-only.img rd.ip=auto nbd.max_part=X root=/dev/nbd0pY netroot=nbd:<SERVER>:<NBD_PORT|EXPORTNAME>
+...
+</pre>}}
+{{Note|During shutdown, networking (including dhcp) and nbd-client must not be stopped, otherwise the nbd can not be unmounted cleanly. For OpenRC, this can be configured in <pre>/etc/conf.d/net</pre> for DHCP client daemon options and <pre>/etc/conf.d/killprocs</pre> to exclude nbd-client processes from being killed.}}
 
 === Debug ===
 For debugging the Dracut boot process, a special module is required. Including the module in the initramfs also includes several useful tools like {{Highlight|scp}} for copying logfiles.
