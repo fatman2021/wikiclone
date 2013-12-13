@@ -164,9 +164,50 @@ For more on samba4 bugs please have a look on the bugs tracker below.<br />
 
 
 ==== Options 2, Remove system wide mit-krb5 and replace with heimdal ====
-This might not be as challenge as compare to option 1 but there are some strange result, which are still looking for solution.
-{{Note|having issue that log kernel: traps: getent[3691] general protection ip:7fd9b7a229f8 sp:a7e5ddc470aa4ca0 error:0 in ld-2.16.so[7fd9b7a0c000+21000]
-Can only temporary fix it by removing all ldap in /etc/nsswitch.conf}}
- 
+This might not be as challenge as compare to option 1 but there are some other challenge.
+{{Note|If you face the following:<br />
+kernel: traps: getent[3691] general protection ip:7fd9b7a229f8 sp:a7e5ddc470aa4ca0 error:0 in ld-2.16.so[7fd9b7a0c000+21000] <br />
+It Can only temporary fix it by removing all ldap in /etc/nsswitch.conf<br />
+This issue is fixed with the latest nss_ldap-265-r2
+Please unmask it and emerge it manually 
+}}
+===== Remove mit-krb5 dependency =====
 You will need to to check which package are dependent on mit-krb5
-{{RootCmd|equery d mit-krb5}}
+{{RootCmd|equery d mit-krb5||output=<pre>
+ * These packages depend on mit-krb5:
+dev-libs/openssl-1.0.1e-r1 (kerberos ? app-crypt/mit-krb5)
+net-libs/c-client-2007f-r4 (kerberos ? app-crypt/mit-krb5)
+virtual/krb5-0 (app-crypt/mit-krb5)
+</pre>}}
+
+remove the '''kerberos''' useflag and recompile these package<br />
+but leave '''virtual/krb5-0''' untouch, we need that later.
+
+{{File|/etc/portage/package.use|Example adding openssl and c-client|<pre>
+dev-libs/openssl -kerberos
+net-libs/c-client -kerberos
+</pre>}}
+
+Emerge your new package with mit-krb5 dependency removed.
+
+{{emerge|openssl c-client|params=--ask --newuse --verbose}}
+
+Check if the kerberos useflag had be removed.
+
+===== Unmerge mit-krb5 =====
+We will now remove mit-krb.
+
+{{Warning|if you skip the above steps, some system will not be responding}}
+
+{{emerge|mit-krb5|params=--ask --unmerge }}
+
+===== Emerge heimdal =====
+We can now emerge app-crypt/heimdal kerberos. 
+{{emerge|app-crypt/heimdal}}
+
+Now rebuild all package which need kerberos library.<br />
+'''virtual/krb5-0''' was the build so that if a package can compile with either of the kerberos library, we can choose either one. 
+
+{{RootCmd|revdep-rebuild}}
+
+When done we can continue emerge samba.
