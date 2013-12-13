@@ -2,16 +2,20 @@
 
 <translate>
 
+<!--T:1-->
 {{Metadata|abstract=AIDE stands for Advanced Intrusion Detection Environment and is an application that scans files and other resources and stores information about these files in a database. Rescanning the system can then identify (possibly unwanted) modifications and report those.}}
 
-== AIDE ==
+== AIDE == <!--T:2-->
 
+<!--T:3-->
 AIDE stands for ''Advanced Intrusion Detection Environment'' and is an application that scans files and other resources and stores information about these files in a database. This information can be hash information, file size, ownership and more. The application can then, once this database is available, rescan the system and compare the results with the previously stored values. If values differ, then the file is changed and this change is reported.
 
-=== Installation and configuration ===
+=== Installation and configuration === <!--T:4-->
 
+<!--T:5-->
 Within Gentoo, you can easily install '''aide''' after setting the USE flags accordingly. The supported USE flags at the time of writing are:
 
+<!--T:6-->
 {{USEflag|package=app-forensics/aide
 |acl
 |audit++yes
@@ -26,33 +30,44 @@ Within Gentoo, you can easily install '''aide''' after setting the USE flags acc
 |zlib++yes
 }}
 
+<!--T:7-->
 Then it is a matter of installing the software:
 
+<!--T:8-->
 {{Emerge|app-forensics/aide}}
 
+<!--T:9-->
 The configuration file for ''aide'' is not as daunting as it might seem at first sight. The default file is stored at {{Path|/etc/aide/aide.conf}} but you can easily create multiple separate configuration files if you want. Besides a few variables, the configuration file contains a few short-hand notations for what aspects of files to scan for (only hashes, or also inode information, etc.) and then which files to scan.
 
+<!--T:10-->
 Let's first look at the variables.
 
+<!--T:11-->
 {{File|aide.conf|variables|<pre>
 database=file:/var/lib/aide/aide.db
 database_out=file:/var/lib/aide/aide.db.new
 </pre>}}
 
+<!--T:12-->
 These parameters define where the database is stored that contains the known values (''database'') and where to store a new database if you create a new one (''database_out''). It is generally recommended to not have these variables point to the same, instead manually copying over the generated database from one location to the other.
 
+<!--T:13-->
 For now, leave those variables as-is, we'll get back to them later.
 
+<!--T:14-->
 {{File|aide.conf|shorthand notations|<pre>
 Binlib = p+i+n+u+g+s+b+m+c+md5+sha1
 Logs = p+i+n+u+g+S
 ...
 </pre>}}
 
+<!--T:15-->
 These are short-hand notations for what to measure. The letters are described in the default {{Path|aide.conf}} file, so instead of documenting them all here, I'll just give information about a few of them: '''p'''ermissions, '''i'''node number, '''n'''umber of (hard)links, '''u'''ser information, '''g'''roup information, '''s''''ize (or '''S''' if the size is allowed to grow but never shrink), '''b'''lock count, '''m'''odification time, etc. Also, you probably have guessed that '''md5''' and '''sha1''' mean that the MD5 and SHA-1 checksums are taken.
 
+<!--T:16-->
 These short-hand notations are then used to identify what to scan for which files. 
 
+<!--T:17-->
 {{File|aide.conf|scan targets|<pre>
 /bin Binlib
 /sbin Binlib
@@ -60,39 +75,50 @@ These short-hand notations are then used to identify what to scan for which file
 ...
 </pre>}}
 
+<!--T:18-->
 This is the overview of which directories to scan, and what to scan for. In the above three lines example, we tell AIDE to scan the {{Path|/bin}} and {{Path|/sbin}} locations and take the measures identified earlier in the ''Binlib'' short-hand notation. The {{Path|/var/log}} location should use the ''Logs'' scan measures.
 
+<!--T:19-->
 AIDE supports regular expressions and you are allowed to "remove" matches. For instance, if you want to scan {{Path|/var/log}} but not {{Path|/var/log/portage}} then you can include an exclusion set as well:
 
+<!--T:20-->
 {{File|aide.conf|other scan targets|<pre>
 /var/log Logs
 !/var/log/portage
 </pre>}}
 
-=== Initialization and frequent scanning ===
+=== Initialization and frequent scanning === <!--T:21-->
 
+<!--T:22-->
 First we need to initialize the database once. 
 
+<!--T:23-->
 {{RootCmd|aide --init --config{{=}}/etc/aide/aide.conf|output=<pre>
 AIDE, version 0.14.2
   
 ### AIDE database at /var/lib/aide/aide.db.new initialized.
 </pre>}}
 
+<!--T:24-->
 Once initialized, we can copy over the database file.
 
+<!--T:25-->
 {{RootCmd|cd /var/lib/aide; cp aide.db.new aide.db}}
 
+<!--T:26-->
 With the database now available, we can scan the entries again for potential modifications:
 
+<!--T:27-->
 {{RootCmd|aide --check --config{{=}}/etc/aide/aide.conf|output=<pre>
 AIDE, version 0.14.2
   
 ### All files match AIDE database. Looks okay!
 </pre>}}
 
+<!--T:28-->
 When a file modification is occurred, you will get a notification:
 
+<!--T:29-->
 {{RootCmd|aide --check --config{{=}}/etc/aide/aide.conf|output=<pre>
 AIDE found differences between database and filesystem!!
 Start timestamp: 2013-04-11 15:31:02
@@ -129,14 +155,17 @@ File: /etc/pam.d/run_init
   SHA1     : NrQtsUeOsXS4RHUq+ejYBne5V6E=     , 5A6ef6VJCcMiqEjKQ7e9xkBNZB8=
 </pre>}}
 
-== Best Practices ==
+== Best Practices == <!--T:30-->
 
-=== Be clear with what to scan ===
+=== Be clear with what to scan === <!--T:31-->
 
+<!--T:32-->
 The default AIDE configuration is useful, but you'll need to fine-tune it to suit your needs. It is important to know which files to scan and why.
 
+<!--T:33-->
 For instance, if you want to scan for all authentication-related files but not for other files, you can use a configuration like so:
 
+<!--T:34-->
 {{File|aide.conf|authentication-related scan targets|<pre>
 # SELinux policy and settings
 /etc/selinux ConfFiles
@@ -152,16 +181,20 @@ For instance, if you want to scan for all authentication-related files but not f
 /lib(64)?/security Binlib
 </pre>}}
 
-=== Keep the database offline and read-only ===
+=== Keep the database offline and read-only === <!--T:35-->
 
+<!--T:36-->
 A second important aspect is that you really want the result database to be stored off-line when you don't need it, and use it in read-only modus when you do. This gives some protection against a malicious user, that might already have compromised the machine, to also modify the results database. For instance, you can provide the result database on a read-only NFS mount (for servers) or read-only medium (when you have physical access to the machine) such as CD/DVD or read-only USB sticks.
 
+<!--T:37-->
 When you have the database on such location, update the {{Path|aide.conf}} file to have ''database='' point to this new location.
 
-=== Do offline scanning ===
+=== Do offline scanning === <!--T:38-->
 
+<!--T:39-->
 If you can, try using offline scanning methods for the system. In case of virtual platforms, you might be able to take a snapshot of the system, mount this snapshot (read-only) and then run the aide scan on the mounted file system.
 
+<!--T:40-->
 {{RootCmd|losetup /dev/loop0 /srv/virt/gentoo.img
 |vgscan
 |vgchange -ay
@@ -173,10 +206,12 @@ If you can, try using offline scanning methods for the system. In case of virtua
 |vgchange -an /dev/volgrpX
 |losetup -d /dev/loop0}}
 
+<!--T:41-->
 The above approach uses a chroot. This is only needed when the initial file system has been scanned from the live system and you want to perform an offline validation. If you did your initial scan offline, then your {{Path|aide.conf}} will point to the mount point already and the database will use these paths immediately, so then you do not have the need for chrooting.
 
-== More information ==
+== More information == <!--T:42-->
 
+<!--T:43-->
 * [[Integrity/Concepts]] talks about the concepts related to system integrity
 
 </translate>
