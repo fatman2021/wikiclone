@@ -1,7 +1,7 @@
 This guide introduces the migration of Samba3 to Samba4 with LDAP on Gentoo boxes.
 
 == Pre-requisite ==
-* A working samba 3 NT PDC (Must be PDC as it will be '''Promote''' to AD)
+* A working samba 3.6.x NT PDC with LDAP backend(Must be PDC as it will be '''Promote''' to AD)
 * Samba AD DNS Planing
 * LDAP Auth Backend Database (Optional)
 * Python 2.7 as ABI 
@@ -110,14 +110,14 @@ Unfortunately, there are no program for this.
 You will have to do it manually.
 
 if you are using smbldap-tools, you can use the following command and manually compare their different.
-{{RootCmd|
-1. smbldap-grouplist
-2. smbldap-userlist
+{{RootCmd
+|smbldap-grouplist
+|smbldap-userlist
 }}
 
 {{Note|Please help write a python program for this}}
 
-== Emerge Samba4 ==
+== Getting Samba4 ==
 
 === Getting ready before Samba4 ===
 There are 2 options to get samba 4 compile, just choose the one that you preferred.<br />
@@ -146,6 +146,18 @@ Apply the patch, any way you like.
 
 rebuild ebuild Manifest, it will download samba source and check on it.
 {{RootCmd|ebuild samba-4.1.2.ebuild Manifest}}
+
+===== Special Useflag =====
+{{USEflag|package=net-fs/samba
+|bi_heimdal++Yes+Use Build in heimdal library
+}}
+Please add this extra useflag
+
+{{File|/etc/portage/package.use|add this extra useflag, for example|<pre>
+net-fs/samba bi_heimdal ads addns cluster winbind quota syslog fam
+</pre>}}
+
+Jump to emerge samba
 
 ==== Options 2, Remove system wide mit-krb5 and replace with heimdal ====
 This might not be as challenge as compare to option 1 but there are some other challenge.
@@ -196,7 +208,6 @@ Now rebuild all package which need kerberos library.<br />
 
 When done we can continue emerge samba.
 
-
 ==== Emerge Samba ====
 For more on samba4 bugs please have a look on the bugs tracker below.<br />
 {{Bug|489762}} Samba4 unmask bugs tracker.
@@ -229,8 +240,50 @@ For more on samba4 bugs please have a look on the bugs tracker below.<br />
 |syslog
 |winbind
 }}
+===== unmaks Samba =====
+Before this let unmask samba 4
+{{File|/etc/portage/package.unmask|add this line in|<pre>
+=net-fs/samba-4.1.2
+</pre>}}
 
 {{Emerge|{{=}}net-fs/samba-4.1.2}}
+
+Please wait and allow samba4 to build.
+
+When it is done we can continue configuration samba4.
+
+== Migration samba 3 to samba 4 configuration ==
+We will not prepaid to do an classic upgrade from samba 3 to samba 4.
+Before that please run test-parm to make sure all configuration on the samba3 is correct. The migration will fail if it see some outdated/obsolete config
+{{Note|We assume that you are currently running samba 3.6.x as it compatibility to samba4 is better.}}
+
+{{RootCmd
+|testparm /etc/samba/smb.conf|output=<pre>
+Load smb config files from /etc/samba/smb.conf
+WARNING: The "password level" option is deprecated
+Processing section "[homes]"
+WARNING: The "username" option is deprecated
+</pre>}}
+
+Change or remove any '''WARNING''' configuration.
+
+We assume that both old and new server are on the same host. Else you can copy them to another host.
+{{RootCmd
+|scp -r /var/lib/samba/private/ /var/lib/samba/samba3tdb/
+|scp /etc/samba/smb.conf /var/lib/samba/samba3tdb/
+}}
+
+If you wish to change the host name of the new server, you can change the netbios name in the Samba3 conf file that you have copy over.<br />
+{{Note|For some reason the samba4 classical upgrade tools will fail if you use hostname on the ldap entry. Please change your ldap domain name from dns to ip. <ref name="classicupgradebugs">[https://bugzilla.samba.org/show_bug.cgi?id=9186]https://bugzilla.samba.org/show_bug.cgi?id=9186</ref>}}
+=== Upgrading ===
+Now it is time to stop samba.
+{{RootCmd|/etc/init.d/samba stop}}
+And run you update 
+{{RootCmd|samba-tool domain classicupgrade --dbdir{{=}}/var/lib/samba/samba3tdb/  --use-xattrs{{=}}yes  --realm{{=}}headoffice.location1.company.com /var/lib/samba/samba3tdb/samba3.conf}}
+You should not see any error message from this command. if you do you will have to re-run the above command again.
+
+
+
 
 = External Reference =
 <references />
