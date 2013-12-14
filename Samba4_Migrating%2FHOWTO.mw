@@ -298,15 +298,53 @@ We assume that both old and new server are on the same host. Else you can copy t
 
 If you wish to change the host name of the new server, you can change the netbios name in the Samba3 conf file that you have copy over.<br />
 {{Note|For some reason the samba4 classical upgrade tools will fail if you use hostname on the ldap entry. Please change your ldap domain name from dns to ip. <ref name="classicupgradebugs">[https://bugzilla.samba.org/show_bug.cgi?id=9186]https://bugzilla.samba.org/show_bug.cgi?id=9186</ref>}}
-=== Upgrading ===
+=== Migration Start ===
 Now it is time to stop samba.
 {{RootCmd|/etc/init.d/samba stop}}
-And run you update 
+And run you migratation choose one of the following for different DNS configuration.
+You can change it later after running.
+
+Samba 4 AD with Bind9 DLZ Module
+DLZ is for windows client to do dns update to bind9 
+
+{{RootCmd|samba-tool domain classicupgrade --dbdir{{=}}/var/lib/samba/samba3tdb/  --use-xattrs{{=}}yes  --realm{{=}}headoffice.location1.company.com --dns-backend{{=}}BIND9_DLZ /var/lib/samba/samba3tdb/samba3.conf}}
+
+Samba 4 AD with internal DNS Module
 {{RootCmd|samba-tool domain classicupgrade --dbdir{{=}}/var/lib/samba/samba3tdb/  --use-xattrs{{=}}yes  --realm{{=}}headoffice.location1.company.com /var/lib/samba/samba3tdb/samba3.conf}}
+
 You should not see any error message from this command. if you do you will have to re-run the above command again.
+=== Testing of Migration ===
+As per said Samba AD do consist LDAP and also DNS.
+so you have to turn off your slapd and also other DNS if you are using samba internal DNS.
+
+{{RootCmd|samba -i -M single}}
+
+{{Note|You might need to change your Administrator password using the following command}}
+{{RootCmd|samba-tool user password -U Administrator}}
+Smbclient test
+{{RootCmd|smbclient //localhost/netlogon -UAdministrator -c 'ls'|output=<pre>
+Domain=[SAMDOM] OS=[Unix] Server=[Samba 4.x.y]
+  .                                   D        0  Tue Dec 11 20:00:00 2012
+  ..                                  D        0  Tue Dec 11 20:00:00 2012
+</pre>}}
+
+=== DNS module Setup ===
+
+=== Kerberos setup ===
 
 
+=== Final Setup ===
+Finally we will need make the following 
 
+{{File|/etc/conf.d/samba|Changing to samba4 deamon|<pre>
+# Add "winbind" to the daemon_list if you also want winbind to start.
+# Replace "smbd nmbd" by "samba4" if you want the active directory domain controller part or the ntvfs
+# file server part or the rpc proxy to start.
+# Note that samba4 controls 'smbd' by itself, thus it can't be started manually. You can, however,
+# tweak the behaviour of a samba4-controlled smbd by modifying your '/etc/samba/smb.conf' file
+# accordingly.
+daemon_list="samba4"
+</pre>}}
 
 = External Reference =
 <references />
