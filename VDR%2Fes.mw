@@ -1,0 +1,325 @@
+<languages />
+
+
+{{Metadata|abstract=This guide shows you how to prepare Gentoo Linux for DVB and VDR.}}
+
+This guide shows you how to prepare Gentoo Linux for DVB and VDR.
+
+== General information to DVB ==
+
+=== What is DVB? ===
+
+''DVB'' stands for ''Digital Video Broadcasting''. DVB describes methods to transfer digital data of TV, radio, interactive services like MHP, EPG and teletext. Through data compression with MPEG-2, or H.264 for HDTV, it's possible to transfer several channels on the same frequency. The more data compression, the more channels can be transferred, but you pay it with quality loss. 
+
+DVB can be transferred in several ways. The trailing letter identifies the method of transfer, e.g. DVB-''T'' for terrestrial transmission. There are several more types: 
+
+* DVB-S for transmission over satellites
+* DVB-C for transmission over cable
+* DVB-H for transmission to mobile devices (terrestrial)
+* DVB-IPI for transmission over IP based networks, e.g. internet
+* DVB-RC(S/C/T) return channel for the transmission of data services, e.g. broadband internet
+
+=== Types and requirement of DVB cards ===
+
+Besides the different methods available to receive a DVB stream, the cards are classified by their type of produced output. There are cards with a decoder implemented which offer direct access to the stream by the device {{Path|/dev/video}}. These cards are ''full featured cards''. Other cards have no own decoder implemented and require a software decoder on the computer and are ''budget cards''. This implies higher system requirements. Your computer's CPU should run at at least 600 MHz, and have at least 256MB of RAM. [http://linuxtv.org/wiki/index.php/DVB_Card_Vendors This list] is useful for identifying your card. 
+
+== Preparing the system ==
+
+=== Configuring the kernel ===
+
+First, we must ensure that your kernel supports DVB and your DVB device. Since kernel version 2.6 the necessary drivers are included. Check your kernel configuration and make sure the following options are selected as a static driver or as modules. 
+
+{{Kernel|Required kernel options|<pre>
+Input Device Support --->
+* Event Interface
+Device Drivers --->
+Multimedia Devices --->
+Digital Video Broadcasting Devices --->
+    [*] DVB For Linux
+     *  DVB Core Support
+   M  [Your driver]
+</pre>
+}}
+
+Additionally we have to select the proper driver for your hardware. To find out the right module for your card, we mark every driver as module. If you have a PCI card, install <code>pciutils</code> if you haven't already. If you want built-in drivers or you don't own a PCI card, skip this step and continue with [[#Checking the kernel output|Checking the kernel output]]. 
+
+{{Emerge|pciutils}}
+
+After booting the new kernel, we run <code>pcimodules</code> to list the required modules. 
+
+{{RootCmd|pcimodules|output=<pre>
+ohci-hcd
+ehci-hcd
+sis900
+snd-emu10k1
+b2c2-flexcop-pci
+nvidia
+nvidiafb
+</pre>
+}}
+
+In this case we have to load the module <code>b2c2-flexcop-pci</code>. We add the name to {{Path|/etc/conf.d/modules}}. 
+
+{{File|/etc/conf.d/modules||<pre>
+modules="b2c2-flexcop-pci"
+</pre>
+}}
+
+=== Checking the kernel output ===
+
+It's recommended to mark every driver as module, so that you can add the required module dynamically, especially if you don't know the module name. If you already know the module name, select the driver as a built-in driver. Compile the kernel, install the modules and boot it. You can check if your kernel has successfully detected your card by using <code>dmesg</code>. 
+
+If you own a TerraTec Cinergy T2, your output might look like this:
+
+{{RootCmd|dmesg {{!}} grep DVB|output=<pre>
+DVB: registering new adaptor (TerraTec/qanu USB2.0 Highspeed DVB-T Receiver).
+input: TerraTec/qanu USB2.0 Highspeed DVB-T Receiver remote control as /class/input/input2
+</pre>
+}}
+
+== Installing VDR ==
+
+To install VDR, we just emerge it. 
+
+{{Emerge|vdr}} 
+
+== Installing the Remote Control ==
+
+There are at least two ways to control VDR via an infrared remote control. If your TV card has an onboard IR receiver you can use <code>vdr-remote</code>. Otherwise, you most likely need to use LIRC. 
+
+=== Installing vdr-remote ===
+
+We first install the plugin via emerge: 
+
+{{RootCmd|emerge vdr-remote
+|eselect vdr-plugin enable remote}}
+
+When using the remote plugin for the IR port on your DVB card everything should be fine with the default config. It automatically uses the input device which has "dvb" in its name. For more advanced uses take a look at {{Path|/etc/conf.d/vdr.remote}}. 
+
+=== Alternative: installing LIRC ===
+
+If your card can be remotely controlled (but you cannot or do not want to use <code>vdr-remote</code> ), you may wish to configure LIRC. LIRC interprets the pressed keys and returns a name for each one. A program that supports LIRC waits for key events and runs the action configured in the config file, mostly stored in the config directory of the executing program (e.g. <code>mplayer</code> loads the file {{Path|~/.mplayer/lircrc}} ). Before we install LIRC, you have to add <code>lirc</code> to your USE flags and add an additional entry to {{Path|/etc/portage/make.conf}}: <code>LIRC_DEVICES</code>. Use [http://www.lirc.org/html/table.html this list] to find the proper arguments for the option. 
+
+{{File|/etc/portage/make.conf||<pre>
+# (Replace "devinput" with the proper driver)
+LIRC_DEVICES="devinput"
+USE="lirc"</pre>}}
+
+{{Emerge|lirc}}
+
+At first we have to define each key code with a name. Most supported remote controls are configured already, take a look at the [http://lirc.sourceforge.net/remotes/ remote list]. Download the required file and save it as {{Path|/etc/lircd.conf}}. Now we have to find out where to access your remote control. Run the following command to get a list of the current input devices (make sure your device is running). 
+
+{{RootCmd|cat /proc/bus/input/devices|output=<pre>
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="TerraTec/qanu USB2.0 Highspeed DVB-T Receiver remote control"
+P: Phys=usb-0000:00:1d.7-1/input0
+S: Sysfs=/class/input/input2
+H: Handlers=kbd event1
+B: EV=100003
+B: KEY=108fc210 2043 0 0 0 0 8000 2080 1 9e1680 0 0 ffc
+</pre>
+}}
+
+In this case we have the Terratec Cinergy T2 device plugged in, so we can access the device over {{Path|/dev/input/event1}}. Replace <code>event1</code> with the matching device in your output. 
+
+<code>lircd</code> needs to know the device to use. Add the following line to {{Path|/etc/conf.d/lircd}}. Remember to replace<code>devinput</code> with the name of your driver and<code>event1</code> with the actual device. 
+
+{{File|/etc/conf.d/lircd||<pre>
+LIRCD_OPTS="-H devinput -d /dev/input/event1"
+</pre>
+}}
+
+It's time to start <code>lircd</code>: 
+
+{{RootCmd|/etc/init.d/lircd start}}
+
+Now it should be possible to watch <code>lircd</code> capturing and decoding key presses. Just run the command <code>irw</code>. Stop it by pressing Ctrl+C when you have enough. 
+
+{{RootCmd|irw|output=<pre>
+0000000000001aa2 00 Exit Technisat_TTS35AI.conf
+0000000000001a8d 00 Mute Technisat_TTS35AI.conf
+0000000000000a97 00 OK Technisat_TTS35AI.conf
+0000000000000a97 01 OK Technisat_TTS35AI.conf
+0000000000000a92 00 Menu Technisat_TTS35AI.conf
+</pre>
+}}
+
+Next, add it to the default runlevel so that it starts automatically at boot. 
+
+{{RootCmd|rc-update add lircd default}}
+
+To be able to use your remote control, you must enable LIRC support in VDR. Add the following line to {{Path|/etc/conf.d/vdr}}: 
+
+{{File|/etc/conf.d/vdr||<pre>
+IR_CTRL="lirc"
+</pre>
+}}
+
+== Video Output Methods ==
+
+You now need to decide on one (and only one!) of the following video output devices which show the picture and the overlayed On Screen Display (OSD). 
+
+=== Hardware decoding: full-featured DVB cards ===
+
+Users of these expensive cards need not install anything else, so you may continue with [[#Creating a Channel List|Creating a Channel List]]. 
+
+=== Hardware decoding: DXR3/Hollywood+ cards ===
+
+To use a DXR3 card for VDR output we need the <code>vdr-dxr3</code> plugin. 
+
+{{Emerge|vdr-dxr3}}
+
+{{File|/etc/conf.d/modules||<pre>
+modules="em8300"
+</pre>
+}}
+
+The em8300 module need some configuration that depends on the exact revision of that card. 
+
+=== Hardware decoding: PVR350 cards ===
+
+As PVR350 cards have an onboard MPEG-Decoder chip we want to make use of that. We need to install the <code>vdr-pvr350</code> plugin. If <code>ivtv-driver</code> is not yet installed emerge will automatically install it for you. To have the ivtv module loaded at boot we add it to {{Path|/etc/conf.d/modules}}: 
+
+{{Emerge|vdr-pvr350}}
+
+{{File|/etc/conf.d/modules||<pre>
+modules="ivtv"
+</pre>
+}}
+
+=== Software decoding: vdr-softdevice ===
+
+To install it, we have to emerge <code>vdr-softdevice</code>. Don't forget to enable the plugin. 
+
+{{Emerge|vdr-softdevice}}
+
+{{RootCmd|eselect vdr-plugin enable softdevice}}
+
+To select the proper video and audio output, edit {{Path|/etc/conf.d/vdr.softdevice}}. 
+
+For now, we will only describe the shm ("shared memory") method. This is already enabled in the installed config file (Setting SOFTDEVICE_VIDEO_OUT). Later you need to start <code>ShmClient</code> to get a window showing the picture. 
+
+{{Note|If you do not want to think about a separate keyboard layout for controlling VDR, there are remote configuration files available at Matthias Schwarzott's [http://dev.gentoo.org/~zzam/vdr_remote_conf/ devspace]. There are files for softdevice/shm and xineliboutput (more coming). You will need the relevant file to {{Path|/etc/vdr/remote.conf}} and run <code>chown vdr:vdr</code> on the file to get it working.}}
+
+=== Software decoding: vdr-xineliboutput ===
+
+Some people prefer to use <code>vdr-xineliboutput</code>, because it can also work remotely. We'll now teach you how to configure <code>vdr-xineliboutput</code> on your host and client. First, the host setup: 
+
+{{Emerge|vdr-xineliboutput}}
+
+{{RootCmd|eselect vdr-plugin enable xineliboutput}}
+
+Adding command line options at this point is crucial for xineliboutput to work. For more options, see <code>vdr --help</code>. 
+
+{{File|/etc/conf.d/vdr.xineliboutput||<pre>
+_EXTRAOPTS="--local=none --remote=37890"
+</pre>
+}}
+
+The next step is to edit {{Path|/etc/vdr/svdrphosts.conf}}. This file describes a number of host addresses that are allowed to connect to the SVDRP port of the video disk recorder running on the host system. 
+
+{{File|/etc/vdr/svdrphosts.conf||<pre>
+# (The proper syntax is: IP-Address[/Netmask])
+127.0.0.1             (always accept localhost)
+192.168.1.0/24        (any host on the local net)
+#204.152.189.113      (a specific host)
+#0.0.0.0/0            (any host on any net - USE THIS WITH CARE!)
+</pre>
+}}
+
+If you only want to use <code>vdr-xineliboutput</code> to view the picture on the same computer as the one running VDR you can continue with creating the channel list. 
+
+Otherwise, you now simply <code>emerge media-plugins/vdr-xineliboutput</code> on your client: 
+
+{{Emerge|vdr-xineliboutput}}
+
+Later (after having started VDR) you will use the command <code>vdr-sxfe xvdr://hostname</code> to connect to VDR and view its picture and OSD. 
+
+{{Note|There is also a plugin which just simulates the existance of a real output device (<code>vdr-dummydevice</code>) for some fancy uses like record-only servers, but that is more advanced than a normal VDR setup.}}
+
+== Creating a Channel List ==
+
+To make VDR really useful you need to create an appropriate channel list. There is more than one way to get a working list of channels (besides downloading one). The channel list installed by default is for DVB-S reception on Astra on 19.2° E. 
+
+=== Using dvbscan from linuxtv-dvb-apps ===
+
+{{Emerge|linuxtv-dvb-apps}}
+
+Find the correct frequency list for your region and type of reception. These files are stored under {{Path|/usr/share/dvb/scan}}. For reception with DVB-T in Germany, Region Nuernberg you need to use {{Path|/usr/share/dvb/scan/dvb-t/de-Nuernberg}}. 
+
+{{Cmd|dvbscan -o vdr /usr/share/dvb/scan/dvb-t/de-Nuernberg > /etc/vdr/channels.conf}}
+
+=== Using vdr-reelchannelscan ===
+
+First, delete the contents of the existing channel list. 
+
+{{RootCmd|rm /etc/vdr/channels.conf}}
+
+{{Emerge|vdr-reelchannelscan}}
+
+{{RootCmd|eselect vdr-plugin enable reelchannelscan}}
+
+=== Channels for systems using vdr-analogtv ===
+
+You'll probably want to configure your channels at this point. The VDR project provides you with some examples which can be found at {{Path|/usr/share/doc/vdr-analogtv-$version/examples/}}, as long as you've installed >= <code>media-plugins/vdr-analogtv-1.0.00-r1</code>. 
+
+== Starting VDR ==
+
+After having all basic software parts ready on the system you need to configure VDR with its OSD. 
+
+If you use a hardware decoder for picture output you should switch on the connected TV now. If you use software output the client for this must be started after VDR. 
+
+First, you should learn your key definitions; that is, connecting keys on your remote control to VDR's internal commands. 
+
+{{Note|Just in case you need to edit the keyboard configuration, or (more likely) want to delete it to go back to learning the keys: VDR stores its key-definitions in {{Path|/etc/vdr/remote.conf}}.}}
+
+We begin with starting VDR: 
+
+{{RootCmd|/etc/init.d/vdr start|output=<pre>
+* Preparing start of vdr:
+*   config files ...                                        [ ok ]
+*   Waiting for prerequisites (devices nodes etc.) ...      [ ok ]
+* Starting vdr ...                                          [ ok ]
+* First start of vdr: No check for running vdr possible
+* until control device (remote/keyboard) keys are learnt!
+</pre>
+}}
+
+{{Note|Users of software decoders should now start the client program that opens the window to show the TV picture and the OSD.}}
+
+For users of vdr-softdevice:
+
+{{RootCmd|ShmClient}}
+
+For users of vdr-xineliboutput:
+
+{{RootCmd|vdr-sxfe xvdr://hostname}}
+
+The most useful keys for VDR are: 
+
+* Cursor keys (Left/Right/Up/Down)
+* Menu/Exit/Ok
+* Colors (Red/Green/Yellow/Blue)
+* Number keys (0-9)
+
+{{Important|If you don't have many keys, make sure to assign these. (Some remotes have Play/Pause/etc. on the same keys as the colors, so use them for the colors).}}
+
+Now that the basic installation is over, you need to configure VDR. Switch to your output screen and follow the on-screen instructions. VDR asks you to press various keys on your remote control to learn the correct key codes. If you don't own a remote control, you can use your keyboard. 
+
+Now you can add the VDR initscript to the default runlevel to get it started every time your computer boots up. 
+
+{{RootCmd|rc-update add vdr default}}
+
+== Troubleshooting ==
+
+{{Note|If you need any help, you can always ask someone in [http://www.gentoo.org/irc://irc.gentoo.org/gentoo-vdr #gentoo-vdr], or look around on our [http://forums.gentoo.org/ forums].}}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Norman Golisz
+* Dimitry Bradt
+* Matthias Schwarzott
+* Joshua Saddler
