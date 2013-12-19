@@ -37,65 +37,75 @@ In order to install LILO on the MBR, just invoke <code>lilo</code>. However, bef
 
 == Configuring LILO ==
 
-An example {{Path|lilo.conf}} file is provided at {{Path|/etc/lilo.conf.example}}.
-
-Lilo's default configuration has hda references, lets change those to sda recursively using sed.
-
-{{RootCmd|sed -i -e 's/hda/sda/' /etc/lilo.conf.example}}
-
-Now we copy the example configuration to the running configuration.
+An example {{Path|lilo.conf}} file is provided at {{Path|/etc/lilo.conf.example}}. To start configuring LILO, copy over the example file. 
 
 {{RootCmd|cp /etc/lilo.conf.example /etc/lilo.conf}}
 
-=== Default OS ===
+Update the {{Path|/etc/lilo.conf}} file accordingly.
 
-To change default booting os.
+=== General LILO configuration ===
 
-{{file|/etc/lilo.conf||<pre>
-# MBR to install LILO to:
+First configure LILO to be deployed on the system. The <code>boot</code> parameter tells LILO where to install the LILO bootloader in. Usually, this is the block device that represents the first disk (the disk that the system will boot), such as {{Path|/dev/sda}}. Be aware that the {{Path|lilo.conf.example}} file still uses {{Path|/dev/hda}} so make sure that references to {{Path|/dev/hda}} are changed to {{Path|/dev/sda}}.
+
+{{File|/etc/lilo.conf|Defining where to install LILO in|<pre>
 boot = /dev/sda
 map = /boot/.map
+</pre>}}
+
+Next, tell LILO what to boot as default (if the user does not select any other option at the boot menu). The name used here is the <code>label</code> value of the operating system blocks defined later in the file.
+
+{{File|/etc/lilo.conf|Booting the block labeled as Gentoo by default|<pre>
 default = Gentoo
 </pre>}}
 
-=== Timeout ===
+LILO will show the available options for a short while before continuing to boot the default selected operating system. How long it waits is defined by the <code>timeout</code> parameter and is defined in tenths of a second (so the value 10 is one second):
 
-To have lilo auto start after a set time.
+{{File|/etc/lilo.conf|Setting a 5 second timeout before continuing to boot the default OS|<pre>
+timeout = 50
+</pre>}}
 
-{{file|/etc/lilo.conf||<pre>
-# If you always want to see the prompt with a 15 second timeout:
-timeout=150</pre>}}
+=== Configuring the Gentoo OS block ===
 
-=== Silence ===
+An example configuration block for Gentoo is shown below. It is given the "Gentoo" label to match the <code>default</code> parameter declared earlier.
 
-For silent kernel unpacking at boot
+{{File|/etc/lilo.conf|Example Gentoo Linux configuration in lilo.conf|<pre>
+image = /boot/kernel-3.11.2-gentoo
+  label = Gentoo
+  read-only
+  root = /dev/sda4
+</pre>}}
 
-{{file|/etc/lilo.conf||<pre>
+This will boot the Linux kernel {{Path|/boot/kernel-3.11.2-gentoo}} with root file system {{Path|/dev/sda4}}.
+
+=== Adding kernel parameters ===
+
+To add additional kernel parameters to the OS block, use the <code>append</code> parameter. For instance, to boot the Linux kernel silently (so it does not show any kernel messages unless critical):
+
+{{File|/etc/lilo.conf|Showing the use of the append parameter with the quiet option|<pre>
+image = /boot/kernel-3.11.2-gentoo
 	label = Gentoo
-	read-only # read-only for checking
+	read-only
+	root = /dev/sda4
 	append = "quiet"
 </pre>}}
 
-=== systemd ===
+[[Systemd|systemd]] users for instance would want to set <code>init=/usr/lib/systemd/systemd</code> so that the systemd init is used:
 
-For systemd instead of openrc
-
-{{file|/etc/lilo.conf||<pre>
-	label = Gentoo-systemd
-	read-only # read-only for checking
+{{File|/etc/lilo.conf|Using systemd with LILO|<pre>
 	append = "quiet init=/usr/lib/systemd/systemd"
 </pre>}}
 
-=== Old Configs ===
+As can be seen, additional kernel parameters are just appended to the same <code>append</code> parameter.
 
-It is a good idea to keep an old image around in case problems crop up in new kernel builds.
+=== Multiple block definitions ===
 
-{{File|/etc/lilo.conf||<pre>
-image = /boot/bzImage.old
-        root = /dev/sda3
-        #root = /devices/discs/disc0/part3
-        label = Gentooold
-        read-only # read-only for checking
+It is a good idea to keep old definitions available in case the new kernel doesn't boot successfully. This is accomplished by creating another block:
+
+{{File|/etc/lilo.conf|Defining a second OS block|<pre>
+image = /boot/kernel-3.9.2-gentoo
+        root = /dev/sda4
+        label = OldGentoo
+        read-only
 </pre>}}
 
 == Kernel Linking ==
