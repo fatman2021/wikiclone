@@ -1,17 +1,17 @@
 <translate>
+
 {{InfoBox stack
 |{{InfoBox homepage|http://www.syslinux.org|header=true}}
 |{{InfoBox wikipedia|SYSLINUX}}
 |{{InfoBox ohloh}}
 }}
-'''Syslinux''' is a package that contains a family of bootloaders, that are a good replacement to other "advanced" [[:Category:Bootloaders|bootloaders]] such as [[GRUB]]. The syslinux package includes:
-* SYSLINUX - FAT filesystem bootloader
-* EXTLINUX - [[ext4|ext2/3/4]] and btrfs filesystem bootloader
-* PXELINUX - Network PXE bootloader
-* ISOLINUX - ISO-9660 (CDROM) bootloader
+
+'''Syslinux''' is a package that contains a family of [[:Category:Bootloaders|bootloaders]]. The package includes SYSLINUX (FAT filesystem bootloader), EXTLINUX ([[ext4|ext2/3/4]] and btrfs filesystem bootloader), PXELINUX (Network PXE bootloader) and ISOLINUX (ISO-9660 (CDROM) bootloader).
 
 == Installation ==
-Install {{Package|sys-boot/syslinux}}:
+
+The installation of {{Package|sys-boot/syslinux}} will provide the software on the system but not install (activate) the bootloader itself.
+
 {{USEflag
 |custom-cflags++no
 }}
@@ -26,10 +26,16 @@ To use Syslinux you need to make sure to both install the proper boot sector, an
 
 === Boot Sector Setup ===
 
-==== MBR setup ====
+==== MBR (msdos) setup ====
+
+{{Note|These instructions are for MBR (msdos) partition layout. For GPT, read [[#GPT_setup|GPT setup]].}}
+
+First install the boot sector provided by syslinux. Take due care with this command; if <code>count=1</code> is not given it will overwrite the entire disk rather than just the first 440 bytes:
+
 {{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/mbr.bin of{{=}}/dev/sda}}
 
-Set the boot partition as active:
+Mark the boot partition as active. A <code>*</code> will appear in the "Boot" column:
+
 {{RootCmd|fdisk /dev/sda|output=<pre>
 Command (m for help): a
 Partition number (1-4): 1
@@ -39,19 +45,24 @@ Command (m for help): p
 /dev/sda1   *        2048      133119       65536   83  Linux
 /dev/sda2          133120     4327423     2097152   82  Linux swap / Solaris
 /dev/sda3         4327424  1953525167   974598872   83  Linux
-
+  
 Command (m for help): w
- ...
 </pre>}}
 
 ==== GPT setup ====
+
+{{Note|These instructions are for the GPT partition layout. For MBR (msdos), read [[#MBR_(msdos)_setup|MBR (msdos) setup]].}}
+
+First install the boot sector provided by syslinux. Take due care with this command; if <code>count=1</code> is not given it will overwrite the entire disk rather than just the first 440 bytes:
+
 {{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/gptmbr.bin of{{=}}/dev/sda}}
 
-Run gdisk and enable legacy BIOS boot partition attributes on the partition where /boot/extlinux is stored.
+Next, run <code>gdisk</code> and enable legacy BIOS boot partition attributes on the partition where {{Path|/boot/extlinux}} is stored.
 
 === Boot Loader Install ===
 
 ==== EXTLINUX setup ====
+
 {{RootCmd
 |mkdir /boot/extlinux
 |extlinux --install /boot/extlinux
@@ -61,11 +72,13 @@ Run gdisk and enable legacy BIOS boot partition attributes on the partition wher
 {{Note|The "boot -> ." symlink is not necessary ''per se'', but for the sake of consistency, it's made so the example configurations are the same for users with {{Path|/boot}} on same partition and those with separate partitions.}}
 
 ==== SYSLINUX setup ====
+
 {{RootCmd
 |syslinux --install /dev/sda1
 }}
 
 ==== PXELINUX setup ====
+
 With PXELINUX is possible to netboot using images that are shared through a TFTP server. This article will assume there is a TFTP server installed, and it's TFTP root directory is in {{Path|/var/lib/tftpboot}}. With this setup, copy the PXELINUX loader to the TFTP boot dir and create a config dir.
 
 {{RootCmd|cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/pxelinux.0
@@ -74,9 +87,11 @@ With PXELINUX is possible to netboot using images that are shared through a TFTP
 The config dir can be used to store different configurations for your netbooted clients. When a client tries to boot, the MAC address or the IP address is used to determine the appropriate client config file. First it tries to look for the MAC address, followed by a try on the hexadecimal representation of the client IP. Next, a character is stripped from the end of this value, until no more characters are left, or until a config file is found. If none of the tries match, the ''default'' config file is used. 
 
 The hexadecimal representation of an IP can be found with the following command:
+
 {{Cmd|gethostip -x YOUR_IP}}
 
 An example config file matching occurs as follows:
+
 {{Code||<pre>
 01-88-99-aa-bb-cc-dd
 C0A80032
@@ -89,13 +104,17 @@ C0
 C
 default
 </pre>}}
+
 {{Note|For easy maintenance, create config files by hostname and symlink to the IP representation. If you want a default netboot, just delete the symlink.}}
 
 == Modules ==
+
 syslinux package contain various modules to support variants of features, starting with syslinux 5 some modules depends on others, its good idea to copy most basic modules regardless of usecase.
+
 {{RootCmd|cp /usr/share/syslinux/{menu.c32,memdisk,libcom32.c32,libutil.c32} /boot/extlinux/}}
 
 == Configuration ==
+
 Configuration file varies between bootloaders:
 * SYSLINUX: {{Path|syslinux.cfg}}
 * EXTLINUX: {{Path|extlinux.conf}}
@@ -104,34 +123,37 @@ Configuration file varies between bootloaders:
 The configuration format is the same.
 
 === Simple configuration ===
+
 This will give you a simple "<tt>boot:</tt>" prompt, similar to the one in Gentoo's Minimal LiveCD:
 
 {{File|/boot/extlinux/extlinux.conf||<pre>
 DEFAULT gentoo
-
+  
 LABEL gentoo
       LINUX /boot/kernel-3.6.11-gentoo
 </pre>}}
 
 === Menu configuration ===
+
 The following configuration provides a simple text menu example.
 
 This is done via the vesamenu module, in some cases where vesa is not compatible, the simpler menu module will work.
 
 Copy the VESA menu module into the boot filesystem:
+
 {{RootCmd|cp /usr/share/syslinux/vesamenu.c32 /boot/extlinux/}}
 
 {{File|/boot/extlinux/extlinux.conf||<pre>
 TIMEOUT 30
 ONTIMEOUT gentoo
-
+  
 UI vesamenu.c32
 MENU TITLE Boot
-
+  
 LABEL gentoo
       MENU LABEL Gentoo Linux
       LINUX /boot/kernel-3.6.11-gentoo
-
+  
 LABEL gentoo-old
       MENU LABEL Gentoo Linux (previous kernel)
       LINUX /boot/kernel-3.5.7-gentoo
@@ -140,15 +162,17 @@ LABEL gentoo-old
 {{Note|Avoid using 'KERNEL' for selecting the kernel images, use LINUX instead, As example, if you use KERNEL and the image ends with .0 the extlinux will misunderstand it and try to PXE it ending with a screen graphical artefacts and nothing else.}}
 
 === Passing Kernel Parameters ===
+
 Unless you're hardcoding kernel parameters in your kernel image, you will want to pass them through the boot loader. To do so you have to use the '''APPEND''' parameter, like this:
 
 {{File|/boot/extlinux/extlinux.conf||<pre>
 DEFAULT gentoo
-
+  
 LABEL gentoo
       LINUX /boot/kernel-3.6.11-gentoo
       APPEND root=/dev/sda1
 </pre>}}
 
-[[Category:Bootloaders]]
 </translate>
+
+[[Category:Bootloaders]]
