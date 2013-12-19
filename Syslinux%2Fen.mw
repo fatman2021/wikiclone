@@ -1,0 +1,210 @@
+
+{{InfoBox stack
+|{{InfoBox homepage|http://www.syslinux.org|header=true}}
+|{{InfoBox wikipedia|SYSLINUX}}
+|{{InfoBox ohloh}}
+}}
+
+'''Syslinux''' is a package that contains a family of [[:Category:Bootloaders|bootloaders]]. The package includes SYSLINUX (FAT filesystem bootloader), EXTLINUX ([[ext4|ext2/3/4]] and btrfs filesystem bootloader), PXELINUX (Network PXE bootloader) and ISOLINUX (ISO-9660 (CDROM) bootloader).
+
+== Installation ==
+
+The installation of {{Package|sys-boot/syslinux}} will provide the software on the system but not install (activate) the bootloader itself.
+
+{{USEflag
+|custom-cflags++no
+}}
+
+{{Emerge|syslinux}}
+
+== Setup ==
+
+{{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
+
+To use EXTLINUX you need to make sure to both install the proper boot sector, and then to install the actual boot loader into the partition. Make sure not to omit steps.
+
+The boot sector setups are not needed for the SYSLINUX, PXELINUX and ISOLINUX installations.
+
+=== Boot sector setup ===
+
+==== MBR (msdos) setup ====
+
+{{Note|These instructions are for MBR (msdos) partition layout. For GPT, read [[#GPT_setup|GPT setup]].}}
+
+First install the boot sector provided by syslinux. Take due care with this command; if <code>count=1</code> is not given it will overwrite the entire disk rather than just the first 440 bytes:
+
+{{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/mbr.bin of{{=}}/dev/sda}}
+
+Mark the boot partition as active. A <code>*</code> will appear in the "Boot" column:
+
+{{RootCmd|fdisk /dev/sda|output=<pre>
+Command (m for help): a
+Partition number (1-4): 1
+Command (m for help): p
+ ...
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048      133119       65536   83  Linux
+/dev/sda2          133120     4327423     2097152   82  Linux swap / Solaris
+/dev/sda3         4327424  1953525167   974598872   83  Linux
+  
+Command (m for help): w
+</pre>}}
+
+==== GPT setup ====
+
+{{Note|These instructions are for the GPT partition layout. For MBR (msdos), read [[#MBR_(msdos)_setup|MBR (msdos) setup]].}}
+
+First install the boot sector provided by syslinux. Take due care with this command; if <code>count=1</code> is not given it will overwrite the entire disk rather than just the first 440 bytes:
+
+{{RootCmd|dd bs{{=}}440 conv{{=}}notrunc count{{=}}1 if{{=}}/usr/share/syslinux/gptmbr.bin of{{=}}/dev/sda}}
+
+Next, run <code>gdisk</code> and enable legacy BIOS boot partition attributes on the partition where {{Path|/boot/extlinux}} is stored.
+
+=== Boot Loader Install ===
+
+==== EXTLINUX setup ====
+
+Use the <code>extlinux</code> command to install the necessary files in {{Path|/boot/extlinux}}:
+
+{{RootCmd
+|mkdir /boot/extlinux
+|extlinux --install /boot/extlinux
+|ln -snf . /boot/boot
+}}
+
+{{Note|The "boot -> ." symlink is not necessary ''per se'', but for the sake of consistency, it's made so the example configurations are the same for users with {{Path|/boot}} on same partition and those with separate partitions.}}
+
+The syslinux package contains various modules to enable additional features. Starting with syslinux version 5, some modules depends on others, so it is a good idea to copy most basic modules regardless of the use case.
+
+{{RootCmd|cd /usr/share/syslinux
+|cp menu.c32 memdisk libcom32.c32 libutil.c32 /boot/extlinux}}
+
+==== ISOLINUX setup ====
+
+To install ISOLINUX, start off with a base directory in which all the files that need to reside on the CD or DVD are situated.
+
+In that base directory, create a subdirectory called {{Path|isolinux}} and copy the {{Path|isolinux.bin}} file from the syslinux package into it.
+
+{{RootCmd|mkdir isolinux
+|cp /usr/share/syslinux/isolinux.bin isolinux/}}
+
+Create the {{Path|isolinux.cfg}} file according to the instructions mentioned below.
+
+Next, create two more directories {{Path|kernel}} and {{Path|images}} in the base directory:
+
+{{RootCmd|mkdir kernel images}}
+
+Copy the {{Path|memdisk}} binary into the {{Path|kernel}} directory:
+
+{{RootCmd|cp /usr/share/syslinux/memdisk kernel/}}
+
+When the configuration has been made, the following <code>mkisofs</code> command can be used to create the final ISO image (substitute <code>${BASEDIR}</code> with the actual base directory):
+
+{{RootCmd|mkisofs -o output.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table ${BASEDIR} }}
+
+The file {{Path|boot.cat}} will be automatically created.
+
+==== PXELINUX setup ====
+
+With PXELINUX is possible to netboot using images that are shared through a TFTP server. This article will assume there is a TFTP server installed, and its TFTP root directory is in {{Path|/var/lib/tftpboot}}. With this setup, copy the PXELINUX loader to the TFTP boot dir and create a config dir.
+
+{{RootCmd|cp /usr/share/syslinux/pxelinux.0 /var/lib/tftpboot/pxelinux.0
+|mkdir /var/lib/tftpboot/pxelinux.cfg}}
+
+The config dir can be used to store different configurations for the netbooted clients. When a client tries to boot, the MAC address or the IP address is used to determine the appropriate client config file. First it tries to look for the MAC address, followed by a try on the hexadecimal representation of the client IP. Next, a character is stripped from the end of this hexadecimal representation until no more characters are left, or until a config file is found. If none of the tries match, the ''default'' config file is used. 
+
+The hexadecimal representation of an IP can be found with the following command:
+
+{{Cmd|gethostip -x 192.168.0.50|output=<pre>
+C0A80032
+</pre>}}
+
+An example config file matching sequence occurs as follows:
+
+{{Code||<pre>
+01-88-99-aa-bb-cc-dd
+C0A80032
+C0A8003
+C0A800
+C0A80
+C0A8
+C0A
+C0
+C
+default
+</pre>}}
+
+{{Note|For easy maintenance, create config files by hostname and symlink to the IP representation. If you want a default netboot, just delete or rename the symlink.}}
+
+
+==== SYSLINUX setup ====
+
+Use the <code>syslinux</code> command to install the SYSLINUX bootloader on the (FAT) file system:
+
+{{RootCmd
+|syslinux --install /dev/sda1
+}}
+
+== Configuration ==
+
+The configuration file is named after the bootloader:
+
+* SYSLINUX: {{Path|syslinux.cfg}}
+* EXTLINUX: {{Path|extlinux.conf}}
+* ISOLINUX: {{Path|isolinux.cfg}}
+
+The configuration format however is the same.
+
+=== Simple configuration ===
+
+This will give you a simple "<tt>boot:</tt>" prompt, similar to the one in Gentoo's Minimal LiveCD:
+
+{{File|/boot/extlinux/extlinux.conf||<pre>
+DEFAULT gentoo
+  
+LABEL gentoo
+      LINUX /boot/kernel-3.6.11-gentoo
+</pre>}}
+
+=== Menu configuration ===
+
+The following configuration provides a simple text menu example.
+
+This is done via the vesamenu module, in some cases where vesa is not compatible, the simpler menu module will work.
+
+Copy the VESA menu module into the boot filesystem:
+
+{{RootCmd|cp /usr/share/syslinux/vesamenu.c32 /boot/extlinux/}}
+
+{{File|/boot/extlinux/extlinux.conf||<pre>
+TIMEOUT 30
+ONTIMEOUT gentoo
+  
+UI vesamenu.c32
+MENU TITLE Boot
+  
+LABEL gentoo
+      MENU LABEL Gentoo Linux
+      LINUX /boot/kernel-3.6.11-gentoo
+  
+LABEL gentoo-old
+      MENU LABEL Gentoo Linux (previous kernel)
+      LINUX /boot/kernel-3.5.7-gentoo
+</pre>}}
+
+{{Note|Avoid using 'KERNEL' for selecting the kernel images, use LINUX instead. If you use KERNEL and the image ends with .0 then extlinux will misinterpret it and try to PXE it ending with a screen full of graphical artifacts and nothing else.}}
+
+=== Passing Kernel Parameters ===
+
+Unless the kernel parameters are hard-coded in the kernel image, these need to be passed on to the kernel through the boot loader. To do so, use the <code>APPEND</code> parameter, like this:
+
+{{File|/boot/extlinux/extlinux.conf|Adding kernel parameters|<pre>
+DEFAULT gentoo
+  
+LABEL gentoo
+      LINUX /boot/kernel-3.6.11-gentoo
+      APPEND root=/dev/sda1
+</pre>}}
+
+
+[[Category:Bootloaders]]
