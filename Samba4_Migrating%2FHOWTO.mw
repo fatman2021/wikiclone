@@ -327,11 +327,47 @@ Domain=[SAMDOM] OS=[Unix] Server=[Samba 4.x.y]
   .                                   D        0  Tue Dec 11 20:00:00 2012
   ..                                  D        0  Tue Dec 11 20:00:00 2012
 </pre>}}
+=== Internal Samba DNS Setup ===
+If you would allow DNS forward to 8.8.8.8 for all PC client to the internet, please setup the following in your new /etc/samba/smb.conf<br />
+Also you should also allow dns update from windows client to samba DNS. 
+{{Note|I don't understand while the time I'm writing this, please add more info}}
+{{File|/etc/samba/smb.conf|add this line to forward dns|<pre>
+#Samba Internal DNS options
+        dns forwarder = 8.8.8.8
+        allow dns updates = nonsecure
+</pre>}}
+=== Bind DNS DLZ module Setup ===
+{{Note| Todo}}
 
-=== DNS module Setup ===
+=== Sub function test ===
+AS per said before, samba include dns, ldap and kerberos in a full AD environment.<br />
+We will need to do a full test it now.
 
-=== Kerberos setup ===
+Before that we need to change our /etc/resolv.conf so that it is using samba dns. Krb and ldap don't work fully without that.<br />
+Set nameserver ip to your current samba server ip. e.g 192.168.0.10. 
+{{File|/etc/resolv.conf|change to the following line|<pre>
+search headoffice.company.com
+nameserver 192.168.0.10
+</pre>}}
 
+==== DNS sub function test ====
+Your result on the following dns query should be identical or very similar. 
+
+{{RootCmd|host -t SRV _kerberos._udp.headoffice.company.com.|output=<pre>
+_kerberos._udp.example.com has SRV record 0 100 88 samba4-1.headoffice.company.com.
+</pre>}}
+{{RootCmd|host -t SRV _ldap._tcp.headoffice.company.com.|output=<pre>
+_ldap._tcp.example.com has SRV record 0 100 389 samba4-1.headoffice.company.com.
+</pre>}}
+{{RootCmd|host -t A samba4-1.headoffice.company.com.|output=<pre>
+samba4-1.headoffice.company.com has address 192.168.0.10
+</pre>}}
+
+==== Kerberous sub function test ====
+There should not be any error prompt when your password is the administrator password on the samba AD.
+{{RootCmd|kinit administrator@HEADOFFICE.COMPANY.COM|output=<pre>
+Password:
+</pre>}}
 
 === Final Setup ===
 Finally we will need make the following 
