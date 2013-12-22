@@ -38,53 +38,65 @@ If you were only missing the option in <code>/etc/fstab</code>:
 Until wine-1.7.5 is added to Portage, it is necessary to install and patch wine manually. Up to date instructions can be found [http://fds-team.de/cms/pipelight-compile-wine.html here]
 
 ==Pipelight==
-If you don’t already have a local overlay (note this can interfere with Layman stuff):
-{{rootCmd|<nowiki>echo 'PORTDIR_OVERLAY=/usr/local/portage' >> /etc/portage/make.conf</nowiki>}}
-{{rootCmd|mkdir -p /usr/local/portage/www-plugins/pipelight}}
-{{rootCmd|<nowiki>wget -qO - 'https://481596.bugs.gentoo.org/attachment.cgi?id=356458' | sed 's/\(EGIT_REPO_URI\)/EGIT_COMMIT="v0.1-4"\n\1/' > /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild</nowiki>}}
-{{rootCmd|<nowiki>echo '~www-plugins/pipelight-9999 **' | tee -a /etc/portage/package.accept_{keywords/netflix,keywords}</nowiki>}}
+Since Pipelight is later than most current versions in overlays, the only viable way to install Pipelight itself is to compile it.
 
-Manual build instructions for pipelight can be found [http://fds-team.de/cms/pipelight-installation.html here]
 
 ==emerge==
 {{rootCmd|emerge -atv crossdev attr}}
 
 ==Setup crossdev==
 This will take quite a while:
-{{rootCmd|crossdev -S -t mingw64}}
+{{rootCmd|crossdev -S -t mingw64}}wget https://launchpad.net/pipelight/trunk/0.2/+download/pluginloader-prebuilt-v0.2.3.tar.xz}}
 
-==emerge Pipelight==
-{{rootCmd|emerge --digest -atv pipelight}}
+==Compile Pipelight==
+First, get the needed tarballs for the pipelight source and precompiled binary:
+{{Cmd|wget https://bitbucket.org/mmueller2012/pipelight/get/v0.2.3.tar.gz && wget https://launchpad.net/pipelight/trunk/0.2/+download/pluginloader-prebuilt-v0.2.3.tar.xz}}
 
-{{note|I have found that I get a compile error in pluginloader.c regarding "_controlfp_s(&control_word, _CW_DEFAULT, MCW_PC);". I was able to simply comment that 4 line block of code out and continue compiling:
-ebuild /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild compile;
-ebuild /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild install;
-ebuild /usr/local/portage/www-plugins/pipelight/pipelight-9999.ebuild qmerge;
-A proper solution would be welcome.
-}}
+Next extract the files:
+{{Cmd|tar xvzf v0.2.3.tar.gz && tar xvJf pluginloader-prebuilt-v0.2.3.tar.xz}}
 
-==Wine installation==
-This takes a bit, and produces a lot of output:
-{{cmd|<pre style="font-size: inherit;">if [ ! -d ~/.wine-pipelight ]; then
-	export WINEARCH=win32 WINEPREFIX=~/.wine-pipelight
+And move the pluginloader binary to the pipelight src/windows directory:
 
-	wget -O /tmp/Silverlight-5.exe \
-	-U 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Trident/6.0)' \
-	'http://www.microsoft.com/getsilverlight/handlers/getsilverlight.ashx?v=5.0'
+{{Cmd|mv pluginloader.exe mmueller2012-pipelight-4006752d5f96/src/windows}}
 
-	wine /tmp/Silverlight-5.exe /q
+Then cd into the pipelight source directory and build it:
 
-	export -n WINEARCH WINEPREFIX
-fi</pre>}}
+{{Cmd|cd ../mmueller2012-pipelight-4006752d5f96/ && make}}
 
-==Pipelight config==
-Needs to be changed a bit:
-{{cmd|<nowiki>cat /usr/share/pipelight/pipelight | sed -e 's@^winePath\(.*\)= .*@winePath\1= /usr/local/@' -e 's@^gccRuntimeDlls\(.*\)i686.*@gccRuntimeDlls\1mingw32/'$(ls /usr/lib/gcc/mingw32/)'/@' -e 's@^dllPath\(.*\)Silverlight\(.*\)@dllPath\1Microsoft Silverlight\2@g' > ~/.config/pipelight</nowiki>}}
+then install it:
 
-At this point, double check your config "~/.config/pipelight" to make sure the paths are correct, specifically the Silverlight path. You may have have to disable the graphics driver check by setting graphicDriverCheck = /bin/true.
+{{rootCmd| make install}}
 
-==Firefox, etc.==
-Start Firefox (from terminal for output explaining whether pipelight is going to work or not), and go to http://bubblemark.com/silverlight2.html for a quick check for Silverlight support.
+==Initialization==
+Before you use the plugin, you have to initialize it, first run
+
+{{rootCmd|pipelight-plugin --create-mozilla-plugins}}
+
+Then initialize the plugin(s) you want:
+
+{{Cmd|pipelight-plugin --enable silverlight}}
+{{Cmd|pipelight-plugin --enable flash}}
+
+Then run Firefox (or your chosen web browser) from the Terminal to check to see if the plugin will run, i.e. for firefox-bin:
+
+{{Cmd|firefox-bin}}
+
+and watch the startup in the terminal for any errors, if any are found, check that you properly installed Wine and Pipelight according to this page, if not, proceed.
+
+Then you have to install corefonts in Pipelight (which isn't installed by default. To do so you have to use Winetricks, to get them, cd to your home directory and grab the script:
+
+{{Cmd|wget http://winetricks.org/winetricks}}
+
+Mark it as executable:
+{{Cmd|chmod +x winetricks}}
+
+Then run it:
+{{Cmd|WINEPREFIX=~/.wine-pipelight ./winetricks}}
+
+Then select Select the default wineprefix->Install a font->corefonts and click "Okay"
+
+The next section details a bit of extra configuration needed for services such as Netflix
+
 
 ==Netflix==
 Install an extension listed at http://answers.launchpad.net/pipelight/+faq/2351 such as http://addons.mozilla.org/en-us/firefox/addon/uacontrol/ and configure <code>netflix.com</code> to be sent a UA string, such as this one:[http://answers.launchpad.net/pipelight/+faq/2351 *]
