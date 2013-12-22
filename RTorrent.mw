@@ -90,4 +90,98 @@ You should not get a warning regarding the self-signed certificate.
 Restart rTorrent. If using the daemon:
 {{RootCmd|/etc/init.d/rtorrentd restart}}
 
+== Customizing the daemonizer ==
+The Gentoo ebuild installs a good basic init script. However, it can be enhanced in various ways if needed. The following examples are completely optional.
+
+=== Arrow keys not working ===
+Probably you can enable them in your terminal application. For instance ''XTerm'' has the "set-appcursor" option, and "Enable Application Cursor Keys" in the toolbar.
+
+Or on the server side, you can change the TERM variable. Your terminal application might work well with TERM="linux" instead of "xterm".
+
+Changing the TERM variable:
+{{File|/etc/init.d/rtorrentd||<pre>
+#env TERM="xterm" \
+env TERM="linux" \
+</pre>}}
+
+=== Using dtach as daemonizer ===
+A smaller alternative to the app-misc/screen package is {{Package|app-misc/dtach}}. This is all what's needed for using ''dtach'' instead of ''screen''.
+
+Save this patch on your computer:
+{{File|rtorrentd-init.patch||<pre>
+--- /usr/portage/net-p2p/rtorrent/files/rtorrentd.init	2011-11-07 16:46:30.000000000 +0100
++++ /etc/init.d/rtorrentd	2013-12-21 10:55:01.251541772 +0100
+@@ -15,13 +15,12 @@
+ 	env TERM="xterm" \
+ 		start-stop-daemon \
+ 			--start \
+-			--make-pidfile \
+ 			--pidfile /var/run/rtorrentd.pid \
+-			--background \
+ 			--user $USER \
+ 			--env HOME="${PWHOME:-/home/$USER}" \
+-			--name rtorrent \
+-			--exec /usr/bin/screen -- -D -m -S rtorrentd /usr/bin/rtorrent
++			--exec /usr/bin/dtach -- -n /tmp/rtorrentd.dtach /usr/bin/rtorrent
++
++	pgrep --newest --uid $USER --exact rtorrent >/var/run/rtorrentd.pid
+ 	eend $?
+ }
+</pre>}}
+
+{{RootCmd
+|USE<nowiki>=</nowiki>"-daemon" emerge -av net-p2p/rtorrent app-misc/dtach
+|cp /usr/portage/net-p2p/rtorrent/files/rtorrentd.conf /etc/conf.d/rtorrentd
+|cp /usr/portage/net-p2p/rtorrent/files/rtorrentd.init /etc/init.d/rtorrentd
+|chmod +x /etc/init.d/rtorrentd
+|patch -p0 < /PATH/TO/rtorrentd-init.patch
+}}
+
+Change the the USER variable to your user account, or (better) a separate account.
+{{File|/etc/init.d/rtorrentd||<pre>
+#USER="$USER"
+USER="p2p"
+</pre>}}
+
+If needed, you can give access to group members of the configured user. Add this at the end of the start() section of the init script:
+{{File|/etc/init.d/rtorrentd||<pre>
+chmod g+rw /tmp/rtorrentd.dtach
+eend $?
+</pre>}}
+
+Starting ''rTorrent'' in the background, and run at system boot:
+{{RootCmd
+|/etc/init.d/rtorrentd start
+|rc-update add rtorrentd default  # optionally
+}}
+
+Login as user, or execute as group member to attach the ''rtorrentd'' session:
+{{Cmd
+|su - p2p  # optionally
+|dtach -a /tmp/rtorrentd.dtach
+}}
+
+=== Localization ===
+Extra environment variable, if you set LANG in your users {{Path|~/.bashrc}} file. This doesn't affect translations, but only character set and sorting.
+{{File|/etc/init.d/rtorrentd||<pre>
+--env HOME="${PWHOME:-/home/$USER}" \
+--env LANG="nl_NL@euro" \
+</pre>}}
+
+=== Renice the process ===
+If checksum calculations eat a lot of CPU, try adding this at the end of the start() section of the init script:
+{{File|/etc/init.d/rtorrentd||<pre>
+renice -n 5 `cat /var/run/rtorrentd.pid` >/dev/null
+eend $?
+</pre>}}
+
+=== Controlling rTorrent exit ===
+By default, the application is closed by the TERM signal. A more graceful exit would be to issue the INT signal, which is equivalent to the ''Ctrl-q'' key press in the rTorrent interface. This way, seeding quota get a last chance to be reported to the tracker. A second ''Ctrl-q'' key press is TERM exit, without waiting for the trackers to respond. After that, a KILL signal is justified.
+
+Changing exit signals, and seconds waiting time:
+{{File|/etc/init.d/rtorrentd||<pre>
+#start-stop-daemon --stop --signal 15 \
+start-stop-daemon --stop --retry -INT/15/-INT/5/-KILL/5 \
+</pre>}}
+
 [[Category:Software]]
