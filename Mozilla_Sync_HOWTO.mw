@@ -1,0 +1,62 @@
+This article explains how to run a Mozilla SYNC server instance in your own system.
+
+== Installation ==
+Unless you have a very particular setup with registration and storage servers on different places you want to install www-misc/mozilla-sync-server-full which is available for now on the klondike overlay.
+
+=== USE flags ===
+The meaning of these is common to all the www-misc/mozilla-sync-server-* packages:
+* ldap: allow user authentication against an LDAP server
+* memcached: use memcached to cache objects and reduce load
+* mysql: use mysql as storage (and if desired authentication) engine
+* sqlite: use sqlite as storage (and if desired authentication) engine
+
+The main difference amongst these is mainly the configuration files that will be installed and that dependency checks will be made to ensure the application can run on the system.
+
+=== emerging the package ===
+After setting up the desired flags remove the keywords from the packages and run:
+emerge -v1a www-misc/mozilla-sync-server-full
+
+== Configuration ==
+The package is now installed and the default configuration is in /etc/mozilla-sync-server/ The configuration of the daemon can be set using the .ini files whilst the configuration of sync itself is done in the .conf files. All of them are ini style files.
+
+The first step is replacing the following line by the .conf file you are going to use on your .ini file:
+:configuration = file:%(here)s/sync.conf
+Then ensure logs are saved in the proper place:
+:class = handlers.RotatingFileHandler
+:args = ('/tmp/sync-error.log',)
+
+Then you may need to edit the server.wsgi file so they load the propper .ini files for that replace the following line by the correct file:
+:ini_file = os.path.join(_CURDIR, 'development.ini')
+
+Finally you need to edit the .conf file with the desired settings. The most important ones are the sqluri which define the path to the SQL databases and the fallback_node which defines the URL to the server as seen by the client you may also want to disable the captcha.
+For a list of parameters check: http://docs.services.mozilla.com/server-devguide/configuration.html
+
+== Testing the server ==
+Once configured you can test the server by following this line in /etc/mozilla-sync-server/
+:$ bin/paster serve development.ini
+This will start the server listening on the port 5000. You will need to have paster installed. In general using this approach to run the server is a bad idea so you can run it behind a web server instead
+
+== Running behind a web server ==
+=== Option 1: Apache 2 ===
+emerge www-apache/mod_wsgi
+: # emerge -va www-apache/mod_wsgi
+
+Create the mozsync user on the mozsync group if it isn't already created.
+
+Merge the following with your vhost configuration (you may need to edit thee first line):
+:WSGIDaemonProcess sync user=mozsync group=mozsync processes=2 threads=25 python-path=/usr/lib64/python2.7/site-packages/syncreg/
+:
+:<Directory "/etc/mozilla-sync-server">
+::Options None
+::AllowOverride All
+::Order allow,deny
+::Allow from all
+:</Directory>
+:
+:WSGIProcessGroup sync
+:WSGIPassAuthorization On
+:WSGIScriptAlias / /etc/mozilla-sync-server/server.wsgi
+
+== See also ==
+http://docs.services.mozilla.com/howtos/run-sync.html
+http://docs.services.mozilla.com/server-devguide/configuration.html
