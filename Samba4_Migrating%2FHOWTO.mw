@@ -337,7 +337,59 @@ Also you should also allow dns update from windows client to samba DNS.
         allow dns updates = nonsecure
 </pre>}}
 === Bind DNS DLZ module Setup ===
-{{Note| Todo}}
+Having Bind DNZ DLZ working with samba4 AD is somehow simple.<br />
+But still we need to do the following.
+# Change of Samba DLZ Module version.
+# Change the permission on /var/lib/samba/private/ so that named can access
+# Change /etc/bind/named.conf to include the files inside /var/lib/samba/private/
+
+==== Change of /var/lib/samba/private/named.conf ====
+Uncomment the proper bind module according to the bind version you have.
+
+{{RootCmd|named -v|output=<pre>
+BIND 9.9.3-P2 (Extended Support Version)
+</pre>}}
+
+{{File|/var/lib/samba/private/named.conf||<pre>
+dlz "AD DNS Zone" {
+    # For BIND 9.8.0
+    # database "dlopen /usr/lib64/samba/bind9/dlz_bind9.so";
+
+    # For BIND 9.9.0
+    database "dlopen /usr/lib64/samba/bind9/dlz_bind9_9.so";
+};
+</pre>}}
+
+==== Getting permission on /var/lib/samba/private/ ====
+This is tricky but not hard to do, still doubt arise about it security where named need to access samba private folder, which is default 400.<br />
+We will try to use ACL to make life simple (since it is default required by samba4)
+{{RootCmd
+|setfacl -m u:named:rx /var/lib/samba/private/
+|setfacl -m u:named:rx /var/lib/samba/private/named.*
+|setfacl -m u:named:rx -R /var/lib/samba/private/dns
+|setfacl -m u:named:rx /var/lib/samba/private/dns*
+}}
+
+==== Change of /etc/bind/named.conf ====
+We would now need to change named.conf<br />
+{{Note|You don't create any primary zone or reverse zone with your samba sub domain. That will be done automatically}}
+
+#Samba gssapi keytab 
+If you follow [[BIND/Tutorial]] put it under "options section"
+{{File|/etc/bind/named.conf||<pre>
+tkey-gssapi-keytab "/var/lib/samba/private/dns.keytab";
+</pre>}}
+
+#Samba4 AD DLZ
+If you follow [[BIND/Tutorial]] put it under "Internal view/External view"<br />
+According to your AD design.
+{{File|/etc/bind/named.conf||<pre>
+include "/var/lib/samba/private/named.conf";
+</pre>}}
+
+You are now done<br />
+
+reload bind.
 
 === Sub function test ===
 AS per said before, samba include dns, ldap and kerberos in a full AD environment.<br />
