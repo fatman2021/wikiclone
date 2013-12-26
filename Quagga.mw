@@ -7,6 +7,52 @@
 
 Quagga is a free software routing suite. Quagga supports static routing, and dynamic routing protocols. 
 
+The Quagga routing suite consists of 2 parts:
+* zebra daemon
+* routing proceses (RIP,OSPF,BGP,IS-IS,Babel,OLSR,LDP,BFD)
+
+The zebra daemon is a ''abstraction layer'' between the kernel and between the running routing processes.
+Each routing protocol has its own specific daemon.
+
+Quagga installed on a physical host acts as a dedicated router. Quagga updates the kernel routing table.
+It modifies interface IP addressing, sets static routes and enables dynamic routing.
+
+A linux host has usually 2 dedicated management tools to manage IP networking on interfaces:
+* {{Package|sys-apps/iproute2}}
+* {{Package|sys-apps/net-tools}}
+
+These tools work only if the user has root access or some kind of privileged access to the physical host. 
+
+Quagga can modify, add and change the physical host interface configuration and routing table, without the need user having privileged root access to a dedicated machine. Quagga is basically a another tool for [[iproute2]] and {{Package|sys-apps/net-tools}}, with additional networking functionality.
+
+All routing daemons listed communicate with the zebra daemon, not directly with the kernel. 
+A abstracted layer view of networking
+
+{|class="wikitable" style="width: 100%; text-align: center;"
+|ripd
+|ripngd
+|ospfd
+|ospfv6d
+|bgpd
+|isisd
+|babeld
+|olsrd
+|ldpd
+|bfdd
+|-
+!colspan="10"|zebra
+!colspan="5"|iproute2
+!colspan="5"|net-tools
+|-
+!colspan="20"|UNIX/Linux kernel IP networking
+|-
+!colspan="4"|lo
+!colspan="4"|eth0
+!colspan="6"|wlan0
+!colspan="6"|ethN
+|}
+
+
 ==Installation==
 {{USEflag|package=net-misc/quagga
 |bgpclassless 
@@ -36,56 +82,19 @@ Verify zebra is running:
 tcp        0      0 0.0.0.0:2601            0.0.0.0:*               LISTEN      114        21947582   23564/zebra
 </pre>}}
 
-==Architecture==
-The Quagga routing suite consists of 2 parts:
-* zebra daemon
-* routing proceses (RIP,OSPF,BGP,IS-IS,Babel,OLSR,LDP,BFD)
-
-The zebra daemon is a ''abstraction layer'' between the kernel and between the running routing processes.
-Each routing protocol has its own specific daemon.
-
-Quagga installed on a physical host acts as a dedicated router. Quagga updates the kernel routing table.
-It modifies interface IP addressing, sets static routes and enables dynamic routing.
-
-A linux host has usually 2 dedicated management tools to manage IP networking on interfaces:
-* {{Package|sys-apps/iproute2}}
-* {{Package|sys-apps/net-tools}}
-
-These tools work only if the user has root access or some kind of privileged access to the physical host. 
-
-Quagga can modify, add and change the physical host interface configuration and routing table, without the need user having privileged root access to a dedicated machine. Quagga is basically a another tool for [[iproute2]] and {{Package|sys-apps/net-tools}}, with additional networking functionality.
-
-All routing daemons listed communicate with the zebra daemon, not directly with the kernel. 
-A abstracted layer view of communication dependencies
-
-{|class="wikitable" style="width: 100%; text-align: center;"
-|ripd
-|ripngd
-|ospfd
-|ospfv6d
-|bgpd
-|isisd
-|babeld
-|olsrd
-|ldpd
-|bfdd
-|-
-!colspan="10"|zebra
-!colspan="5"|iproute2
-!colspan="5"|net-tools
-|-
-!colspan="20"|UNIX/Linux kernel IP networking
-|-
-!colspan="4"|lo
-!colspan="4"|eth0
-!colspan="6"|wlan0
-!colspan="6"|...
-|}
-
 ==Usage==
-Following steps will explain howto configure a IP address on a loopback interface using Quagga suite .Finally we will show the configured IP address outside of the Quagga suite. This will explain some basic usage of Quagga, how it works and interacts with linux kernel and IP configuration.
+Overview of steps used following example:
+* Login to zebra
+* Show basic IP networking information
+* Get privileged access
+* Get into "edit" mode 
+* configure IP address on a loopback interface
+* Show current loopback configuration
+* Save quagga configuration
+* Display configured IP address using iproute2 
 
-We assume following IP networking settings on a example host:
+It will try to explain how  Quagga/Zebra works and interacts with the linux kernel and IP networking.
+Following IP networking settings have been used:
 
 {|class="wikitable sortable" style="width: 100%"
 |+IP networking settings
@@ -115,7 +124,7 @@ We assume following IP networking settings on a example host:
 |192.168.0.10/24
 |}
 
-Display IP settings using [[iproute2]]
+Display configured IP settings using [[iproute2]]
 {{Cmd|ip add|output=<pre>
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
@@ -128,7 +137,7 @@ Display IP settings using [[iproute2]]
     inet 192.168.0.10/24 brd 192.168.0.255 scope global wlan0
 </pre>}}
 
-Show the linux routing table:
+Show the linux IP routing table:
 {{Cmd|ip route|output=<pre>
 default via 192.168.0.1 dev wlan0  metric 2005
 127.0.0.0/8 dev lo  scope host
