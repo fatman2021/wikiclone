@@ -297,6 +297,7 @@ We assume that both old and new server are on the same host. Else you can copy t
 }}
 
 If you wish to change the host name of the new server, you can change the netbios name in the Samba3 conf file that you have copy over.<br />
+{{Note|changing netbios name might caused services using existing netbios name to fail, it effect are huge if you existing using that name widely, you have been warn}}
 {{Note|For some reason the samba4 classical upgrade tools will fail if you use hostname on the ldap entry. Please change your ldap domain name from dns to ip. <ref name="classicupgradebugs">[https://bugzilla.samba.org/show_bug.cgi?id=9186]https://bugzilla.samba.org/show_bug.cgi?id=9186</ref>}}
 === Migration Start ===
 Now it is time to stop samba.
@@ -448,11 +449,55 @@ E.g.
 2. My netlogon is not working<br />
 A: Netlogon script setting from ldap is not being migrated when you move from samba3 PDC to Samba4.<br />
 Why? You are advise to use GPO Drive mapping which in most case the deployment can be simpler.
+Some Example.
+<ref name="Map Network Shared Drive in Group Policy">[http://community.spiceworks.com/how_to/show/17039-mapping-drives-with-group-policy-preferences-and-item-level-targeting]http://community.spiceworks.com/how_to/show/17039-mapping-drives-with-group-policy-preferences-and-item-level-targeting</ref>
+<ref name="Using Group Policy Preferences to Map Drives Based on Group Membership">[http://blogs.technet.com/b/askds/archive/2009/01/07/using-group-policy-preferences-to-map-drives-based-on-group-membership.aspx?PageIndex=2]http://blogs.technet.com/b/askds/archive/2009/01/07/using-group-policy-preferences-to-map-drives-based-on-group-membership.aspx?PageIndex=2</ref>
 
 But still if you still want to use netlogon script, you can copy all your existing script to the [netlogon] path above.
 Make change of your netbios name in your netlogon script if you have change it during the migration.
 
-Open the AD Users profiles under setting and put the script file name in (without path) e.g: netlog.bat. You will have to do it for all users which is tedious.
+Open the AD Users profiles under setting and put the script file name in (without path) e.g: netlog.bat. You can do it for all users by selection all together.
+
+3. My [homes] is not accessible, I have not change anythings.
+
+A: a basic [homes] share can be just like below.
+{{Code||<pre>
+[homes]
+        valid users = %S
+        read only = No
+        browseable = No
+</pre>}}
+
+As it path is only read from AD by winbind.
+You would have to configure /etc/nsswitch.conf and add winbind to be like follow 
+{{Code|/etc/nsswitch.conf|<pre>
+passwd:      compat winbind
+shadow:      compat 
+group:       compat winbind
+</pre>}}
+
+{{Note|shadow with winbind, that would be a nice to have. In this case will not need to configure pam to use winbind since shadow information is already provided. But provided AD can support shadow password}}
+For more about PAM support winbind, please check on the docs below.
+<ref name="Samba4/Winbind">[https://wiki.samba.org/index.php/Samba4/Winbind]https://wiki.samba.org/index.php/Samba4/Winbind</ref>
+
+With this configuration the system will be able to know the user and group, use these to verify:
+{{RootCmd
+|getent passwd
+|getent group
+}}
+
+You would see some strange entry on the password where the path are /home/COMPANY/username
+which is the caused of why your [homes] don't work.
+So just tweak smb.conf a bit on winbind under [global] but before any share
+{{Code|/etc/samba/smb.conf|<pre>
+        winbind use default domain = Yes
+        template homedir = /home/%ACCOUNTNAME%
+        template shell = /bin/bash
+</pre>}}
+
+Restart Samba and run the above command again...
+
+{{Note|nscd have to be off when you use winbind, as winbind have it own cache and thus caused nscd to be even more delay}}
 
 = External Reference =
 <references />
