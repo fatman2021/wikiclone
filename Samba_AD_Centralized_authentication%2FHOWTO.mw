@@ -1,0 +1,90 @@
+=Samba/Win AD Centralized authentication=
+This might look a bit weird at 1st but when working on the migration from samba 3 with LDAP to samba 4 AD.<br />
+This seem to be the only choice we have as we have to remove the LDAP Server on the server that running Samba 4 AD.<br />
+
+Else you would have 2 server.<br />
+Windows Client using Samba 4 AD and Linux client using an LDAP Server from another which is no longer centralized and defeated the purpose.
+
+== Working method and choice ==
+There are a few method. 
+# nslcd or nss_pam_ldapd
+# sssd
+
+= nslcd or nss_pam_ldapd = 
+If you are using 64 bit system, you will need to unmask it.
+{{Code|Add these line to /etc/portage/package.keywords|<pre>
+#nss-pam-ldapd replacement of both nss_ldap and nss_pam
+sys-auth/nss-pam-ldapd ~amd64
+</pre>}}
+
+This package will provide what is currently provide by nss_ldap and also nss_pam thus the 2 package have to be removed.
+{{Emerge
+|nss_ldap nss_pam
+|params=--unmerge --ask
+}}
+
+Now we can start emerge nss_pam_ldapd
+{{Emerge|nss_pam_ldapd}}
+
+== Configuration ==
+There are at least 2 method to work on this solution, the result are same but the way of working it are different.
+Pick one...
+<ref name="nss-pam-ldapd setup">[http://arthurdejong.org/nss-pam-ldapd/setup nss-pam-ldapd setup]http://arthurdejong.org/nss-pam-ldapd/setup</ref>
+
+=== Method 1:  Connecting to AD via LDAP Bind DN and password ===
+This method will configure /etc/nslcd.conf to make LDAP binding via an AD account. Communication with AD with this setup is unencrypted, unless your AD and nslcd had setup LDAP over SSL.
+
+Please create a new user with username '''nslcdconnect''' and password '''secret'''.<br />
+You might need to do the following:
+* ''Enable - disable user change password on next logon''
+* ''Disable - user change password''
+* ''Enable - Password never expired''.
+
+Assuming that:<br />
+* Samba is running locally and accessible via 127.0.0.1
+* LDAP Base DN is dc=headoffice,dc=location1,dc=company,dc=com
+
+{{File|/etc/nslcd.conf|Change some line below|<pre>
+# The uri pointing to the LDAP server to use for name lookups.
+# Multiple entries may be specified. The address that is used
+# here should be resolvable without using LDAP (obviously).
+#uri ldap://127.0.0.1/
+#uri ldaps://127.0.0.1/
+#uri ldapi://%2fvar%2frun%2fldapi_sock/
+# Note: %2f encodes the '/' used as directory separator
+uri ldap://127.0.0.1/
+
+# The distinguished name of the search base.
+base dc=headoffice,dc=location1,dc=company,dc=com
+
+# The distinguished name to bind to the server with.
+# Optional: default is to bind anonymously.
+binddn cn=nslcdconnect,cn=Users,dc=headoffice,dc=location1,dc=company,dc=com
+
+# The credentials to bind with.
+# Optional: default is no credentials.
+# Note that if you set a bindpw you should check the permissions of this file.
+bindpw secret
+
+# The distinguished name to perform password modifications by root by.
+rootpwmoddn cn=Administrator,cn=Users,dc=headoffice,dc=location1,dc=company,dc=com
+
+# Mappings for Active Directory
+pagesize 1000
+referrals off
+idle_timelimit 800
+filter passwd (&(objectClass=user)(!(objectClass=computer))(uidNumber=*)(unixHomeDirectory=*))
+map    passwd uid              sAMAccountName
+map    passwd homeDirectory    unixHomeDirectory
+map    passwd gecos            displayName
+filter shadow (&(objectClass=user)(!(objectClass=computer))(uidNumber=*)(unixHomeDirectory=*))
+map    shadow uid              sAMAccountName
+map    shadow shadowLastChange pwdLastSet
+filter group  (objectClass=group)
+</pre>}}
+
+=== Method 2:  Connecting to AD via Kerberos ===
+
+
+= External Reference =
+<references />
