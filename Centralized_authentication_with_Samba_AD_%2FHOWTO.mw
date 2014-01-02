@@ -34,14 +34,14 @@ Samba Wiki:Local_user_management_and_authentication/nslcd<ref name="Local_user_m
 === Method 1:  Connecting to AD via LDAP Bind DN and password ===
 This method will configure /etc/nslcd.conf to make LDAP binding via an AD account. Communication with AD with this setup is unencrypted, unless your AD and nslcd had setup LDAP over SSL.
 
-Please create a new user with username '''nslcdconnect''' and password '''secret'''.<br />
-You might need to do the following:
+Please create a new user with username '''nslcdconnect''' and password '''secret''' in the AD Server.<br />
+You will need to do the following:
 * ''Enable - disable user change password on next logon''
 * ''Disable - user change password''
 * ''Enable - Password never expired''.
 
 Assuming that:<br />
-* Samba is running locally and accessible via 127.0.0.1
+* Samba AD is running locally and accessible via 127.0.0.1
 * LDAP Base DN is dc=headoffice,dc=location1,dc=company,dc=com
 
 {{File|/etc/nslcd.conf|Change some line below|<pre>
@@ -57,6 +57,7 @@ uri ldap://127.0.0.1/
 # The distinguished name of the search base.
 base dc=headoffice,dc=location1,dc=company,dc=com
 
+#LDAP Bind Config
 # The distinguished name to bind to the server with.
 # Optional: default is to bind anonymously.
 binddn cn=nslcdconnect,cn=Users,dc=headoffice,dc=location1,dc=company,dc=com
@@ -83,9 +84,77 @@ map    shadow shadowLastChange pwdLastSet
 filter group  (objectClass=group)
 </pre>}}
 
-
-
 === Method 2:  Connecting to AD via Kerberos ===
+This method are very similar with the 1st method specially in the configuration you will still need to change the configure /etc/nslcd.conf to make LDAP connection to an AD Server with the help of Kerberos. But you don't need to specified a bind account and also the communication with AD with this setup is encrypted.
+
+Please create a new user with username '''nslcdconnect''' and password '''secret''' in the AD Server.<br />
+You will need to do the following:
+* ''Enable - disable user change password on next logon''
+* ''Disable - user change password''
+* ''Enable - Password never expired''.
+
+Assuming that:<br />
+* Samba is running locally and accessible via 127.0.0.1
+* LDAP Base DN is dc=headoffice,dc=location1,dc=company,dc=com
+* /etc/hosts and also /etc/conf.d/hostname have the same result with your Samba AD DNS (There will be problem if there are not the same of cannot resolve).
+* hostname = samba4-1.headoffice.company.com
+* AD = headoffice.company.com
+* REALM = HEADOFFICE.COMPANY.COM
+* DOMAINNAME ( NT Style ) COMPANY
+* Already have Kerberos install either mit-krb5 or heimdal.
+
+{{RootCmd|samba-tool spn add nslcd/samba4-1.headoffice.company.com nslcdconnect}}
+
+Now we should export the keytab from AD server for user nslcdconnect.
+With this keytab we can connect via Kerberos without the need of key in the password for nslcdconnect if configure correctly.
+
+{{RootCmd
+|samba-tool domain exportkeytab /etc/krb5.nslcd.keytab --principal=nslcdconnect
+|chown nslcd:nslcd /etc/krb5.nslcd.keytab 
+|chmod 600 /etc/krb5.nslcd.keytab
+}}
+
+The command below will kept nslcdconnect to the AD server via kerberos using keytab.
+You will need app-crypt/kstart so the Kerberos ticket and key will be automatically renew when it expired or needed.
+{{emerge|app-crypt/kstart}}
+
+{{RootCmd|k5start -f /etc/krb5.nslcd.keytab -U -o nslcd -K 360 -b -k /var/run/nslcd/nslcd.tkt}}
+
+Now we can change our nslcd.conf to suit Kerberos setup.
+
+{{File|/etc/nslcd.conf|Change some line below|<pre>
+# The uri pointing to the LDAP server to use for name lookups.
+# Multiple entries may be specified. The address that is used
+# here should be resolvable without using LDAP (obviously).
+#uri ldap://127.0.0.1/
+#uri ldaps://127.0.0.1/
+#uri ldapi://%2fvar%2frun%2fldapi_sock/
+# Note: %2f encodes the '/' used as directory separator
+uri ldap://127.0.0.1/
+
+# The distinguished name of the search base.
+base dc=headoffice,dc=location1,dc=company,dc=com
+
+# Kerberos Connection to AD
+sasl_mech GSSAPI
+sasl_realm HEADOFFICE.COMPANY.COM
+krb5_ccname /var/run/nslcd/nslcd.tkt
+
+# Mappings for Active Directory
+pagesize 1000
+referrals off
+idle_timelimit 800
+filter passwd (&(objectClass=user)(!(objectClass=computer))(uidNumber=*)(unixHomeDirectory=*))
+map    passwd uid              sAMAccountName
+map    passwd homeDirectory    unixHomeDirectory
+map    passwd gecos            displayName
+filter shadow (&(objectClass=user)(!(objectClass=computer))(uidNumber=*)(unixHomeDirectory=*))
+map    shadow uid              sAMAccountName
+map    shadow shadowLastChange pwdLastSet
+filter group  (objectClass=group)
+</pre>}}
+
+{{Warning|k5start don't have an startup script with gentoo, and I cannot make a script the will work. Someone please help. }}
 
 == nssswitch.conf connfiguration ==
 You will need to edit your /etc/nsswitch.conf according to the following.
