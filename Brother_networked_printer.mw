@@ -1,0 +1,104 @@
+
+This document covers the installation of a Brother network printer . It covers only the networked installation taking the DCP-750CW as an example. It may be applied to other network printer of Brother.
+
+{{Important| Before starting the installation process, you are advised to read this page and the [[Printing|Printing]] page in their entirety.}} 
+==Feedback ==
+After having applied this guide to your printer, please update the following table :
+
+{| class="wikitable"
+|-
+!Printer model
+!Architecture
+! Gentoo configuration
+!Works?
+!Remarks
+|-
+|DCP-750CW
+|X86_64 64 bits
+|gnome3.8 systemd
+|Yes
+|No remark
+|-
+|}
+== Prerequisites ==
+=== rpm installer ===
+As the drivers are available from Brother as .rpm file. You need to have the <code>rpm</code> package installed.
+
+{{RootCmd|emerge -av rpm }}
+
+=== cups ===
+You also need cups installed
+{{RootCmd|emerge -av cups }}
+
+=== Drivers ===
+==== Downloading the driver from Brother ====
+The drivers for Brother printers are available at [http://welcome.solutions.brother.com/bsc/public_s/id/linux/en/index.html Brother solutions' ] web page.
+Search for you model name by clicking ''Printer driver'' in the Download box.
+After having chosen your model you will be presented four drivers for download. Please download the two ones ending in .rpm that are ''LPR driver'' and ''cupswrapper driver''.
+==== Installing the drivers ====
+Installing the drivers may be a multiple steps process as some needed directories may appears missing on your Gentoo installation.
+To install a driver change to the directory where you downloaded the .rpm files.
+Then issue the following command to visualize the filenames.
+{{RootCmd|ls -a <pre>
+.  ..  dcp750cwcupswrapper-1.0.1-1.i386.rpm  dcp750cwlpr-1.0.1-1.i386.rpm
+</pre>}}
+Of course the driver names may change according to your model's name. Using the previous command will allow you to copy and paste the filenames in the rpm command to avoid typos when entering them.
+
+First install the ...cupswrapper... driver:
+{{RootCmd| rpm -i --nodeps dcp750cwcupswrapper-1.0.1-1.i386.rpm }}
+You may be told that some directories are missing. In this case, try to add the missing directories by hand and re-install the driver with this command:
+{{RootCmd| rpm -i --nodeps --replacepkgs dcp750cwcupswrapper-1.0.1-1.i386.rpm }}
+{{Note|Do not forget the --replacepkgs option to force the re-installation of all the necessary files.}}
+In my case, I had to add {{Path|/usr/lib64/cups}} and {{Path|/usr/lib64/cups/filter}}
+
+Now install the LPR driver the same way.
+{{RootCmd| rpm -i --nodeps dcp750cwlpr-1.0.1-1.i386.rpm }}
+
+I had to add the {{Path|/var/spool/lpd }} directory and re-install:
+
+{{RootCmd| rpm -i --nodeps --replacepkgs dcp750cwlpr-1.0.1-1.i386.rpm }}
+
+== Installing the printer ==
+=== Start the cups service ===
+To install the printer you have to start the '''cups''' service first:
+==== OpenRC ====
+If you use OpenRC use the following command to start the ''cups''' service.
+
+{{RootCmd|/etc/init.d/cupsd start}}  
+
+and to have it started automatically at boot time
+
+{{RootCmd|rc-update add cupsd default}}
+
+==== Systemd  ====
+If you use systemd use the following command to start the ''cups''' service.
+
+{{RootCmd|systemctl start cups.service }}  
+
+and to have it started automatically at boot time
+
+{{RootCmd|systemctl enable cups.service}}
+
+=== Use cups' web interface to install the printer ===
+Point your browser at [http://localhost:631 localhost:631].
+In the ''CUPS for Administrators'' section of the home page, click on ''Add Printer and classes''. Then, in the Printers box, click on  ''Add printer''.
+
+
+{{Note|If you are prompted for a user id and a password, enter '''root''' and the root password. If it happens that you enter your standard user's name by mistake, access to add printer will be forbidden.  It could be necessary to leave and reenter the session to be able to declare yourself as '''root'''.}}
+In the network choices suggested, choose the ''Host or LPD/LPR printer'' protocol and enter the connection url as suggested in Brother's documentation.
+In the case of DCP-750CW I had to use ''lpd://192.168.1.13/binary_p1''  where ''192.168.1.13'' was the IP address of my printer read from the command panel of the printer.
+{{Note|Other protocols than LPD/LPR can be used. Please refer to Brother's documentation.}}
+
+After, this the configuration is completely intuitive and free. Just follow the instructions of the wizard.
+
+==Troubleshooting ==
+It may happen that, when displaying your printers in Printers --> Manage Printers, the following message appears in the state column of your printer
+
+<pre>"File "/usr/libexec/cups/filter/brlpdwrapperdcp750cw" not available: No such file or directory".</pre>
+
+To solve this use the following command:
+{{RootCmd| cp /usr/lib64/cups/filter/brlpdwrapperdcp750cw /usr/libexec/cups/filter/ 
+}}
+Then delete and re-install the printer again.
+
+[[Category:Brother]]
