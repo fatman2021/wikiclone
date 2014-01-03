@@ -118,7 +118,7 @@ The command below will kept nslcdconnect to the AD server via kerberos using key
 You will need app-crypt/kstart so the Kerberos ticket and key will be automatically renew when it expired or needed.
 {{emerge|app-crypt/kstart}}
 
-{{RootCmd|k5start -f /etc/krb5.nslcd.keytab -U -o nslcd -K 360 -b -k /var/run/nslcd/nslcd.tkt}}
+{{RootCmd|k5start -f /etc/krb5.nslcd.keytab -U -o nslcd -K 360 -b -k /run/nslcd/nslcd.tkt}}
 
 Now we can change our nslcd.conf to suit Kerberos setup.
 
@@ -138,7 +138,7 @@ base dc=headoffice,dc=location1,dc=company,dc=com
 # Kerberos Connection to AD
 sasl_mech GSSAPI
 sasl_realm HEADOFFICE.COMPANY.COM
-krb5_ccname /var/run/nslcd/nslcd.tkt
+krb5_ccname /run/nslcd/nslcd.tkt
 
 # Mappings for Active Directory
 pagesize 1000
@@ -155,6 +155,53 @@ filter group  (objectClass=group)
 </pre>}}
 
 {{Warning|k5start don't have an startup script with gentoo, and I cannot make a script the will work. Someone please help. }}
+
+== Editing /etc/init.d/nslcd to start k5start together ==
+We need to make some change to start k5strt with nslcd so the kerberos ticket will work.
+
+{{File|/etc/init.d/nslcd|<pre>
+#!/sbin/runscript
+# Copyright 1999-2013 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: /var/cvsroot/gentoo-x86/sys-auth/nss-pam-ldapd/files/nslcd-init,v 1.2 2013/02/07 18:11:37 prometheanfire Exp $
+
+extra_commands="checkconfig"
+cfg="/etc/nslcd.conf"
+
+depend() {
+        need net
+        use dns logger
+}
+
+checkconfig() {
+        if [ ! -f "$cfg" ] ; then
+                eerror "Please create $cfg"
+                eerror "Example config: /usr/share/nss-ldapd/nslcd.conf"
+                return 1
+        fi
+        return 0
+}
+start() {
+    checkpath -q -d /var/run/nslcd -o nslcd:nslcd
+        checkconfig || return $?
+
+        ebegin "Starting nslcd"
+        start-stop-daemon --start --pidfile /var/run/nslcd/nslcd.pid \
+                --exec /usr/sbin/nslcd
+        start-stop-daemon --start --pidfile /var/run/nslcd/nslcd.k5start.pid \
+                --exec /usr/bin/k5start -- -f /etc/krb5.nslcd.keytab -U -o nslcd -K 360 -b -k /var/run/nslcd/nslcd.tkt -p /var/run/nslcd/nslcd.k5start.pid
+        eend $? "Failed to start nslcd"
+}
+
+stop() {
+        ebegin "Stopping nslcd"
+        start-stop-daemon --stop --pidfile /var/run/nslcd/nslcd.pid
+        start-stop-daemon --stop --pidfile /var/run/nslcd/nslcd.k5start.pid
+        eend $? "Failed to stop nslcd"
+
+</pre>}}
+
+
 
 == nssswitch.conf connfiguration ==
 You will need to edit your /etc/nsswitch.conf according to the following.
