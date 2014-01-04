@@ -1,9 +1,9 @@
 = Access Control List - ACL =
 ACL are one of the more important feature required by the current enterprise or co-operate need.
 What it do is that it will create more control over the files of folder and provide more then 
-User, Group and Other Basic Access Control.
+User, Group and Other POSIX Basic ACL.
 
-== POSIX ACL ==
+== POSIX Basic ACL ==
 Some example on ls -al /var/log
 {{Cmd|ls -al /var/www/|output=<pre>
 total 54632
@@ -59,19 +59,19 @@ As you might know for example<br />
 
 {{Note| Missing on SGID and sticky bit}}
 
-'''What is missing?'''
+'''What is missing?'''<br />
+
 1. What happen if we need more then one users to have control on this directory?<br />
-A: We cannot, but you can add this users to the apache group. Problem is this users will have all access where apache group have.
+A: We cannot, but you can add this users to the apache group. Problem is this users will have all access where apache group have.<br />
 
-
-2. What happen if we need one more group to have read write access to this directory but not all other users?
+2. What happen if we need one more group to have read write access to this directory but not all other users?<br />
 A: We cannot, but in some way we can add all the other group user and the apache user to another group and let them have access to this group.
-But what happen if you want to control this group to read only and not write?
+But what happen if you want to control this group to read only and not write?<br />
 
-The more example you have you will found the limitation on the POSIX ACL and so we have ACL which fix this.
+The more example you have you will found the limitation on the POSIX Basic ACL and so we have extended ACL which fix this.
 
 = Kernel Options = 
-We need to enable each files system Access control from the kernel before the application can use it.
+We need to enable each files system to support '''extended access control''' from the kernel before the application can use it.<br />
 You can enable the one you need.
 
 '''Ext2 ACL'''
@@ -115,6 +115,97 @@ Save what you changes and recompile your kernel and boot from it.
 We should now emerge the acl tools so what we can start using ACL.
 {{Emerge|sys-apps/acl}}
 
+= ext2/3/4 /etc/fstab with ACL Support =
+Some files system like xfs have it by default when mount.<br />
+Some files system like ext2/ext3/ext4 and reiserfs required extra mount options to enable extended ACL. Just add the acl options on the options <br />
+{{Code|/etc/fstab|<pre>/dev/hda1               /               reiserfs        noatime,user_xattr,acl      0 1</pre>}}
 
+remount the partition with the acl option and we are done.
+
+= Running extended ACL =
+How do we know that extended ACL is running correctly?
+You will be able to do the following:
+* Set/Modify ACL
+* Get/Read ACL
+* ACL Mask
+
+== Set/Modify ACL ==
+To set ACL we need to run '''setfacl''' command you can read the man page for setfacl for more options
+
+To add username to have read, write and execute on /testfiles
+{{RootCmd|setfacl -m u:username:rwx /testfiles}}
+
+To add username to have +write access on /testfiles
+{{RootCmd|setfacl -m u:username:+w /testfiles}}
+
+To add default user access right to read and write on testfolder folder
+{{RootCmd|setfacl -m d:u:username:rw testfolder/}}
+
+To add groupnamehave read, write and execute on /testfiles
+{{RootCmd|setfacl -m g:groupname:rwx /testfiles}}
+
+To add groupnamehave to add execute on testfolder and recursive 
+{{RootCmd|setfacl -R -m g:groupname:+x testfolder/}}
+
+To add default group access right to read and write on testfolder folder
+{{RootCmd|setfacl -m d:g:groupname:rw testfolder/}}
+
+== Get/Read ACL ==
+To get ACL we need to run '''getfacl''' command you can read the man page for getfacl for more options
+
+To get acl on /testfiles
+{{RootCmd|getfacl /testfiles|output=<pre>
+# file: testfiles
+# owner: root
+# group: root
+user::rw-
+user:username:r-x
+group::r--
+mask::r-x
+other::r--
+</pre>}}
+
+== ACL Mask ==
+{{Note|Todo}}
+
+== Remove ACL ==
+To remove ACL are simple.
+
+Remove all ACL on /testfiles
+{{RootCmd|setfacl -b /testfiles}}
+
+Remove default ACL on testfolder
+{{RootCmd|setfacl -k testfolder/}}
+
+== Which files/folder are with ACL? ==
+How do you know that your files is with ACL without running getfacl on all files?<br />
+Luckily ls will show you a '''+''' sign if it had ACL.
+
+Notice the '''+''' Sign on ''apache2'' and also ''named''?
+
+{{Cmd|ls -al /var/www/|output=<pre>
+total 54632
+drwxr-xr-x 12 root    root        4096 Jan  4 02:17 .
+drwxr-xr-x 14 root    root        4096 Dec 11 11:50 ..
+drwxr-xr-x+ 2 apache  apache       135 Dec 11 17:48 apache2
+-rw-r-----  1 root    root       25085 Jan  4 14:26 dmesg
+-rw-rw----  1 portage portage    22088 Jan  4 01:06 emerge-fetch.log
+-rw-rw----  1 portage portage  1498948 Jan  4 04:06 emerge.log
+-rw-------  1 root    root       32480 Dec 30 21:30 faillog
+-rw-r--r--  1 root    root      628240 Nov  6 01:47 genkernel.log
+-rw-r--r--  1 root    root      296380 Jan  4 18:43 lastlog
+-rw-------  1 root    root    47973000 Jan  4 19:40 messages
+drwxr-xr-x  2 mysql   mysql         82 Dec 11 22:04 mysql
+drwxrwx---+ 2 named   named       4096 Jan  3 18:09 named
+drwxr-xr-x  2 root    root          18 May 14  2010 news
+drwxr-xr-x  3 root    root      167936 Jan  4 04:24 portage
+-rw-r--r--  1 root    root       88301 Jan  4 14:26 rc.log
+drwxr-xr-x  3 root    root        4096 Jan  2 02:55 samba
+drwxrwx---  2 root    portage       37 Dec 11 15:21 sandbox
+-rw-------  1 root    root       64960 Jan  2 02:59 tallylog
+-rw-------  1 root    root         560 Nov 11 02:35 vsftpd.log
+drwxr-xr-x  2 root    root          63 Sep 12  2010 webmin
+-rw-rw-r--  1 root    utmp     1178112 Jan  4 18:43 wtmp
+</pre>}}
 
 [[Category:Filesystems]]
