@@ -23,16 +23,55 @@ The ''initramfs'' usually contains at least one file, {{Path|/init}}. This file 
 When the kernel mounts the ''initramfs'', your target root partition is not yet mounted, so you can't access any of your files. That means there is nothing but the ''initramfs''. So everything you need, everything you want, you have to include it in your ''initramfs''. If you want a shell, you have to include it in your ''initramfs''. If you want to mount something, you need a mount utility. If you need to load a module, your ''initramfs'' has to provide both the module, as well as a utility to load it. If the utility depends on libraries in order to work, you have to include the libraries as well. This seems complicated, and it is, because the ''initramfs'' has to function independently.
 
 == Basics ==
+
+In this section you will learn the ''easy and straightforward way to initramfs creation''. You will make a functional - albeit minimalistic - ''initramfs'' which you then can extend according to your own requirements. 
+
 === Directory Structure ===
+
+Create the directory that will later become your ''initramfs'' root. For consistency. we'll work in {{Path|/usr/src/initramfs}}, but any directory would do. Create the ''initramfs'' root directory and cd into it.
+
+{{RootCmd|mkdir /usr/src/initramfs}}
+{{RootCmd|cd /usr/src/initramfs}}
+
+Create a basic directory layout.
+
+{{RootCmd|mkdir -p bin dev etc lib lib64 mnt/root proc root sbin sys}}
+
 ==== Device Nodes ====
+
+Most things you do in ''initramfs'' will require a couple of device nodes to be present, especially the device for your root partition. Throughout this document, {{Path|/dev/sda1}} will be used as example device. Copy basic device nodes.
+
+{{RootCmd|cp -a /dev/{null,console,tty,sda1} /usr/src/initramfs/dev/}}
+
+Which devices you need exactly depends entirely on what you are going to use ''initramfs'' for. Please adapt to your own needs.
+
+{{Note|More advanced approaches to device nodes are covered later on in the [[Initramfs/Custom#Dynamic_Devices]] section.}}
+
 === Applications ===
+
+Any binary you want to execute at boot needs to be copied into your ''initramfs'' layout. You also need to copy any libraries that your binaries require. To see what libraries any particular binary requires, use the tool '''ldd'''. An example examining what libraries {{Package|dev-util/strace}} requires:
+
+{{Cmd|ldd /usr/bin/strace|output=<pre>
+	linux-vdso.so.1 (0x00007fff271ff000)
+	libc.so.6 => /lib64/libc.so.6 (0x00007f5b954fe000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f5b958a9000)
+</pre>}}
+
+Here you see that for {{Path|/usr/bin/strace}} to work in your ''initramfs'', you not only need to copy {{Path|/usr/bin/strace}} to your {{Path|/usr/src/initramfs/bin}}, but also {{Path|/lib64/libc.so.6}} and {{Path|/lib64/ld-linux-x86-64.so.2}} to your {{Path|/usr/src/initramfs/lib64}}. Note that you don't need the {{Path|linux-vdso.so.1}}.
+
+Additionally, some applications may be depend on other files and libraries to work. For example, {{Package|app-editor/nano}} also needs a terminfo file {{Path|/usr/share/terminfo/l/linux}} from {{Package|sys-libs/ncurses}}, so that has to be copied to your ''initramfs'' as well. To find these dependencies, tools like '''equery''' and '''strace''' prove to be helpful. 
+
 ==== Busybox ====
+
+Instead of collecting countless utilities and libraries (and never seeing the end of it), you can just use {{Package|sys-apps/busybox}}. It's a set of utilities for rescue and embedded systems, it contains a shell, utilities like ls, mkdir, cp, mount, insmod, and many more - all in a single binary called {{Path|/bin/busybox}}.
+
 === Init ===
 === Packaging Your Initramfs ===
 ==== Kernel Configuration ====
 ==== Embedding into the Kernel ====
 ==== Creating a Separate File ====
 === Finalizing ===
+
 == Functionality ==
 === Rescue Shell ===
 ==== Remote Rescue Shell ====
