@@ -105,9 +105,46 @@ Lastly, make the {{Path|/init}} executable:
 {{RootCmd|chmod +x /usr/src/initramfs/init}}
 
 === Packaging Your Initramfs ===
+
+Your ''initramfs'' now has to be made available to your kernel at boot time. This is done by packaging it as a compressed cpio archive. This archive is then either embedded directly into your kernel image, or stored as a separate file which can be loaded by grub during the boot process. Both methods perform equally well, simply choose the method that you find most convenient. 
+
 ==== Kernel Configuration ====
+
+With either method, you need to enable support for Initial RAM filesystem and RAM disk (initramfs/initrd) support for the initramfs functionality. 
+
+{{Kernel|<nowiki>CONFIG_BLK_DEV_INITRD=y</nowiki>|<pre>
+General setup  --->
+    [*] Initial RAM filesystem and RAM disk (initramfs/initrd) supportoption1
+</pre>}}
+
 ==== Embedding into the Kernel ====
+
+If you want the ''initramfs'' to be embedded into the kernel image, edit your kernel config and set ''Initramfs source file(s)'' to the root of your ''initramfs'', (e.g {{Path|/usr/src/initramfs}}): 
+
+{{Kernel|<nowiki>CONFIG_INITRAMFS_SOURCE="/usr/src/initramfs"</nowiki>|<pre>
+General setup  --->
+    (/usr/src/initramfs) Initramfs source file(s)
+</pre>}}
+
+Now when you compile your kernel it will automatically put the files into a cpio archive and embed it into the kernel image. You will need to rebuild your kernel any time you make any changes to your ''initramfs''. 
+
 ==== Creating a Separate File ====
+
+You can create a standalone archive file by running the following commands: 
+
+{{RootCmd
+|cd /usr/src/initramfs
+|find . -print0 | cpio --null -ov --format=newc | gzip -9 > /boot/my-custom-initramfs.cpio.gz}}
+
+This will create a file called {{Path|my-custom-initramfs.cpio.gz}} in your {{Path|/boot}} directory. You now need to instruct grub to load this file at boot time, you do this with the '''initrd''' line.
+
+{{File|grub.cfg||<pre>
+linux 3.12.6-gentoo
+initrd my-custom-initramfs.cpio.gz
+</pre>}}
+
+{{Note|If you are unfamiliar with bootloader configuration, please refer to [[GRUB2]] or [[GRUB]].}}
+
 === Finalizing ===
 
 == Functionality ==
