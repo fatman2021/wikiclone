@@ -10,7 +10,7 @@ Here are some examples of what you can do with ''initramfs'':
 * Load modules (e.g. a third party driver that can not be integrated into the kernel directly)
 * Mount the root partition (for encrypted, logical, and otherwise special partitions)
 * Provide a minimalistic rescue shell (if something goes wrong)
-* Anything the kernel can't do (as long as you can do it in user space, e.g. by executing commands) 
+* Anything the kernel can't do (as long as you can do it in user space, e.g. by executing commands)
 
 If you don't have advanced requirements, you do not need ''initramfs''.
 
@@ -18,13 +18,13 @@ If you don't have advanced requirements, you do not need ''initramfs''.
 
 There are countless ways to make an ''initramfs''. You can choose not to create an ''initramfs'' at all but let other apps, such as [[Genkernel]] or [[Dracut]], do the work for you. If you are lucky, one of them does what you want out of the box, and you don't need to bother with how ''initramfs'' works and what it does anymore. If you're unlucky, they don't do what you want and you have to extend their functionality, or even build an ''initramfs'' all by yourself.
 
-The ''initramfs'' usually contains at least one file, {{Path|/init}}. This file is executed by the kernel as the main init process (PID 1). It has to do all the work. In addition, there can be any number of additional files and directories that are required by {{Path|/init}}. They are usually files you will also find on any other root filesystem, such as {{Path|/dev}} for device nodes, {{Path|/proc}} for kernel information, {{Path|/bin}} for binaries, and so on. The structure of the ''initramfs'' can be simple, or it can be complicated, depending on what you are planning to do.
+The ''initramfs'' usually contains at least one file, {{Highlight|color=darkgreen|'''/init'''}}. This file is executed by the kernel as the main init process (PID 1). It has to do all the work. In addition, there can be any number of additional files and directories that are required by {{Highlight|color=darkgreen|'''/init'''}}. They are usually files you will also find on any other root filesystem, such as {{Path|/dev}} for device nodes, {{Path|/proc}} for kernel information, {{Path|/bin}} for binaries, and so on. The structure of the ''initramfs'' can be simple, or it can be complicated, depending on what you are planning to do.
 
 When the kernel mounts the ''initramfs'', your target root partition is not yet mounted, so you can't access any of your files. That means there is nothing but the ''initramfs''. So everything you need, everything you want, you have to include it in your ''initramfs''. If you want a shell, you have to include it in your ''initramfs''. If you want to mount something, you need a mount utility. If you need to load a module, your ''initramfs'' has to provide both the module, as well as a utility to load it. If the utility depends on libraries in order to work, you have to include the libraries as well. This seems complicated, and it is, because the ''initramfs'' has to function independently.
 
 == Basics ==
 
-In this section you will learn the ''easy and straightforward way to initramfs creation''. You will make a functional - albeit minimalistic - ''initramfs'' which you then can extend according to your own requirements. 
+In this section you will learn the ''easy and straightforward way to initramfs creation''. You will make a functional - albeit minimalistic - ''initramfs'' which you then can extend according to your own requirements.
 
 === Directory Structure ===
 
@@ -45,21 +45,21 @@ Most things you do in ''initramfs'' will require a couple of device nodes to be 
 
 Which devices you need exactly depends entirely on what you are going to use ''initramfs'' for. Please adapt to your own needs.
 
-{{Note|More advanced approaches to device nodes are covered later on in the [[Initramfs/Custom#Dynamic_Devices]] section.}}
+{{Note|More advanced approaches to device nodes are covered later on in the [[Custom_Initramfs#Dynamic_Devices]] section.}}
 
 === Applications ===
 
-Any binary you want to execute at boot needs to be copied into your ''initramfs'' layout. You also need to copy any libraries that your binaries require. To see what libraries any particular binary requires, use the tool '''ldd'''. An example examining what libraries {{Package|dev-util/strace}} requires:
+Any binary you want to execute at boot needs to be copied into your ''initramfs'' layout. You also need to copy any libraries that your binaries require. To see what libraries any particular binary requires, use the tool {{Highlight|'''ldd'''}}. An example examining what libraries {{Package|dev-util/strace}} requires:
 
 {{Cmd|ldd /usr/bin/strace|output=<pre>
-	linux-vdso.so.1 (0x00007fff271ff000)
-	libc.so.6 => /lib64/libc.so.6 (0x00007f5b954fe000)
-	/lib64/ld-linux-x86-64.so.2 (0x00007f5b958a9000)
+    linux-vdso.so.1 (0x00007fff271ff000)
+    libc.so.6 => /lib64/libc.so.6 (0x00007f5b954fe000)
+    /lib64/ld-linux-x86-64.so.2 (0x00007f5b958a9000)
 </pre>}}
 
 Here you see that for {{Path|/usr/bin/strace}} to work in your ''initramfs'', you not only need to copy {{Path|/usr/bin/strace}} to your {{Path|/usr/src/initramfs/bin}}, but also {{Path|/lib64/libc.so.6}} and {{Path|/lib64/ld-linux-x86-64.so.2}} to your {{Path|/usr/src/initramfs/lib64}}. Note that you don't need the {{Path|linux-vdso.so.1}}.
 
-Additionally, some applications may be depend on other files and libraries to work. For example, {{Package|app-editor/nano}} also needs a terminfo file {{Path|/usr/share/terminfo/l/linux}} from {{Package|sys-libs/ncurses}}, so that has to be copied to your ''initramfs'' as well. To find these dependencies, tools like '''equery''' and '''strace''' prove to be helpful. 
+Additionally, some applications may be depend on other files and libraries to work. For example, {{Package|app-editor/nano}} also needs a terminfo file {{Path|/usr/share/terminfo/l/linux}} from {{Package|sys-libs/ncurses}}, so that has to be copied to your ''initramfs'' as well. To find these dependencies, tools like {{Highlight|'''equery'''}} and {{Highlight|'''strace'''}} prove to be helpful.
 
 ==== Busybox ====
 
@@ -69,13 +69,13 @@ Instead of collecting countless utilities and libraries (and never seeing the en
 |<nowiki>USE="static" emerge -av busybox</nowiki>
 |cp -a /bin/busybox /usr/src/initramfs/bin/busybox}}
 
-{{Note|Check with '''ldd''' that you're copying a static binary.}}
+{{Note|Check with {{Highlight|'''ldd'''}}} that you're copying a static binary.}}
 
 === Init ===
 
-The file structure of your ''initramfs'' is almost complete. The only thing that is missing is {{Path|/init}}, the executable in the root of the ''initramfs'' that is executed by the kernel once it is loaded. Because {{Package|sys-apps/busybox}} includes a fully functional shell, this means you can write your {{Path|/init}} binary as a simple shell script (instead of making it a complicated application written in Assembler or C that you have to compile).
+The file structure of your ''initramfs'' is almost complete. The only thing that is missing is {{Highlight|color=darkgreen|'''/init'''}}, the executable in the root of the ''initramfs'' that is executed by the kernel once it is loaded. Because {{Package|sys-apps/busybox}} includes a fully functional shell, this means you can write your {{Highlight|color=darkgreen|'''/init'''}} binary as a simple shell script (instead of making it a complicated application written in Assembler or C that you have to compile).
 
-The following example realizes this executable as a minimalistic shell script, based on the busybox shell: 
+The following example realizes this executable as a minimalistic shell script, based on the busybox shell:
 
 {{File|/usr/src/initramfs/init||<pre>
 #!/bin/busybox sh
@@ -100,17 +100,17 @@ exec switch_root /mnt/root /sbin/init
 
 This example needs some device nodes to work, mainly the root block device. Change the script and copy the the corresponding {{Path|/dev/}} node to fit your needs.
 
-Lastly, make the {{Path|/init}} executable:
+Lastly, make the {{Highlight|color=darkgreen|'''/init'''}} executable:
 
 {{RootCmd|chmod +x /usr/src/initramfs/init}}
 
 === Packaging Your Initramfs ===
 
-Your ''initramfs'' now has to be made available to your kernel at boot time. This is done by packaging it as a compressed cpio archive. This archive is then either embedded directly into your kernel image, or stored as a separate file which can be loaded by grub during the boot process. Both methods perform equally well, simply choose the method that you find most convenient. 
+Your ''initramfs'' now has to be made available to your kernel at boot time. This is done by packaging it as a compressed cpio archive. This archive is then either embedded directly into your kernel image, or stored as a separate file which can be loaded by grub during the boot process. Both methods perform equally well, simply choose the method that you find most convenient.
 
 ==== Kernel Configuration ====
 
-With either method, you need to enable support for Initial RAM filesystem and RAM disk (initramfs/initrd) support for the initramfs functionality. 
+With either method, you need to enable support for Initial RAM filesystem and RAM disk (initramfs/initrd) support for the initramfs functionality.
 
 {{Kernel|<nowiki>CONFIG_BLK_DEV_INITRD=y</nowiki>|<pre>
 General setup  --->
@@ -119,18 +119,18 @@ General setup  --->
 
 ==== Embedding into the Kernel ====
 
-If you want the ''initramfs'' to be embedded into the kernel image, edit your kernel config and set ''Initramfs source file(s)'' to the root of your ''initramfs'', (e.g {{Path|/usr/src/initramfs}}): 
+If you want the ''initramfs'' to be embedded into the kernel image, edit your kernel config and set ''Initramfs source file(s)'' to the root of your ''initramfs'', (e.g {{Path|/usr/src/initramfs}}):
 
 {{Kernel|<nowiki>CONFIG_INITRAMFS_SOURCE="/usr/src/initramfs"</nowiki>|<pre>
 General setup  --->
     (/usr/src/initramfs) Initramfs source file(s)
 </pre>}}
 
-Now when you compile your kernel it will automatically put the files into a cpio archive and embed it into the kernel image. You will need to rebuild your kernel any time you make any changes to your ''initramfs''. 
+Now when you compile your kernel it will automatically put the files into a cpio archive and embed it into the kernel image. You will need to rebuild your kernel any time you make any changes to your ''initramfs''.
 
 ==== Creating a Separate File ====
 
-You can create a standalone archive file by running the following commands: 
+You can create a standalone archive file by running the following commands:
 
 {{RootCmd
 |cd /usr/src/initramfs
@@ -147,15 +147,15 @@ initrd my-custom-initramfs.cpio.gz
 
 === Finalizing ===
 
-You can now reboot your machine. On boot, the kernel will extract the files from your ''initramfs'' archive automatically and execute your {{Path|/init}} script, which in turn should then take care of mounting your root partition and exec the init of your installed Linux distribution.
+You can now reboot your machine. On boot, the kernel will extract the files from your ''initramfs'' archive automatically and execute your {{Highlight|color=darkgreen|'''/init'''}} script, which in turn should then take care of mounting your root partition and exec the init of your installed Linux distribution.
 
 == Functionality ==
 
-Now that you've covered the ''initramfs'' basics, in this section you will learn how to extend your {{Path|/init}} script with more advanced functionality. 
+Now that you've covered the ''initramfs'' basics, in this section you will learn how to extend your {{Highlight|color=darkgreen|'''/init'''}} script with more advanced functionality.
 
 === Rescue Shell ===
 
-If you want to be dropped to a rescue shell if an error occurs, you can add the following function to your {{Path|/init}} and call it when something goes wrong.
+If you want to be dropped to a rescue shell if an error occurs, you can add the following function to your {{Highlight|color=darkgreen|'''/init'''}} and call it when something goes wrong.
 
 {{File|/usr/src/initramfs/init|Rescue Shell|<pre>
 rescue_shell() {
@@ -186,7 +186,7 @@ Device Drivers  --->
         [*] Maintain a devtmpfs filesystem to mount at /dev
 </pre>}}
 
-You can include the following snippet in your {{Path|/init}} script to have it mount at boot:
+You can include the following snippet in your {{Highlight|color=darkgreen|'''/init'''}} script to have it mount at boot:
 
 {{File|/usr/src/initramfs/init||<pre>
 mount -t devtmpfs none /dev
@@ -204,7 +204,7 @@ Alternatively, you can use mdev, the udev replacement of busybox. For mdev to wo
 
 {{RootCmd|ln -s ../bin/busybox /usr/src/initramfs/sbin/mdev}}
 
-Then add the following snippet to your {{Path|/init}}, after mounting {{Path|/proc}} and {{Path|/sys}}: 
+Then add the following snippet to your {{Highlight|color=darkgreen|'''/init'''}}, after mounting {{Path|/proc}} and {{Path|/sys}}:
 
 {{File|/usr/src/initramfs/init||<pre>
 echo /sbin/mdev > /proc/sys/kernel/hotplug
@@ -215,11 +215,11 @@ mdev -s
 
 If your root partition is located on a logical volume, you need to include the LVM binary in your ''initramfs''. You can get a static binary by enabling the '''static''' USE-Flag for {{Package|sys-fs/lvm2}}. Copy it to your ''initramfs'' {{Path|/sbin}} directory.
 
-{{Note|The static LVM binary may also be called {{Path|/sbin/lvm.static}}. Check with '''ldd''' that you're copying a static binary.}}
+{{Note|The static LVM binary may also be called {{Path|/sbin/lvm.static}}. Check with {{Highlight|'''ldd'''}} that you're copying a static binary.}}
 
 {{RootCmd|cp -a /sbin/lvm /usr/src/initramfs/sbin/lvm}}
 
-Now you can enable your LVM root partition in {{Path|/init}}. This example assumes that your volume group is called '''VG''', and your root volume is called '''Root'''. Replace them with the names you chose when creating the volume. 
+Now you can enable your LVM root partition in {{Highlight|color=darkgreen|'''/init'''}}. This example assumes that your volume group is called '''VG''', and your root volume is called '''Root'''. Replace them with the names you chose when creating the volume.
 
 {{File|/usr/src/initramfs/init||<pre>
 lvm vgscan --mknodes
@@ -262,7 +262,7 @@ This {{Path|mdadm.conf}} will scan all {{Path|/dev/sd?*}} devices and assemble t
 
 {{Note|If your {{Path|mdadm.conf}} has additional conditions such as metadata and name, it may be more practical to remove them. The UUID alone should be sufficient.}}
 
-Now you can initialize your Software RAID in {{Path|/init}}:
+Now you can initialize your Software RAID in {{Highlight|color=darkgreen|'''/init'''}}:
 
 {{File|/usr/src/initramfs/init||<pre>
 mdadm --assemble --scan
@@ -278,7 +278,7 @@ If your root partition is LUKS encrypted, you need to include the cryptsetup bin
 |cp -a /dev/{urandom,random} /usr/src/initramfs/dev
 |cp -a /sbin/cryptsetup /usr/src/initramfs/sbin/cryptsetup}}
 
-Now you can unlock your encrypted root partition in {{Path|/init}}:
+Now you can unlock your encrypted root partition in {{Highlight|color=darkgreen|'''/init'''}}:
 
 {{File|/usr/src/initramfs/init||<pre>
 cryptsetup -T 5 luksOpen /dev/sda1 luksroot
@@ -302,7 +302,7 @@ The following example creates a random 512 byte key, encrypted with LUKS, and ad
 |<nowiki>dd if=/dev/urandom of=/dev/mapper/lukskey</nowiki>
 |cryptsetup luksAddKey /dev/sda1 /dev/mapper/lukskey}}
 
-Unlocking the root device using this key in your {{Path|/init}} can then be done like this: 
+Unlocking the root device using this key in your {{Highlight|color=darkgreen|'''/init'''}} can then be done like this:
 
 {{File|/usr/src/initramfs/init||<pre>
 # Obtain the key
@@ -319,7 +319,7 @@ As before, your root partition should then be available as {{Path|/dev/mapper/lu
 
 === Networking ===
 
-If you need networking in your ''initramfs'', all required network related drivers have to be built into your kernel, and you'll have to configure the network interfaces in your {{Path|/init}}. How exactly this has to be done, depends on your network situation. The following sections cover only the most common cases.
+If you need networking in your ''initramfs'', all required network related drivers have to be built into your kernel, and you'll have to configure the network interfaces in your {{Highlight|color=darkgreen|'''/init'''}}. How exactly this has to be done, depends on your network situation. The following sections cover only the most common cases.
 
 ==== Static IP ====
 
@@ -340,7 +340,7 @@ Copy the script to your initramfs and make it executable.
 |cp simple.script /usr/src/initramfs/bin
 |chmod +x /usr/src/initramfs/bin/simple.script}}
 
-Edit the script's first line to read {{Highlight|!#/bin/busybox sh}} or create a symlink for {{Path|/bin/sh}}:
+Edit the script's first line to read {{Highlight|color=darkred|#!/bin/busybox sh}} or create a symlink for {{Path|/bin/sh}}:
 
 {{RootCmd|ln -s busybox /usr/src/initramfs/bin/sh}}
 
@@ -353,11 +353,11 @@ udhcpc -t 5 -q -s /bin/simple.script
 
 ==== DNS ====
 
-Your network should be up and running now. However, that's only if you know exactly which IPs to talk to. If all you have is a host or domain name, it's a different story entirely. In that case, you need to be able to resolve hostnames. Unfortunately, this is where our luck leaves us. Until now, everything could be done with just the static binary of Busybox - however, this is not the case with DNS. 
+Your network should be up and running now. However, that's only if you know exactly which IPs to talk to. If all you have is a host or domain name, it's a different story entirely. In that case, you need to be able to resolve hostnames. Unfortunately, this is where our luck leaves us. Until now, everything could be done with just the static binary of Busybox - however, this is not the case with DNS.
 
 {{Note|Additional libraries are required to make DNS work.}}
 
-This is because {{Package|sys-libs/glibc}} itself dynamically includes additional libraries for DNS lookups. As long as you don't need that functionality, you're fine, but if you need it, you have no choice but to include those libraries in your ''initramfs''. The only alternative would be building Busybox against another libc such as {{Package|sys-libs/uclibc}}, however that would go beyond the scope of this document. 
+This is because {{Package|sys-libs/glibc}} itself dynamically includes additional libraries for DNS lookups. As long as you don't need that functionality, you're fine, but if you need it, you have no choice but to include those libraries in your ''initramfs''. The only alternative would be building Busybox against another libc such as {{Package|sys-libs/uclibc}}, however that would go beyond the scope of this document.
 
 This is a good chance to demonstrate how to use {{Package|dev-util/strace}} to reveal such hidden dependencies.
 
@@ -382,17 +382,11 @@ Copy the necessary libraries to your initramfs.
 
 {{RootCmd|cp /lib64/libnss_{dns,files}.so.2 /lib64/{libresolv,ld-linux-x86-64}.so.2 /lib64/libc.so.6 /usr/src/initramfs/lib64}}
 
-Create a {{Path|/etc/resolv.conf}} with at least one nameserver you can use. Note that this may be done automatically for you if you use [[Initramfs/Custom#DHCP]]. 
+Create a {{Path|/etc/resolv.conf}} with at least one nameserver you can use. Note that this may be done automatically for you if you use [[Custom_Initramfs#DHCP]].
 
 {{RootCmd|echo nameserver 10.0.2.3 > /usr/src/initramfs/etc/resolv.conf}}
 
-With this, DNS lookups should now work for you. 
-
-=== Kernel Modules ===
-=== UUID/LABEL Root Mounting ===
-=== Bootsplash ===
-=== Bootchart ===
-=== Systemd ===
+With this, DNS lookups should now work for you.
 
 == Troubleshooting ==
 === Multiple initramfs ===
@@ -404,7 +398,11 @@ Gentoo provides static binaries for some ebuilds. Check if the ebuild for your b
 
 Many applications also offer static builds with an option in their configure scripts. There is no standard name for the option, it may be --enable-static or similar. When compiling a package manually, check the list of available options with ./configure --help to see if it supports building static binaries for you.
 
-You can check whether or not a binary is static by using the '''ldd''' command (see [[Initramfs/Custom#Applications]] for a usage example). The '''strace''' command is also very useful to find out about additional dependencies (see [[Initramfs/Custom#DNS]] for a usage example).
+You can check whether or not a binary is static by using the {{Highlight|'''ldd'''}} command. The {{Highlight|'''strace'''}} command is also very useful to find out about additional dependencies. With {{Highlight|'''equery files'''}} you can see which files a certain package brought into your system, some of which may also be candidates for additional dependencies of that package.
+
+{{Note|
+* See [[Custom_Initramfs#Applications]] for a {{Highlight|'''ldd'''}} usage example.
+* See [[Custom_Initramfs#DNS]] for a {{Highlight|'''strace'''}} usage example.}}
 
 Including libraries into your ''initramfs'' in order to make a dynamic executable work is a last resort only. It makes the ''initramfs'' much larger and more complicated to maintain than necessary. It also makes the ''initramfs'' harder to maintain, as the dependencies might change with every update of the program in question.
 
@@ -414,19 +412,19 @@ When working with ''initramfs'' and writing custom init scripts for it, you may 
 
  Kernel panic - not syncing: Attempted to kill init!
 
-This is not an error in the kernel, but an error in your {{Path|/init}} script. This script is executed as the init process with PID 1. Unlike other processes, the PID 1 init process is special. It is the only process that is started by the kernel on boot. It's the process that takes care of starting other processes (boot process, init scripts) which in turn start other processes (daemons, login prompts, X), which in turn start other processes (bash, window manager, browser, ...). The init process is the mother of all other processes, and therefore it mustn't be killed. On shutdown, it's again the init process that takes care of cleaning up by shutting down other processes first, then running processes that will unmount the filesystems, until it is safe to actually do a shutdown without corrupting anything.
+This is not an error in the kernel, but an error in your {{Highlight|color=darkgreen|'''/init'''}} script. This script is executed as the init process with PID 1. Unlike other processes, the PID 1 init process is special. It is the only process that is started by the kernel on boot. It's the process that takes care of starting other processes (boot process, init scripts) which in turn start other processes (daemons, login prompts, X), which in turn start other processes (bash, window manager, browser, ...). The init process is the mother of all other processes, and therefore it mustn't be killed. On shutdown, it's again the init process that takes care of cleaning up by shutting down other processes first, then running processes that will unmount the filesystems, until it is safe to actually do a shutdown without corrupting anything.
 
-If you have some error in your {{Path|/init}} script, that causes the init process to end, this basically means there are no processes left to run, there is nothing that could take care of cleaning up, and the kernel has no choice but to panic. For this reason there are some things in {{Path|/init}} that you can't do like you can do them in a normal shell script, like using return or exit, or letting the script just run a series of commands and then simply end.
+If you have some error in your {{Highlight|color=darkgreen|'''/init'''}} script, that causes the init process to end, this basically means there are no processes left to run, there is nothing that could take care of cleaning up, and the kernel has no choice but to panic. For this reason there are some things in {{Highlight|color=darkgreen|'''/init'''}} that you can't do like you can do them in a normal shell script, like using return or exit, or letting the script just run a series of commands and then simply end.
 
-If you want {{Path|/init}} to end, you have to pass the responsibility of the init process to someone else using '''exec'''. See the examples above how '''exec''' is used to either run /sbin/init of the mounted root partition or to run a rescue shell in case something went wrong. 
+If you want {{Highlight|color=darkgreen|'''/init'''}} to end, you have to pass the responsibility of the init process to someone else using '''exec'''. See the examples above how '''exec''' is used to either run /sbin/init of the mounted root partition or to run a rescue shell in case something went wrong.
 
 === Job Control ===
 
-While working with ''initramfs'', especially the [[Initramfs/Custom#Rescue_Shell]], you may come across this message:
+While working with ''initramfs'', especially the [[Custom_Initramfs#Rescue_Shell]], you may come across this message:
 
  /bin/sh: can't access tty; job control turned off
 
-The lack of Job Control is usually not a problem, since {{Path|/init}} is not supposed to be interactive. However, if you want to work with the Busybox shell on a regular basis, being unable to control programs with {{Key|Ctrl-C}} or {{Key|Ctrl-Z}} can easily become a huge issue. In worst case, if Job Control is not available, and a program refuses to quit, you have to reboot.
+The lack of Job Control is usually not a problem, since {{Highlight|color=darkgreen|'''/init'''}} is not supposed to be interactive. However, if you want to work with the Busybox shell on a regular basis, being unable to control programs with {{Key|Ctrl-C}} or {{Key|Ctrl-Z}} can easily become a huge issue. In worst case, if Job Control is not available, and a program refuses to quit, you have to reboot.
 
 The [http://www.busybox.net/FAQ.html#job_control busybox faq] offers some help here. You can either use
 
@@ -440,7 +438,7 @@ to start a shell on tty1 with jobcontrol enabled.
 
 === Salvaging ===
 
-If for whatever reason you lost your {{Path|/usr/src/initramfs}} structure, but you still got either the kernel image with the builtin ''initramfs'', or the separate cpio archive, it's possible to salvage it from there. Although it may be easier to just redo it from scratch - if you've done it once, doing it again should be a piece of cake. So this is just in case. 
+If for whatever reason you lost your {{Path|/usr/src/initramfs}} structure, but you still got either the kernel image with the builtin ''initramfs'', or the separate cpio archive, it's possible to salvage it from there. Although it may be easier to just redo it from scratch - if you've done it once, doing it again should be a piece of cake. So this is just in case.
 
 {{Warning|The following commands will overwrite files, so you should do all your work in a temporary directory like {{Path|/tmp/initramfs}}.}}
 
@@ -451,12 +449,12 @@ You can skip this step if your ''initramfs'' is a separate cpio archive already.
 The utility of choice when dismantling kernel images is {{Package|app-misc/binwalk}}. In analyzes arbitrary files for known signatures, and prints their offsets. While there are usually a bunch of false matches in the output, it should be easy to pick the correct ones.
 
 {{Cmd|binwalk bzImage|output=<pre>
-DECIMAL   	HEX       	DESCRIPTION
+DECIMAL     HEX         DESCRIPTION
 -------------------------------------------------------------------------------------------------------------------
-15949     	0x3E4D    	bzip2 compressed data, block size = 900k
-3042172   	0x2E6B7C  	LZMA compressed data, properties: 0x9A, dictionary size: 4194304 bytes, uncompressed size: 9439488 bytes
-4433597   	0x43A6BD  	LZMA compressed data, properties: 0xD8, dictionary size: 16777216 bytes, uncompressed size: 4213785 bytes
-8530175   	0x8228FF  	ELF (NetBSD)
+15949       0x3E4D      bzip2 compressed data, block size = 900k
+3042172     0x2E6B7C    LZMA compressed data, properties: 0x9A, dictionary size: 4194304 bytes, uncompressed size: 9439488 bytes
+4433597     0x43A6BD    LZMA compressed data, properties: 0xD8, dictionary size: 16777216 bytes, uncompressed size: 4213785 bytes
+8530175     0x8228FF    ELF (NetBSD)
 </pre>}}
 
 A less sophisticated method would be to grep for signatures. For bzip2, this is '''BZh'''. For gzip, you can use '''<nowiki>$'\x1f'$'\x8b'</nowiki>'''.
@@ -476,7 +474,7 @@ Now, you have the uncompressed kernel image. Somewhere within this image resides
 |binwalk Image
 |grep -a -b --only-matching BZh Image}}
 
-Suppose the offset is 171424 bytes this time. Now you can extract the ''initramfs'' cpio archive: 
+Suppose the offset is 171424 bytes this time. Now you can extract the ''initramfs'' cpio archive:
 
 {{Cmd|<nowiki>dd if=Image bs=171424 skip=1 | bunzip2 > initramfs.cpio</nowiki>}}
 
@@ -488,7 +486,7 @@ initramfs.cpio: ASCII cpio archive (SVR4 with no CRC)
 
 ==== Extracting the cpio archive ====
 
-If your ''initramfs'' cpio archive was a separate file, you have to uncompress it first. 
+If your ''initramfs'' cpio archive was a separate file, you have to uncompress it first.
 
 {{Cmd|gunzip initramfs.cpio.gz}}
 
@@ -496,20 +494,21 @@ To extract the uncompressed {{Path|initramfs.cpio}}, you can do so with the foll
 
 {{Cmd|cpio -i -d -H newc --no-absolute-filenames < initramfs.cpio}}
 
-With this, you should have successfully recovered your initramfs structure. 
+With this, you should have successfully recovered your initramfs structure.
 
-=== Files in initramfs unreachable ===
 === Integrated initramfs doesn't always update ===
 
-If your ''initramfs'' is integrated into your kernel (instead of using a separate file), there's a possibility that a `make bzImage` does not actually update it every time. So you might be making changes to your ''initramfs'' but actually keep booting using your old, buggy one. In this case you have to manually delete the integrated image to force the kernel to integrate a fresh ''initramfs'' archive:
+If your ''initramfs'' is integrated into your kernel (instead of using a separate file), there's a possibility that a {{Highlight|make bzImage}} does not actually update it every time. So you might be making changes to your ''initramfs'' but actually keep booting using your old, buggy one. In this case you have to manually delete the integrated image to force the kernel to integrate a fresh ''initramfs'' archive:
 
 {{RootCmd|rm /usr/src/linux/usr/initramfs_data.cpio*}}
 
-Alternatively, you could also `make clean`, but then the entire kernel will need to be recompiled.
+Alternatively, you could also {{Highlight|make clean}}, but then the entire kernel will need to be recompiled.
 
 == Resources ==
 
-* {{Path|/usr/src/linux/Documentation/filesystems/ramfs-rootfs-initramfs.txt}} ([https://www.kernel.org/doc/Documentation/filesystems/ramfs-rootfs-initramfs.txt online version])
+* {{Path|/usr/src/linux/Documentation/filesystems/ramfs-rootfs-initramfs.txt}} ([https://www.kernel.org/doc/Documentation/filesystems/ramfs-rootfs-initramfs.txt on kernel.org])
 * [[Initramfs/HOWTO]]
 * [[Dracut]]
 * [[Genkernel]]
+
+[[Category:Initramfs]]
