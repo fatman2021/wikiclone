@@ -228,6 +228,46 @@ lvm lvchange -a ly VG/Root
 
 Your root partition may then be called {{Path|/dev/VG/Root}} or {{Path|/dev/mapper/VG-Root}}.
 
+=== Software RAID ===
+
+Normally the Linux kernel will automatically scan for any "Linux raid autodetect" partitions (msdos type: fd) and start as many software RAIDs (with 0.90 metadata) as it can find. But if you use an ''initramfs'', the kernel will not automatically scan for RAIDs until it is told to. In the following example instructs the kernel to scan for software RAIDs and start as many as it can find. This will actually start all arrays, not just {{Path|/dev/md0}}:
+
+{{File|/usr/src/initramfs/init||<pre>
+raidautorun /dev/md0
+</pre>}}
+
+{{Note|"Linux raid autodetect" is deprecated and won't work for any recent setups, unless you specifically set up your system with msdos partitions of type "fd" and used 0.90 metadata for your Software RAID.}}
+
+==== mdadm ====
+
+If you are not using "Linux raid autodetect" partitions, or need to do more advanced RAID setup, then you can use mdadm instead. You will need to include the mdadm binary in your initramfs. You can get a static binary by enabling the '''static''' USE-Flag for {{Package|sys-fs/mdadm}}.
+
+Copy the binary {{Path|/sbin/mdadm}} and your {{Path|/etc/mdadm.conf}} into your ''initramfs'':
+
+{{RootCmd
+|cp -a /sbin/mdadm /usr/src/initramfs/sbin
+|cp -a /etc/mdadm.conf /usr/src/initramfs/etc
+}}
+
+{{Note|Use mdadm --detail --scan you do not yet have a {{Path|mdadm.conf}}.}}
+
+Edit the {{Path|mdadm.conf}} in your ''initramfs'' to your liking. An example {{Path|mdadm.conf}} follows:
+
+{{File|/usr/src/initramfs/etc/mdadm.conf||<pre>
+DEVICE /dev/sd?*
+ARRAY /dev/md0 UUID=627125a5:abce6b82:6c738e49:50adadae
+</pre>}}
+
+This {{Path|mdadm.conf}} will scan all {{Path|/dev/sd?*}} devices and assemble the RAID device fitting the UUID 627125a5:abce6b82:6c738e49:50adadae.
+
+{{Note|If your {{Path|mdadm.conf}} has additional conditions such as metadata and name, it may be more practical to remove them. The UUID alone should be sufficient.}}
+
+Now you can initialize your Software RAID in {{Path|/init}}:
+
+{{File|/usr/src/initramfs/init||<pre>
+mdadm --assemble --scan
+</pre>}}
+
 === DM-Crypt ===
 
 If your root partition is LUKS encrypted, you need to include the cryptsetup binary in your ''initramfs''. You can get a static binary by setting the '''static''' USE-Flag for {{Package|sys-fs/cryptsetup}}. Copy it to your ''initramfs'' {{Path|/sbin}} directory. Since cryptsetup also often requires the use of the kernel's random device, include them as well.
@@ -275,8 +315,6 @@ cryptsetup luksClose lukskey
 
 As before, your root partition should then be available as {{Path|/dev/mapper/luksroot}}.
 
-=== Software RAID ===
-==== mdadm ====
 === Networking ===
 ==== Static IP ====
 ==== DHCP ====
