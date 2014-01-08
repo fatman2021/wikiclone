@@ -397,11 +397,114 @@ With this, DNS lookups should now work for you.
 == Troubleshooting ==
 === Multiple initramfs ===
 === Static vs. Dynamic binaries ===
+
+Any custom binaries you need to use in your ''initramfs'' before mounting have to be fully functional, independently from any files you may have installed on your root partition. This is much easier to achieve with static binaries (which usually work as single file) than with dynamic binaries (which need any number of additional libraries to work).
+
+Gentoo provides static binaries for some ebuilds. Check if the ebuild for your binary offers a '''static''' or '''-dynamic''' USE flag. That's by far the easiest method to get a static binary for something, but unfortunately only a select few ebuilds support it.
+
+Many applications also offer static builds with an option in their configure scripts. There is no standard name for the option, it may be --enable-static or similar. When compiling a package manually, check the list of available options with ./configure --help to see if it supports building static binaries for you.
+
+You can check whether or not a binary is static by using the '''ldd''' command (see [[Initramfs/Custom#Applications]] for a usage example). The '''strace''' command is also very useful to find out about additional dependencies (see [[Initramfs/Custom#DNS]] for a usage example).
+
+Including libraries into your ''initramfs'' in order to make a dynamic executable work is a last resort only. It makes the ''initramfs'' much larger and more complicated to maintain than necessary. It also makes the ''initramfs'' harder to maintain, as the dependencies might change with every update of the program in question.
+
 === Kernel panics ===
+
+When working with ''initramfs'' and writing custom init scripts for it, you may experience the following kernel panic on boot:
+
+ Kernel panic - not syncing: Attempted to kill init!
+
+This is not an error in the kernel, but an error in your {{Path|/init}} script. This script is executed as the init process with PID 1. Unlike other processes, the PID 1 init process is special. It is the only process that is started by the kernel on boot. It's the process that takes care of starting other processes (boot process, init scripts) which in turn start other processes (daemons, login prompts, X), which in turn start other processes (bash, window manager, browser, ...). The init process is the mother of all other processes, and therefore it mustn't be killed. On shutdown, it's again the init process that takes care of cleaning up by shutting down other processes first, then running processes that will unmount the filesystems, until it is safe to actually do a shutdown without corrupting anything.
+
+If you have some error in your {{Path|/init}} script, that causes the init process to end, this basically means there are no processes left to run, there is nothing that could take care of cleaning up, and the kernel has no choice but to panic. For this reason there are some things in {{Path|/init}} that you can't do like you can do them in a normal shell script, like using return or exit, or letting the script just run a series of commands and then simply end.
+
+If you want {{Path|/init}} to end, you have to pass the responsibility of the init process to someone else using '''exec'''. See the examples above how '''exec''' is used to either run /sbin/init of the mounted root partition or to run a rescue shell in case something went wrong. 
+
 === Job Control ===
+
+While working with ''initramfs'', especially the [[Initramfs/Custom#Rescue_Shell]], you may come across this message:
+
+ /bin/sh: can't access tty; job control turned off
+
+The lack of Job Control is usually not a problem, since {{Path|/init}} is not supposed to be interactive. However, if you want to work with the Busybox shell on a regular basis, being unable to control programs with {{Key|Ctrl-C}} or {{Key|Ctrl-Z}} can easily become a huge issue. In worst case, if Job Control is not available, and a program refuses to quit, you have to reboot.
+
+The [http://www.busybox.net/FAQ.html#job_control busybox faq] offers some help here. You can either use
+
+{{RootCmd|setsid sh -c 'exec sh </dev/tty1 >/dev/tty1 2>&1'}}
+
+or
+
+{{RootCmd|setsid cttyhack sh}}
+
+to start a shell on tty1 with jobcontrol enabled.
+
 === Salvaging ===
+
+If for whatever reason you lost your {{Path|/usr/src/initramfs}} structure, but you still got either the kernel image with the builtin ''initramfs'', or the separate cpio archive, it's possible to salvage it from there. Although it may be easier to just redo it from scratch - if you've done it once, doing it again should be a piece of cake. So this is just in case. 
+
+{{Warning|The following commands will overwrite files, so you should do all your work in a temporary directory like {{Path|/tmp/initramfs}}.}}
+
 ==== Dismantling the Kernel ====
+
+You can skip this step if your ''initramfs'' is a separate cpio archive already. Otherwise, you'll have to get the built-in cpio archive out of the kernel image. To do that, you have to dismantle it, which isn't easy, since the kernel image is a combination of boot sector and compressed archive itself. It also depends on the compression you are using for your kernel and for your ''initramfs''. For simplicity, this example assumes bzip2 - however, the principle is the same for other compression methods.
+
+The utility of choice when dismantling kernel images is {{Package|app-misc/binwalk}}. In analyzes arbitrary files for known signatures, and prints their offsets. While there are usually a bunch of false matches in the output, it should be easy to pick the correct ones.
+
+{{Cmd|binwalk bzImage|output=<pre>
+DECIMAL   	HEX       	DESCRIPTION
+-------------------------------------------------------------------------------------------------------------------
+15949     	0x3E4D    	bzip2 compressed data, block size = 900k
+3042172   	0x2E6B7C  	LZMA compressed data, properties: 0x9A, dictionary size: 4194304 bytes, uncompressed size: 9439488 bytes
+4433597   	0x43A6BD  	LZMA compressed data, properties: 0xD8, dictionary size: 16777216 bytes, uncompressed size: 4213785 bytes
+8530175   	0x8228FF  	ELF (NetBSD)
+</pre>}}
+
+A less sophisticated method would be to grep for signatures. For bzip2, this is '''BZh'''. For gzip, you can use '''<nowiki>$'\x1f'$'\x8b'</nowiki>'''.
+
+{{Cmd|grep -a -b --only-matching BZh bzImage|output=<pre>
+15949:BZh
+3946909:BZh
+</pre>}}
+
+In this case the offset we are looking for is '''15949''' bytes. Now you can extract the compressed kernel image:
+
+{{Cmd|<nowiki>dd if=bzImage bs=15949 skip=1 | bunzip2 > Image</nowiki>}}
+
+Now, you have the uncompressed kernel image. Somewhere within this image resides the compressed ''initramfs'' archive, so just iterate the previous process to find it. Depending on your kernel configuration, you're looking for another bzip2, gzip, or cpio container.
+
+{{Cmd
+|binwalk Image
+|grep -a -b --only-matching BZh Image}}
+
+Suppose the offset is 171424 bytes this time. Now you can extract the ''initramfs'' cpio archive: 
+
+{{Cmd|<nowiki>dd if=Image bs=171424 skip=1 | bunzip2 > initramfs.cpio</nowiki>}}
+
+If you want to verify that you actually got a cpio archive from that, use file:
+
+{{Cmd|file initramfs.cpio|output=<pre>
+initramfs.cpio: ASCII cpio archive (SVR4 with no CRC)
+</pre>}}
+
 ==== Extracting the cpio archive ====
+
+If your ''initramfs'' cpio archive was a separate file, you have to uncompress it first. 
+
+{{Cmd|gunzip initramfs.cpio.gz}}
+
+To extract the uncompressed {{Path|initramfs.cpio}}, you can do so with the following command. Please note that this overwrites files in the directory you're currently in:
+
+{{Cmd|cpio -i -d -H newc --no-absolute-filenames < initramfs.cpio}}
+
+With this, you should have successfully recovered your initramfs structure. 
+
 === Files in initramfs unreachable ===
 === Integrated initramfs doesn't always update ===
+
+If your ''initramfs'' is integrated into your kernel (instead of using a separate file), there's a possibility that a `make bzImage` does not actually update it every time. So you might be making changes to your ''initramfs'' but actually keep booting using your old, buggy one. In this case you have to manually delete the integrated image to force the kernel to integrate a fresh ''initramfs'' archive:
+
+{{RootCmd|rm /usr/src/linux/usr/initramfs_data.cpio*}}
+
+Alternatively, you could also `make clean`, but then the entire kernel will need to be recompiled.
+
 == Resources ==
