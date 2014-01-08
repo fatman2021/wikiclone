@@ -173,10 +173,77 @@ mount -o ro /dev/sda1 /mnt/root || rescue_shell
 
 ==== Remote Rescue Shell ====
 === Dynamic Devices ===
+
+For populating {{Path|/dev}} dynamically, you can use either devtmpfs or mdev. Please note that the kernel can take some time detecting devices (such as external USB drives), so you may also have to add a {{Highlight|sleep}} statement to your script.
+
 ==== devtmpfs ====
+
+Provided by the kernel, devtmpfs is designed to offer device nodes early at bootup.
+
+{{Kernel|<nowiki>CONFIG_DEVTMPFS=y</nowiki>|<pre>
+Device Drivers  --->
+    Generic Driver Options  --->
+        [*] Maintain a devtmpfs filesystem to mount at /dev
+</pre>}}
+
+You can include the following snippet in your {{Path|/init}} script to have it mount at boot:
+
+{{File|/usr/src/initramfs/init||<pre>
+mount -t devtmpfs none /dev
+</pre>}}
+
+Don't forget to unmount it again in the cleanup phase of the script:
+
+{{File|/usr/src/initramfs/init||<pre>
+umount /dev
+</pre>}}
+
 ==== mdev ====
+
+Alternatively, you can use mdev, the udev replacement of busybox. For mdev to work, you have to make {{Path|/sbin/mdev}} a symlink to {{Path|/bin/busybox}} in your ''initramfs''.
+
+{{RootCmd|ln -s ../bin/busybox /usr/src/initramfs/sbin/mdev}}
+
+Then add the following snippet to your {{Path|/init}}, after mounting {{Path|/proc}} and {{Path|/sys}}: 
+
+{{File|/usr/src/initramfs/init||<pre>
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+mdev -s
+</pre>}}
+
 === LVM ===
+
+If your root partition is located on a logical volume, you need to include the LVM binary in your ''initramfs''. You can get a static binary by enabling the '''static''' USE-Flag for {{Package|sys-fs/lvm2}}. Copy it to your ''initramfs'' {{Path|/sbin}} directory.
+
+{{Note|The static LVM binary may also be called {{Path|/sbin/lvm.static}}. Check with '''ldd''' that you're copying a static binary.}}
+
+{{RootCmd|cp -a /sbin/lvm /usr/src/initramfs/sbin/lvm}}
+
+Now you can enable your LVM root partition in {{Path|/init}}. This example assumes that your volume group is called '''VG''', and your root volume is called '''Root'''. Replace them with the names you chose when creating the volume. 
+
+{{File|/usr/src/initramfs/init||<pre>
+lvm vgscan --mknodes
+lvm lvchange -a ly VG/Root
+</pre>}}
+
+Your root partition may then be called {{Path|/dev/VG/Root}} or {{Path|/dev/mapper/VG-Root}}.
+
 === DM-Crypt ===
+
+If your root partition is LUKS encrypted, you need to include the cryptsetup binary in your ''initramfs''. You can get a static binary by setting the '''static''' USE-Flag for {{Package|sys-fs/cryptsetup}}. Copy it to your ''initramfs'' {{Path|/sbin}} directory. Since cryptsetup also often requires the use of the kernel's random device, include them as well.
+
+{{RootCmd
+|cp -a /dev/{urandom,random} /usr/src/initramfs/dev
+|cp -a /sbin/cryptsetup /usr/src/initramfs/sbin/cryptsetup}}
+
+Now you can unlock your encrypted root partition in {{Path|/init}}:
+
+{{File|/usr/src/initramfs/init||<pre>
+cryptsetup -T 5 luksOpen /dev/sda1 luksroot
+</pre>}}
+
+Once you entered your passphrase, your root partition will be available as {{Path|/dev/mapper/luksroot}}.
+
 ==== GnuPG ====
 ==== Loop Device ====
 === Software RAID ===
