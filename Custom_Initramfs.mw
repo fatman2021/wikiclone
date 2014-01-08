@@ -244,8 +244,37 @@ cryptsetup -T 5 luksOpen /dev/sda1 luksroot
 
 Once you entered your passphrase, your root partition will be available as {{Path|/dev/mapper/luksroot}}.
 
-==== GnuPG ====
-==== Loop Device ====
+==== Encrypted Keyfile ====
+
+If you need encrypted keyfiles, use {{Highlight|cryptsetup}} to encrypt them. It keeps your ''initramfs'' simple as that's the encryption tool you already have - no need to add other binaries. Plus, unlike some of the alternatives, it offers a nice password prompt.
+
+The following example creates a random 512 byte key, encrypted with LUKS, and adds it to your LUKS container {{Path|/dev/sda1}}.
+
+{{Note|Current versions of cryptsetup use 4096 instead of 2056 blocks for LUKS metadata. With the <nowiki>--align-payload=1</nowiki> parameter, it's back to 2056 blocks.
+<br />cryptsetup also offers --keyfile-size and --keyfile-offset options. You can use this for keys with other sizes than 512 bytes, or even multiple keys inside the same LUKS container.}}
+
+{{RootCmd
+|<nowiki>dd if=/dev/zero of=/usr/src/initramfs/root/key.luks count=2057</nowiki>
+|<nowiki>cryptsetup --align-payload=1 luksFormat /usr/src/initramfs/root/key.luks</nowiki>
+|cryptsetup luksOpen /usr/src/initramfs/root/key.luks lukskey
+|<nowiki>dd if=/dev/urandom of=/dev/mapper/lukskey</nowiki>
+|cryptsetup luksAddKey /dev/sda1 /dev/mapper/lukskey}}
+
+Unlocking the root device using this key in your {{Path|/init}} can then be done like this: 
+
+{{File|/usr/src/initramfs/init||<pre>
+# Obtain the key
+cryptsetup -T 5 luksOpen /root/key.luks lukskey
+
+# Unlock the root partition
+cryptsetup --key-file /dev/mapper/lukskey luksOpen /dev/sda1 luksroot
+
+# Clean up the key
+cryptsetup luksClose lukskey
+</pre>}}
+
+As before, your root partition should then be available as {{Path|/dev/mapper/luksroot}}.
+
 === Software RAID ===
 ==== mdadm ====
 === Networking ===
