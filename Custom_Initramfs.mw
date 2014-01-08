@@ -268,6 +268,8 @@ Now you can initialize your Software RAID in {{Path|/init}}:
 mdadm --assemble --scan
 </pre>}}
 
+With this, you should be able to mount your root partition {{Path|/dev/md0}}.
+
 === DM-Crypt ===
 
 If your root partition is LUKS encrypted, you need to include the cryptsetup binary in your ''initramfs''. You can get a static binary by setting the '''static''' USE-Flag for {{Package|sys-fs/cryptsetup}}. Copy it to your ''initramfs'' {{Path|/sbin}} directory. Since cryptsetup also often requires the use of the kernel's random device, include them as well.
@@ -316,9 +318,76 @@ cryptsetup luksClose lukskey
 As before, your root partition should then be available as {{Path|/dev/mapper/luksroot}}.
 
 === Networking ===
+
+If you need networking in your ''initramfs'', all required network related drivers have to be built into your kernel, and you'll have to configure the network interfaces in your {{Path|/init}}. How exactly this has to be done, depends on your network situation. The following sections cover only the most common cases.
+
 ==== Static IP ====
+
+If your network situation allows you to use a static network IP, you can set it up using the {{Highlight|ifconfig}} and {{Highlight|route}} commands, which are included in Busybox. This is by far the easiest solution, so if it's at all possible, go for it.
+
+{{File|/usr/src/initramfs/init||<pre>
+ifconfig eth0 10.0.2.15
+route add default gw 10.0.2.2
+</pre>}}
+
 ==== DHCP ====
+
+To obtain a dynamic IP address from your network's DHCP server, you need a DHCP client. Busybox comes with a minimalistic DHCP client called {{Highlight|udhcpc}}, which is sufficient for most users. Unfortunately, {{Highlight|udhcpc}} has a dependency: it requires the help of a separate script to actually configure the network interface. An example for such a script is included in the Busybox distribution, but it's not installed by Gentoo. You will have to obtain it directly from the Busybox tarball (it's called {{Path|examples/udhcp/simple.script}}) or [http://git.busybox.net/busybox/plain/examples/udhcp/simple.script download it from the Busybox project page].
+
+Copy the script to your initramfs and make it executable.
+
+{{RootCmd
+|cp simple.script /usr/src/initramfs/bin
+|chmod +x /usr/src/initramfs/bin/simple.script}}
+
+Edit the script's first line to read {{Highlight|!#/bin/busybox sh}} or create a symlink for {{Path|/bin/sh}}:
+
+{{RootCmd|ln -s busybox /usr/src/initramfs/bin/sh}}
+
+Now, you can obtain a dynamic IP address for eth0 using DHCP:
+
+{{File|/usr/src/initramfs/init||<pre>
+ifconfig eth0 up
+udhcpc -t 5 -q -s /bin/simple.script
+</pre>}}
+
 ==== DNS ====
+
+Your network should be up and running now. However, that's only if you know exactly which IPs to talk to. If all you have is a host or domain name, it's a different story entirely. In that case, you need to be able to resolve hostnames. Unfortunately, this is where our luck leaves us. Until now, everything could be done with just the static binary of Busybox - however, this is not the case with DNS. 
+
+{{Note|Additional libraries are required to make DNS work.}}
+
+This is because {{Package|sys-libs/glibc}} itself dynamically includes additional libraries for DNS lookups. As long as you don't need that functionality, you're fine, but if you need it, you have no choice but to include those libraries in your ''initramfs''. The only alternative would be building Busybox against another libc such as {{Package|sys-libs/uclibc}}, however that would go beyond the scope of this document. 
+
+This is a good chance to demonstrate how to use {{Package|dev-util/strace}} to reveal such hidden dependencies.
+
+{{Cmd|<nowiki>strace busybox ping wiki.gentoo.org 2>&1 | grep open</nowiki>|output=<pre>
+open("/etc/nsswitch.conf", O_RDONLY|O_CLOEXEC) = 3
+open("/etc/host.conf", O_RDONLY|O_CLOEXEC) = 3
+open("/etc/resolv.conf", O_RDONLY|O_CLOEXEC) = 3
+open("/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+open("/lib64/libnss_files.so.2", O_RDONLY|O_CLOEXEC) = 3
+open("/lib64/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+open("/lib64/ld-linux-x86-64.so.2", O_RDONLY|O_CLOEXEC) = 3
+open("/etc/hosts", O_RDONLY|O_CLOEXEC)  = 3
+open("/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+open("/lib64/libnss_dns.so.2", O_RDONLY|O_CLOEXEC) = 3
+open("/lib64/libresolv.so.2", O_RDONLY|O_CLOEXEC) = 3
+open("/etc/resolv.conf", O_RDONLY|O_CLOEXEC) = 3
+</pre>}}
+
+As you can see, the command accesses quite a lot of files, some of which are mandatory for it to work.
+
+Copy the necessary libraries to your initramfs.
+
+{{RootCmd|cp /lib64/libnss_{dns,files}.so.2 /lib64/{libresolv,ld-linux-x86-64}.so.2 /lib64/libc.so.6 /usr/src/initramfs/lib64}}
+
+Create a {{Path|/etc/resolv.conf}} with at least one nameserver you can use. Note that this may be done automatically for you if you use [[Initramfs/Custom#DHCP]]. 
+
+{{RootCmd|echo nameserver 10.0.2.3 > /usr/src/initramfs/etc/resolv.conf}}
+
+With this, DNS lookups should now work for you. 
+
 === Kernel Modules ===
 === UUID/LABEL Root Mounting ===
 === Bootsplash ===
