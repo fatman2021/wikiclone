@@ -1,3 +1,744 @@
+= Prerequisites =
+This Howto assumes the following are up and running.  Here I use a single vhost configuration file which is made up from all the various module definitions plus a few extras.  If you prefer you should be able to follow the modular approach which is the proper Gentoo way. 
+* Install Apache including a method of authentication, and ideally SSL encryption
+** Disable the default vhosts in /etc/conf.d/apache2
+** Create a separate vhost in /etc/apache2/vhosts.d/ (see below for a sample config file)
+* Install MySQL, with phpmyadmin (always handy) and a root password configured
 
+= Icinga = 
+net-analyzer/icinga-1.10.2  USE="apache2 eventhandler idoutils mysql perl plugins ssl web -contrib -lighttpd -postgres -vim-syntax"
+
+Add some extras:
+* net-analyzer/nagios-check_ipmi_sensor
+* net-analyzer/nagios-check_mysql_health
+* sys-power/apcupsd nls -cgi -gnome -snmp -usb (this failed to compile for me unless I disabled some USE flags)
+* net-analyzer/nagios-plugins-snmp
+
+* Add the apache user to the icinga group and restart Apache:
+{{RootCmd|usermod -G icinga apache
+|/etc/init.d/apache2 restart
+}}
+
+* Amend the CGI configuration as required. Replace all occurrences of "icingaadmin" in the permission settings with a valid user that the web server authenticates or * which means any authenticated user.
+{{File|/etc/icinga/cgi.cfg|Icinga CGI settings changed from defaults|<pre>
+lowercase_user_name=1
+first_day_of_week=1
+date_format=euro
+</pre>
+}}
+
+* Start the daemon
+{{RootCmd|/etc/init.d/icinga start}}
+
+* At this point Icinga should be up and running and the web interface should be usable at https://monitor.example.co.uk/icinga. The localhost should be monitored and probably showing an error for the http service (its switched off - we are only using https here).
+
+{{Note|Some of the Python plugins may need their <nowiki>#!</nowiki> lines changing to force /usr/bin/python2.7 if you have 3.x enabled}}
+
+= IDOUtils =
+
+* Setup the IDO related config
+{{RootCmd|cd /etc/icinga
+|cp ido2db.cfg-sample ido2db.cfg
+|cp idomod.cfg-sample idomod.cfg
+|chown icinga:icinga ido*
+}}
+
+{{RootCmd|cd modules
+|cp idoutils.cfg-sample idoutils.cfg
+|chown icinga:icinga ido*
+}}
+
+* Create the DB. The root password is echoed to the screen so watch out for shoulder surfers.  A log file is spat out at the end.
+{{RootCmd|cd /usr/share/icinga/contrib/db/scripts
+|sh create_mysqldb.sh
+}}
+* Start daemons (The Icinga service will startup ico2db itself)
+{{RootCmd|/etc/init.d/icinga restart}}
+* Check /var/log/icinga.log that IDO is happy
+* Add to default run level
+{{RootCmd|rc-update add ido2db
+|rc-update add icinga
+}}
+
+= Icinga-web =
+* net-analyzer/icinga-web-1.9.0  USE="apache2 mysql pnp -postgres" 
+* rrdtool may need media-fonts/dejavu installing
+
+* Create Database
+{{RootCmd|echo "CREATE DATABASE icinga_web;" | mysql -p 
+|<nowiki>echo "GRANT SELECT,UPDATE,INSERT,DELETE ON icinga_web.* TO 'icinga_web'@'localhost' IDENTIFIED BY 'icinga_web';" | mysql -p</nowiki>
+|<nowiki>echo "FLUSH PRIVILEGES;" | mysql -p</nowiki>
+|<nowiki>cat /usr/share/icinga/icinga-web/contrib/mysql.sql | mysql icinga_web -p</nowiki>
+}}
+
+* Change /etc/apache2/modules.d/00_default_settings.conf and set servertokens to Minimal and restart Apache
+
+* Here we are using the web server to authenticate, so add this section to auth.xml.  I put it after the default section.  It seems to work fine but more research needed to find out exactly how it works.
+{{File|/etc/icinga-web/auth.xml|Icinga-web auth config - Use web server auth|<pre>
+       <setting name="provider">
+
+            <ae:parameter name="http-basic-authentication">
+                 <ae:parameter name="auth_create">true</ae:parameter>
+                 <ae:parameter name="auth_update">true</ae:parameter>
+            </ae:parameter>
+            
+        </setting>
+</pre>
+}}
+
+* At this point you should be able to point your browser at: https://monitor.example.co.uk/icinga-web, connect and see localhost being monitored.  If there is no data in Icinga-Web then ensure that the ido2db service is running
+
+==Admin users ==
+As we are using web server auth, then the root user becomes unavailable.  Edit the database directly to enable another admin user:
+* DB: icinga_web, Table: nsm_user.  Find the user_id corresponding to the user to "upgrade"
+* In the nsm_user_role table, add two additional entries for that user_id with role_id = 2 and 3
+* Log the user out and in again and the admin menu should appear
+{{Note|To clear the Icinga-web cache: {{RootCmd|/usr/share/icinga/icinga-web/bin/clearcache.sh}} }}
+{{Note| WIP (from ebuild output): Please note that the magic_quotes_gpc setting must be disabled (in both apache and cli php.ini) }}
+
+= PNP4Nagios =
+The pnp USE flag for icinga-web pulls in PNP4nagios
+Bulk Mode with npcdmod - this means minimal extra configuration within Icinga.  A module is loaded and that grads the process data and passes it to a daemon called npcd. npcd then proceesses that data and puts it into the rrds for the web interface
+
+* Create rra config, no need to edit this, defaults are fine
+{{RootCmd|cd /etc/pnp/
+|cp rra.cfg-sample rra.cfg
+}}
+
+* Edit npcd config
+{{File|/etc/pnp/npcd.cfg|NPCD config changes|<pre>
+# Changed from default (/var/lib/perfdata.dump) - JG 13 Aug 2013
+perfdata_file = /var/spool/npcdmod/prefdata.dump
+</pre>
+}}
+
+* Create a directory for npcdmod which runs from within Icinga to dump its data file into, npcd then gets data from there and processes it
+{{RootCmd|mkdir /var/spool/npcdmod/
+|chown icinga:icinga /var/spool/npcdmod/
+}}
+
+* Site local changes are made in config_local.php, leave all the other config files alone.  On upgrades diff against them for any new parameters and add to the local config as needed.  The ebuild correctly sets icinga perfdata but does not set nagios_base correctly
+{{File|/etc/pnp/config_local.php|PNP config file changes|<pre>
+# Default was for Nagios JG 13 Aug 2013
+$conf['nagios_base'] = "/icinga/cgi-bin";
+</pre>
+}}
+
+* Create the PNP module configuration
+{{File|/etc/icinga/modules/pnp.cfg|PNP broker module configuration|<pre>
+define module{                                                                                                                                                                   
+        module_name     npcdmod                                                                                                                                                  
+        module_type     neb                                                                                                                                                      
+        path            /usr/lib/npcdmod.o                                                                                                                                       
+        args            config_file=/etc/pnp/npcd.cfg                                                                                                                            
+    }
+</pre>
+}}
+
+* Amend icinga config to process prefdata
+{{File|/etc/icinga/icinga.cfg|Icinga config file changes|<pre>
+process_performance_data=1
+</pre>
+}}
+
+* Setup the npcd service
+{{RootCmd|rc-update add npcd default
+|/etc/init.d/npcd start
+}}
+
+* Restart the icinga service to enable the module and start gathering data
+{{RootCmd|/etc/init.d/icinga restart}}
+
+* Wait for a while for the graphs to be generated and start filling with data - this will take at least five minutes.  You should see that npcd is mentioned in /var/log/icinga/icinga.log.  Look for "npcdmod: Ready to run to have some fun!"
+** Icinga-web: Expand the heading on a host or service (little blue square icon with an arrow) there should be a PNP section with links to the graphs.  
+** Icinga classic does not have built in support for PNP as such but the extra actions can be configured in a template for this which is not covered here.
+
+{{Warning|Problem with Pango seemingly needing to access /root/? - a reboot fixes it! Do not try to chmod the path in the error to work around this fault. This manifests itself as a large dark red graph error.  TODO - better fix required.}}
+
+== Debugging PNP ==
+Debugging pnp can be hard.  A script is available to help:
+<pre>
+cd /usr/src 
+wget http://verify.pnp4nagios.org/verify_pnp_config
+perl verify_pnp_config -c /etc/icinga/icinga.cfg -m npcdmod -p /etc/pnp/
+</pre>
+I think that the script requires you to explicitly state the module using the broker_module parameter within the icinga.cfg, so you may have to convert back to that temporarily to run this test.
+
+= mk-livestatus =
+The Nagvis developers have deprecated using the ndomy driver and only recommend using mk-livestatus
+
+* Create this module config file
+{{File|/etc/icinga/modules/mk-livestatus.cfg|mk-livestatus module config for icinga|<pre>
+define module{
+        module_name    mklivestatus
+        path           /usr/lib/mk-livestatus/livestatus.o
+        module_type    neb
+        args           /var/lib/icinga/rw/live
+        }
+</pre>
+}}
+
+* Restart Icinga
+{{RootCmd|/etc/init.d/icinga restart}}
+
+* Check /var/log/icinga/icinga.log for this: "livestatus: Finished initialization. Further log messages go to /var/log/icinga/livestatus.log"
+
+= Nagvis =
+Nagviz in Portage lags upstream quite badly - its the only package used here that does this. So I use a local ebuild.  See below for how to create this. If Portage catches up then ignore that step and install directly.
+
+* Create config from sample
+{{RootCmd|cp /etc/nagvis/nagvis.ini.php-sample /etc/nagvis/nagvis.ini.php}}
+
+* Set some permissions
+{{RootCmd|chown apache /var/nagvis
+|mkdir /etc/nagvis/profiles
+|chown apache /etc/nagvis/profiles
+}}
+
+* Edit config
+{{File|/etc/nagvis/nagvis.ini.php| Snippets from Nagvis config|<pre>
+; This will make new users into admins by default.  Login with each user you want to be a manager and then revert it to Guests
+; After that a manager can maintain the permissions from within the application
+; See http://docs.nagvis.org/1.7/en_US/index.html
+logonmodule="LogonMixed"
+logonenvvar="REMOTE_USER"
+logonenvcreateuser="1"
+logonenvcreaterole=""Administrators"
+
+; Disable the demo maps
+;maps="demo-germany,demo-ham-racks,demo-load,demo-muc-srv1,demo-geomap,demo-automap"
+
+[paths]
+base="/usr/share/nagvis/"
+htmlbase="/nagvis"
+htmlcgi="/icinga/cgi-bin"
+
+[defaults]
+backend="live_1"
+
+[backend_live_1]
+backendtype="mklivestatus"
+socket="unix:/var/lib/icinga/rw/live"
+</pre>
+}}
+
+* Remove demo data (put them somewhere for reference)
+{{RootCmd|mv /etc/nagvis/maps/*.cfg /tmp/}}
+
+* Create a simple map - as you add systems to Icinga, this map will grow with it.
+{{File|/etc/nagvis/maps|Example map|<pre>
+define global {
+object_id=0
+sources=automap
+width=1440
+height=950
+iconset=std_medium
+render_mode=radial
+}
+</pre>
+}}
+
+* Set permissions
+{{RootCmd|chown -r apache:apache /etc/nagvis/maps}}
+
+* Test it - https://monitor.example.co.uk/nagvis.  You should go straight though using web server authentication and become an admin.  To reset the permissions, you can delete /etc/nagvis/auth.db - it will be recreated from scratch for you. Change logonenvcreaterole in nagvis.ini.cfg to change how future users will be created.
+
+{{Warning|TODO - whats the error that flashes up quickly before accessing each page [[User:Gerdesj|Gerdesj]] ([[User talk:Gerdesj|talk]]) 14:59, 10 January 2014 (UTC)}}
+
+* Add a cronk to display Nagviz in icinga-web
+{{File|/etc/icinga-web/cronks.xml|Icinga-web cronk snippet for Nagvis in an iFrame|<pre>
+             <cronk name="iFrameViewNagvis">
+                <ae:parameter name="module">Cronks</ae:parameter>
+                <ae:parameter name="action">System.IframeView</ae:parameter>
+                <ae:parameter name="hide">false</ae:parameter>
+                <ae:parameter name="description">Nagvis Maps views</ae:parameter>
+                <ae:parameter name="name">Nagvis Display</ae:parameter>
+                <ae:parameter name="image">cronks.Info2</ae:parameter>
+                <ae:parameter name="categories">data</ae:parameter>
+                <ae:parameter name="position">310</ae:parameter>
+                <ae:parameter name="ae:parameter">
+                    <ae:parameter name="url"><![CDATA[/nagvis/frontend/nagvis-js/]]></ae:parameter>
+                    <ae:parameter name="user">admin</ae:parameter>
+                    <ae:parameter name="password">admin</ae:parameter>
+                </ae:parameter>
+            </cronk>
+ </pre>
+}}
+* Clear the cache to enable the new cronk
+{{RootCmd|<nowiki>/usr/share/icinga/icinga-web/bin/clearcache.sh</nowiki>}}
+
+{{Note|Graphviz - This is pulled in further up the install. Make sure gts USE flag is switched on for triangulation library.  This enables several of the layout algorithms.}}
+
+= Icinga Mobile =
+''' Work in progress '''
+* Install a JVM first eg dev-java/oracle-jdk-bin
+* Homepage: https://www.icinga.org/about/icinga-mobile/
+(Broken - FIXME: https://icinga.org/display/howtos/Setting+up+Icinga+Mobile)
+
+<pre>
+cd icinga-mobile
+autoconf
+</pre>
+
+* Generate an API key in Icinga web 
+* Edit lib/Model/IcingaConfiguration.js and set the apikey
+* Install the web app
+<pre>
+./configure --with-web-user=apache --with-web-group=apache --with-web-apache-path=/etc/apache2/modules.d --prefix=/usr/local/icinga-mobile
+make
+make install
+make install-apache-config
+/usr/bin/install -c -b -m 664 -o apache -g apache etc/apache/icinga-mobile.conf /etc/apache2/modules.d/icinga-mobile.conf
+</pre>
+
+* Point your browser at https://monitor.example.co.uk/m
+
+= NagiosQL =
+* Download and untar source, patch with SP2.
+* Move to /var/www/localhost/htdocs
+* Symlink to ./nagiosql
+* Set date.timezone in php.ini
+{{File|/etc/php/apache2/php.ini|Snippet from php.ini|<pre>
+[Date]
+date.timezone = Europe/London
+</pre>
+}}
+* Create /etc/icinga/nagiosql and chown icinga:icinga and chmod g+s
+* Temporary: chown apache:apache /var/www/localhost/htdocs/nagiosql/config
+* Run the setup wizard: https:// /nagiosql
+* Set NagiosQL path values:
+** Config: /etc/icinga/nagiosql and /etc/icinga
+* Remove the install directory
+* Temp disable the http -> https redirection so that you can login and amend the config, reload apache.  You will need to amend the browser URL to set https:
+<pre>Administration -> Settings -> Server protocol -> https</pre>
+* Put the redirector back and reload apache
+* NagiosQL needs to write to this directory - this may need to be fixed every time Icinga is upgraded:
+{{RootCmd|<nowiki>chmod g+w /var/lib/icinga/spool/checkresults</nowiki>}}
+* Change Icinga over to using the objects defined in NagiosQL in /etc/icinga/icinga.conf.  Set this from within the web GUI itself 
+<pre>Administration -> Config Targets -> localhost</pre>
+
+= Notes =
+* Snags with Pango seemingly needing to access /root/? - reboot fixes it!  This manifests itself as graph errors when accessing PNP4Ngios pages 
+* Handy SQL - use in phpmyadmin:
+** Find/Replace:
+<pre>UPDATE  `tbl_host` SET  `alias` = REPLACE(  `alias` ,  'A string',  'Another string' )</pre>
+* Embedded Perl (ePN).  If you enable this note that Icinga prefers this to disable it (rather than nagios):
+<pre># icinga: -epn</pre>
+
+== Sample Apache configuration ==
+The following sample Apache vhost configuration includes settings for mod_auth_kerb and SSL.  Replace monitor and example.co.uk and make sure the SSLCert lines correspond to your environment.  Note use of SetEnvIf to automatically "login" certain systems with a username where Kerberos fails - handy for automated systems to access this web server without having to be Kerberized.  Replace the authentication settings in the Location / section for your environment.  
+
+{{File|/etc/conf.d/apache2|Snippet from Apache startup configuration file|<pre>
+APACHE2_OPTS="-D INFO -D SSL -D LANGUAGE -D PHP5 -D AUTH_KERB"
+</pre>}}
+
+{{File|/etc/apache2/vhosts.d/10_mon.conf|Sample Icinga and addons Apache vhost definition|<pre>
+# Monitoring
+# JG 9 Aug 2013
+
+Listen 443
+
+<VirtualHost _default_:443>
+
+    DocumentRoot "/var/www/localhost/htdocs"
+    ServerName   monitoring.example.co.uk:443
+    ServerAdmin  admin@example.co.uk
+      
+    ErrorLog     /var/log/apache2/mon_error_log
+    TransferLog  /var/log/apache2/mon_access_log
+  
+    SSLEngine           on
+    SSLHonorCipherOrder On
+    SSLCipherSuite      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
+      
+    SSLCertificateFile      /etc/apache2/ssl/server.crt
+    SSLCertificateKeyFile   /etc/apache2/ssl/server.key
+
+# Authorization/Authentication
+    <Location />
+        AuthType Kerberos
+        AuthName "Login"
+        Krb5Keytab /etc/krb5.keytab
+        KrbAuthRealms EXAMPLE.CO.UK
+        KrbMethodNegotiate On
+        KrbMethodK5Passwd On                                                                                                                                                                         
+        KrbServiceName HTTP/monitor@EXAMPLE.CO.UK
+
+        Require valid-user                                                                                                                                                                           
+
+        Order allow,deny
+        Allow from 127.0.0.1
+
+        Satisfy any
+
+        SetEnvIf Remote_Addr 127\.0\.0\.1 REMOTE_USER=Mon
+
+    </Location>
+
+    <Directory "/var/www/localhost/htdocs">
+        Options Indexes FollowSymlinks
+        AllowOverride All
+        Order allow,deny
+        Allow from all
+    </Directory>
+
+    ScriptAlias /cgi-bin/ "/var/www/localhost/cgi-bin/"
+
+    <Directory "/var/www/localhost/cgi-bin">
+        AllowOverride None
+        Options None
+        Order allow,deny
+        Allow from all
+    </Directory>
+
+# Icinga
+    ScriptAlias /icinga/cgi-bin/ /usr/lib/icinga/cgi-bin/
+    Alias /icinga /usr/share/icinga/htdocs
+
+    <Directory "/usr/share/icinga/htdocs/">
+        Order allow,deny
+        Allow from all
+    </Directory>
+
+    <Directory "/usr/lib/icinga/cgi-bin/">
+        Options ExecCGI
+        Order allow,deny
+        Allow from all
+    </Directory>
+
+#### icinga-Web - taken from the module
+# Matching for module stylesheet and images
+AliasMatch "^/icinga-web/modules/([A-Za-z0-9]+)/resources/styles/([A-Za-z0-9]+\.css)$" "/usr/share/icinga/icinga-web/app/modules/$1/pub/styles/$2"
+AliasMatch "^/icinga-web/modules/([A-Za-z0-9]+)/resources/images/([A-Za-z_\-0-9]+\.(?:png|gif|jpg))$" "/usr/share/icinga/icinga-web/app/modules/$1/pub/images/$2"
+
+# Matching for Icinga Web and the ext3 framework
+Alias /icinga-web/js/ext3/ /usr/share/icinga/icinga-web/lib/ext3/
+Alias /icinga-web/ /usr/share/icinga/icinga-web/pub/
+RedirectMatch "^/icinga-web$" /icinga-web/
+
+# Access to where the styles are located
+<DirectoryMatch "^/usr/share/icinga/icinga-web/app/modules/\w+/pub/styles/">
+    Options -Indexes -MultiViews
+
+    Order allow,deny
+    Allow from all
+
+</DirectoryMatch>
+
+# Access to where the images are located
+<DirectoryMatch "^/usr/share/icinga/icinga-web/app/modules/\w+/pub/images/">
+    Options -Indexes -MultiViews
+
+    Order allow,deny
+    Allow from all
+
+</DirectoryMatch>
+
+# Access to the ext3 library
+<Directory "/usr/share/icinga/icinga-web/lib/ext3/">
+    Options -Indexes -MultiViews
+
+    Order allow,deny
+    Allow from all
+
+</Directory>
+
+# Access to the public web folder of Icinga Web
+<Directory "/usr/share/icinga/icinga-web/pub/">
+    DirectoryIndex index.php
+    Options -MultiViews -Indexes +FollowSymLinks
+
+    RewriteEngine On
+    # /icinga-web is base for all rewrite rules
+    RewriteBase /icinga-web
+
+    # If the requested URL does not exist (it's likely an agavi route),
+    # pass it as path info to index.php, the Agavi dispatch script.
+    RewriteRule ^$ index.php?/ [QSA,L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ".*" index.php?/$0 [QSA,L]
+
+    <IfModule mod_deflate.c>
+        # Insert filter
+        SetOutputFilter DEFLATE
+
+        # Netscape 4.x has some problems...
+        BrowserMatch ^Mozilla/4 gzip-only-text/html
+
+        # Netscape 4.06-4.08 have some more problems
+        BrowserMatch ^Mozilla/4\.0[678] no-gzip
+
+        # MSIE masquerades as Netscape, but it is fine
+        BrowserMatch \bMSIE !no-gzip !gzip-only-text/html
+        # Don't compress images
+        SetEnvIfNoCase Request_URI \
+        \.(?:gif|jpe?g|png)$ no-gzip dont-vary
+
+        # Make sure proxies don't deliver the wrong content
+        <IfModule mod_headers.c>
+            Header append Vary User-Agent env=!dont-vary
+        </IfModule>
+    </IfModule>
+
+
+    <IfDefine APACHE2>
+        AcceptPathInfo On
+    </IfDefine>
+
+    Order allow,deny
+    Allow from all
+
+</Directory>
+# /icinga-web
+
+# PNP4Nagios
+    Alias /pnp4nagios /usr/share/pnp/
+
+    <Directory /usr/share/pnp>
+        AllowOverride AuthConfig
+
+        Order allow,deny
+        Allow from all
+
+        RewriteEngine On
+        Options FollowSymLinks
+
+        RewriteBase /pnp4nagios
+
+        # Protect application and system files from being viewed
+        RewriteRule ^(application|modules|system) - [F,L]
+        # Allow any files or directories that exist to be displayed directly
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        # Rewrite all other URLs to index.php/URL
+        RewriteRule .* index.php/$0 [PT,L]
+    </Directory>
+
+# /PNP4Nagios
+
+# Nagvis
+    Alias /nagvis "/usr/share/nagvis/"
+
+    <Directory "/usr/share/nagvis/">
+
+        Options FollowSymLinks
+        AllowOverride None
+        Order allow,deny
+        Allow from all
+
+    </Directory>
+# /Nagvis
+
+# Icinga Mobile
+Alias /m /usr/local/icinga-mobile/
+
+<Directory /usr/local/icinga-mobile/>
+        DirectoryIndex index.html
+        Options FollowSymLinks
+        AllowOverride all
+        Order allow,deny
+        Allow from all
+</Directory>
+# /Icinga Mobile
+
+</VirtualHost>
+</pre>
+}}
+
+== Local ebuild for Nagvis ==
+I cobbled this together from the existing ebuild and it works OK for me.
+
+* Create a local overlay directory structure
+{{RootCmd|mkdir -p /usr/local/portage/net-analyzer/nagvis/files
+|mkdir /usr/local/portage/metadata
+|mkdir /usr/local/portage/profiles
+}}
+* Name the repo
+{{File|/usr/local/portage/profiles/repo-name|Overlay name|<pre>
+local-repo
+</pre>}}
+* Set layout
+{{File|/usr/local/portage/metadata/layout.conf|Overlay layout file|<pre>
+masters=gentoo
+</pre>
+}}
+
+* Ebuild files
+{{File|/usr/local/portage/net-analyzer/nagvis/nagvis-1.7.10.ebuild|Ebuild|<pre>
+# Copyright 1999-2009 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: $
+
+EAPI=4
+
+inherit eutils confutils depend.php depend.apache
+
+DESCRIPTION="NagVis is a visualization addon for the well known network managment system Nagios."
+HOMEPAGE="http://www.nagvis.org/"
+SRC_URI="mirror://sourceforge/${PN}/${P}.tar.gz"
+
+LICENSE="GPL-2"
+SLOT="0"
+KEYWORDS="~amd64 ~ppc ~x86"
+IUSE="apache2"
+
+DEPEND=""
+RDEPEND="|| ( net-analyzer/nagios net-analyzer/icinga )
+        apache2? ( dev-lang/php[apache2] )
+        >=media-gfx/graphviz-2.14
+        net-analyzer/mk-livestatus
+        dev-lang/php[gd,nls,json,session,pdo,sqlite,sockets,mysql,unicode,xml]"
+
+need_php_httpd
+want_apache2
+
+pkg_setup() {
+        confutils_require_built_with_all dev-lang/php gd nls json session pdo sqlite sockets mysql unicode xml
+        depend.apache_pkg_setup
+}
+
+src_prepare() {
+        epatch "${FILESDIR}"/${P}-base-path.patch
+        epatch "${FILESDIR}"/${P}-global-definitions.patch
+        grep -Rl "/usr/local" "${S}"/* | xargs sed -i s:/usr/local:/usr:g ||die
+        sed -i s:@NAGVIS_WEB@:/nagvis:g "${S}"/etc/apache2-nagvis.conf-sample ||die
+        sed -i s:@NAGVIS_PATH@:/usr/share/nagvis/:g "${S}"/etc/apache2-nagvis.conf-sample ||die
+        sed -i s:/usr/nagios/var/rw/live:/var/nagios/rw/live:g "${S}"/etc/nagvis.ini.php-sample ||die
+}
+
+src_install() {
+        dodoc README INSTALL
+
+        insinto /usr/share/nagvis
+        doins -r share/{config.php,index.php,frontend,netmap,server,userfiles}
+        doins -r docs
+
+        diropts -o apache -g root
+        dodir /var/nagvis/tmpl/{cache,compile}
+        diropts
+        dosym /var/nagvis /usr/share/nagvis/var
+
+        if use apache2 ; then
+                insinto "${APACHE_MODULES_CONFDIR}"
+                newins etc/apache2-nagvis.conf-sample 98_${PN}.conf
+        fi
+
+        insinto /etc/nagvis
+        doins -r etc/{conf.d,geomap,.htaccess,nagvis.ini.php-sample}
+        fowners apache:root /etc/nagvis
+        fperms 0664 /etc/nagvis/nagvis.ini.php-sample
+        dosym /etc/nagvis /usr/share/nagvis/etc
+
+        diropts -o apache -g root -m0775
+        insopts -o apache -g root -m0664
+        doins -r etc/maps
+        diropts
+        insopts
+
+        # move image maps dir from usr to var and symlink it back
+        dodir /var/nagvis/userfiles/images
+        mv "${D}"/usr/share/nagvis/userfiles/images/maps "${D}"/var/nagvis/userfiles/images/ ||die
+        fowners apache:root /var/nagvis/userfiles/images/maps
+        dosym /var/nagvis/userfiles/images/maps /usr/share/nagvis/userfiles/images/maps
+}
+
+pkg_postinst() {
+        elog "Before running NagVis for the first time, you will need to set up"
+        elog "/etc/nagvis/nagvis.ini.php"
+        elog "A sample is in"
+        elog "/etc/nagvis/nagvis.ini.php-sample"
+        if use apache2 ; then
+                elog
+                elog "For web interface make sure to add -D NAGVIS to APACHE2_OPTS in"
+                elog "/etc/conf.d/apache2 and to restart apache2. A default configuration"
+                elog "has been placed at /etc/apache2/modules.d/98_${PN}.conf"
+        fi
+        elog ""
+        elog "Default user/password are: nagiosadmin/nagiosadmin"
+        elog "                                 guest/guest"
+}
+</pre>
+}}
+
+{{File|/usr/local/portage/net-analyzer/nagvis/files/nagvis-1.7.10-global-definitions.patch|patch 1|<pre>
+--- a/share/server/core/defines/global.php      2013-07-17 14:40:39.768577131 +0200
++++ b/share/server/core/defines/global.php      2013-07-17 14:41:44.492006012 +0200
+@@ -65,7 +65,7 @@
+ define('DEBUGLEVEL', 6);
+ 
+ // Path to the debug file
+-define('DEBUGFILE', '../../../var/nagvis-debug.log');
++define('DEBUGFILE', '../../var/nagvis-debug.log');
+ 
+ // It is possible to define a conf.d directory for splitting the main
+ // configuration in several files. Only the values defined in the CONST_MAINCFG
+@@ -79,14 +79,14 @@
+ // The last value wins.
+ //
+ // Path to the main configuration file
+-define('CONST_MAINCFG', '../../../etc/nagvis.ini.php');
+-define('CONST_MAINCFG_CACHE', '../../../var/nagvis-conf');
++define('CONST_MAINCFG', '../../etc/nagvis.ini.php');
++define('CONST_MAINCFG_CACHE', '../../var/nagvis-conf');
+ 
+ // Path to the main configuration conf.d directory
+-define('CONST_MAINCFG_DIR', '../../../etc/conf.d');
++define('CONST_MAINCFG_DIR', '../../etc/conf.d');
+ 
+ // The directory below the NagVis root which is shared by the webserver
+-define('HTDOCS_DIR', 'share');
++define('HTDOCS_DIR', '');
+ 
+ // Needed minimal PHP version
+ define('CONST_NEEDED_PHP_VERSION', '5.0');
+</pre>
+}}
+
+{{File|/usr/local/portage/net-analyzer/nagvis/files/nagvis-1.7.10-base-path.patch|Patch 2|<pre>
+--- a/share/server/core/classes/GlobalMainCfg.php       2013-07-17 14:37:00.475733872 +0200
++++ b/share/server/core/classes/GlobalMainCfg.php       2013-07-17 14:37:46.745756044 +0200
+@@ -1391,8 +1391,8 @@
+      * @author Roman Kyrylych <rkyrylych@op5.com>
+      */
+     private function getBasePath() {
+-        // Go 3 levels up from nagvis/share/nagvis to nagvis base path
+-        return realpath(dirname($_SERVER['SCRIPT_FILENAME']) . '/../../..') . '/';
++        // Go 2 levels up from share/nagvis to nagvis base path
++        return realpath(dirname($_SERVER['SCRIPT_FILENAME']) . '/../..') . '/';
+         // Note: the method below causes problems when <docroot>/nagvis is a symlink to <nagvis-base>/share
+         // return realpath(dirname(dirname(dirname($_SERVER['SCRIPT_FILENAME'])))).'/';
+     }
+
+</pre>
+}}
+
+* Digest the ebuild
+{{RootCmd|ebuild /usr/local/portage/net-analyzer/nagvis/nagvis-1.7.10.ebuild digest}}
+
+* Add the repo to Portage
+{{File|/etc/portage/make.conf|Standard Gentoo make.conf snippet|<pre>
+PORTDIR_OVERLAY="/usr/local/portage"
+</pre>
+}}
+
+* If you use eix then update its database
+{{RootCmd|eix-update}}
+
+* You should now be able to:
+{{RootCmd|emerge -va nagvis|output=<pre>
+These are the packages that would be merged, in order:
+
+Calculating dependencies... done!
+[ebuild  N     ] net-analyzer/nagvis-1.7.10::x-portage  USE="apache2" 0 kB
+
+Total: 1 package (1 new), Size of downloads: 0 kB
+
+Would you like to merge these packages? [Yes/No] 
+</pre>
+}}
+
+= References =
+* Links to docs for Icinga are provided from within the classic web and icinga web interface
 
 [[Category:Monitoring]]
