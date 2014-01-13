@@ -1,0 +1,177 @@
+<languages />
+
+{{Metadata|abstract=Distcc is a program designed to distribute compiling tasks across a network to participating hosts. It is comprised of a server, distccd, and a client program, distcc. Distcc can work transparently with ccache, Portage, and Automake with a little setup.}}
+
+[http://distcc.samba.org Distcc] is a program designed to distribute compiling tasks across a network to participating hosts. It is comprised of a server, <code>distccd</code>, and a client program, <code>distcc</code>. Distcc can work transparently with [http://ccache.samba.org ccache], Portage, and Automake with a little setup. 
+
+If you are planning on using distcc to help you bootstrap a Gentoo installation, make sure you read the section [[#Using_Distcc_to_Bootstrap|Using Distcc to Bootstrap]]. 
+
+== Setup ==
+
+=== Dependencies ===
+
+In order to use Distcc, all of the computers on your network need to have the same GCC versions. For example, mixing 3.3.x (where the x varies) is okay, but mixing 3.3.x with 3.2.x '''may''' result in compilation errors or runtime errors. 
+
+=== Installing Distcc ===
+
+There are a couple of options you should be aware of before you start installing distcc. 
+
+Distcc ships with a graphical monitor to monitor tasks that your computer is sending away for compilation. If you use Gnome then put 'gnome' in your USE flags. However, if you don't use Gnome and would still like to have the monitor then you should put 'gtk' in your USE flags. 
+
+{{Emerge|distcc}}
+
+{{Important|Remember, you must be sure to install distcc on all of your participating machines.}}
+
+=== Setting up Portage to use Distcc ===
+
+Setting up Portage to use distcc is easy. Execute the following steps on each system that should participate in the distributed compiling: 
+
+{{Emerge|distcc}}
+
+Now, set the <code>MAKEOPTS</code> variable and <code>FEATURES</code> variable as shown below.
+A common strategy is to set N as twice the number of total (local + remote) CPUs + 1 and M as number of local CPUs. In case distcc hosts are not available, or the ebuild requires local-only compile (e.g. gcc), <code>-lM</code> flag this will prevent spawning too many tasks.
+
+{{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
+MAKEOPTS="-jN -lM"
+FEATURES="distcc"
+</pre>
+}}
+
+=== Specifying Participating Hosts ===
+
+Use the <code>distcc-config</code> command to set the list of hosts. Here is an example of some hosts that might be in your list: 
+
+{{Code|Examples of host definitions|<pre>
+192.168.0.1          192.168.0.2                       192.168.0.3
+192.168.0.1/2        192.168.0.2                       192.168.0.3/10
+192.168.0.1:4000/2   192.168.0.2/1                     192.168.0.3:3632/4
+@192.168.0.1         @192.168.0.2:/usr/bin/distccd     192.168.0.3
+</pre>
+}}
+
+There are also several other methods of setting up hosts.  See the distcc manpage for more details.
+
+If you wish to compile on the local machine you should put 'localhost' in the hosts list.  Conversely if you do not wish to use the local machine to compile (which is often the case) omit it from the hosts list.  On a slow machine using localhost may actually slow things down. Make sure to test your settings for performance.
+
+It may all look complicated, but in most cases a variant of line 1 or 2 will work. 
+
+Since most people won't be using lines 3 or 4, I'll [http://distcc.samba.org/man/distcc_1.html refer to] the distcc docs (man distcc) for more information, which includes being able to run distcc over an SSH connection. 
+
+For instance, to set the first line in the previous example: 
+
+{{RootCmd|/usr/bin/distcc-config --set-hosts "192.168.0.1 192.168.0.2 192.168.0.3"}}
+
+Edit {{Path|/etc/conf.d/distccd}} to your needs and be sure to set the <code>--allow</code> directive to allow only hosts you trust. For added security, you should also use the <code>--listen</code> directive to tell the distcc daemon what IP to listen on (for multi-homed systems). More information on distcc security can be found at [http://distcc.samba.org/security.html Distcc Security Design] . 
+
+{{Important|It is important to use --allow and --listen. Please read the distccd manpage or the above security document for more information.}}
+
+Now start the distcc daemon on all the participating computers: 
+
+{{RootCmd|rc-update add distccd default
+|/etc/init.d/distccd start}}
+
+=== Setting up Distcc to Work With Automake ===
+
+This is, in some cases, easier than the Portage setup. What you have to do is update your <code>PATH</code> variable to include {{Path|/usr/lib/distcc/bin}} in front of the directory that contains <code>gcc</code> ( {{Path|/usr/bin}} ). However, there is a caveat. If you use ccache you have to put distcc after the ccache part: 
+
+{{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
+
+You can put this in your {{Path|~/.bashrc}} or equivalent file to have the PATH set every time you log in.
+
+Then, as you would normally type <code>make</code> , you would type <code>make -jN</code> (where N is an integer). The value of N depends on your network and the types of computers you are using to compile. Test your own settings to find the number that yields the best performance. 
+
+== Cross-Compiling ==
+
+Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a Sparc to build a program for a ppc. This is documented in our [[Distcc/Cross-Compiling|DistCC Cross-compiling Guide]] .
+
+== Using Distcc to Bootstrap ==
+
+=== Step 1: Configure Portage ===
+
+Boot your new box with a Gentoo Linux LiveCD and follow the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 installation instructions] up until the bootstrapping part. (See the [http://www.gentoo.org//doc/en/faq.xml#stage12 Gentoo FAQ] for more information about bootstrapping.) Then configure Portage to use distcc: 
+
+{{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
+FEATURES="distcc"
+MAKEOPTS="-jN"
+</pre>
+}}
+
+{{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
+
+=== Step 2: Getting Distcc ===
+
+Install distcc: 
+
+{{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
+
+=== Step 3: Setting Up Distcc ===
+
+Run <code>distcc-config --install</code> to setup distcc; substitute <code>host*</code> with the IP addresses or hostnames of the participating DistCC nodes.
+
+{{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
+
+Distcc is now set up to bootstrap! Continue with the official installation instructions and ''do not forget'' to re-emerge distcc after <code>emerge system</code> . This is to make sure that all of the dependencies you want are installed as well. 
+
+{{Note|During bootstrap and <code>emerge system</code> distcc may not appear to be used. This is expected as some ebuilds do not work well with distcc, so they intentionally disable it.}}
+
+== Troubleshooting ==
+
+=== Some Packages Don't Use Distcc ===
+
+As you emerge various packages, you'll notice that some of them aren't being distributed (and aren't being built in parallel). This may happen because the package's Makefile doesn't support parallel operations or the maintainer of the ebuild has explicitly disabled parallel operations due to a known problem. 
+
+Sometimes distcc might cause a package to fail to compile. If this happens for you, please [http://bugs.gentoo.org report] it to us. 
+
+=== Mixed GCC Versions ===
+
+If you have different GCC versions on your hosts, there will likely be very weird problems. The solution is to make certain all hosts have the same GCC version. 
+
+Recent Portage updates have made Portage use <code>${CHOST}-gcc</code> instead of <code>gcc</code> . This means that if you're mixing i686 machines with other types (i386, i586) you will run into problems. A workaround for this may be to <code>export CC='gcc' CXX='c++'</code> or to put it in {{Path|/etc/portage/make.conf}} . 
+
+{{Important|Doing this explicitly redefines some behavior of Portage and may have some weird results in the future. Only do this if you're mixing CHOSTs.}}
+
+=== -march=native ===
+
+Starting with GCC 4.3.0, the compiler supports the <code>-march=native</code> switch which turns on CPU autodetection and optimizations that are worth being enabled on the processor the GCC is running at. This is a problem with <code>distcc</code> as it allows mixing of code optimized for different processors (like AMD Athlon and Intel Pentium). ''Don't'' use <code>-march=native</code> or <code>-mtune=native</code> in your <code>CFLAGS</code> or <code>CXXFLAGS</code> when compiling with <code>distcc</code> .
+
+To know the flags that GCC would enable when called with <code>-march=native</code>, execute the following:
+
+{{Cmd|gcc -march{{=}}native -E -v - &lt;/dev/null 2&gt;&amp;1 {{!}} grep cc1|output=<pre>
+/usr/libexec/gcc/x86_64-pc-linux-gnu/4.7.3/cc1 -E -quiet -v - -march=corei7-avx \
+  -mcx16 -msahf -mno-movbe -mno-aes -mpclmul -mpopcnt -mno-abm -mno-lwp -mno-fma \
+  -mno-fma4 -mno-xop -mno-bmi -mno-bmi2 -mno-tbm -mavx -mno-avx2 -msse4.2 -msse4.1 \
+  -mno-lzcnt -mno-rdrnd -mno-f16c -mno-fsgsbase --param l1-cache-size=32 \
+  --param l1-cache-line-size=64 --param l2-cache-size=6144 -mtune=corei7-avx
+</pre>}}
+
+== Distcc Extras ==
+
+=== Distcc Monitors ===
+
+Distcc ships with two monitors. The text-based one is always built and is called <code>distccmon-text</code> . Running it for the first time can be a bit confusing, but it is really quite easy to use. If you run the program with no parameter it will run once. However, if you pass it a number it will update every N seconds, where N is the argument you passed. 
+
+The other monitor is only turned on if you enabled <code>gtk</code> or <code>gnome</code> in your <code>USE</code> flags. This one is GTK+ based, runs in an X environment and it is quite lovely. For Gentoo the GUI monitor has been called <code>distccmon-gui</code> for less confusion. Elsewhere it may be referred to as <code>distccmon-gnome</code> . 
+
+{{RootCmd|distccmon-text N}}
+
+or run <code>distccmon-gui</code>:
+
+{{RootCmd|distccmon-gui}}
+
+To monitor Portage's distcc usage you can use:
+{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
+|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
+
+{{Important|If your distcc directory is elsewhere, change the DISTCC_DIR variable accordingly.}}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Lisa Seelye
+* Mike Frysinger
+* Erwin
+* Sven Vermeulen
+* Lars Weiler
+* Tiemo Kieft
+* nightmorph
