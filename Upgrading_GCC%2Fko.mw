@@ -1,0 +1,105 @@
+<languages />
+
+
+{{Metadata|abstract=This document will guide the user through the process of upgrading GCC.}}
+
+This document will guide the user through the process of upgrading GCC.
+
+== Quickstart ==
+
+=== Introduction ===
+
+This is about ''upgrading'' GCC. Downgrading GCC might have unwanted side effects. Please refer to the troubleshooting section for some commonly reported issues. 
+
+The next section gives a quick primer into GCC upgrades (and how easy they are). If you want to read the lengthy reasoning behind GCC upgrades, please continue with [[#GCC Upgrading Explained|GCC Upgrading Explained]].
+
+=== Short Version ===
+
+If you are upgrading GCC then you do not need to do anything except switch compiler version and rebuild libtool: 
+
+{{RootCmd|emerge -u gcc
+|gcc-config -l|output=<pre>
+[1] i686-pc-linux-gnu-4.4.5 *
+[2] i686-pc-linux-gnu-4.5.3
+</pre>}}
+
+{{RootCmd|gcc-config 2
+|env-update && source /etc/profile
+|emerge --oneshot libtool}}
+
+If you upgrade GCC from a version earlier than 3.4.0 (for the 3.x series) or 4.1, you will need to run <code>revdep-rebuild</code> as well: 
+
+{{RootCmd|revdep-rebuild --library libstdc++.so.5}}
+
+There you go. Enjoy the new compiler! 
+
+== GCC Upgrading Explained ==
+
+=== Introduction ===
+
+GCC upgrading has always been mystified, with suggestions ranging from "You do not need to do anything" up to "You will need to rebuild your entire system twice". Most of this FUD comes from the confusion surrounding ABI incompatibility. But first a quick pointer towards <code>libtool</code>.
+
+=== libtool and fix_libtool_files.sh ===
+
+Earlier installments of GCC on Gentoo required you to run a specific command called <code>fix_libtool_files.sh</code>. Some time ago, the execution of this command has been integrated in the package deployments itself (through the toolchain eclass) so there is no need for users to call this themselves anymore. 
+
+The reason we need to rebuild libtool after the upgrade of gcc versions is because of its main purpose: ''libtool'' is a toolset that aggregates platform-specific code in a generic interface, allowing applications to build against shared libraries without needing to deal with the platform specific aspects of shared libraries. To fulfill its function properly, the <code>libtool</code> script uses various library locations that have hardcoded GCC version information in them.
+
+=== ABI Changes ===
+
+An ABI, or ''Application Binary Interface'', is a set of conventions used by all tools that deal with binary representation of programs, including compilers, assemblers, linkers and language runtime support (source: [http://gcc.gnu.org/onlinedocs/gcc/Compatibility.html GCC Binary Compatibility]). When the ABI used for binary applications and libraries is changed, you will risk getting linker errors or malfunctioning programs unless you rebuild all libraries that use C++ code. Yes, C++, since most incompatibilities occur within the C++ ABI. This is also why we use the <code>revdep-rebuild</code> command against the {{Path|libstdc++.so.5}} library. 
+
+{{RootCmd|revdep-rebuild --library libstdc++.so.5}}
+
+So why is this only needed up to GCC 3.4.0/4.1? That's because from that version onwards, GCC uses a forward compatible ABI, which removes the need for rebuilding applications and libraries. Of course, guarantees can never be given indefinitely, but when an incompatibility occurs again, we'll definitely document it here. In that case, the version of the {{Path|libstdc++.so}} library will probably be increased.
+
+=== Rebuilding Everything ===
+
+Some people swear that they need to rebuild every single package on their system when a new GCC version is made available. Of course, that doesn't make sense, since there are many applications that are not using GCC for their build and install process anyhow, so they would never be affected by such changes. 
+
+That however doesn't mean they are completely incorrect: newer GCC versions often include better support for the processors' instruction set, which might influence the performance of some applications in a positive way. Although it is expected that this improvement is generally only marginally, in some cases (especially CPU intensive applications) this might yield notable improvements. 
+
+There are also known cases where packages need to be built with the same compiler. Although these packages are usually bumped by Gentoo simultaneously (so that they are always built with the same GCC version) cherry-picking reinstalls on these packages might prove to be troublesome. The various {{Path|qt-*}} packages are a nice example on this matter. 
+
+== Troubleshooting ==
+
+=== libstdc++.so.6: version `GLIBCXX_3.4.15' not found ===
+
+During updates, you might encounter an error like the following: 
+
+{{Code|GLIBCXX_x.y.z not found|<pre>
+cmake_bootstrap_28021_test: /usr/lib/gcc/i486-pc-linux-gnu/4.1.2/libstdc++.so.6:
+version `GLIBCXX_3.4.11' not found 
+</pre>
+}}
+
+This means that you are trying to build a package with an ''older'' GCC version than with which some depending libraries were built. Remember when we told that the C++ ABI if forward-compatible? That is true, but it ensures only that ''higher'' (or same) GCC versions can be used when building applications and linking libraries (compared to the GCC version used to build those libraries). 
+
+=== Which packages are known to need a rebuild? ===
+
+The following table gives the packages that, ''if installed'', need to be rebuild and why. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Package
+! Rebuild needed because ...
+|- 
+| sys-devel/libtool
+| libtool application has hardcoded paths towards GCC internal libraries
+|-
+|}
+
+== Resources ==
+
+=== Gentoo Guides and Resources ===
+
+*  [https://wiki.gentoo.org/wiki/Upgrade_GCC_up_to_4.1 GCC Upgrading up to 4.1], the previous version of this document
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* swift
+
+[[Category:Core system]]
