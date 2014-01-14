@@ -1,0 +1,121 @@
+<languages />
+
+
+{{Metadata|abstract=LILO is a simple boot loader to load Linux and other operating systems.}}
+
+{{InfoBox stack
+|{{InfoBox homepage|http://lilo.alioth.debian.org/|header=true}}
+|{{InfoBox wikipedia|LILO_(boot_loader)}}
+}}
+
+'''LILO (Linux Loader)''' is a simple boot loader to load Linux and other operating systems.
+
+== Installation ==
+
+LILO's installation is two-fold. One is the installation of the software itself on the system (but does not activate LILO), the second one is the installation (activation) of the LILO bootloader on the disk's MBR.
+
+=== Useflags ===
+
+{{USEflag
+|package=sys-boot/lilo
+|static
+|minimal
+|pxeserial
+|device-mapper
+}}
+
+=== Emerge ===
+
+The software installation will only deploy the software on the file system, but will not install LILO in the MBR.
+
+{{emerge|lilo}}
+
+=== Installing LILO on the MBR ===
+
+In order to install LILO on the MBR or update LILO, just invoke <code>lilo</code>. However, before doing that, the {{Path|/etc/lilo.conf}} file must be set up, which is covered next.
+
+{{RootCmd|lilo}}
+
+== Configuring LILO ==
+
+An example {{Path|lilo.conf}} file is provided at {{Path|/etc/lilo.conf.example}}. To start configuring LILO, copy over the example file. 
+
+{{RootCmd|cp /etc/lilo.conf.example /etc/lilo.conf}}
+
+Update the {{Path|/etc/lilo.conf}} file accordingly.
+
+=== General LILO configuration ===
+
+First configure LILO to be deployed on the system. The <code>boot</code> parameter tells LILO where to install the LILO bootloader in. Usually, this is the block device that represents the first disk (the disk that the system will boot), such as {{Path|/dev/sda}}. Be aware that the {{Path|lilo.conf.example}} file still uses {{Path|/dev/hda}} so make sure that references to {{Path|/dev/hda}} are changed to {{Path|/dev/sda}}.
+
+{{File|/etc/lilo.conf|Defining where to install LILO in|<pre>
+boot = /dev/sda
+map = /boot/.map
+</pre>}}
+
+Next, tell LILO what to boot as default (if the user does not select any other option at the boot menu). The name used here is the <code>label</code> value of the operating system blocks defined later in the file.
+
+{{File|/etc/lilo.conf|Booting the block labeled as Gentoo by default|<pre>
+default = Gentoo
+</pre>}}
+
+LILO will show the available options for a short while before continuing to boot the default selected operating system. How long it waits is defined by the <code>timeout</code> parameter and is defined in tenths of a second (so the value 10 is one second):
+
+{{File|/etc/lilo.conf|Setting a 5 second timeout before continuing to boot the default OS|<pre>
+timeout = 50
+</pre>}}
+
+=== Configuring the Gentoo OS block ===
+
+An example configuration block for Gentoo is shown below. It is given the "Gentoo" label to match the <code>default</code> parameter declared earlier.
+
+{{File|/etc/lilo.conf|Example Gentoo Linux configuration in lilo.conf|<pre>
+image = /boot/kernel-3.11.2-gentoo
+  label = Gentoo
+  read-only
+  root = /dev/sda4
+</pre>}}
+
+This will boot the Linux kernel {{Path|/boot/kernel-3.11.2-gentoo}} with root file system {{Path|/dev/sda4}}.
+
+=== Adding kernel parameters ===
+
+To add additional kernel parameters to the OS block, use the <code>append</code> parameter. For instance, to boot the Linux kernel silently (so it does not show any kernel messages unless critical):
+
+{{File|/etc/lilo.conf|Showing the use of the append parameter with the quiet option|<pre>
+image = /boot/kernel-3.11.2-gentoo
+	label = Gentoo
+	read-only
+	root = /dev/sda4
+	append = "quiet"
+</pre>}}
+
+[[Systemd|systemd]] users for instance would want to set <code>init=/usr/lib/systemd/systemd</code> so that the systemd init is used:
+
+{{File|/etc/lilo.conf|Using systemd with LILO|<pre>
+	append = "quiet init=/usr/lib/systemd/systemd"
+</pre>}}
+
+As can be seen, additional kernel parameters are just appended to the same <code>append</code> parameter.
+
+=== Multiple block definitions ===
+
+It is a good idea to keep old definitions available in case the new kernel doesn't boot successfully. This is accomplished by creating another block:
+
+{{File|/etc/lilo.conf|Defining a second OS block|<pre>
+image = /boot/kernel-3.9.2-gentoo
+        root = /dev/sda4
+        label = OldGentoo
+        read-only
+</pre>}}
+
+== Updating LILO in the MBR ==
+
+As mentioned earlier, <code>lilo</code> has to be executed in order to install LILO in the MBR. This step has to be repeated every time {{Path|/etc/lilo.conf}} is modified or when the Linux kernel(s) that the {{Path|/etc/lilo.conf}} file points to are updated!
+
+{{RootCmd|lilo}}
+
+Running <code>lilo</code> too much doesn't hurt.
+
+
+[[Category:Bootloaders]]
