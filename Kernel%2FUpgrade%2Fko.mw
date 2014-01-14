@@ -1,0 +1,98 @@
+<languages />
+
+{{Metadata|abstract=This article describes the steps to upgrade to a new kernel.}}
+
+This article describes the steps to upgrade to a new [[kernel]].
+
+== Installation ==
+
+A kernel upgrade may be necessary when new kernel sources are installed after a system update or when you yourself install new kernel sources.
+
+== Configuration ==
+
+The configuration parallels that of the [[Kernel/Configuration|manual configuration]], since only the config file is reused. All steps are mentioned here again for the sake of completeness, for a more verbose explanation see the other article.
+
+=== Set symlink ===
+
+The symlink {{Path|/usr/src/linux}} should always point to the kernel sources that is currently being used. This can be done in one of three ways:
+
+; 1. Installing the kernel sources with active ''symlink'' [[USE flag]]
+: This will make the {{Path|/usr/src/linux}} point to your newly installed kernel sources. If necessary, it can still be modified later with the following two methods:
+
+; 2. Setting the symlink with '''eselect''':
+
+: {{RootCmd| eselect kernel list |
+  |output=Available kernel symlink targets:<br /> &nbsp; [1] linux-3.3.8-gentoo *<br /> &nbsp; [2]   linux-3.4.9-gentoo}}
+
+: This outputs the available kernel sources. The asterisk indicates the chosen sources. To change the kernel sources, e.g. to the second entry, do:
+
+: {{RootCmd|eselect kernel set 2}}
+
+; 3. Setting the symlink manually:
+
+: {{RootCmd|ln -sf /usr/src/linux-3.4.9 /usr/src/linux |
+  |ls -l /usr/src/linux |
+  |output=lrwxrwxrwx 1 root root 11 Aug 29 22:10 /usr/src/linux -> /usr/src/linux-3.4.9-gentoo}}
+
+=== Sanitize sources ===
+
+If you are experiencing build problems while rebuilding the current kernel, it might help to sanitize the kernel sources. Make sure you backup the {{Path|.config}} file first, as the operation will remove it.
+
+{{RootCmd|cp .config .config~
+|make distclean
+|mv .config~ .config}}
+
+=== Copy previous kernel configuration ===
+The configuration from currently running kernel needs to be copied to the new one. It can be found in several places:
+
+* In the [[procfs]] filesystem, if the kernel option ''Enable access to .config through /proc/config.gz'' was activated in your present kernel:
+
+: {{RootCmd|zcat /proc/config.gz > /usr/src/linux/.config}}
+
+* In the {{Path|/boot}} directory, if you installed the config file there:
+
+: {{RootCmd|cp /boot/config-3.3.8-gentoo /usr/src/linux/.config}}
+
+* In the kernel directory of the currently-running kernel:
+
+: {{RootCmd|cp /usr/src/linux-3.3.8-gentoo/.config /usr/src/linux/}}
+
+=== make oldconfig ===
+Now update the previous config file for your new kernel:
+
+{{RootCmd|cd /usr/src/linux
+|make oldconfig}}
+
+The following configuration parallels that of the text based configuration with '''make config'''. For every difference between the kernel versions, it asks if you want to activate the driver or feature. An example:
+
+{{RootCmd|make oldconfig
+|output=Anticipatory I/O scheduler (IOSCHED_AS) [Y/n/m/?] (NEW)
+}}
+
+The string ''(NEW)'' at the end of the line marks this option as new. Left to the string in square brackets are the possible answers: ''Y''es, ''n''o, ''m''odule or ''?'' to show the help. The recommend answer is capitalized (here ''Y''). The help explains the option or driver.
+
+Unfortunately '''make oldconfig''' doesn't show - next to the help - a lot more information for each option, like the context, so that it is sometimes difficult to give the right answer. In this case the best way to go is to remember the option name and revise it afterwards through one of the [[Kernel/Configuration#Configuration tools|graphical kernel configuration tools]].
+
+== Reinstall external kernel modules ==
+
+Any external kernel modules, such as [[:Category:Binary kernel modules|binary kernel modules]], need to be rebuilt for each new kernel. If the kernel hasn't been built yet, it has to first be prepared for the building of the external kernel modules:
+
+{{RootCmd|make modules_prepare}}
+
+You can rebuild the packages using the ''@module-rebuild'' set:
+
+{{Emerge|@module-rebuild}}
+
+== Build ==
+
+For this step, follow the steps in the [[Kernel/Configuration#Build|manual configuration]] article.
+
+== Removing old kernels ==
+
+See the [[Kernel/Removal|kernel removal]] article. 
+
+== External resources ==
+
+* [http://kernelnewbies.org/LinuxChanges kernel changelog with some explanations of new features]
+
+[[Category:Kernel]]
