@@ -1,0 +1,187 @@
+<languages />
+
+{{Metadata|abstract=SSH (Secure Shell) is an encrypted terminal program that replaces the classic telnet tool on Unix-like operating systems.}}
+
+{{InfoBox stack
+|{{InfoBox homepage|http://www.openssh.org|header=true}}
+|{{InfoBox wikipedia|Secure Shell}}
+}}
+'''SSH''' ('''S'''ecure '''SH'''ell) is an encrypted terminal program that replaces the classic [[Wikipedia:telnet|telnet]] tool on Unix-like operating systems.
+
+In addition to remote terminal access provided by the main '''ssh''' binary, the SSH suite of programs has grown to include other tools such as '''scp''' ('''s'''ecure '''c'''o'''p'''y) and '''sftp''' ('''s'''ecure '''f'''ile '''t'''ransfer '''p'''rotocol).
+
+Originally, SSH was not free.  However, today the most popular and de-facto standard implementation of SSH is [http://www.openbsd.org/ OpenBSD]'s OpenSSH, which comes pre-installed on Gentoo.
+
+== Installation ==
+
+Most deployments will already have OpenSSH installed (through the {{Package|net-misc/openssh}} package). This package uses the following USE flags:
+
+{{USEflag|package=net-misc/openssh
+|bindist
+|hpn
+|pam
+|tcpd
+|kerberos
+|ldap
+|libedit
+|selinux
+|skey
+|static
+|X
+|X509
+}}
+
+After changing USE flags, don't forget to rebuild OpenSSH:
+
+{{emerge|net-misc/openssh}}
+
+== Running OpenSSH ==
+
+=== Server ===
+
+Add openssh to the default runlevel if this hasn't been done already.
+
+{{RootCmd|rc-update add sshd default}}
+
+Start sshd daemon with:
+
+{{RootCmd|/etc/init.d/sshd start}}
+
+The OpenSSH server can be controlled like any other [[OpenRC]]-managed service:
+
+{{RootCmd|/etc/init.d/sshd start
+|/etc/init.d/sshd stop
+|/etc/init.d/sshd restart}}
+
+{{Note|Active SSH connections to the server remain unaffected when issuing <code>/etc/init.d/sshd restart</code>.}}
+
+== Configuration ==
+
+=== Create Keys ===
+
+In order to provide a secure shell, cryptographic keys are used to manage the encryption, decryption and hashing functionalities offered by SSH. 
+
+On the first start of the SSH service, system keys will be generated. Keys can be (re)generated using the <code>ssh-keygen</code> command.
+
+{{Note|Substitute <code>SecretPassphrase</code> in the examples with your own passphrase.}}
+
+To generate the key used for SSH protocol version 1 (which usually is not enabled anymore as it has been deprecated in favor of protocol version 2):
+
+{{RootCmd|/usr/bin/ssh-keygen -t rsa1 -b 1024 -f /etc/ssh/ssh_host_key -N "SecretPassphrase"}}
+
+To generate the keys for SSH protocol version 2 (DSA and RSA algorithms):
+
+{{RootCmd|/usr/bin/ssh-keygen -d -f /etc/ssh/ssh_host_dsa_key -N "SecretPassphrase"
+|/usr/bin/ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N "SecretPassphrase"}}
+
+=== Server configuration ===
+
+The SSH server is usually configured in the {{Path|/etc/ssh/sshd_config}} file, though it is also possible to perform further configuration in OpenRC's {{Path|/etc/conf.d/sshd}}, including changing the location of the configuration file.  For detailed information on how to configure the server see the ''sshd_config'' [[man page]].
+
+You should also study this [https://dev.gentoo.org/~swift/docs/security_benchmarks/openssh.html guide] for a security focused configuration.
+
+=== Client configuration ===
+
+The '''ssh''' client and related programs ('''scp''', '''sftp''', etc.) can be configured in following files:
+* {{Path|~/.ssh/config}}
+* {{Path|/etc/ssh/ssh_config}}
+
+For more information read the <code>ssh_config</code> manual:
+
+{{Cmd|man ssh_config}}
+
+=== Passwordless Authentication ===
+
+Handy for [[git]] server management.
+
+==== Client ====
+
+On the client run the following command:
+
+{{Cmd|ssh-keygen -t rsa|output=<pre>
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/larry/.ssh/id_rsa):
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/larry/.ssh/id_rsa.
+Your public key has been saved in /home/larry/.ssh/id_rsa.pub.
+The key fingerprint is:
+de:ad:be:ef:15:g0:0d:13:37:15:ad:cc:dd:ee:ff:61 larry@client
+The key's randomart image is:
++--[ RSA 2048]----+
+|                 |
+|     .           |
+| . .. n   .      |
+|   . (: . .      |
+|  o   . . : .    |
+| . ..: >.> .     |
+|  * ?. .         |
+| o.. .. ..       |
+| :. .  ! .       |
++-----------------+
+</pre>}}
+
+==== Server ====
+
+Make sure an account for the user exists on the server, and then place the clients' {{Path|id_rsa.pub}} file into the {{Path|~/.ssh/authorized_keys}} file.
+
+==== Single Machine Testing ====
+
+The above procedure can be tested out locally:
+
+{{Cmd|ssh-keygen -t rsa|output=<pre>
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/larry/.ssh/id_rsa):
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+...
+</pre>}}
+
+{{Cmd|mv ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys}}
+
+{{Cmd|ssh localhost}}
+
+== Troubleshooting ==
+
+There are 3 different levels of debug modes that can help troubleshooting issues. With ''-v'' ssh prints debugging messages about its progress.  This is helpful in debugging connection, authentication, and configuration problems.  Multiple -v options increase the verbosity.  The maximum is 3.
+
+{{Cmd|ssh example.org -v
+|ssh example.org -vv
+|ssh example.org -vvv}}
+
+=== Death of Long-lived Connections ===
+
+Many internet access devices perform network address translation ([[NAT]]), a process that enables devices on a private network such as that typically found in a home or business place to access foreign networks, such as the internet, despite only having a single IP address on that network.  Unfortunately, not all NAT devices are created equal, and some of them incorrectly close long-lived, occasional-use TCP connections such as those used by SSH.  This is generally observable as a sudden inability to interact with the remote server, though the '''ssh''' client program has not exited.
+
+In order to resolve the issue, OpenSSH clients and servers can be configured to send a 'keep alive', or invisible message aimed at maintaining and confirming the live status of the link.
+* To enable keep alive '''for all clients connecting to your local server''', set ''ClientAliveInterval 30'' (or some other value, in seconds) within the {{Path|/etc/ssh/sshd_config}} file.
+* To enable keep alive '''for all servers connected to by your local client''', set ''ServerAliveInterval 30'' (or some other value, in seconds) within the {{Path|/etc/ssh/ssh_config}} file.
+
+=== X11 Forwarding Not Forwarding or Tunneling! ===
+
+<b>Problem</b>: After you have made the necessary changes to the configuration files for permitting X11 Forwarding, you find X applications are executing on the server and are not being forwarded to the client.
+
+<b>Solution</b>: What is likely occurring during SSH login into the remote server or host, the <code>$DISPLAY</code> variable is either being unset or is being set after the SSH session sets it.
+
+Test for this scenario as follows after logging in remotely:
+
+{{Cmd|echo $DISPLAY|output=<pre>
+localhost:10.0
+</pre>}}
+
+You should get something similar to "localhost:10.0" or "localhost2.local:10.0" using server side <code>X11UseLocalhost no</code> setting.  If you're getting the usual ":0.0", check to make sure you are not unsetting or initializing the <code>$DISPLAY</code> variable within {{Path|$HOME/.bash_profile}}. If so, remove or comment your custom initialization of <code>$DISPLAY</code> or prevent {{Path|bash_profile}} from executing during SSH login:
+
+{{Cmd|ssh -t me@localhost2 bash --noprofile}}
+
+A trick would be to alias this within {{Path|bashrc}}.
+
+== See also ==
+* [https://dev.gentoo.org/~swift/docs/security_benchmarks/openssh.html Securing OpenSSH] - Gentoo developer documentation.
+* [http://www.gentoo.org/doc/en/articles/openssh-key-management-p1.xml OpenSSH Key Management Part1] - Gentoo documentation, have a look at all 3 parts.
+* [[Keychain|Gentoo Linux Keychain Guide]]
+* [[autossh]] - Detects when SSH connections drop and auto-reconnects.
+
+
+[[Category:SSH]]
+[[Category:Server]]
+[[Category:Daemons]]
