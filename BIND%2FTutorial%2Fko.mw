@@ -1,0 +1,254 @@
+<languages />
+
+{{Metadata|abstract=This guide will teach you how install and configure BIND for your domain and your local network.}}
+
+This guide will teach you how install and configure BIND for your domain and your local network.
+
+== Introduction ==
+
+This tutorial will show you how to install and configure BIND, the most used DNS server on Internet. We will configure <code>bind</code> for your domain using different configurations, one for your local network and one for the rest of the world. We will use views to do that. One view for your internal zone (your local network) and other view for the external zone (rest of the world). 
+
+== Data used in the examples ==
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Keyword
+! Explanation
+! Example
+|- 
+| YOUR_DOMAIN
+| Your domain name
+| gentoo.org
+|- 
+| YOUR_PUBLIC_IP
+| The public ip that ISP gives to you
+| 204.74.99.100
+|- 
+| YOUR_LOCAL_IP
+| The local ip address
+| 192.168.1.5
+|- 
+| YOUR_LOCAL_NETWORK
+| The local network
+| 192.168.1.0/24
+|- 
+| SLAVE_DNS_SERVER
+| The ip address of the slave DNS server for your domain.
+| 209.177.148.228
+|- 
+| ADMIN
+| The DNS server administrator's name.
+| root
+|- 
+| MODIFICATION
+| The modification date of the file zone, with a number added
+| 2009062901
+|-
+|}
+
+== Configuring BIND ==
+
+=== Installation ===
+
+First, install <code>net-dns/bind</code> . 
+
+{{Emerge|net-dns/bind}}
+
+=== Configuring /etc/bind/named.conf ===
+
+The first thing to configure is {{Path|/etc/bind/named.conf}} . The first part of this step is specifying bind's root directory, the listening port with the IPs, the pid file, and a line for ipv6 protocol.
+
+{{Code|options section|<pre>
+options {
+        directory "/var/bind";
+  
+        listen-on-v6 { none; };
+        listen-on port 53 { 127.0.0.1; YOUR_LOCAL_IP; };
+  
+        pid-file "/var/run/named/named.pid";
+};
+</pre>
+}}
+
+The second part of {{Path|named.conf}} is the internal view used for our local network. 
+
+{{Code|Internal view|<pre>
+view "internal" {
+        match-clients { YOUR_LOCAL_NETWORK; localhost; };
+        recursion yes;
+  
+        zone "YOUR_DOMAIN" {
+                type master;
+                file "pri/YOUR_DOMAIN.internal";
+                allow-transfer { any; };
+        };
+};
+</pre>
+}}
+
+The third part of {{Path|named.conf}} is the external view used to resolve our domain name for the rest of the world and to resolve all other domain names for us (and anyone who wants to use our DNS server). 
+
+{{Code|External view|<pre>
+view "external" {
+        match-clients { any; };
+        recursion no;
+  
+        zone "." IN {
+                type hint;
+                file "named.ca";
+        };
+  
+        zone "127.in-addr.arpa" IN {
+                type master;
+                file "pri/127.zone";
+                allow-update { none; };
+                notify no;
+        };
+  
+        zone "YOUR_DOMAIN" {
+                type master;
+                file "pri/YOUR_DOMAIN.external";
+                allow-query { any; };
+                allow-transfer { SLAVE_DNS_SERVER; };
+        };
+};
+</pre>
+}}
+
+The final part of {{Path|named.conf}} is the logging policy. 
+
+{{Code|External view|<pre>
+logging {
+        channel default_syslog {
+                file "/var/log/named/named.log" versions 3 size 5m;
+                severity debug;
+                print-time yes;
+                print-severity yes;
+                print-category yes;
+        };
+       category default { default_syslog; };
+};
+</pre>
+}}
+
+The {{Path|/var/log/named/}} directory must be exist and belong to <code>named</code> : 
+
+{{RootCmd|mkdir -p /var/log/named/
+|chmod 770 /var/log/named/
+|touch /var/log/named/named.log
+|chmod 660 /var/log/named/named.log
+|chown -R named /var/log/named/
+|chgrp -R named /var/log/named/}}
+
+=== Creating the internal zone file ===
+
+We use the hostnames and IP adresses of the picture network example. Note that almost all (not all) domain names finish with "." (dot). 
+
+{{Code|/var/bind/pri/YOUR_DOMAIN.internal|<pre>
+$TTL 2d
+@	IN SOA	ns.YOUR_DOMAIN.	ADMIN.YOUR_DOMAIN. (
+	MODIFICATION	; serial
+	3h	; refresh
+	1h	; retry
+	1w	; expiry
+	1d )	; minimum
+  
+YOUR_DOMAIN.		IN MX	0 mail.YOUR_DOMAIN.
+YOUR_DOMAIN.		IN TXT	"v=spf1 ip4:YOUR_PUBLIC_IP/32 mx ptr mx:mail.YOUR_DOMAIN ~all"
+YOUR_DOMAIN.		IN NS	ns.YOUR_DOMAIN.
+YOUR_DOMAIN.		IN NS	SLAVE_DNS_SERVER
+www.YOUR_DOMAIN.	IN A	192.168.1.3
+ns.YOUR_DOMAIN.		IN A	192.168.1.5
+mail.YOUR_DOMAIN.	IN A	192.168.1.3
+router.YOUR_DOMAIN.	IN A	192.168.1.1
+hell.YOUR_DOMAIN.	IN A	192.168.1.3
+heaven.YOUR_DOMAIN.	IN A	192.168.1.5
+desktop.YOUR_DOMAIN.	IN A	192.168.1.4
+</pre>
+}}
+
+=== Creating the external zone file ===
+
+Here we only have the subdomains we want for external clients (www, mail and ns). 
+
+{{Code|/var/bind/pri/YOUR_DOMAIN.external|<pre>
+$TTL 2d
+@	IN SOA	ns.YOUR_DOMAIN.	ADMIN.YOUR_DOMAIN. (
+	MODIFICATION	;serial
+	3h	;refresh
+	1h	;retry
+	1w	;expiry
+	1d )	;minimum
+  
+YOUR_DOMAIN.		IN MX	0 mail.YOUR_DOMAIN.
+YOUR_DOMAIN.		IN TXT	"v=spf1 ip4:YOUR_PUBLIC_IP/32 mx ptr mx:mail.YOUR_DOMAIN ~all"
+YOUR_DOMAIN.		IN NS	ns.YOUR_DOMAIN.
+YOUR_DOMAIN.		IN NS	SLAVE_DNS_SERVER
+www.YOUR_DOMAIN.	IN A	YOUR_PUBLIC_IP
+ns.YOUR_DOMAIN.		IN A	YOUR_PUBLIC_IP
+mail.YOUR_DOMAIN.	IN A	YOUR_PUBLIC_IP
+</pre>
+}}
+
+=== Finishing configuration ===
+
+You'll need to add <code>named</code> to the default runlevel: 
+
+{{RootCmd|rc-update add named default}}
+
+== Configuring clients ==
+
+Now you can use your own DNS server in all machines of your local network to resolve domain names. Modify the {{Path|/etc/resolv.conf}} file of all machines of your local network. 
+
+{{Code|Editing /etc/resolv.conf|<pre>
+search YOUR_DOMAIN
+nameserver YOUR_DNS_SERVER_IP
+</pre>
+}}
+
+Note that YOUR_DNS_SERVER_IP is the same as YOUR_LOCAL_IP we used in this document. In the picture the example is 192.168.1.5. 
+
+== Testing ==
+
+We are able to test our new DNS server. First, we need to start the service. 
+
+{{RootCmd|/etc/init.d/named start}}
+
+Now, we are going to make some <code>host</code> commands to some domains. We can use any computer of our local network to do this test. If you don't have <code>net-dns/host</code> installed you can use <code>ping</code> instead. Otherwise, first run <code>emerge host</code> . 
+
+{{Cmd|host www.gentoo.org|output=<pre>
+www.gentoo.org has address 209.177.148.228
+www.gentoo.org has address 209.177.148.229
+</pre>}}
+
+{{Cmd|host hell|output=<pre>
+hell.YOUR_DOMAIN has address 192.168.1.3
+</pre>}}
+
+{{Cmd|host router|output=<pre>
+router.YOUR_DOMAIN has address 192.168.1.1
+</pre>}}
+
+
+== Protecting the server with iptables ==
+
+If you use iptables to protect your server, you can add these rules for DNS service. 
+
+{{Code|Iptables rules|<pre>
+iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -p tcp --sport 53 -j ACCEPT
+iptables -A INPUT -p tcp --dport 53 -j ACCEPT
+</pre>
+}}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Vicente Olivert Riera
+* nightmorph
+
+
+[[Category:Server]]
+[[Category:Daemons]]
