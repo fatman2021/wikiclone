@@ -408,6 +408,48 @@ It is recommended to provide an IP based virtual host definition as well. This a
 
 After inserting virtual hosts, the server needs to be (gracefully) restarted for the new sites to become active.
 
+=== Enabling PHP through fcgid ===
+
+Install {{Package|www-apache/mod_fcgid}} and {{Package|dev-lang/php}}. The PHP package requires the ''cgi'' USE flag:
+
+{{emerge|mod_fcgid php}}
+
+Edit the {{Path|mod_fcgid.conf}} file:
+
+{{File|/etc/apache2/modules.d/20_mod_fcgid.conf||<pre>
+<IfDefine FCGID>
+LoadModule fcgid_module modules/mod_fcgid.so
+SocketPath /var/run/fcgidsock
+SharememPath /var/run/fcgid_shm
+  
+AddHandler php-fcgid .php
+AddType application/x-httpd-php .php
+Action php-fcgid /fcgid-bin/php-fcgid-wrapper
+# max request 128mb
+FcgidMaxRequestLen 134217728
+<Location /fcgid-bin/>
+        SetHandler fcgid-script
+        Options +ExecCGI
+</Location>
+</IfDefine>
+</pre>}}
+
+Create the needed directory: 
+
+{{RootCmd|mkdir /var/www/localhost/htdocs/fcgid-bin}}
+
+Symlink it for the PHP wrapper:
+
+{{RootCmd|ln -s /usr/bin/php-cgi /var/www/localhost/htdocs/fcgid-bin/php-fcgid-wrapper}}
+
+Enable the fcgid module:
+
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="... -D FCGID"
+</pre>}}
+
+Finally restart Apache and check the <code>phpinfo()</code> site created earlier. The value of <code>Server API</code> should be ''CGI/FastCGI''
+
 == Troubleshooting ==
 
 * [http://www.gentoo.org/proj/en/apache/doc/troubleshooting.xml Risoluzione dei problemi in Apache ]
