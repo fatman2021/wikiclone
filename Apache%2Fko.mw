@@ -1,0 +1,489 @@
+<languages />
+
+{{Metadata|abstract=The Apache HTTP Server is an efficient and extensible web server and one of the most popular ones used on the Internet.}}
+
+{{InfoBox stack
+|{{InfoBox homepage|http://httpd.apache.org|header=true}}
+|{{InfoBox wikipedia|Apache HTTP Server}}
+|
+}}
+
+The '''Apache HTTP Server''' is an efficient and extensible [[:Category:Web Servers|web server]] and one of the most popular ones used the Internet.
+
+== Installation ==
+
+{{Note|If you're only updating, check the [http://www.gentoo.org/proj/en/apache/doc/upgrading.xml upgrading guide].}}
+
+{{Emerge|{{Package|www-servers/apache}}}}
+
+=== USE flags ===
+
+{{USEflag|package=www-servers/apache
+|debug
+|doc
+|ldap
+|ssl+yes
+|static
+|suexec
+|threads
+|APACHE2_MODULES+++See {{Path|[http://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/profiles/desc/apache2_modules.desc /usr/portage/profiles/desc/apache2_modules.desc]}}. Enable in your {{Path|make.conf}}.
+|APACHE2_MPMS+++See {{Path|[http://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/profiles/desc/apache2_mpms.desc /usr/portage/profiles/desc/apache2_mpms.desc]}}. Enable in your {{Path|make.conf}}.
+}}
+
+=== Support in other packages ===
+
+There is a global USE flag ''apache2'' which enables support for Apache in other packages. This may cause {{Package|www-servers/apache}} to be pulled in automatically if such packages are used.
+{{File|/etc/portage/make.conf||<pre>
+USE="... apache2 ..."
+</pre>}}
+
+After setting this you want to update your system so the changes take effect:
+
+{{Emerge|params+=--changed-use --deep|@world}}
+
+== Launching and restarting ==
+
+=== OpenRC ===
+
+Start the Apache server:
+
+{{RootCmd|/etc/init.d/apache2 start}}
+
+Add Apache to the default runlevel:
+
+{{RootCmd|rc-update add apache2 default}}
+
+Restart the Apache service:
+
+{{RootCmd|/etc/init.d/apache2 restart}}
+
+Reload Apache configuration files:
+
+{{RootCmd|/etc/init.d/apache2 reload}}
+
+=== systemd ===
+
+Start the Apache server:
+
+{{RootCmd|systemctl start apache2}}
+
+Add Apache to the default runlevel: 
+
+{{RootCmd|systemctl enable apache2}}
+
+Restart the Apache service: 
+
+{{RootCmd|systemctl restart apache2}}
+
+== Testing ==
+
+Verifying IP interfaces and ports on which apache2 is running on and listening to:
+
+{{RootCmd|netstat -tulpen {{!}} grep apache|output=<pre>
+tcp     0     0 0.0.0.0:80      0.0.0.0:*     LISTEN     0     10932720     4544/apache2        
+tcp     0     0 0.0.0.0:443     0.0.0.0:*     LISTEN     0     10932716     4544/apache2        
+</pre>}}
+
+Testing if a connection to a Apache server is working on localhost:
+
+{{Cmd|telnet localhost 80|output=<pre>
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+</pre>}}
+
+Interrupt the connection test with {{Key|Ctrl}}+{{Key|c}} and {{Key|Enter}}.
+
+== Configuration ==
+
+=== Configuration files ===
+
+There are 2 main files that configure Apache2's behavior on the system: 
+
+* Gentoo's apache2 init script configuration file {{path|/etc/conf.d/apache2 }}
+
+* Apache server's conventional configuration file {{path|/etc/apache2/httpd.conf}}
+
+==== Gentoo's init script configuration file ====
+
+The only active line in this file is as follow :
+
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="-D DEFAULT_VHOST -D INFO -D SSL -D SSL_DEFAULT_VHOST -D LANGUAGE"
+</pre>}}
+
+This line defines options that will be interpreted by the various configuration files using  the <code><IfDefine option-name></code> statement to activate or deactivate some part of the whole configuration. We will come back to this where appropriate in the rest of this guide.
+
+==== Apache server's conventional configuration file - httpd.conf ====
+
+In fact this file is only an '''entry point''' as the whole configuration is split in many files in the {{Path|/etc/apache2/}} directory, that are assembled  together using the <code>Include</code> directive. For example, the statement <code>Include /etc/apache2/modules.d/*.conf</code>, in {{Path|httpd.conf}}, aims at including all the files in {{Path|/etc/apache2/modules.d/}} which name ends with {{Path|.conf}}. 
+
+Taking into account what has been said in the subsection above, and as module configuration files (files in /etc/apache2/modules.d) almost always start with the <code><IfDefine module-name></code>, the content of one file inside {{Path|/ect/apache2/modules.d}}, will ONLY be assembled with the rest of the configuration, if the matching option is set using a <code>-D module-name</code> flag in the APACHE2_OPTS variable in the {{Path|/etc/conf.d/apache2 }} file. The {{Path|00_default_settings.conf}} configuration file is an exception to this rule as it doesn't start with an <code>IfDefine</code> statement and therefore is always included in the resulting configuration.
+
+=== Default configuration ===
+
+After a fresh install of apache server, the configuration resulting from the assemblage of the different configuration files is as follows. We start with the entry point {{Path|/etc/apache2/httpd.conf}}.
+
+{{Warning| This is ''only'' given for quick reference and to give you an overall view. You are strongly invited to review the comments included in the various files to understand the ins and out of the configuration. Please also refer to the apache manual for an  in depth understanding.}}
+
+{{File|http.d ||<pre>
+ServerRoot "/usr/lib64/apache2"
+  
+#Module loaded unconditionally, assuming the USE flag is no unset in
+# /etc/portage/make.conf or in /etc/portage/package.use
+LoadModule actions_modulemodules/mod_actions.so
+...
+#other modules loaded that way : alias_module, auth_basic_module, authn_alias_module,
+# authn_anon_module, authn_dbm_module, authn_default_module, authn_file_module, 
+# authz_dbm_module, authz_default_module, authz_groupfile_module, authz_host_module, 
+# authz_owner_module, authz_user_module, autoindex_module,  cgi_module,  cgid_module, 
+# deflate_module, dir_module, env_module, expires_module, ext_filter_module, filter_module,
+#  headers_module, include_module,  log_config_module, logio_module, mime_module,  
+# mime_magic_module, negotiation_module, rewrite_module, setenvif_module, 
+# speling_module,ssl_module, status_module, unique_id_module, usertrack_module, host_alias_module
+  
+  
+#Modules loaded conditionally, assuming matching USE flag is not unset in
+# /etc/portage/make.conf or in /etc/portage/package.use (flag to be set in )
+<IfDefine AUTHNZ_LDAP>
+LoadModule authnz_ldap_module modules/mod_authnz_ldap.so
+</IfDefine>
+#other modules loaded that way : cache_module, dav_module, dav_fs_module,
+# dav_lock_module,disk_cache_module,  file_cache_module, info_module, ldap_module,
+# mem_cache_module, userdir_module
+  
+  
+User apache
+Group apache
+  
+# Supplemental configuration
+#**************************************************************************************vvv
+#this part is included via Include /etc/apache2/modules.d/*.conf 
+  
+#included from /etc/apache2/modules.d/00_default_settings.conf-------------v
+#this is always included as there is not option to deactivate it.
+Timeout 300
+KeepAlive On
+MaxKeepAliveRequests 100
+KeepAliveTimeout 15
+UseCanonicalName Off
+AccessFileName .htaccess
+ServerTokens Prod
+TraceEnable off
+ServerSignature On 
+HostnameLookups Off
+EnableMMAP On
+EnableSendfile On
+FileEtag INode MTime Size
+ContentDigest Off
+ErrorLog /var/log/apache2/error_log
+LogLevel warn
+  
+<Directory />
+	Options FollowSymLinks
+	AllowOverride None
+	Order deny,allow
+	Deny from all
+</Directory>
+  
+<IfModule dir_module>
+	DirectoryIndex index.html index.html.var
+</IfModule>
+<FilesMatch "^\.ht">
+	Order allow,deny
+	Deny from all
+</FilesMatch>
+#--------------------------------------------------------------------------^
+  
+#included from 00_mod_info.conf--------------------------------------------v
+<IfDefine INFO>
+<Location /server-info>
+	SetHandler server-info
+	Order deny,allow
+	Deny from all
+	Allow from 127.0.0.1
+</Location>
+</IfDefine>
+#--------------------------------------------------------------------------^
+  
+#--------------------------------------------------------------------------v
+#included from 00_languages.conf
+# Settings for hosting different languages.
+<IfDefine LANGUAGE>
+  
+	AddLanguage ca .ca
+	...
+	AddLanguage zh-TW .zh-tw
+  
+	LanguagePriority en ca cs da de el eo es et fr he hr it ja ko ltz nl nn no pl pt pt-BR ru sv zh-CN zh-TW
+  
+	ForceLanguagePriority Prefer Fallback
+  
+	AddCharset us-ascii.ascii	.us-ascii
+	AddCharset ISO-8859-1		.iso8859-1 .latin1
+	...
+	AddCharset shift_jis		.shift_jis .sjis
+</IfDefine>
+#---------------------------------------------------------------------------^
+#**************************************************************************************^^^
+  
+  
+#***************************************************************************************vvv
+#this part is included via Include /etc/apache2/vhosts.d/*.conf 
+#from 00_default_ssl_vhost.conf-----------------------------------------------------vv
+<IfDefine SSL>
+	<IfDefine SSL_DEFAULT_VHOST>
+		<IfModule ssl_module>
+			Listen 443
+  
+			<VirtualHost _default_:443>
+				ServerName localhost
+                                #------------------------------------------v
+				# this part is included via Include /etc/apache2/vhosts.d/default_vhost.include
+				ServerAdmin root@localhost
+				DocumentRoot "/var/www/localhost/htdocs"
+  
+  	
+				<Directory "/var/www/localhost/htdocs">
+	   				Options Indexes FollowSymLinks
+	   				AllowOverride All
+	   				Order allow,deny
+	   				Allow from all
+				</Directory>
+  
+				<IfModule alias_module>
+	   				ScriptAlias /cgi-bin/ "/var/www/localhost/cgi-bin/"
+				</IfModule>
+  
+				<Directory "/var/www/localhost/cgi-bin">
+	   				AllowOverride None
+	   				Options None
+	   				Order allow,deny
+	   				Allow from all
+				</Directory>
+        			#end of Include ---------------------------^
+  	
+				ErrorLog /var/log/apache2/ssl_error_log
+  
+				<IfModule log_config_module>
+					TransferLog /var/log/apache2/ssl_access_log
+				</IfModule>
+				SSLEngine on
+				SSLCipherSuite ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP:+eNULL
+				SSLCertificateFile /etc/ssl/apache2/server.crt
+				SSLCertificateKeyFile /etc/ssl/apache2/server.key
+  
+				<FilesMatch "\.(cgi|shtml|phtml|php)$">
+					SSLOptions +StdEnvVars
+				</FilesMatch>
+  
+				<Directory "/var/www/localhost/cgi-bin">
+					SSLOptions +StdEnvVars
+				</Directory>
+  
+				<IfModule setenvif_module>
+					BrowserMatch ".*MSIE.*" \
+					nokeepalive ssl-unclean-shutdown \
+					downgrade-1.0 force-response-1.0
+				</IfModule>
+  
+  
+				<IfModule log_config_module>
+					CustomLog /var/log/apache2/ssl_request_log \
+					"%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \"%r\" %b"
+					</IfModule>
+			</VirtualHost>
+		</IfModule>
+	</IfDefine>
+</IfDefine>
+#---------------------------------------------------------------------------------^^
+#from 00_default_vhost.conf-------------------------------------------------------vv
+<IfDefine DEFAULT_VHOST>
+	Listen 80
+	NameVirtualHost *:80
+  
+	<VirtualHost *:80>
+		ServerName localhost
+  
+		#---------------------------------------------------------------v
+		# this part is included via Include /etc/apache2/vhosts.d/default_vhost.include
+		ServerAdmin root@localhost
+		DocumentRoot "/var/www/localhost/htdocs"
+  
+  	
+		<Directory "/var/www/localhost/htdocs">
+	   		Options Indexes FollowSymLinks
+	   		AllowOverride All
+	   		Order allow,deny
+	   		Allow from all
+		</Directory>
+  
+		<IfModule alias_module>
+	   		ScriptAlias /cgi-bin/ "/var/www/localhost/cgi-bin/"
+		</IfModule>
+  
+		<Directory "/var/www/localhost/cgi-bin">
+	   		AllowOverride None
+	   		Options None
+	   		Order allow,deny
+	   		Allow from all
+		</Directory>
+        	#end of Include -----------------------------------------------^
+  
+		<IfModule mpm_peruser_module>
+			ServerEnvironment apache apache
+		</IfModule>
+	</VirtualHost>
+</IfDefine>
+#-----------------------------------------------------------------------------------^^
+# end of include ****************************************************************************************^^^
+</pre>}}
+
+=== First sign of life ===
+
+As you can see in the initial configuration above, the  pre-installed virtual host's <code>DocumentRoot</code>  directory is {{Path|/var/www/localhost/htdocs}}, its server name is ''localhost''.  In addition an index.html file is provided in the <code>DocumentRoot</code> directory, thus to check whether everything is correctly installed or not, point your browser to [http://www.localhost http://www.localhost].
+
+You should see an "It works !" message on the page.
+
+=== Enabling Security Module ===
+
+{{emerge|mod_security}}
+
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="... -D SECURITY"
+</pre>}}
+
+Control this module by editing {{Path|/etc/apache2/modules.d/79_modsecurity.conf}} and {{Path|/etc/apache2/modules.d/80_modsecurity-crs.conf}} and restarting apache.
+
+=== Enabling PHP support ===
+
+Install [[PHP]] with the ''apache2'' USE flag and enable the module:
+
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="... -D PHP5"
+</pre>}}
+
+To test if the PHP module works, create a test page:
+
+{{File|/var/www/localhost/htdocs/index.php||<pre>
+<html>
+ <body>
+  <?php phpinfo(); ?>
+ </body>
+</html>
+</pre>}}
+
+Now open the test page: http://localhost/. You should see a table describing the PHP settings
+
+=== Adding your own virtual hosts ===
+
+For each virtual host, provide a <code>DocumentRoot</code> directory that is reachable and accessible by the Apache daemon. Add a virtual host configuration file ({{Path|myVirtualHost.conf}}) in the {{Path|/etc/apache2/vhosts.d}} directory which uses this <code>DocumentRoot</code> and the virtual host server name, and don't forget to add an entry for this domain name in {{Path|/etc/hosts}}.
+
+To assign the apache user/group ownership on the virtual host files, use <code>chown</code> like in the following example:
+
+{{RootCmd|chown apache:apache /var/www/sitename}}
+
+Below are two example virtual host definitions, one for domainname1.com and one for domainname2.com. Notice the different <code>DocumentRoot</code> and <code>ServerName</code> directives even though the host itself (<code>*:80</code>) remains the same:
+
+{{Code|Example virtual host definitions|<pre>
+<VirtualHost *:80>
+    ServerAdmin email@site.com
+    DocumentRoot /var/www/website1
+    ServerName domainname1.com
+</VirtualHost>
+  
+<VirtualHost *:80>
+    ServerAdmin email@site.com
+    DocumentRoot /var/www/website2
+    ServerName domainname2.com
+</VirtualHost>
+</pre>}}
+
+It is recommended to provide an IP based virtual host definition as well. This allows the administrator to put up a message for users that try to reach a site through its IP address:
+
+{{Code|IP-based virtual host|<pre>
+<VirtualHost *:80>
+    ServerAdmin email@site.com
+    DocumentRoot /var/www/html
+    ServerName xxx.xxx.xxx.xxx
+</VirtualHost>
+</pre>}}
+
+After inserting virtual hosts, the server needs to be (gracefully) restarted for the new sites to become active.
+
+=== Enabling PHP through fcgid ===
+
+Install {{Package|www-apache/mod_fcgid}} and {{Package|dev-lang/php}}. The PHP package requires the ''cgi'' USE flag:
+
+{{emerge|mod_fcgid php}}
+
+Edit the {{Path|mod_fcgid.conf}} file:
+
+{{File|/etc/apache2/modules.d/20_mod_fcgid.conf||<pre>
+<IfDefine FCGID>
+LoadModule fcgid_module modules/mod_fcgid.so
+SocketPath /var/run/fcgidsock
+SharememPath /var/run/fcgid_shm
+  
+AddHandler php-fcgid .php
+AddType application/x-httpd-php .php
+Action php-fcgid /fcgid-bin/php-fcgid-wrapper
+# max request 128mb
+FcgidMaxRequestLen 134217728
+<Location /fcgid-bin/>
+        SetHandler fcgid-script
+        Options +ExecCGI
+</Location>
+</IfDefine>
+</pre>}}
+
+Create the needed directory: 
+
+{{RootCmd|mkdir /var/www/localhost/htdocs/fcgid-bin}}
+
+Symlink it for the PHP wrapper:
+
+{{RootCmd|ln -s /usr/bin/php-cgi /var/www/localhost/htdocs/fcgid-bin/php-fcgid-wrapper}}
+
+Enable the fcgid module:
+
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="... -D FCGID"
+</pre>}}
+
+Finally restart Apache and check the <code>phpinfo()</code> site created earlier. The value of <code>Server API</code> should be ''CGI/FastCGI''
+
+== Troubleshooting ==
+
+* [http://www.gentoo.org/proj/en/apache/doc/troubleshooting.xml Troubleshooting guide]
+* {{Bug|www-servers/apache|search=package}}
+
+=== Common Issues ===
+When starting apache, you might get the following error:
+
+{{Code||<pre>apache2: apr_sockaddr_info_get() failed for SomeHostname
+</pre>}}
+
+When this occurs, add your host name to the {{Path|/etc/hosts}} file.
+
+{{file|/etc/hosts||127.0.0.1 localhost SomeHostname
+}}
+
+== See also ==
+
+* [[Lighttpd]] - a fast, lightweight web server.
+* [[Nginx]] - a small, robust and high-performance HTTP server
+
+== External resources ==
+
+* [http://articles.slicehost.com/2010/12/2/installing-apache-on-gentoo Slicehost article: Installing Apache on Gentoo]
+* [http://articles.slicehost.com/2010/12/3/apache-configuration-files-on-gentoo Slicehost article: Apache configuration files on Gentoo]
+* [http://articles.slicehost.com/2010/12/3/configuring-the-apache-mpm-on-gentoo Slicehost article: Configuring the Apache MPM on Gentoo]
+* [http://articles.slicehost.com/2010/12/3/apache-configuration-on-gentoo-part-1 Slicehost article: Apache configuration on Gentoo]
+* [http://articles.slicehost.com/2010/12/3/apache-virtual-hosts-on-gentoo-part-1 Slicehost article: Apache Virtual Hosts on Gentoo]
+* [http://articles.slicehost.com/2010/12/3/enabling-and-using-apache-s-mod_status-on-gentoo Slicehost article: Enabling and using apache's mod_status on Gentoo]
+* [http://httpd.apache.org/docs/ apache.org documentation]
+* [http://gentoo-en.vfose.ru/wiki/Apache2_mod_pagespeed Apache2 mod_pagespeed]
+
+
+[[Category:Web Servers]]
