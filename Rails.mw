@@ -4,54 +4,37 @@
 }}
 Rails or [[Ruby]] on Rails is a web application framework.
 
-== Installation ==
+= Installation =
 Install {{Package|dev-ruby/rails}}:
 {{Emerge|dev-ruby/rails}}
 
 == Setup ==
-{{Cmd|cd
-|mkdir rails
-|cd rails
+{{RootCmd
 |rails new ror
-|~/rails/ror/script/rails server}}
+|./ror/bin/rails server
+|prompt=root /var/www #}}
 
-Point your browser @ http://0.0.0.0:3000 and your are riding rails.
+Point your browser @ http://0.0.0.0:3000 and your are now riding rails via WEBrick.  This is only for testing, not production.  WEBrick could probably be used for production if it were behind nginx or an accelerator proxy such as [[varnish]].
 
-== passenger ==
-this was setup using
-
-{{RootCmd|gem install rails passenger
-|passenger-install-apache2-module}}
-
-Emerge passenger should work equally as well.
+== passenger via apache ==
+Emerge passenger.
 {{Emerge|passenger}}
 
+add -D PASSENGER to apache's config
 {{file|/etc/conf.d/apache2|add -D PASSENGER to apache's config|<pre>
 APACHE2_OPTS="-D PASSENGER"
 </pre>}}
 
-apache's user needs to control enviroment.rb
-{{RootCmd|chown apache:apache ~/rails/ror/config/environment.rb}}
-
-link your working rails to {{Path|/var/www/ror}} using [[sudo]] to keep the $HOME of your user (and not have $HOME show as /root):
-{{Cmd|sudo ln -s $HOME/rails/ror /var/www/ror}}
-
-passenger needs apache to relax the rules a little bit you need to edit {{Path|/etc/apache2/modules.d/00_default_settings.conf}} and comment out the draconian settings and insert the relaxed settings:
-{{File|/etc/apache2/modules.d/00_default_settings.conf||<pre>
-# We configure the "default" to be a very restrictive set of features.
-#<Directory />
-#	Options FollowSymLinks
-#	AllowOverride None
-#	Order deny,allow
-#	Deny from all
-#</Directory>
-
+Passenger needs apache to relax the rules a little bit.  You need to edit {{Path|/etc/apache2/modules.d/30_mod_passenger.conf}} and insert relaxed settings before </IfDefine>
+.
+{{File|/etc/apache2/modules.d/30_mod_passenger.conf||<pre>
 <Directory />
 	Options FollowSymLinks
 	AllowOverride all
 	Order allow,deny
 	Allow from all
 </Directory>
+</IfDefine>
 </pre>}}
 
 backup your original apache vhost:
@@ -62,22 +45,24 @@ you need to drop in the passenger vhost file for apache:
 <IfDefine DEFAULT_VHOST>
 Listen 80
 NameVirtualHost *:80
-   <VirtualHost *:80>
+<VirtualHost *:80>
       DocumentRoot /var/www/ror/public    
+#  RailsBaseURI /
+  RailsEnv development
       <Directory /var/www/ror/public>
+Options -MultiViews
       </Directory>
-   </VirtualHost>
+</VirtualHost>
 </IfDefine>
-</pre>}}
-
-add to {{Path|/etc/apache2/modules.d/30_mod_passenger.conf}}:
-{{File|/etc/apache2/modules.d/30_mod_passenger.conf||<pre>   LoadModule passenger_module /usr/local/lib64/ruby/gems/1.8/gems/passenger-3.0.19/ext/apache2/mod_passenger.so
-   PassengerRoot /usr/local/lib64/ruby/gems/1.8/gems/passenger-3.0.19
-   PassengerRuby /usr/bin/ruby18
 </pre>}}
 
 {{RootCmd|/etc/init.d/apache2 restart}}
 
-point your browser to http://0.0.0.0 or http://127.0.0.1 or http://localhost and your rocking passenger now
+point your browser to http://0.0.0.0 or http://127.0.0.1 or http://localhost and your riding rails via passenger now.
+
+= external resources =
+* [http://railstutorial.org http://railstutorial.org]
+* [http://railsforzombies.org/ http://railsforzombies.org/]
+* [http://railscasts.com/ http://railscasts.com/]
 
 [[Category:Web application]]
