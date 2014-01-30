@@ -1,0 +1,385 @@
+<languages />
+
+{{InfoBox stack
+|{{InfoBox wikipedia|header=true}}
+}}
+
+This guide describes how to setup and use cron.
+
+== Cron basics ==
+
+=== What cron does ===
+
+Cron is a daemon that runs scheduled tasks based on input from the command <code>crontab</code> . It accomplishes this task by waking up every minute and checking to see if there are any cron-jobs to run in any of the user crontabs. 
+
+{{Note|Notice that ''crontab'' is both the name of a list of cron-jobs as well as the name of the command to edit that list.}}
+
+=== The de facto cron ===
+
+There are a few cron implementations for you to choose from in Portage. All of them offer a similar interface, namely the use of <code>crontab</code> or a similar command. There is also a related utility called Anacron which is meant to work with cron on systems that are not continuously running. 
+
+It is also worth noting that all of the available cron packages depend on <code>sys-process/cronbase</code> . This package is not technically depended on by any of the cron packages, but it does provide cron-like functionality that most users can appreciate. 
+
+Before we get started working with cron, you will have to choose which implementation you want to use. For your convenience, below we have collected information about each one.
+
+== Which cron is right for you? ==
+
+=== vixie-cron ===
+
+Vixie-cron is a full featured cron implementation based on SysV cron. Each user has his own crontab and is allowed to specify environment variables within that crontab. Unlike the other cron variants, it also offers support for SELinux and PAM. It supports fewer architectures than Dcron, but more than Fcron. 
+
+Features of <code>sys-process/vixie-cron</code> : 
+
+* Support for SELinux
+* Support for PAM {{Path|/etc/security/limits.conf}} 
+* Setting of environment variables in crontabs (PATH, SHELL, HOME, etc.)
+* Each user can have his own crontab; access is controlled by {{Path|cron.allow}} and {{Path|cron.deny}} 
+
+=== cronie ===
+Cronie (sys-process/cronie) is a fork of vixie-cron done by [https://fedorahosted.org/cronie/wiki fedora]. Because of it being a fork it has the same feature set the original vixie-cron provides. Additionally cronie comes with an anacron implementation which must be enabled through the ''anacron'' USE flag.
+
+=== dcron (Dillon's Cron) ===
+
+Dcron aims to be a simple, elegant and secure implementation of cron. It does not allow the specification of environment variables in crontabs and all cron-jobs are run from {{Path|/bin/sh}} . Like vixie-cron, each user has his own crontab. 
+
+Features of <code>sys-process/dcron</code> : 
+
+* Fast, simple and free of unnecessary features
+* Access to <code>crontab</code> is limited to the cron group, i.e. it doesn't rely on any external faculties
+
+=== fcron ===
+
+Fcron aims at replacing vixie-cron and anacron. It is designed to work on systems that are not continuously running and it is packed with extra features. It has job startup constraints, job serialization controls, the ability to assign nice values to jobs and the ability to schedule jobs to run at system startup. See [http://fcron.free.fr/ fcron's home page] for more information. 
+
+Features of <code>sys-process/fcron</code> : 
+
+* Designed to work on systems that are not continuously running, i.e. it can run a job after restarting if it was missed
+* Setting of environment variables and many other options in crontabs
+* Each user can have his own crontab, access is controlled by cron.allow and cron.deny
+* Enhanced crontab syntax with support for many new features
+
+=== bcron ===
+
+Bcron is a new cron system designed with secure operations in mind. To do this, the system is divided into several separate programs, each responsible for a separate task, with strictly controlled communications between them. The user interface is a drop-in replacement for similar systems (such as vixie-cron), but the internals differ greatly. For more information, see the bcron homepage at [http://untroubled.org/bcron http://untroubled.org/bcron] . 
+
+Features of <code>sys-process/bcron</code> : 
+
+* Drop-in replacement for vixie-cron
+* Multiprocess design
+* Native daylight savings time support
+
+=== anacron ===
+
+Anacron is not a cron daemon, it is something that usually works in conjunction with one. It executes commands at intervals specified in days and it does not assume that the system is running continuously; it will run jobs that were missed while the system was down. Anacron usually relies on a cron daemon to run it each day. 
+
+== Using cron ==
+
+=== Installation ===
+
+Select the cron implementation you like the most, and then emerge it. 
+
+{{Emerge|dcron}}
+
+{{RootCmd|/etc/init.d/dcron start
+|rc-update add dcron default}}
+
+Optionally, if you have not installed Fcron, you may also want to install Anacron. 
+
+{{Emerge|anacron}}
+
+{{RootCmd|/etc/init.d/anacron start
+|rc-update add anacron default}}
+
+=== System crontab ===
+
+The post install messages from some of these cron packages tell you to run <code>crontab /etc/crontab</code> . The {{Path|/etc/crontab}} file is your ''system crontab'' . A cron installation can use it in conjunction with <code>sys-process/cronbase</code> to run the scripts in {{Path|/etc/cron.{daily,hourly,weekly,monthly}}} . Note that only vixie-cron and cronie schedule jobs in {{Path|/etc/crontab}} automatically. Dcron and fcron users will need to run <code>crontab /etc/crontab</code> every time they make changes to {{Path|/etc/crontab}} . 
+
+Please note that jobs scheduled in the system crontab might not show up in the list of cron-jobs displayed by <code>crontab -l</code> . 
+
+Of course, you can choose not to use any system crontab at all. If you chose dcron or fcron, do ''not'' run <code>crontab /etc/crontab</code> . If you chose vixie-cron, cronie or bcron, you should comment all lines in {{Path|/etc/crontab}} . 
+
+{{RootCmd|sed -i -e "s/^/#/" /etc/crontab}}
+
+=== Giving trusted users access to cron ===
+
+If you want users other than root to have access to the cron daemon, you'll want to read this section, otherwise, you can proceed to the next section, [[#Scheduling_cron-jobs|Scheduling cron-jobs]]. 
+
+{{Note|Giving another user access to crontab does not let him run cron-jobs as root. If you want a user to be able to edit the root crontab, you should look into <code>sudo</code> . Please read our [http://www.gentoo.org//doc/en/sudo-guide.xml Gentoo Sudo(ers) Guide] for more details.}}
+
+No matter which cron package you use, if you want to allow a user to use crontab, he will first have to be in the cron group. As an example, if you wanted to add the user ''wepy'' to the cron group you would run: 
+
+{{RootCmd|gpasswd -a wepy cron}}
+
+{{Note|When adding a user to the cron group, make sure that the user log out and back in for the group change to take effect.}}
+
+If you're using '''dcron''' , that's all you have to do to give a user access to crontab. Dcron users may proceed to the next section [[#Scheduling_cron-jobs|Scheduling cron-jobs]], all others will want to keep reading. 
+
+If you're using '''fcron''' , you'll want to edit {{Path|/etc/fcron/fcron.deny}} and {{Path|/etc/fcron/fcron.allow}} . The most secure way is to first deny everyone in {{Path|/etc/fcron/fcron.deny}} , and then explicitly allow users in {{Path|/etc/fcron/fcron.allow}} . 
+
+{{Important|If neither {{Path|/etc/fcron/fcron.allow}} nor {{Path|/etc/fcron/fcron.deny}} exist, all users in the cron group will be allowed to use crontab . fcron comes with a default {{Path|fcron.allow}} which '''allows all users''' in the cron group access to fcrontab.}}
+
+{{Code|Permissions in fcron.deny|<pre>
+all
+</pre>
+}}
+
+Now, say we have a user ''wepy'' who should be able to schedule his own cron-jobs. We would add him to {{Path|/etc/fcron/fcron.allow}} as follows: 
+
+{{Code|Permissions in fcron.allow|<pre>
+wepy
+</pre>
+}}
+
+If you chose '''vixie-cron''' or '''cronie''', you'll probably just want to edit {{Path|/etc/cron.allow}} . 
+
+{{Important|It is important to note that if only {{Path|/etc/cron.allow}} exists, then only the cron group users listed there will have access. Otherwise, if only an empty {{Path|/etc/cron.deny}} exists, then all cron group users will be allowed! Do not leave an empty {{Path|/etc/cron.deny}} if you have no {{Path|/etc/cron.allow}} .}}
+
+For example, if you wanted to allow access to the user ''wepy'' , you would add him to {{Path|/etc/cron.allow}} as follows: 
+
+{{Code|Permissions in /etc/cron.allow|<pre>
+wepy
+</pre>
+}}
+
+=== Scheduling cron-jobs ===
+
+The process of editing crontabs is different for each package, but they all support the same basic set of commands: adding and replacing crontabs, editing crontabs, deleting crontabs, and listing cron-jobs in crontabs. The following list shows you how to run those commands for each package. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Version
+! Edit crontab
+! Remove crontab
+! New crontab
+! List cron-jobs
+|- 
+| dcron
+| <code>crontab -e</code>
+| <code>crontab -d ''[user]'' </code>
+| <code>crontab ''file'' </code>
+| <code>crontab -l</code>
+|- 
+| fcron
+| <code>fcrontab -e</code>
+| <code>fcrontab -r ''[user]'' </code>
+| <code>fcrontab ''file'' </code>
+| <code>fcrontab -l</code>
+|- 
+| vixie-cron, cronie & bcron
+| <code>crontab -e</code>
+| <code>crontab -r ''-u [user]'' </code>
+| <code>crontab ''file'' </code>
+| <code>crontab -l</code>
+|-
+|}
+
+{{Note|When using the remove command, if no argument is supplied, it deletes the current user's crontab.}}
+
+{{Note|Fcron also has a symlink from <code>crontab</code> to <code>fcrontab</code> .}}
+
+Before we can use any of these commands though, you first need to understand the crontab itself. Each line in a crontab needs to specify five time fields in the following order: the minutes (0-59), hours (0-23), days of the month (1-31), months (1-12), and days of the week (0-7, Monday is 1, Sunday is 0 and 7). The days of the weeks and months can be specified by three-letter abbreviations like mon, tue, jan, feb, etc. Each field can also specify a range of values (e.g. 1-5 or mon-fri), a comma separated list of values (e.g. 1,2,3 or mon,tue,wed) or a range of values with a ''step'' (e.g. 1-6/2 as 1,3,5). 
+
+That sounds a little confusing, but with a few examples, you will see that it is not as complicated as it sounds. 
+
+{{Code|Examples|<pre>
+## # Run /bin/false every minute year round
+*     *     *     *     *        /bin/false
+  
+## # Run /bin/false at 1:35 on the mon,tue,wed and the 4th of every month
+35    1     4     *     mon-wed  /bin/false
+  
+## # Run /bin/true at 22:25 on the 2nd of March
+25    22    2     3     *        /bin/true
+  
+## # Run /bin/false at 2:00 every Monday, Wednesday and Friday
+0     2     *     *     1-5/2    /bin/false
+</pre>
+}}
+
+{{Note|Notice how you have to specify specific days of the week and days of the month before they are combined. If you have * for only one of them, the other takes precedence, while * for both just means every day.}}
+
+To test what we have just learned, let's go through the steps of actually inputting a few cron-jobs. First, create a file called {{Path|crons.cron}} and make it look like the this: 
+
+{{RootCmd|nano crons.cron|output=<pre>
+## #Mins  Hours  Days   Months  Day of the week
+10     3      1      1       *       /bin/echo "I don't really like cron"
+30     16     *      1,2     *       /bin/echo "I like cron a little"
+*      *      *      1-12/2  *       /bin/echo "I really like cron"
+</pre>
+}}
+
+Now we can add that crontab to the system with the "new command" from the table above. 
+
+{{RootCmd|crontab crons.cron}}
+
+
+{{Note|You won't actually see the output from these echo commands unless you use redirection.}}
+
+To verify the cron-jobs you scheduled, we'll use the proper ''list command'' from the table above. 
+
+{{RootCmd|crontab -l}}
+
+You should see a list resembling {{Path|crons.cron}} , if not, maybe you used the wrong command to input your new crontab. 
+
+This crontab should echo "I really like cron" every minute of every hour of every day every other month. Obviously you would only do that if you really liked cron. The crontab will also echo "I like cron a little" at 16:30 every day in January and February. It will also echo "I don't really like cron" at 3:10 on the January 1st. 
+
+If you are using anacron, you should keep reading this section. Otherwise, proceed to the next section on [[#Editing_crontabs|Editing crontabs]] . 
+
+Anacron users will want to edit {{Path|/etc/anacrontab}} . This file has four fields: the number of days between each run, the delay in minutes after which it runs, the name of the job, and the command to run. 
+
+For example, to have it run <code>echo "I like anacron"</code> every 5 days, 10 minutes after anacron is started, you would have: 
+
+{{Code|/etc/anacrontab|<pre>
+5 10 wasting-time /bin/echo "I like anacron"
+</pre>
+}}
+
+Anacron exits after all of the jobs in anacrontab are done, so if we want it to check these jobs every day, we will need to use cron. The instructions at the end of the next section tell you how to do that.
+
+=== Editing crontabs ===
+
+Let's be realistic though, you don't want your system telling you how much you like cron every minute. As a step forward, let's remove that crontab using the corresponding ''remove command'' from the table above. We will also list the cron-jobs after, just to make sure it worked. 
+
+{{RootCmd|crontab -d
+|crontab -l}}
+
+You should see no cron-jobs in the output from <code>crontab -l</code> . If you do see jobs listed, that means we failed to remove the crontab, and that you should make sure that you used the correct ''remove command'' for your cron package. 
+
+Now that we have a clean state, let's put something useful into the '''root''' crontab. Most people will want to run <code>updatedb</code> on a weekly basis to make sure that <code>mlocate</code> works properly. To add that to your crontab, let's first edit {{Path|crons.cron}} again so that it looks like the following: 
+
+{{Code|A real crontab|<pre>
+22 2 * * 1    /usr/bin/updatedb
+</pre>
+}}
+
+That would make cron run updatedb at 2:22 A.M. on Monday morning every week. You should now input the crontab with the proper ''new command'' from the table above, and check the list again. 
+
+{{RootCmd|crontab crons.cron
+|crontab -l}}
+
+Now let's say that you also want to add <code>emerge --sync</code> to your daily schedule. You could do this by first editing {{Path|crons.cron}} and then using <code>crontab crons.cron</code> just as we did before, or you could use the proper ''edit command'' from the table above. This gives you a way to edit your user's crontab in situ, without depending on external files like {{Path|crons.cron}} . 
+
+{{RootCmd|crontab -e}}
+
+That should open your user's crontab with an editor. We want to have <code>emerge --sync</code> run every day at 6:30 A.M., so we'll make it look something like this: 
+
+{{Code|A real crontab|<pre>
+22 2 * * 1    /usr/bin/updatedb
+30 6 * * *    /usr/bin/emerge --sync
+## (if you're using anacron, add this line)
+30 7 * * *    /usr/sbin/anacron -s
+</pre>
+}}
+
+Again, check the cron-jobs list as we did in the previous examples to make sure the jobs are scheduled. If they are all there, then you're all set. 
+
+== Using cronbase ==
+
+As mentioned earlier, all of the available cron packages depend on <code>sys-process/cronbase</code> . The cronbase package creates {{Path|/etc/cron.{hourly,daily,weekly,monthly}}} , and a script called <code>run-crons</code> . You might have noticed that the default {{Path|/etc/crontab}} contains something like this: 
+
+{{Code|Default system crontab|<pre>
+*/15 * * * *     test -x /usr/sbin/run-crons && /usr/sbin/run-crons
+0  *  * * *      rm -f /var/spool/cron/lastrun/cron.hourly
+0  3  * * *      rm -f /var/spool/cron/lastrun/cron.daily
+15 4  * * 6      rm -f /var/spool/cron/lastrun/cron.weekly
+30 5  1 * *      rm -f /var/spool/cron/lastrun/cron.monthly
+</pre>
+}}
+
+To avoid going into much detail, we can just assume that these commands will effectively run your hourly, daily, weekly and monthly scripts. This method of scheduling cron-jobs has some important advantages: 
+
+* They will run even if your computer was off when they were scheduled to run
+* It is easy for package maintainers to place scripts in those well defined places
+* You know exactly where your cron-jobs and your crontab are stored, making it easy for you to backup and restore this part of your system
+
+{{Note|Again, it is useful to point out that vixie-cron, cronie and bcron automatically read {{Path|/etc/crontab}} , while dcron and fcron do not. Please read the [[#System_crontab|System crontab]] section to learn more about this.}}
+
+== Using anacron ==
+
+As mentioned earlier, anacron is used on systems not meant to be run continuously (like most of the desktop installations). Its default configuration file, {{Path|/etc/anacrontab}}, is usually like the following:
+
+{{File|/etc/anacrontab||<pre>
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# format: period delay job-identifier command
+1       5       cron.daily      run-parts /etc/cron.daily
+7       10      cron.weekly     run-parts /etc/cron.weekly
+30      15      cron.monthly    run-parts /etc/cron.monthly
+</pre>}}
+
+As you see the main difference between this and other common crontabs is that with anacron there is no fixed date/hour for the job scheduling, but only the period between every run. When anacron is started, it will check the contents of a set of files in {{Path|/var/spool/anacron}} and calculate if the corresponding entry in the configuration file has expired since the last run. If it has, then the command is invoked again.
+
+As a final note, it is important to comment out any overlapping entry in any other cron installed in the system, such as in the following vixie-cron crontab example:
+
+{{File|/etc/crontab||<pre>
+# for vixie-cron
+# $Header: /var/cvsroot/gentoo-x86/sys-process/vixie-cron/files/crontab-3.0.1-r4,v 1.3 2011/09/20 15:13:51 idl0r Exp $
+  
+# Global variables
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=root
+HOME=/
+  
+# check scripts in cron.hourly, cron.daily, cron.weekly and cron.monthly
+59  *  * * *    root    rm -f /var/spool/cron/lastrun/cron.hourly
+#9  3  * * *    root    rm -f /var/spool/cron/lastrun/cron.daily
+#19 4  * * 6    root    rm -f /var/spool/cron/lastrun/cron.weekly
+#29 5  1 * *    root    rm -f /var/spool/cron/lastrun/cron.monthly
+#*/10  *  * * * root    test -x /usr/sbin/run-crons && /usr/sbin/run-crons @hourly root nice -n 19 run-parts --report /etc/cron.hourly
+</pre>}}
+
+Without doing this, the daily, weekly and monthly parts will be executed - at different times - by both the cron daemon and anacron, leading to possible double job executions.
+
+== Final Notes ==
+
+Remember, each cron package is different and the range of features varies greatly. Be sure to consult the man pages for crontab, fcrontab or anacrontab, depending on what you use. 
+
+Good luck! 
+
+=== Troubleshooting ===
+
+If you're having problems getting cron to work properly, you might want to go through this quick checklist. 
+
+==== Is cron running? ====
+
+Run <code>ps ax | grep cron</code> and make sure it shows up!
+
+==== Is cron working? ====
+
+Try the following:
+
+{{Code|crontab to see if cron is running|<pre>
+* * * * * /bin/echo "foobar" >> /file_you_own
+</pre>}}
+
+Then check if {{Path|/file_you_own}} is modified periodically.
+
+==== Is your command working? ====
+
+Same as before, but perhaps redirect the standard error output as well:
+
+{{Code|crontab to verify application runs|<pre>
+* * * * * /bin/echo "foobar" >> /file_you_own 2>&amp;1
+</pre>}}
+
+==== Can cron run your job? ====
+
+Check the cron log, usually {{Path|/var/log/cron.log}} or {{Path|/var/log/messages}} for errors
+
+==== Are there any {{Path|dead.letter}}s? ====
+
+cron usually sends mail when there's a problem; check your mail and also look for {{Path|~/dead.letter}} .
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Eric Brown
+* Xavier Neys
+* nightmorph
+
+
+[[Category:Core system]]
+[[Category:Daemons]]
