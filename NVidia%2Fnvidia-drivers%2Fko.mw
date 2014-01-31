@@ -1,0 +1,241 @@
+<languages />
+
+{{Metadata|abstract=nvidia-drivers is the proprietary graphics driver for nVidia graphic cards. An open source alternative is nouveao.}}
+
+'''x11-drivers/nvidia-drivers''' is the proprietary graphics driver for nVidia graphic cards. An open source alternative is [[nouveau]].
+
+The nVidia drivers in the tree are released by nVidia and are built against the Linux kernel. They contain a binary blob that does the heavy lifting for talking to the card. The drivers consist of two parts, a kernel module, and an X11 driver. Both parts are included in a single package. Due to the way nVidia has been packaging their drivers, you will need to make some choices before you install the drivers.
+
+The '''nvidia-drivers''' package contains the latest drivers from nVidia with support for ''all'' cards, with several versions available depending on how old your card is. It uses an eclass to detect what kind of card you're running so that it installs the proper version.
+
+== Hardware Compatibility ==
+The {{Package|x11-drivers/nvidia-drivers}} package supports a range of available nVidia cards. Multiple versions are available for installation, depending on the card(s) you have. See the official nVidia documentation, [http://www.nvidia.com/object/IO_32667.html What's a legacy driver?], on what version of nvidia-drivers you should use. A pretty decent way to find this out through an interactive form is offered [http://www.nvidia.com/Download/Find.aspx here]. Enter the graphics card you have (mind the Legacy option in the 'Product Type' field) and you should end up with the best supported version displayed beneath the form.
+
+If you've identified your card as a legacy card you need to mask the more recent releases of {{Package|nvidia-drivers}}, i.e
+{{RootCmd|echo ">x11-drivers/nvidia-drivers-174" >> /etc/portage/package.mask}}
+
+Note that Gentoo does not provide the 71.86.xx versions. If you have a card that need these drivers you are recommended to use the [[nouveau]] driver.
+
+== Kernel ==
+As mentioned above, the nVidia kernel driver installs and runs against your current kernel. It builds as a module, so your kernel must support the loading of kernel modules (see below).
+
+The kernel module (nvidia.ko) consists of a proprietary part (commonly known as the "binary blob") which drives your graphics chip(s), and an open source part (the "glue") which at runtime acts as intermediary between the proprietary part and the kernel. These all need to work nicely together or you could be faced with data loss (through kernel panics, X servers crashing with unsaved data in X applications) and even hardware failure (overheating and other power management related issues should spring to mind).
+
+=== Kernel compatibility ===
+From time to time, a new kernel release changes the internal ABI for drivers, which means all drivers that use those ABIs must be changed accordingly. For open source drivers, especially those distributed with the kernel, these changes are nearly trivial to fix since the entire chain of calls between drivers and other parts of the kernel can be reviewed quite easily. For proprietary drivers like nvidia.ko, it doesn't work quite the same. When the internal ABIs change, you cannot merely fix the "glue", because you cannot know how the glue is used by the proprietary part. If you do manage to patch things up and things seem to work nicely, you still risk that running nvidia.ko in your new, unsupported kernel will lead to data loss and hardware failure.
+
+When a new, incompatible kernel version is released, it is probably best to stick with the newest supported kernel for a while. Nvidia usually takes a few weeks to prepare a new proprietary release they think is fit for general use. Just be patient. If you want to throw all caution to the wind, the nvidia-drivers ebuilds do support the epatch_user command from eutils.eclass: this allows you to patch nvidia-drivers to somehow fit in with the latest, unsupported kernel release you want to run. Do note that neither the nvidia-drivers maintainers nor Nvidia will support you when you run into trouble. Your hardware warranty will most likely be void, Gentoo's maintainers cannot begin to fix your issues since it's a proprietary driver that only Nvidia can properly debug, and the kernel maintainers (both Gentoo's and its upstream) will certainly not support proprietary drivers, or indeed any "tainted" system that happens to run into trouble.
+
+=== Required kernel options ===
+If you used '''genkernel all''' to configure the kernel for you, then you're all set. If not, double check your kernel configuration so that this support is enabled:
+{{Kernel||<pre>
+Loadable module support --->
+    [*] Enable loadable module support
+</pre>
+}}
+
+You also need to enable ''Memory Type Range Register'' in your kernel:
+{{Kernel||<pre>
+Processor and Features --->
+    [*] MTRR (Memory Type Range Register) support
+</pre>}}
+
+Also, if you have an AGP graphics card, you can optionally enable '''agpgart''' support to your kernel, either compiled in or as a module. If
+you do not use the in-kernel agpgart, then the drivers will use their own '''agpgart''' implementation, called '''NvAGP'''.  On certain systems, this
+performs better than the in-kernel agpgart, and on others, it performs worse. You will need to evaluate this on your own system to get the best performance. If you are unsure what to do, use the in-kernel agpgart:
+{{Kernel||<pre>
+Device Drivers --->
+    Graphics Support --->
+        -*- /dev/agpgart (AGP Support) --->
+</pre>}}
+
+{{Note|On amd64, the IOMMU controls the agpgart setting.}}
+
+{{Important|For x86 and AMD64 processors, the in-kernel [[framebuffer]] driver conflicts with the binary driver provided by nVidia. If you will be compiling your kernel for these CPUs,you must completely remove support for the in-kernel driver as shown:
+{{Kernel||<pre>
+Device Drivers --->
+    Graphics Support --->
+        <*> Support for frame buffer devices --->
+            < >   nVidia Framebuffer Support
+            < >   nVidia Riva support
+</pre>}}
+}}
+
+A framebuffer alternative is [[uvesafb]], which can be installed parallel to nvidia-drivers.
+
+The '''nvidia-drivers''' ebuild automatically discovers your kernel version based on the {{Path|/usr/src/linux}} symlink. Please ensure that you have
+this symlink pointing to the correct sources and that your kernel is correctly configured. Please refer to the "Configuring the Kernel" section of the [http://www.gentoo.org/doc/en/handbook/ Gentoo Handbook] for details on configuring your kernel.
+
+First, you'll need to choose the right kernel source using '''eselect'''. If you are using '''gentoo-sources-3.7.10''', your kernel listing might look something like this:
+{{RootCmd|eselect kernel list|output=<pre>
+Available kernel symlink targets:
+  [1]   linux-3.7.10-gentoo *
+  [2]   linux-3.7.9-gentoo
+</pre>}}
+
+In the above output, you'll notice that the '''linux-3.7.10-gentoo''' kernel is marked with an asterisk ('''*''') to show that it is the symlinked kernel.
+
+If the symlink is not pointing to the correct sources, you must update the link by selecting the number of your desired kernel sources, as in the example above.
+{{RootCmd|eselect kernel set 1}}
+
+== Drivers == 
+
+Now it's time to install the drivers. You can do this by first following the [http://www.gentoo.org/doc/en/xorg-config.xml X Server Configuration HOWTO] and setting '''VIDEO_CARDS="nvidia"''' in {{Path|/etc/portage/make.conf}}. When you install the X server, it will then install the right version of
+'''nvidia-drivers''' for you.
+
+{{Note|The drivers can be installed with the '''gtk''' USE flag set in {{Path|/etc/portage/make.conf}}. This will install '''media-video/nvidia-settings''', a handy graphical tool for monitoring and configuring several aspects of your nVidia card.}}
+
+{{Important|Every time you [http://www.gentoo.org/doc/en/kernel-upgrade.xml compile a new kernel] or recompile the current one, you will need to reinstall the nVidia kernel modules. An easy way to rebuild the modules installed by ebuilds (such as '''nvidia-drivers''') is to run '''emerge @module-rebuild'''.}}
+
+Once the installation has finished, run '''modprobe nvidia''' to load the kernel module into memory. If this is an upgrade, you should remove the
+previous module first.
+{{RootCmd
+|lsmod {{!}} grep nvidia
+|rmmod nvidia
+|modprobe nvidia
+}}
+
+To prevent you having to manually load the module on every bootup, you probably want to have this done automatically each time you boot your system, so edit {{Path|/etc/conf.d/modules}} and add '''nvidia''' to it.
+
+{{Important|If you compiled '''agpgart''' as a module, you will need to add it to {{Path|/etc/conf.d/modules}} as well.}}
+
+=== The X Server ===
+Once the appropriate drivers are installed you need to configure your X Server to use the '''nvidia''' driver instead of the default '''nv''' driver.
+{{VIDEO_CARDS/xorg.conf|nvidia}}
+
+Run '''eselect''' so that the X Server uses the nVidia GLX libraries:
+{{RootCmd|eselect opengl set nvidia}}
+
+=== Permissions ===
+{{VIDEO_CARDS/Permissions|nvidia}}
+
+== Testing your Card ==
+To test your nVidia card, fire up X and run '''glxinfo''', which is part of the '''mesa-progs''' package. It should say that direct rendering is activated:
+{{Cmd|glxinfo {{!}} grep direct|output=<pre>
+direct rendering: Yes
+</pre>}}
+
+To monitor your FPS, run '''glxgears'''.
+
+== Enabling nvidia Support ==
+Some tools, such as '''mplayer''' and '''xine-lib''', use a local USE flag called '''xvmc''' which enables XvMCNVIDIA support, useful when watching high resolution movies. Add in '''xvmc''' in your USE variable in {{Path|/etc/portage/make.conf}} or add it as USE flag to '''media-video/mplayer''' and/or '''media-libs/xine-lib''' in {{Path|/etc/portage/package.use}}.
+
+GeForce 8 series and later GPUs do come with VDPAU support which superseded XvMCNVIDIA support. See the [[VDPAU]] article for enabling VDPAU support.
+
+There are also some applications that use the '''nvidia''' USE flag, so you may want to add it to {{Path|/etc/portage/make.conf}}.
+
+Then, run '''emerge -uD --newuse @world''' to rebuild the applications that benefit from the USE flag change.
+
+=== Using NVidia Settings Tool ===
+nVidia also provides you with a settings tool. This tool allows you to monitor and change graphical settings without restarting the X server and is available through Portage as '''media-video/nvidia-settings'''. As mentioned earlier, it will be pulled in automatically if you install the drivers with the '''gtk''' USE flag set in {{Path|/etc/portage/make.conf}} or in {{Path|/etc/portage/package.use}}.
+
+=== Enable OpenGL/OpenCL ===
+
+To enable OpenGL and OpenCL.
+
+{{RootCmd|eselect opengl set nvidia}}
+{{RootCmd|eselect opencl set nvidia}}
+
+You should make sure that the Xorg server is not running during these changes.
+
+== Troubleshooting ==
+* {{Bug|nvidia-drivers|search=package}}
+
+=== Getting 2D acceleration to work on machines with 4GB memory or more ===
+If you are having trouble with the nVidia 2D acceleration it is likely that you are unable to set up a write-combining range with MTRR. To verify, check the contents of {{Path|/proc/mtrr}}:
+{{RootCmd|cat /proc/mtrr}}
+
+Every line should contain "write-back" or "write-combining". If you see a line with "uncachable" in it you will need to change a BIOS setting to fix this.
+
+Reboot and enter the BIOS, then find the MTRR settings (probably under "CPU Settings"). Change the setting from "continuous" to "discrete" and boot back into Linux. You will now find out that there is no "uncachable" entry anymore and 2D acceleration now works without any glitches.
+
+=== When I attempt to load the kernel module, I receive a "no such device" ===
+This is usually caused by one of the following issues:
+
+1.  You don't have an nVidia card at all.  Check '''lspci''' output to confirm that you have an nVidia graphics card installed and detected.
+
+2.  The currently installed version of x11-drivers/nvidia-drivers does not support your graphics card model.  Check the README file in /usr/share/nvidia-drivers-*/ for a list of supported devices, or use the driver search at http://www.geforce.com/drivers.  See the [[NVidia/nvidia-drivers#Which_version.3F|Which Version]] section above.
+
+3.  Another kernel driver has control of the hardware.  Check '''lspci -k''' to see if another driver like "nouveau" is bound to the graphics card.  If so, you will need to disable or blacklist this driver.
+
+=== Xorg says it can't find any screens ===
+When you boot up your computer and end up with a black screen or a console prompt instead of your GUI; you can press Ctrl+Alt+F2 to bring up a console prompt if you don't already have one. Then you can run:
+{{RootCmd| /etc/init.d/xdm stop}}
+{{Cmd| startx}}
+to see the output of Xorg. If one of the first errors is that Xorg can't find any screens, then follow these steps to resolve your issue.<br />
+It should be enough to run the following command before rebooting:
+{{Cmd| nvidia-xconfig}}
+But if that doesn't work, run lspci and you'll find your video card starts off like this:
+01:00.0 VGA compatible controller: make and model of videocard <br />
+Take the first bit, ''01.00.0'' and put it in your /etc/X11/xorg.conf with the BusID option:
+{{File|/etc/X11/xorg.conf||<pre>
+# this is not the whole file, only the part that needs edited
+# the file should already exist after running nvidia-xconfig
+
+Section "Device"
+    Identifier     "Device0"
+    Driver         "nvidia"
+    VendorName     "NVIDIA Corporation"
+    BusID          "PCI:1:0:0"
+EndSection
+</pre>}}
+
+=== Direct rendering is not enabled ===
+
+If Direct rendering does not work, it may be because you have Direct Rendering Manager enabled in the kernel, which conflicts with the driver. You can see Direct rendering Status by following instructions in the section "Testing you card".
+
+First, disable Direct Rendering Manager (CONFIG_DRM) in the kernel :
+
+{{Kernel||<pre>
+Device drivers --->
+    Graphics support --->
+        < > Direct Rendering Manager (XFree86 4.1.0 and higher DRI support)
+</pre>
+}}
+
+And rebuild '''x11-drivers/nvidia-drivers''' since the driver may have built against the kernel DRM symbols. It should fix your problem.
+
+== Expert Configuration ==
+
+=== Documentation ===
+The nVidia driver package also comes with comprehensive documentation. This is installed into '''/usr/share/doc''' and can be viewed with the following
+command:
+{{Cmd|less /usr/share/doc/nvidia-drivers-*/README.bz2}}
+
+=== Kernel module parameters ===
+The '''nvidia''' kernel module accepts a number of parameters (options) which you can use to tweak the behaviour of the driver. Most of these are mentioned in the documentation. To add or change the values of these parameters, edit the file '''/etc/modprobe.d/nvidia.conf'''. Remember to run '''update-modules''' after modifying this file, and bear in mind that you will need to reload the '''nvidia''' module before the new settings take effect.
+
+Edit /etc/modprobe.d/nvidia.conf in your favourite editor:
+{{RootCmd|nano -w /etc/modprobe.d/nvidia.conf}}
+
+Update module information:
+{{RootCmd|update-modules}}
+
+Unload the nvidia module...
+{{RootCmd|modprobe -r nvidia}}
+
+...and load it once again:
+{{RootCmd|modprobe nvidia}}
+
+=== Advanced X configuration ===
+The GLX layer also has a plethora of options which can be configured. These control the configuration of TV out, dual displays, monitor frequency detection, etc. Again, all of the available options are detailed in the documentation.
+
+If you wish to use any of these options, you need to list them in the relevant Device section of your X config file (usually '''/etc/X11/xorg.conf'''). For example, suppose I wanted to disable the splash logo:
+
+{{File|/etc/X11/xorg.conf|Disable the splash logo|<pre>
+Section "Device"
+  Identifier "nVidia Inc. GeForce2"
+  Driver     "nvidia"
+  Option     "NoLogo" "true"
+  VideoRam   65536
+EndSection
+</pre>}}
+
+== Acknowledgements ==
+We would like to thank the following authors and editors for their contributions to this guide: Sven Vermeulen, Joshua Saddler, M Curtis Napier and Chris Gianelloni.
+
+== See also ==
+* [[nouveau & nvidia-drivers switching]]
+
+[[Category:Graphics Adapters]]
+[[Category:Binary kernel modules]]
