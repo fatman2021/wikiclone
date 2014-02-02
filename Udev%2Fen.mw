@@ -1,0 +1,191 @@
+<languages />
+
+
+{{Metadata|abstract=udev is the device manager for the Linux kernel. It manages device nodes in /dev and handles all user space actions when adding/removing devices.}}
+
+{{Lowercase title}}
+{{InfoBox stack
+|{{InfoBox wikipedia|header=true}}
+}}
+
+'''udev''' is the device manager for the Linux kernel. Primarily, it manages device nodes in {{Path|/dev}} and handles all user space actions when adding/removing devices. Also have a look at [http://www.gentoo.org/proj/en/eudev eudev], a fork of udev.
+
+== What is udev? ==
+
+=== The /dev directory ===
+
+When Linux-users talk about the hardware on their system in the vicinity of people who believe Linux is some sort of virus or brand of coffee, the use of "slash dev slash foo" will return a strange look for sure. But for the fortunate user (and that includes you) using {{Path|/dev/sda1}} is just a fast way of explaining that we are talking about the primary master SATA, first partition. Or aren't we? 
+
+We all know what a device file is. Some even know why device files have special numbers when we take a closer look at them when we issue <code>ls -l</code> in {{Path|/dev}} . But what we always take for granted is that the primary SATA disk is referred to as {{Path|/dev/sda}} . You might not see it this way, but this is a flaw by design. 
+
+Think about hotpluggable devices like USB, IEEE1394, hot-swappable PCI, ... What is the first device? And for how long? What will the other devices be named when the first one disappears? How will that affect ongoing transactions? Wouldn't it be fun that a printing job is suddenly moved from your supernew laserprinter to your almost-dead matrix printer because your mom decided to pull the plug of the laserprinter which happened to be the first printer? 
+
+Enter ''udev'' . The goals of the udev project are both interesting and needed:
+
+* Runs in userspace
+* Dynamically creates/removes device files
+* Provides consistent naming
+* Provides a user-space API
+
+Every time a change happens within the device structure, the kernel emits a ''uevent'' which gets picked up by udev. udev then follows the rules as declared in the {{Path|/etc/udev/rules.d}} , {{Path|/run/udev/rules.d}} and {{Path|/lib/udev/rules.d}} directories. Based on the information contained within the uevent, it finds the rule or rules it needs to trigger and performs the required actions. These actions can be creating or deleting device files, but can also trigger the loading of particular firmware files into the kernel memory. 
+
+== Installation ==
+
+{{Note|If you're updating, check the [[/upgrade|upgrade subpage]].}}
+
+=== Kernel ===
+
+You need to activate the following kernel options:
+
+<!-- See http://git.kernel.org/?p=linux/hotplug/udev.git;a=blob_plain;f=README -->
+{{Kernel||<pre>
+General setup  --->
+    [*] Configure standard kernel features (expert users)  --->
+        [ ] Enable deprecated sysfs features to support old userspace tools
+        [*] Enable signalfd() system call
+Enable the block layer  --->
+    [*] Block layer SG support v4
+Networking support  --->
+    Networking options  --->
+        <*> Unix domain sockets
+Device Drivers  --->
+    Generic Driver Options  --->
+        ()  path to uevent helper
+        [*] Maintain a devtmpfs filesystem to mount at /dev
+    < > ATA/ATAPI/MFM/RLL support (DEPRECATED)  --->
+File systems  --->
+    [*] Inotify support for userspace
+    Pseudo filesystems --->
+        [*] /proc file system support
+        [*] sysfs file system support
+</pre>}}
+
+=== Software ===
+
+Portage knows the global USE flag ''udev'' for enabling support for udev in other packages. Enabling this USE flag (default in all ''linux'' [[profile]]s) will pull in {{Package|sys-fs/udev}} automatically:
+
+{{File|/etc/portage/make.conf||<pre>
+USE="... udev ..."
+</pre>}}
+
+The USE flags of udev are:
+
+{{USEflag|package=sys-fs/udev
+|acl+yes
+|doc
+|firmware-loader+yes
+|gudev+yes
+|hwdb+yes
+|introspection+yes
+|keymap+yes
+|openrc+yes
+|selinux++no
+|static-libs++no
+}}
+
+After setting this you want to update your system so the changes take effect:
+
+{{Emerge|params+=--changed-use --deep|@world}}
+
+== Configuration ==
+
+=== Service ===
+
+To start udev at boot time, add it your sysinit runlevel:
+{{RootCmd|rc-update add udev sysinit}}
+
+== Advanced Configuration ==
+
+=== Rules ===
+
+udev provides a set of rules that match against exported values of uevents (events sent by the kernel) and properties of the discovered device. A matching rule will possibly name and create a device node and run configured programs to set-up and configure the device.
+
+The rule definitions are stored in {{Path|/lib/udev/rules.d}} (installed by packages) and {{Path|/etc/udev/rules.d}} (for end-user specified rules). In these directories, multiple rule files (with suffix {{Path|.rules}}) are traversed in alphanumerical order. Inside the rules files, udev will find expressions that might match a uevent together with the state to match (is the uevent because a device is added or removed) and the command to execute.
+
+The event matching is based on information such as:
+* the ''SUBSYSTEM'' of the uevent (for which type of device is the uevent fired)
+* the ''ACTION'' that is taken (add, change or remove)
+* one or more attributes (through ''ATTR'' or ''ATTRS''), such as the device class, vendor or other device information
+* the kernel-provided name (through ''KERNEL''), such as sd* (for SCSI/SATA disks) or input* (for input devices such as mice and keyboards)
+* one or more environment settings (through ''ENV''), used to send information between multiple rules
+
+Based on this information, the rule can then state if 
+* some information needs to be shared with later events (through environment variables)
+* links need to be created in {{Path|/dev}}
+* commands need to be executed
+
+Udev does this for every rule that matches (so it does not stop after the first match) to allow a flexible device management approach.
+
+=== Persistent device names ===
+
+The kernel detects devices asynchronous, udev mirrors the kernel's [[sysfs]] filesystem and so the device are named and numbered in order of detection. So by default udev provides no persistent device names. However there are mechanismen for some device classes to provide these:
+
+* udev creates for storage devices additional symlinks based on the device's id, label, uuid and path. See the {{Path|/dev/disk/by-*}} directory. So instead of using e.g. the device file {{Path|/dev/sda}} use the file {{Path|/dev/disk/by-label/SOME_LABEL}}.
+
+* The same for input devices in the {{Path|/dev/input}} directory.
+
+* Using custom rules you can create your own device files.
+
+== Usage ==
+
+Some useful commands are:
+
+* Show all messages about a given device file:
+: {{RootCmd|udevadm info --query{{=}}all --name{{=}}/dev/DEVICE_FILE}}
+
+* Monitor udev activities:
+: {{RootCmd|udevadm monitor}}
+
+See the ''udevadm'' [[man page]] for more information.
+
+== Troubleshooting ==
+
+* {{Bug|udev|search=package}}
+
+=== Log monitor messages ===
+
+Log all message you see, when you run '''udevadm monitor''':
+
+{{File|/etc/conf.d/udev||<pre>
+udev_monitor="YES"
+</pre>}}
+
+It will create the new log file {{Path|/run/udev/udevmonitor.log}}.
+
+=== Debug mode ===
+
+Enable debug mode to get more log messages:
+
+{{File|/etc/conf.d/udev||<pre>
+udev_debug="YES"
+</pre>}}
+
+It will create the new log file {{Path|/run/udev/udevdebug.log}}.
+
+=== Missing device files {{Path|/dev/null}} and {{Path|/dev/console}} ===
+
+Some udev versions need these files and can't create them on their own. So you have to create them:
+
+{{RootCmd
+|mkdir test
+|mount --bind / test
+|cd test/dev
+|mknod -m 660 console c 5 1
+|mknod -m 660 null c 1 3
+|cd ../..
+|umount test
+|rmdir test
+}}
+
+=== NIC assigned eth0, but is moved to eth1 ===
+
+Those having dual network cards on their motherboards may run into a situation where ifconfig may show no eth0 or eth1.  Dmesg may show their NIC detected as eth0, and later moved to eth1. Performing a "ifconfig -a" will also show the NIC as eth1. This is caused by using the kernel assigned names in the first place. You should write your own rules like {{Path|/etc/udev/rules.d/70-my-network.rules}} to
+use free names like lan0 or wireless0 or use the predictable interface names which are enabled by the default since version 197.
+
+Remember to also remove old files from old versions of udev:
+
+{{RootCmd|rm /etc/udev/rules.d/70-persistent-net.rules /etc/udev/rules.d/80-net-name-slot.rules}}
+
+
+[[Category:Core system]]
+[[Category:Daemons]]
