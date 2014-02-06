@@ -1,0 +1,281 @@
+
+{{Note|Work in Progress}}
+
+{{kernel||<pre>
+File systems --->   
+    [*] OCFS2 file system support
+    [*]   O2CB Kernelspace Clustering
+    [*]   OCFS2 statistics
+    [*]   OCFS2 logging support
+    [ ]   OCFS2 expensive checks
+    <*> Distributed Lock Manager (DLM)
+Device Drivers  --->
+    [*] Block devices  --->
+        [*]   DRBD Distributed Replicated Block Device support
+        [ ]     DRBD fault injection
+</pre>}}
+
+{{Emerge| sys-cluster/drbd}}
+
+{{Emerge | sys-fs/ocfs2-tools}}
+
+DRBD Configure
+
+{{File|/etc/drdb.d/global_common.conf||<pre>
+global {
+        usage-count yes;
+        # minor-count dialog-refresh disable-ip-verification
+}
+
+common {
+        handlers {
+                pri-on-incon-degr "/usr/lib64/drbd/notify-pri-on-incon-degr.sh; /usr/lib64/drbd/notify-emergency-reboot.sh; echo b > /proc/sysrq-trigger ; reboot -f";
+                pri-lost-after-sb "/usr/lib64/drbd/notify-pri-lost-after-sb.sh; /usr/lib64/drbd/notify-emergency-reboot.sh; echo b > /proc/sysrq-trigger ; reboot -f";
+                local-io-error "/usr/lib64/drbd/notify-io-error.sh; /usr/lib64/drbd/notify-emergency-shutdown.sh; echo o > /proc/sysrq-trigger ; halt -f";
+                # fence-peer "/usr/lib64/drbd/crm-fence-peer.sh";
+                # split-brain "/usr/lib64/drbd/notify-split-brain.sh root";
+                # out-of-sync "/usr/lib64/drbd/notify-out-of-sync.sh root";
+                # before-resync-target "/usr/lib64/drbd/snapshot-resync-target-lvm.sh -p 15 -- -c 16k";
+                # after-resync-target /usr/lib64/drbd/unsnapshot-resync-target-lvm.sh;
+        }
+
+        startup {
+                # wfc-timeout degr-wfc-timeout outdated-wfc-timeout wait-after-sb
+        }
+
+        options {
+                # cpu-mask on-no-data-accessible
+        }
+
+        disk {
+                # size max-bio-bvecs on-io-error fencing disk-barrier disk-flushes
+                # disk-drain md-flushes resync-rate resync-after al-extents
+                # c-plan-ahead c-delay-target c-fill-target c-max-rate
+                # c-min-rate disk-timeout
+        }
+
+        net {
+                # protocol timeout max-epoch-size max-buffers unplug-watermark
+                # connect-int ping-int sndbuf-size rcvbuf-size ko-count
+                # allow-two-primaries cram-hmac-alg shared-secret after-sb-0pri
+                # after-sb-1pri after-sb-2pri always-asbp rr-conflict
+                # ping-timeout data-integrity-alg tcp-cork on-congestion
+                # congestion-fill congestion-extents csums-alg verify-alg
+                # use-rle
+        }
+}
+</pre>}}
+
+2 Node Resource 
+
+{{File|/etc/drdb.d/r0.res||<pre>
+resource r0 {
+        on amtbsrv01 {
+                device    /dev/drbd1;
+                disk      /dev/sda5;
+                address   192.168.11.23:7789;
+                meta-disk internal;
+        }
+        on amtbsrv02 {
+                device    /dev/drbd1;
+                disk      /dev/sda5;
+                address   192.168.11.27:7789;
+                meta-disk internal;
+        }
+}
+</pre>}}
+
+
+{{RootCmd|drbdadm create-md r0|output=<pre>
+DRBD module version: 8.4.3
+   userland version: 8.4.2
+you should upgrade your drbd tools!
+Writing meta data...
+initializing activity log
+NOT initializing bitmap
+New drbd meta data block successfully created.
+success
+</pre>}}
+
+
+{{RootCmd|drbdadm up r0|output=<pre>
+DRBD module version: 8.4.3
+   userland version: 8.4.2
+you should upgrade your drbd tools!
+</pre>}}
+
+
+{{RootCmd|cat /proc/drbd|output=<pre>
+version: 8.4.3 (api:1/proto:86-101)
+built-in
+
+ 1: cs:WFConnection ro:Secondary/Unknown ds:Inconsistent/DUnknown C r----s
+    ns:0 nr:0 dw:0 dr:0 al:0 bm:0 lo:0 pe:0 ua:0 ap:0 ep:1 wo:f oos:2026376
+</pre>}}
+
+
+When the 2nd node is up.
+{{RootCmd|cat /proc/drbd|output=<pre>
+version: 8.4.3 (api:1/proto:86-101)
+built-in
+
+ 1: cs:Connected ro:Secondary/Secondary ds:Inconsistent/Inconsistent C r-----
+    ns:0 nr:0 dw:0 dr:0 al:0 bm:0 lo:0 pe:0 ua:0 ap:0 ep:1 wo:f oos:2026376
+</pre>}}
+
+
+
+
+DRBD are now successfully setup
+
+The initial device synchronization
+{{RootCmd|drbdadm primary --force r0|output=<pre>
+DRBD module version: 8.4.3
+   userland version: 8.4.2
+you should upgrade your drbd tools!
+</pre>}}
+
+{{RootCmd|cat /proc/drbd|output=<pre>
+version: 8.4.3 (api:1/proto:86-101)
+built-in
+
+ 1: cs:SyncSource ro:Primary/Secondary ds:UpToDate/Inconsistent C r---n-
+    ns:313236 nr:0 dw:0 dr:315032 al:0 bm:19 lo:5 pe:2 ua:7 ap:0 ep:1 wo:f oos:1715080
+        [==>.................] sync'ed: 15.6% (1715080/2026376)K
+        finish: 0:00:44 speed: 38,912 (38,912) K/sec
+</pre>}}
+
+Until it is done.
+{{RootCmd|cat /proc/drbd|output=<pre>
+version: 8.4.3 (api:1/proto:86-101)
+built-in
+
+ 1: cs:Connected ro:Primary/Secondary ds:UpToDate/UpToDate C r-----
+    ns:2026376 nr:0 dw:0 dr:2027040 al:0 bm:124 lo:0 pe:0 ua:0 ap:0 ep:1 wo:f oos:0
+</pre>}}
+
+the initial full synchronization will commence
+
+ocfs2 setup
+
+{{File|/etc/ocfs2/cluster.conf|Create new files|<pre>
+cluster:
+        node_count = 2
+        name = amtbsysvol
+
+node:
+        number = 1
+        cluster = amtbsysvol
+        ip_port = 7777
+        ip_address = 192.168.11.23
+        name = amtbsrv01
+
+node:
+        number = 2
+        cluster = amtbsysvol
+        ip_port = 7777
+        ip_address = 192.168.11.27
+        name = amtbsrv02
+</pre>}}
+
+{{File|/etc/conf.d/ocfs2|Change OCFS2 Cluster Name|<pre>
+OCFS2_CLUSTER="amtbsysvol"
+</pre>}}
+
+{{File|/etc/fstab|add the following|<pre>
+# Needed by ocfs2
+none                    /sys/kernel/config      configfs        defaults                0 0
+none                    /sys/kernel/dlm         ocfs2_dlmfs     defaults                0 0
+
+# Our DRBD device
+/dev/drbd1              /var/lib/samba/sysvol/  ocfs2           user_xattr,acl,noatime  0 0
+</pre>}}
+
+{{RootCmd
+|mount /sys/kernel/config
+|mount /sys/kernel/dlm 
+|mount /var/lib/samba/sysvol/
+|/etc/init.d/drbd start
+}}
+
+{{RootCmd|/etc/init.d/ocfs2 start|output=<pre>
+ * Starting OCFS2 cluster
+ *  - amtbsysvol ...    
+</pre>}}
+
+
+{{RootCmd|mkfs.ocfs2 -N 2 -L "amtbsysvol" /dev/drbd1|output=<pre>
+mkfs.ocfs2 1.8.2
+Cluster stack: classic o2cb
+Label: amtbsysvol
+Features: sparse extended-slotmap backup-super unwritten inline-data strict-journal-super xattr indexed-dirs refcount discontig-bg
+Block size: 4096 (12 bits)
+Cluster size: 4096 (12 bits)
+Volume size: 2075009024 (506594 clusters) (506594 blocks)
+Cluster groups: 16 (tail covers 22754 clusters, rest cover 32256 clusters)
+Extent allocator size: 4194304 (1 groups)
+Journal size: 67108864
+Node slots: 2
+Creating bitmaps: done
+Initializing superblock: done
+Writing system files: done
+Writing superblock: done
+Writing backup superblock: 1 block(s)
+Formatting Journals: done
+Growing extent allocator: done
+Formatting slot map: done
+Formatting quota files: done
+Writing lost+found: done
+mkfs.ocfs2 successful
+</pre>}}
+
+Time to make a change and make the DRBD Dual Primary
+We only list changes here
+{{Note|They are not configure before activating for a reason}}
+
+{{File|/etc/drdb.d/global_common.conf||<pre>
+        handlers {
+                pri-on-incon-degr "/usr/lib64/drbd/notify-pri-on-incon-degr.sh; /usr/lib64/drbd/notify-emergency-reboot.sh; echo b > /proc/sysrq-trigger ; reboot -f";
+                pri-lost-after-sb "/usr/lib64/drbd/notify-pri-lost-after-sb.sh; /usr/lib64/drbd/notify-emergency-reboot.sh; echo b > /proc/sysrq-trigger ; reboot -f";
+                local-io-error "/usr/lib64/drbd/notify-io-error.sh; /usr/lib64/drbd/notify-emergency-shutdown.sh; echo o > /proc/sysrq-trigger ; halt -f";
+                out-of-sync "/usr/lib64/drbd/notify-out-of-sync.sh root";
+
+
+        net {
+                protocol C;
+                allow-two-primaries yes;
+
+</pre>}}
+
+{{File|/etc/drdb.d/r0.res||<pre>
+resource r0 {
+        startup {
+                become-primary-on both;
+        }
+        }
+        on amtbsrv01 {
+                device    /dev/drbd1;
+                disk      /dev/sda5;
+                address   192.168.11.23:7789;
+                meta-disk internal;
+        }
+        on amtbsrv02 {
+                device    /dev/drbd1;
+                disk      /dev/sda5;
+                address   192.168.11.27:7789;
+                meta-disk internal;
+        }
+        net {
+        # allow-two-primaries yes;
+        after-sb-0pri discard-zero-changes;
+        after-sb-1pri discard-secondary;
+        after-sb-2pri disconnect;
+                      }
+}
+</pre>}}
+{{RootCmd|mount /test}}
+
+{{RootCmd|rc-update add brdb}}
+{{RootCmd|rd-update add ocfs2}}
+{{RootCmd|a command}}
+{{RootCmd|a command}}
