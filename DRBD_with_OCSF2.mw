@@ -9,7 +9,7 @@ see [[DRBD]]
 This is a guide for DRBR with OCFS2.<br />
 The tough came with found that samba Active Directory (AD) Domain Controller (DC) sysvol is not being replicated between DC as current Samba4 known limitation.<br />
 
-Q: Why DRBD is not enough...<br />
+Q: Why DRBD only is not enough...<br />
 There might be case where there are multiple write access to the sysvol by multiple DC member, thus without cluster files system we might be looking for trouble since the DRBD volume are being mount by 2 or more DC member, so OCFS2 is selected for it performance and also popularity.<br />
 
 You can use always other Cluster files system.<br />
@@ -18,6 +18,7 @@ You can use always other Cluster files system.<br />
 Samba Team don't suggest to use this solution, so this is '''''purely experimental'''''. But still DRBD + OCFS2 example are everywhere we can make use of that.<br />
 Please wait for Samba official replication solution and don't use this in any production server.<br />
 I wouldn't held any responsible about your lost... But still you are welcome to TRY :)<br />
+This example can only support Max 2 DC + 1 RODC. because of the limitation of DRBD.<br />
 }}
 
 = Prerequisite =
@@ -38,11 +39,39 @@ Device Drivers  --->
 
 = Packages =
 Please emerge the following package 
-{{Emerge| sys-cluster/drbd}}
+{{Emerge|sys-cluster/drbd}}
+{{USEflag
+|package=sys-cluster/drbd
+|bash-completion+yes
+|udev+yes
+|heartbeat++
+|pacemaker++
+|xen++
+}}
 
-{{Emerge| sys-fs/ocfs2-tools}}
+DRBD 8.4 guide do suggest the use of heartbeat and also pacemaker. But I think that was just too complicated...<br />
+You are welcome to try and add on an option with heartbeat and peacemaker. 
 
-DRBD Configure
+{{Emerge|sys-fs/ocfs2-tools|}}
+{{USEflag
+|package=sys-fs/ocfs2-tools
+|debug
+|external
+|gtk
+}}
+
+= DRBD Configuration =
+We will now configure DRBD.
+{{Note|<br />
+DRBD version check and prompt are a bit annoying as it will suggest you to upgrade every time you execute a command.<br />
+}}
+
+Please check the DRBD User’s Guide Ver 8.4<ref name="drbdManual">[http://www.drbd.org/users-guide/drbd-users-guide.html The DRBD User’s Guide Ver 8.4], The DRBD User’s Guide</ref> on their website it is well written with example.
+
+
+This is a Global DRBD configuration.
+It will need to change according to your DRBD need.
+Please check the on the manual for more info.
 
 {{File|/etc/drdb.d/global_common.conf||<pre>
 global {
@@ -88,18 +117,20 @@ common {
         }
 }
 </pre>}}
+Please create the files below.<br />
+If you have multiple resource setup, you can do it one resource per files to avoid confusion.<br />
 
-2 Node Resource 
+Below files is a 2 Node Resource example.
 
-{{File|/etc/drdb.d/r0.res||<pre>
+{{File|/etc/drdb.d/r0.res|Resource name r0 DRBD |<pre>
 resource r0 {
-        on amtbsrv01 {
+        on serverNode01 {
                 device    /dev/drbd1;
                 disk      /dev/sda5;
                 address   192.168.11.23:7789;
                 meta-disk internal;
         }
-        on amtbsrv02 {
+        on serverNode02 {
                 device    /dev/drbd1;
                 disk      /dev/sda5;
                 address   192.168.11.27:7789;
@@ -107,6 +138,89 @@ resource r0 {
         }
 }
 </pre>}}
+
+In plain English, we will use /dev/sda5 on serverNode01 (IP 192.168.11.23) and /dev/sda5 on serverNode02 (IP 192.168.11.27) to create a drbd node /dev/drbd1 respectively on both server. Both drbd node will store the metadata on internally.
+
+{| class="wikitable"
+|-
+! Name !! Description
+|-
+| resource r0|| The DRBD resource named r0
+|-
+| on serverNode01<br />on serverNode01
+ || The 1st Server Name for your reference.
+|-
+| device    /dev/drbd1; || The device node which will be created by BRDB that need to be mount.
+|-
+| disk      /dev/sda5; || The physical partition that DRBD will be using to store the information. 
+|-
+| address   192.168.11.23:7789;<br />address   192.168.11.27:7789;
+ || The server ip address for DRBD will use to sync between all nodes, You will have to assign this ip to the interface.<br />
+Also DRBD don't support multiple ip address. Use Channel Bonding/Teaming like LACP.<br />
+|-
+| meta-disk internal; || This tell DRBD where to store the metadata, it can be external as well. 
+|}
+
+= OCFS2 Configuration =
+We will now continue with OCFS2 Setup.<br />
+Unfortunately ocfs2 configuration don't include the cluster files example and thus you will need to copy the files below as an example.
+
+{{File|/etc/ocfs2/cluster.conf|Create this files|<pre>
+cluster:
+        node_count = 2
+        name = amtbsysvol
+
+node:
+        number = 1
+        cluster = amtbsysvol
+        ip_port = 7777
+        ip_address = 192.168.11.23
+        name = amtbsrv01
+
+node:
+        number = 2
+        cluster = amtbsysvol
+        ip_port = 7777
+        ip_address = 192.168.11.27
+        name = amtbsrv02
+</pre>}}
+
+{| class="wikitable"
+|-
+! Name !! Descriptions
+|-
+| cluster: || OCFS2 cluster 
+|-
+| Example || Example
+|-
+| Example || Example
+|-
+| Example || Example
+|-
+| Example || Example
+|-
+| Example || Example
+|-
+| Example || Example
+|-
+| Example || Example
+|}
+
+
+{{File|/etc/conf.d/ocfs2|Change OCFS2 Cluster Name|<pre>
+OCFS2_CLUSTER="amtbsysvol"
+</pre>}}
+
+{{File|/etc/fstab|add the following|<pre>
+# Needed by ocfs2
+none                    /sys/kernel/config      configfs        defaults                0 0
+none                    /sys/kernel/dlm         ocfs2_dlmfs     defaults                0 0
+
+# Our DRBD device
+/dev/drbd1              /var/lib/samba/sysvol/  ocfs2           user_xattr,acl,noatime  0 0
+</pre>}}
+
+= DRBD Setup =
 
 
 {{RootCmd|drbdadm create-md r0|output=<pre>
@@ -302,3 +416,6 @@ resource r0 {
 {{RootCmd|rd-update add ocfs2}}
 {{RootCmd|a command}}
 {{RootCmd|a command}}
+
+=External Reference=
+<ref name="test" />
