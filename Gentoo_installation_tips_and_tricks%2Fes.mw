@@ -1,0 +1,183 @@
+<languages />
+
+
+{{Metadata|abstract=The Gentoo installation allows for very flexible approaches to the various installation methods. As it is almost impossible to insert every single tip or trick in the installation instructions this document tries to deal with all submitted tips and tricks for reference purposes.}}
+
+The Gentoo installation allows for very flexible approaches to the various installation methods. As it is almost impossible to insert every single tip or trick in the installation instructions this document tries to deal with all submitted tips and tricks for reference purposes.
+
+
+== Introduction ==
+
+=== Preliminary ===
+
+This document contains various tips and tricks for the Gentoo/x86 installation. Most of them are discussed in a dense way - they are meant as an addendum to the installation instructions and not as a replacement. 
+
+== Advanced Installations ==
+
+=== Software RAID ===
+
+{{Note|If you are not familiar with software raid, please read the [https://raid.wiki.kernel.org/index.php/Linux_Raid Software-RAID-HOWTO] .}}
+
+{{Note|A more detailed procedure can be found in our [http://www.gentoo.org//doc/en/gentoo-x86+raid+lvm2-quickinstall.xml Software Raid and LVM2 x86 Quick Install Guide] .}}
+
+Once you are booted from the Installation CD, load the appropriate RAID modules. For instance, if you plan on using RAID-1: 
+
+{{RootCmd|modprobe raid1}}
+
+When you partition your disks, make sure that your partitions use <code>fd</code> (Linux raid autodetect) as Partition Type instead of <code>83</code> (Linux native). You can alter the partition type using the <code>t</code> command in <code>fdisk</code> . 
+
+Now before we start creating the RAID arrays, we need to create the metadevice nodes: 
+
+{{RootCmd|mknod /dev/md1 b 9 1
+|mknod /dev/md2 b 9 2
+|mknod /dev/md3 b 9 3}}
+
+After partitioning, create the {{Path|/etc/mdadm.conf}} file (yes, indeed, on the Installation CD environment) using <code>mdadm</code> , an advanced tool for [http://www.linuxdevcenter.com/pub/a/linux/2002/12/05/RAID.html RAID management] . For instance, to have your boot, swap and root partition mirrored (RAID-1) covering {{Path|/dev/sda}} and {{Path|/dev/sdb}} , you can use: 
+
+{{RootCmd|mdadm --create --verbose /dev/md1 --level{{=}}1 --raid-devices{{=}}2 --metadata{{=}}0.90 /dev/sda1 /dev/sdb1
+|mdadm --create --verbose /dev/md2 --level{{=}}1 --raid-devices{{=}}2 --metadata{{=}}0.90 /dev/sda2 /dev/sdb2
+|mdadm --create --verbose /dev/md3 --level{{=}}1 --raid-devices{{=}}2 --metadata{{=}}0.90 /dev/sda3 /dev/sdb3}}
+
+{{Important|You should not use any form of striping such as RAID-0 or RAID-5 on the partition you boot from. Also, the <code>--metadata{{=}}0.90</code> is only necessary for these critical file systems. Other filesystems can use more recent metadata formats.}}
+
+The Linux Software RAID driver will start creating the metadevices. You can see its progress in {{Path|/proc/mdstat}} . Wait until the metadevices are completely finished before proceeding. 
+
+{{RootCmd|mdadm --detail --scan > /etc/mdadm.conf}}
+
+From now onwards, use {{Path|/dev/md1}} for the boot partition, {{Path|/dev/md2}} for the swap partition and {{Path|/dev/md3}} for the root partition. 
+
+Right before chrooting, don't forget to copy over {{Path|/etc/mdadm.conf}} to {{Path|/mnt/gentoo/etc}} . 
+
+When you're configuring your kernel, make sure you have the appropriate RAID support ''in'' your kernel and not as module. 
+
+When installing extra tools, emerge <code>mdadm</code> as well. Note that this isn't available on all Installation CDs so you might not be able to install Gentoo on a Software RAID when using a networkless installation! 
+
+When configuring your bootloader, make sure it gets installed in the MBR of ''both'' disks if you use mirroring. 
+
+=== ATA RAID using 2.4 kernels ===
+
+Make sure you boot your Installation CD using the <code>doataraid</code> option. Once booted, check the contents of {{Path|/dev/ataraid}} . It should contain various {{Path|disc*}} directories for each harddisk available in the ATA RAID. An entire disk is displayed as {{Path|disc}} while partitions are {{Path|part*}} . 
+
+Write down the various {{Path|/dev/ataraid/disc*/*}} device files that you use to install Gentoo on. You will need to substitute the {{Path|/dev/sda}} examples in the installation with this path. 
+
+Before chrooting, bind-mount the {{Path|/dev}} structure in the new environment: 
+
+{{RootCmd|mount --rbind /dev /mnt/gentoo/dev}}
+
+When configuring your kernel, make sure you enable support for your ATA RAID chipset and options. For instance, a popular ATA RAID system is a ''Promise FastTrack built-in RAID'' in which case you definitely need <code>Promise FastTrack Options</code> built in into your kernel. 
+
+When configuring GRUB, you first have to create a GRUB bootdisk. This is not as hard as you think. First install GRUB as you would, but when you come to the part where GRUB is getting installed in the MBR, follow the following instructions: 
+
+{{RootCmd|cd /boot/grub
+|dd if{{=}}stage1 of{{=}}/dev/fd0 bs{{=}}512 count{{=}}1
+|dd if{{=}}stage2 of{{=}}/dev/fd0 bs{{=}}512 seek{{=}}1}}
+
+You still need to write your {{Path|grub.conf}} file. This is no different from the installation instructions, just make sure that your <code>root=</code> points to the ATA RAID device. 
+
+After finishing the installation, boot with your GRUB bootdisk. You will be greeted by a GRUB prompt. Now configure GRUB to boot from the ATA RAID device: 
+
+{{Cmd|root (hd0,x)|prompt=grub> 
+|setup (hd0)
+|quit}}
+
+Now reboot (with the GRUB bootfloppy removed). 
+
+LILO users can safely use the instructions mentioned in the installation instructions. 
+
+=== Using the Installation CD kernel ===
+
+If you don't want to compile a kernel yourself you can use the kernel from the Installation CD and copy it to your system. When you come to the point that you're asked to compile a kernel, go to another terminal (press Alt-F2) and log in with the root password you've supplied at the beginning of the installation. 
+
+Copy over the kernel and modules to your Gentoo system: 
+
+{{Note|${KN} is the kernel name, usually something like 'gentoo' or 'smp'.}}
+
+{{RootCmd|cp /mnt/cdrom/isolinux/${KN} /mnt/cdrom/isolinux/${KN}.igz /mnt/gentoo/boot
+|mkdir -p /mnt/gentoo/lib/modules
+|cp -Rp /lib/modules/`uname -r` /mnt/gentoo/lib/modules}}
+
+To have all modules that are currently running (from the Installation CD) loaded during bootup of your Gentoo system, run the following command from within the chrooted environment: 
+
+{{RootCmd|printf "modules\"" >> /etc/conf.d/modules
+|cat /proc/modules | cut -d ' ' -f 1 >> /etc/conf.d/modules
+|printf "\"\n" >> /etc/conf.d/modules}}
+
+Verify the {{Path|/etc/conf.d/modules}} content and update appropriately. 
+
+== Simplifying the Installation ==
+
+=== Leaving your Terminal ===
+
+Many people want to leave their system when it's compiling. In certain cases this is rather difficult as the installation is done in a public environment where you cannot trust everyone. If this is the case, you want to be able to perform the compilation in the background and log out from all terminals. 
+
+There are several possible solutions for this. The first one is to use <code>screen</code> . After booting the Installation CD, set your root password and start a screen session: 
+
+{{Note|Not all Installation CDs provide screen. If this is the case, you will have to use one of the other methods described in this section.}}
+
+{{RootCmd|screen -S gentoo}}
+
+Once inside the screen session you can perform the entire installation. When you want to leave your terminal, press <code>Ctrl-a, d</code> (that is, control and a at the same time, then followed by a d) to ''detach'' your screen session. You can now safely log out of your system. 
+
+To regain access to your terminal, log in as root again and ''attach'' to the running screen session: 
+
+{{RootCmd|screen -x gentoo}}
+
+If you can't use screen, there is still a way to leave your terminal. Follow the installation instructions, but when you come to the point where a long-term compilation would be started (for instance the <code>./scripts/bootstrap.sh</code> step), use <code>nohup</code> which allows for a process to continue even when you log out. Don't forget the trailing "&", otherwise the process won't be placed in the background! Remember where you are (the <code>pwd</code> command will show you that) as you will need to know this later on. 
+
+{{RootCmd|pwd|output=<pre>
+/usr/portage
+</pre>}}
+
+{{RootCmd|nohup ./scripts/bootstrap.sh &}}
+
+Now exit the chrooted environment ( <code>exit</code> ) and the Installation CD session. Your compilation will continue in the background. 
+
+When you want to check the compilation, log in as root (on the Installation CD) and chroot back into your environment and go to the directory where you left off: 
+
+{{RootCmd|chroot /mnt/gentoo /bin/bash
+|env-update && source /etc/profile
+|cd /usr/portage}}
+
+Now use the <code>less</code> command on the {{Path|nohup.out}} file that is situated inside that directory. The compilation will append its output to that file, so if you want to follow the compilation progress, run <code>less nohup.out</code> and press <code>F</code> to follow the changes. When the compilation is finished, you can continue with the next step of the installation instructions. 
+
+If you ever get tired of following the changes, press <code>Ctrl-C</code> followed by a <code>q</code> . This won't stop the compilation process, only the <code>less</code> process. 
+
+== Fixing Errors/Issues ==
+
+=== Extensive Testing of your Disks ===
+
+If you think your disk needs to be thoroughly checked for consistency (bad sectors and such), you can use the <code>-c</code> option while placing the ext2 or ext3 filesystem on it (using <code>mke2fs</code> ). This will format, perform a read-test and mark all bad blocks as such. If you are really paranoid, use <code>-c -c</code> to format your disk and perform an extensive read/write test. 
+
+{{RootCmd|mke2fs -j -c /dev/sda3}}
+
+=== Recovering from a malfunctioning installation ===
+
+If for some reason your Gentoo installation fails, you don't have to redo the installation all over again. Instead, you can safely "go" to the point where you think you made a mistake (or where you think the instructions are flawed) and try a different approach. 
+
+First of all you need to chroot back into your Gentoo Linux environment. Follow the instructions again, but ignore the partitioning steps as your partitions are already created and even populated. You can therefore immediately mount those partitions at {{Path|/mnt/gentoo}} . You should also ignore the steps about stage extraction and modifying {{Path|make.conf}} - you don't want to overwrite your files do you? 
+
+Once chrooted inside your Gentoo Linux environment, immediately go to the step where you think you should try a different approach. Don't redo all the steps like bootstrapping and such unless that is the place where you think things went wrong. 
+
+For instance, if you believe that you have a wrongly configured {{Path|grub.conf}} , you can immediately fire up your editor to update {{Path|/boot/grub/grub.conf}} . 
+
+Once you have tried a different approach for your situation, you should consider how much of the subsequent steps you need to perform again. If the subsequent steps are depending on your change, you will need to redo those. 
+
+For instance, 
+
+* if you have changed a variable inside {{Path|make.conf}} you will need to do all subsequent compiling since those depend on the settings inside {{Path|make.conf}} 
+* if you have altered {{Path|/boot/grub/grub.conf}} you can immediately exit the chrooted environment and reboot as no subsequent steps are depending on {{Path|grub.conf}} 
+* if you have recompiled your kernel you only need to make sure that your bootloader configuration points to the correct kernel image (double-check that you mounted your {{Path|/boot}} !), then you can exit the chrooted environment and reboot
+* if you have altered {{Path|/etc/fstab}} you can exit the chrooted environment and reboot
+
+As you can see, for most recovery operations you can immediately reboot. Only in certain cases will you need to redo the subsequent installation steps. 
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Sven Vermeulen
+* Xavier Neys
+* nightmorph
+
+[[Category:Server and Security]]
