@@ -1,0 +1,106 @@
+== Converting to a "Native" btrfs Based System ==
+This exercise is an update to the original example for re-basing a gentoo installation's root filesystem to use btrfs [[Btrfs_system_root|found here]].  In this case, the existing system is a mirror set using two 2tb drives at /dev/sda and /dev/sdb.  Two fresh 2tb drives have been added at /dev/sdc and /dev/sdd.  In the original exercise, the mdadm array was kept to mirror the /boot partitions on the two drives, while the rest of the partitions were converted to btrfs subvolumes.
+
+This second exercise explores the use of grub2 to fully convert the mirror set to use the multi-volume functionality of btrfs, implementing /boot as a mirrored btrfs filesystem and forgoing the need to use an initramfs to provide early userspace mounting of the root subvolume.  We also will be using the gptfdisk ebuild tools to make a GPT based partition table on the new mirror set in place of a legacy MBR table.
+
+=== Partitioning ===
+Emerge gptfdisk if you don't already have it.  It provides the gdisk, sgdisk and cgdisk utilities for manipulating GPT partitions.  These correspond to the legacy fdisk, sfdisk and cfdisk utilities for MBR tables.
+
+We followed the writeup on grub2 [[GRUB2|here]] to put together the following GPT scheme that GRUB2 can use and got it working after a false start or two.
+
+{{RootCmd|cgdisk|output=<pre>
+                                                          cgdisk 0.8.6
+
+                                                      Disk Drive: /dev/sdc
+                                                   Size: 3907029168, 1.8 TiB
+
+Part. #     Size        Partition Type            Partition Name
+----------------------------------------------------------------
+            1007.0 KiB  free space
+   3        3.0 MiB     BIOS boot partition       biosboot
+   1        500.0 MiB   Linux filesystem          boot
+   2        1.8 TiB     Linux filesystem          root
+
+    [ Align  ]  [ Backup ]  [  Help  ]  [  Load  ]  [  New   ]  [  Quit  ]  [ Verify ]  [ Write  ]
+</pre>}}
+
+The biosboot partition was what got missed on the first round and thus got added later.  To recreate this setup in cgdisk, use the following values:
+
+* '''biosboot''' - start at sector 2048 and do a minimum size of 2048 sectors to create at least a 1mb partition for GRUB2 to park its core.img file when doing grub2-install.  Set the partition type to 0xEF02 and set the label to something meaningful like biosboot.  We had simply done a 4mb freespace originally before putting in the boot partition so went back and made it start at 2048 and size of 6144 sectors to make the 3mb result.
+* '''boot''' - GRUB2 will take about 32mb more of /boot than you may be used to so the usual suggestion of 200mb in days past is now more like 300mb - 500mb depending on how many kernels and initramfs filesystems you like to keep around.  Set the partition type to the default which is 0x8300 for Linux.
+* '''root''' - We took the default for size to allocate the rest of the drive to the root partition.  Once again the type is set to 0x8300.
+
+The resulting table looks like the following in gdisk:
+
+{{RootCmd|gdisk /dev/sdc|output=<pre>
+GPT fdisk (gdisk) version 0.8.6
+
+Partition table scan:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.
+
+Command (? for help): p
+Disk /dev/sdc: 3907029168 sectors, 1.8 TiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): A5C43D4A-ED5A-4173-BDC0-5D632C0BAEEF
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 3907029134
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            8192         1032191   500.0 MiB   8300  boot
+   2         1032192      3907029134   1.8 TiB     8300  root
+   3            2048            8191   3.0 MiB     EF02  biosboot
+
+Command (? for help): 
+</pre>}}
+
+{{Note|You may not see the "MBR: protective" indication in the output above until after grub2-install has been run on the drive.  Also your biosboot would be the first entry if you got things right the first time like we didn't.}}
+
+Repeat the same partitioning on /dev/sdd.  Similar to sfdisk, the sgdisk utility has the ability to dump the GPT table to a file and then reload that.  However the output is binary, so we just went ahead and used cgdisk to create the same layout on /dev/sdd.
+
+
+== Filesystem Creation ==
+Since this is a two disk simple mirror, we specify raid1 for both metadata and data when making the two filesystems.
+
+{{RootCmd|mkfs -t btrfs -L BTBOOT -m raid1 -d raid1 /dev/sdc1 /dev/sdd1|output=<pre>
+
+Warning btrfs is experimental blah blah blah
+</pre>}}
+{{RootCmd|mkfs -t btrfs -L BTROOT -m raid1 -d raid1 /dev/sdc2 /dev/sdd2|output=<pre>
+
+TBD... paste real output
+</pre>}}
+
+We mount the default volume for the root partition on /mnt/newmirror but will be putting the actual contents into subvolumes with different btrfs features enabled or disabled.
+{{RootCmd|mkdir /mnt/newmirror}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag /dev/sdc2 /mnt/newmirror}}
+
+The new root filesystem will go onto a btroot subvolume which is created on the mirror and then mounted to /mnt/newroot
+{{RootCmd|mkdir /mnt/newroot}}
+{{RootCmd|btrfs subvol create /mnt/newmirror/btroot}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag /dev/sdc2 /mnt/newroot}}
+
+We mount the existing root filesystem to /mnt/rawroot and use tar to transfer things over while avoiding the dynamic stuff.
+
+{{RootCmd|mkdir /mnt/rawroot}}
+{{RootCmd|mount --bind / /mnt/rawroot}}
+{{RootCmd|cd /mnt/rawroot}}
+{{RootCmd|tar cvpf - . {{!}} (cd /mnt/newroot; tar xpf -)|output=<pre>
+
+40 or so gb worth of stuff in the output log goes by
+</pre>}}
+
+At this point /mnt/newroot/boot and the mountpoints for the other subvolumes we will be creating are already in place from the tar.  We keep the mount options simple for /mnt/newroot/boot.
+
+{{RootCmd|mount -t btrfs -o defaults,noatime /dev/sdc1 /mnt/newroot/boot}}
+{{RootCmd|cd /boot}}
+{{RootCmd|tar cvpf - . {{!}} (cd /mnt/newroot/boot; tar xpf -)|output=<pre>
+
+short and sweet output log goes by
+</pre>}}
