@@ -6,8 +6,7 @@ The 13 and 15 inch models are slightly different. The 15 inch model is more comp
 * [[Macbook Pro Retina 13inch 10,x]]
 * [[Macbook Pro Retina 15inch 10,x]]
 
-
-
+In theory, the steps here should be very similar to the 11,x model. 
 
 == Installation Steps ==
 
@@ -16,14 +15,6 @@ These instructions will perform a Dual Boot setup with MacOS. A single boot inst
 
 Install Ubuntu's daily liveCD to a USB drive using unetbootin on an existing PC. You MUST use a 64 bit USB boot image. As of March 2013, I had use the daily as 12.10 does not have the right wireless drivers. However, you could use an older Ubuntu and install via a USB Ethernet NIC or via Thunderbolt (plug in the Thunderbolt before you boot).
 
-Now you must choose your a EFI boot manager. Currently Apple's Bootcamp doesn't support linux. However there are two option for you. 
-1)
-Refit it is very easy to install (I used it myself) however be aware that it is dead.  There is longer any active development for it.  I can confirm that is works well with OSX Mountain Lion however Apple is releasing OSX Mavericks which it hasnt been tested on. If you want to install it the link is below. 
- http://refit.sourceforge.net/doc/c1s1_install.html 
-
-2)
-Refind which is a  fork of Refit and is being actively development and maintained. For installation see follow below link 
- http://www.rodsbooks.com/refind/installing.html#installsh
 
 Use MacOS Disk Utility to resize the MacOS partition on the fly, which by default takes up most of the disk, and behind it create your Linux root partition of the size you desire.
 
@@ -35,27 +26,22 @@ When it boots, most everything should work except the sound on the liveCD.
 
 Proceed with a standard Gentoo install using the Ubuntu live environment. Install your snapshot into the root partition you created (Probably /dev/sdb4) and configure it per the installation instructions but do not install the boot loader. Note that by default the EFI system partition will be sdb1, Apple root will be sdb2 and Apple recovery will be sdb3.
 
-I use the EFI Stub Kernel method of booting. It is very simple and there are other ways but I will describe the stub method.
 
-In this method, the Mac app rEFIt will act as the boot manager/boot loader and it will boot the kernel directly. The kernel must have EFI stub support compiled in.
 
-Use at least a 3.7 Kernel. The wireless drivers you need later do not compile with a kernel greater than 3.8 at the present time.
 
-Configure your kernel as normal, but add the following options for EFI Stub:
 
-Processor type and features  --->
-    [*] EFI runtime service support 
-    [*]   EFI stub support
+== Kernel Configuration ==
 
-Processor type and features  --->
-    [*] Built-in kernel command line
-    (root=/dev/sda4)
+If you are going to use rEFIt, read the section about EFI stubs before you build your kernel.
 
-Make sure the root= line on your kernel command line configuration is correct. More details about Kernel configuration for EFI stub are here: [[ EFI stub kernel ]]
+I've included [https://gist.github.com/8995282 my 3.14 kernel config] as a reference, which supports:
+ * Open source intel and nvidia drivers
+ * Apple magic mouse
+ * LVM
+ * LUKS encryption
+ * Bluetooth
+ * Everything below
 
-This assumes you do not need an initramfs. I do not use one. If you do, the EFI stub method may not be the easiest method. But it can still be done, refer to the [[ EFI_stub_kernel ]] page.
-
-Also, add the following Kernel options for driver support:
 
 These options are in addition to the standard options you would select for Intel based PC's
 
@@ -90,6 +76,11 @@ Drivers, Sound, ALSA, PCI:
 
 Once configured, compile the kernel as normal but do not copy it to /boot. Once it is compiled, do the following:
 
+Required for Audio: Add the following to the bottom of /etc/modprobe.d/alsa:
+ options snd_hda_intel model=mbp101
+
+=== Installing the kernel === 
+
 Your built in Macbook SSD should be /dev/sdb if you booted from the Ubuntu USB which will probably be /dev/sda.
 Assuming it is /dev/sdb, your "EFI System Partition" will be /dev/sdb1, in which case, copy it to the EFI partition as such:
 
@@ -97,15 +88,83 @@ Assuming it is /dev/sdb, your "EFI System Partition" will be /dev/sdb1, in which
  mount /dev/sdb1 /mnt/efi
  cp /usr/src/linux/arch/x86_64/boot/bzImage /mnt/efi/EFI/Boot/Gentoo_37_x64.efi
 
+If you used rEFInd and need an initramfs, copy it over too.
+
+== Bootloader == 
+
+Now you must choose your a EFI boot manager. Currently Apple's Bootcamp doesn't support linux. However there are two option for you: rEFIt and rEFInd.
+
+=== Using Refit === 
+
+Refit it is very easy to install (I used it myself) however be aware that it is dead.  There is longer any active development for it.  I can confirm that is works well with OSX Mountain Lion however Apple is releasing OSX Mavericks which it hasnt been tested on. If you want to install it the link is below. 
+ http://refit.sourceforge.net/doc/c1s1_install.html 
+
+A major drawback of this method is that you cannot use an initramfs, so if you have lvm or encryption then you must use rEFInd.
+
+You cannot pass kernel arguments using rEFIt, so it is useless on 15 in macbooks where kernel arguments are required.
+
+In this method, the Mac app rEFIt will act as the boot manager/boot loader and it will boot the kernel directly. The kernel must have EFI stub support compiled in.
+
+Use at least a 3.7 Kernel. The wireless drivers you need later do not compile with a kernel greater than 3.8 at the present time.
+
+Configure your kernel as normal, but add the following options for EFI Stub:
+
+Processor type and features  --->
+    [*] EFI runtime service support 
+    [*]   EFI stub support
+
+Processor type and features  --->
+    [*] Built-in kernel command line
+    (root=/dev/sda4)
+
+Make sure the root= line on your kernel command line configuration is correct. More details about Kernel configuration for EFI stub are here: [[ EFI stub kernel ]]
+
+This assumes you do not need an initramfs. I do not use one. If you do, the EFI stub method may not be the easiest method. But it can still be done, refer to the [[ EFI_stub_kernel ]] page.
+
+
 You do not need to setup any bootloaders (Grub nor Lilo) for this to work. rEFIt will automatically detect the kernel you copied to that location and show it as a boot option when you reboot.
 
 Complete the rest of the gentoo installation, and reboot. rEFIt should show Gentoo_37_x64.efi as an option in the boot menu.
 
 
-Required for Audio: Add the following to the bottom of /etc/modprobe.d/alsa:
- options snd_hda_intel model=mbp101
 
+=== Using Refind === 
 
+Refind which is a  fork of Refit and is being actively development and maintained. For installation see follow below link 
+ http://www.rodsbooks.com/refind/installing.html#installsh
+
+This option is recommended for 15 inch versions, as it allows for passing kernel parameters. 
+
+Setting up rEFInd must be done from OSX. Essentially it boils down to:
+
+Getting rEFInd
+ Go to http://sourceforge.net/projects/refind/files/
+ Get the latest binary zip 
+ Extract it
+
+Installing rEFInd
+ mkdir /Volumes/esp
+ mount -t msdos /dev/disk0s1 /Volumes/esp
+ sudo cp -r refind Volumes/esp/efi/refind
+ sudo bless --mount /Volumes/esp --setBoot --file /Volumes/esp/efi/refind/refind_x64.efi # actually sets it active
+
+Configuring rEFInd
+
+Edit /Volumes/efi/refind/refind.conf to add your kernel, as you would with grub
+
+ menuentry Linux-Bleeding-Modeset-Switch {
+    icon EFI/refind/icons/os_gentoo.icns
+
+    loader EFI/gentoo/kernel-3.14-m
+    initrd EFI/gentoo/initrd-3.14-m
+    options "ro root=UUID=a3b54691-7d5b-3b20-8b80-08cbfa521fbf noapic" # Basic kernel options, specifying root partition by uuid.
+#    options "ro crypt_root=/dev/vg1/root dolvm real_root=/dev/mapper/root rootfstype=ext4 noapic" # kernel options for lvm + luks encryption
+
+ }
+
+You can (and probably should) have several entries, and can edit this file from within linux.
+
+Just compile your kernels normally and install them to EFI/gentoo on the efi partition.
 
 == Wireless Drivers ==
 There are two driver options for wifi. 
@@ -124,10 +183,97 @@ echo "net-wireless/broadcom-sta" >> /etc/portage/package.keywords
 broadcom-sta
 }}
 
-NB: Only broadcom-sta supports 802.11n at time of writing (Aug 1 2013)
+NB: Only broadcom-sta supports 802.11n at time of writing (Aug 1 2013).
+
+The broadcom-sta driver will have to be recompiled each time you upgrade your kernel.e
+
+== Media keys ==
+
+We will control the media keys using xbindkeys. Create an .xbindkeysrc in your home directory with the options mentioned. You can also use xbindkey -k to generate new mappings. To install, add "xbindkeys" to your .xinitrc. You can access function keys by holding the "fn" modifier in the bottom left of the keyboard.
+
+We'll also need to create a local.d script:
+
+/etc/local.d/01-keyboard.start :
+ #!/bin/bash
+ /usr/bin/setpci -v -H1 -s 00:01.00 BRIDGE_CONTROL=0 #http://askubuntu.com/questions/370857/cant-adjust-screen-brightness-on-macbook-pro-10-1- ubuntu-13-10 
+ /bin/chmod a+w /sys/devices/platform/applesmc.768/leds/smc\:\:kbd_backlight/brightness
+ /bin/chmod a+w /sys/class/backlight/gmux_backlight/brightness 
+
+=== Keyboard backlight ===
+
+Install xbindkeys and add the following to your xbindkeysrc
+
+ "/usr/bin/kb-brightness down"
+   m:0x0 + c:237
+
+ "/usr/bin/kb-brightness up"
+   m:0x0 + c:238
+
+kb-brightness:
+ #!/bin/bash
+ kbdb='/sys/devices/platform/applesmc.768/leds/smc::kbd_backlight/brightness'
+ step=25
+ current=`cat $kbdb`
+ new=$current
+ if [ "$1" == "up" ];then
+    new=$(($current + $step))
+ elif [ "$1" == "down" ];then 
+    new=$(($current - $step))
+ fi
+ if [ $new -le 0 ];then
+    new=0
+ fi
+ echo $new > $kbdb
+
+=== Display backlight ===
+
+Note: this will not work with the proprietary Nvidia graphics driver by any known method.
+
+Add the following tho .xbindkeysrc:
+
+ "/usr/bin/bl-brightness down"
+   m:0x0 + c:232
+
+ "/usr/bin/bl-brightness up"
+   m:0x0 + c:233
+
+bl-brightness:
+ #!/bin/bash
+ bldb='/sys/class/backlight/gmux_backlight/brightness'
+ step=25
+ current=`cat $bldb`
+ new=$current
+ if [ "$1" == "up" ];then
+    new=$(($current + $step))
+ elif [ "$1" == "down" ];then 
+    new=$(($current - $step))
+ fi
+ if [ $new -le 0 ];then
+    new=0
+ fi
+ echo $new > $bldb
+ current=`cat $bldb`
+
+=== Audio control keys ===
+
+This assumes you are using alsa, and have your card properly configured:
+
+Add the following to your .xbindkeysrc:
+
+ # Increase volume
+ "amixer set Master playback 1+ unmute"
+    XF86AudioRaiseVolume
+ # Decrease volume
+ "amixer set Master playback 1-"
+    XF86AudioLowerVolume
+ "amixer set Master toggle"
+    XF86AudioMute
 
 
 == Application configuration ==
+
+=== Keeping retina resolution === 
+
 If you plan to use the retina display at native resolution on the 13" or 15" MBP, you probably want to make it a little more readable. To do this, most toolkits have DPI configuration. In KDE, you can find it in systemsettings>Application appearance>Font>DPI, set it at 160 for 1.5x resolution and 220 for 1.0x resolution (letting it at 96 will be equal to 2.0x resolution). For terminals such as xterm and urxvt, edit ~/.Xdefaults to add
 
  Xft.dpi:       160
@@ -139,7 +285,20 @@ If you plan to use the retina display at native resolution on the 13" or 15" MBP
 
 For GTK, font size can be set in ~/.gtkrc-2.0. It can also share KDE settings when using oxygen-gtk.
 
+=== Downscaling resolution ===
+
+This will just globally cut the resolution in half, and provides a much more "normal" experience, while sacrificing the additional resolution. IMHO, this is totally worth it and actually works way better.
+
+Add the following to your .xinitrc:
+
+ monitor=`xrandr | grep -i edp | cut -d " " -f 1`
+ xrandr --newmode  "1440x900_60.00"  106.50  1440 1528 1672 1904  900 903 909 934 -hsync +vsync
+ xrandr --addmode $monitor 1440x900_60.00
+ xrandr --output $monitor --mode 1440x900_60.00
+
+
 == Turn off backlight when screen closed ==
+
 The hardware does not automatically shut off the backlight like other laptops. Make the following change. Edit /etc/acpi/default.sh and find the commented #lid) section, the lid) case should look like this:
  lid)
    xset -display :0 dpms force off
@@ -151,8 +310,6 @@ In addition, edit /etc/X11/xinit/xinitrc.d/00-xhost and add the following line t
 
 Restart ACPID and the X server for this to take effect.
 
-
-
 == What's Not Yet Working ==
 
 Everything I can think to test works, except the following:
@@ -160,5 +317,10 @@ Everything I can think to test works, except the following:
 * The SD card reader is giving me some troubles. It works fine with some cards but I am having errors with other cards. But it does seem to work sometimes. I get the following:
   [16032.337737] mmc0: Switching to 1.8V signalling voltage failed, retrying with S18R set to 0
   [16049.257421] mmc0: error -110 whilst initialising SD card
+
+== Resources ==
+
+The [https://wiki.archlinux.org/index.php/MacBookPro_Retina arch linux wiki] is a very good reference
+
 
 [[Category:Laptops]]
