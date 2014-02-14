@@ -12,27 +12,92 @@ In theory, the steps here should be very similar to the 11,x model.
 
 These instructions will perform a Dual Boot setup with MacOS. A single boot installation could be performed, but you will need to use the rEFIt instructions for installing rEFIt to the EFI system partition using bless instead of to the MAC partition (which is the default). I have not tried this yet but you can read about it on the rEFIt website.
 
+=== Preparation ===
 
-Install Ubuntu's daily liveCD to a USB drive using unetbootin on an existing PC. You MUST use a 64 bit USB boot image. As of March 2013, I had use the daily as 12.10 does not have the right wireless drivers. However, you could use an older Ubuntu and install via a USB Ethernet NIC or via Thunderbolt (plug in the Thunderbolt before you boot).
+We will be bootstrapping using Ubuntu. Grab a [http://releases.ubuntu.com/13.04/ mac image] and [http://www.ubuntu.com/download/desktop/create-a-usb-stick-on-mac-osx flash it to a USB drive]. SD cards don't seem to work.
+
+To connect to ethernet, you'll need a thunderbolt adapter, which will have to be plugged in from boot (hotplugging doesn't seem to work).
+
+Use MacOS Disk Utility to resize the MacOS partition on the fly, which by default takes up most of the disk, and behind it create your Linux root partition of the size you desire. Note: if you have full disk encryption, you will need to temporarily disable it (takes a while) to make any changes to the partition table.
+
+Now, choose a bootloader so that you can boot the liveUSB and the kernel we'll be making later.
 
 
-Use MacOS Disk Utility to resize the MacOS partition on the fly, which by default takes up most of the disk, and behind it create your Linux root partition of the size you desire.
+== Bootloader == 
 
-Shut down the Mac, and boot it up twice (Requirement for rEFIt). You should start seeing the rEFIt boot menu after the second reboot.
+Now you must choose your a EFI boot manager. Currently Apple's Bootcamp doesn't support linux. However there are two option for you: rEFIt and rEFInd.
 
-Now, plug the Ubuntu USB stick into the Mac and boot the Mac. Select the new option in the menu which should be the USB stick.
+=== Using Refit === 
+
+Refit it is very easy to install however be aware that it is dead.  There is longer any active development for it.  I can confirm that is works well with OSX Mountain Lion however it's untested on OSX Mavericks which it hasnt been tested on. If you want to install it the link is below. 
+ http://refit.sourceforge.net/doc/c1s1_install.html 
+
+A major drawback of this method is that you cannot use an initramfs, so if you have lvm or encryption then you must use rEFInd.
+
+You cannot pass kernel arguments using rEFIt, so it is useless on 15 in macbooks where kernel arguments are required (unless you hardcode all arguments, which is very cumbersome).
+
+In this method, the Mac app rEFIt will act as the boot manager/boot loader and it will boot the kernel directly. 
+
+Use at least a 3.7 Kernel. The wireless drivers you need later do not compile with a kernel greater than 3.8 at the present time.
+
+Complete the rest of the gentoo installation, and reboot. rEFIt should show Gentoo_37_x64.efi as an option in the boot menu.
+
+
+
+=== Using Refind === 
+
+Refind which is a  fork of Refit and is being actively development and maintained. For installation see follow below link 
+ http://www.rodsbooks.com/refind/installing.html#installsh
+
+This option is recommended for 15 inch versions, as it allows for passing kernel parameters. 
+
+Setting up rEFInd must be done from OSX. Essentially it boils down to:
+
+Getting rEFInd
+ Go to http://sourceforge.net/projects/refind/files/
+ Get the latest binary zip 
+ Extract it
+
+Installing rEFInd
+ mkdir /Volumes/esp
+ mount -t msdos /dev/disk0s1 /Volumes/esp
+ sudo cp -r refind Volumes/esp/efi/refind
+ sudo bless --mount /Volumes/esp --setBoot --file /Volumes/esp/efi/refind/refind_x64.efi # actually sets it active
+
+Configuring rEFInd
+
+Later, once you've built a kernel, you'll need to edit /Volumes/efi/refind/refind.conf (from within linux) to add your kernel, as you would with grub
+
+ menuentry Linux-Bleeding-Modeset-Switch {
+    icon EFI/refind/icons/os_gentoo.icns
+    loader EFI/gentoo/kernel-3.14-m
+    initrd EFI/gentoo/initrd-3.14-m
+    options "ro root=UUID=a3b54691-7d5b-3b20-8b80-08cbfa521fbf noapic" # Basic kernel options, specifying root partition by uuid.
+ #    options "ro crypt_root=/dev/vg1/root dolvm real_root=/dev/mapper/root rootfstype=ext4 noapic" # kernel options for lvm + luks encryption
+ }
+
+You can (and probably should) have several entries, and can edit this file from within linux.
+
+Just compile your kernels normally and install them to EFI/gentoo on the efi partition.
+
+
+== LiveUSB Bootstrap ==
+
+
+Now that the bootloader has been installed and the disk is prepared, we are ready to start bootstrapping.
+
+Shut down the Mac, and boot it up twice (Requirement for rEFIt). You should start seeing the rEFIt or rEFInd boot menu after the second reboot.
+
+Now, plug the Ubuntu USB stick into the Mac and boot the Mac. Select the new option in the menu which should be the USB stick. If there are multiple options, keep trying until you get one that boots. At the ubuntu boot screen, press F6 to disable apic, or you may experience random crashes.
 
 When it boots, most everything should work except the sound on the liveCD.
 
 Proceed with a standard Gentoo install using the Ubuntu live environment. Install your snapshot into the root partition you created (Probably /dev/sdb4) and configure it per the installation instructions but do not install the boot loader. Note that by default the EFI system partition will be sdb1, Apple root will be sdb2 and Apple recovery will be sdb3.
 
 
-
-
-
 == Kernel Configuration ==
 
-If you are going to use rEFIt, read the section about EFI stubs before you build your kernel.
+If you are going to use rEFIt, make sure you 
 
 I've included [https://gist.github.com/8995282 my 3.14 kernel config] as a reference, which supports:
  * Open source intel and nvidia drivers
@@ -44,6 +109,12 @@ I've included [https://gist.github.com/8995282 my 3.14 kernel config] as a refer
 
 
 These options are in addition to the standard options you would select for Intel based PC's
+
+Configure your kernel as normal, but add the following options for EFI Stub (needed for rEFIt or rEFInd), More details about Kernel configuration for EFI stub are here: [[ EFI stub kernel ]]:
+
+Processor type and features  --->
+    [*] EFI runtime service support 
+    [*]   EFI stub support
 
 Drivers, Input, Generic Input, Mouse:
  CONFIG_MOUSE_BCM5974=y (For trackpad support)
@@ -74,6 +145,14 @@ Drivers, Sound, ALSA, PCI:
  CONFIG_SND_HDA_CODEC_HDMI=m
  CONFIG_SND_HDA_CODEC_CIRRUS=m
 
+If and only if you are using rEFIt, specify the root hardcoded in the kernel:
+
+ Processor type and features  --->
+    [*] Built-in kernel command line
+    (root=/dev/sda4)
+
+Make sure the root= line on your kernel command line configuration is correct. 
+
 Once configured, compile the kernel as normal but do not copy it to /boot. Once it is compiled, do the following:
 
 Required for Audio: Add the following to the bottom of /etc/modprobe.d/alsa:
@@ -90,80 +169,6 @@ Assuming it is /dev/sdb, your "EFI System Partition" will be /dev/sdb1, in which
 
 If you used rEFInd and need an initramfs, copy it over too.
 
-== Bootloader == 
-
-Now you must choose your a EFI boot manager. Currently Apple's Bootcamp doesn't support linux. However there are two option for you: rEFIt and rEFInd.
-
-=== Using Refit === 
-
-Refit it is very easy to install (I used it myself) however be aware that it is dead.  There is longer any active development for it.  I can confirm that is works well with OSX Mountain Lion however Apple is releasing OSX Mavericks which it hasnt been tested on. If you want to install it the link is below. 
- http://refit.sourceforge.net/doc/c1s1_install.html 
-
-A major drawback of this method is that you cannot use an initramfs, so if you have lvm or encryption then you must use rEFInd.
-
-You cannot pass kernel arguments using rEFIt, so it is useless on 15 in macbooks where kernel arguments are required.
-
-In this method, the Mac app rEFIt will act as the boot manager/boot loader and it will boot the kernel directly. The kernel must have EFI stub support compiled in.
-
-Use at least a 3.7 Kernel. The wireless drivers you need later do not compile with a kernel greater than 3.8 at the present time.
-
-Configure your kernel as normal, but add the following options for EFI Stub:
-
-Processor type and features  --->
-    [*] EFI runtime service support 
-    [*]   EFI stub support
-
-Processor type and features  --->
-    [*] Built-in kernel command line
-    (root=/dev/sda4)
-
-Make sure the root= line on your kernel command line configuration is correct. More details about Kernel configuration for EFI stub are here: [[ EFI stub kernel ]]
-
-This assumes you do not need an initramfs. I do not use one. If you do, the EFI stub method may not be the easiest method. But it can still be done, refer to the [[ EFI_stub_kernel ]] page.
-
-
-You do not need to setup any bootloaders (Grub nor Lilo) for this to work. rEFIt will automatically detect the kernel you copied to that location and show it as a boot option when you reboot.
-
-Complete the rest of the gentoo installation, and reboot. rEFIt should show Gentoo_37_x64.efi as an option in the boot menu.
-
-
-
-=== Using Refind === 
-
-Refind which is a  fork of Refit and is being actively development and maintained. For installation see follow below link 
- http://www.rodsbooks.com/refind/installing.html#installsh
-
-This option is recommended for 15 inch versions, as it allows for passing kernel parameters. 
-
-Setting up rEFInd must be done from OSX. Essentially it boils down to:
-
-Getting rEFInd
- Go to http://sourceforge.net/projects/refind/files/
- Get the latest binary zip 
- Extract it
-
-Installing rEFInd
- mkdir /Volumes/esp
- mount -t msdos /dev/disk0s1 /Volumes/esp
- sudo cp -r refind Volumes/esp/efi/refind
- sudo bless --mount /Volumes/esp --setBoot --file /Volumes/esp/efi/refind/refind_x64.efi # actually sets it active
-
-Configuring rEFInd
-
-Edit /Volumes/efi/refind/refind.conf to add your kernel, as you would with grub
-
- menuentry Linux-Bleeding-Modeset-Switch {
-    icon EFI/refind/icons/os_gentoo.icns
-
-    loader EFI/gentoo/kernel-3.14-m
-    initrd EFI/gentoo/initrd-3.14-m
-    options "ro root=UUID=a3b54691-7d5b-3b20-8b80-08cbfa521fbf noapic" # Basic kernel options, specifying root partition by uuid.
- #    options "ro crypt_root=/dev/vg1/root dolvm real_root=/dev/mapper/root rootfstype=ext4 noapic" # kernel options for lvm + luks encryption
- }
-
-You can (and probably should) have several entries, and can edit this file from within linux.
-
-Just compile your kernels normally and install them to EFI/gentoo on the efi partition.
 
 == Wireless Drivers ==
 There are two driver options for wifi. 
