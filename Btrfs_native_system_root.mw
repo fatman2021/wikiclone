@@ -169,10 +169,11 @@ fs created label BTROOT on /dev/sdc3
 </pre>}}
 
 
-
+===Root Volume===
 We mount the default volume for the root partition on /mnt/newmirror but will be putting the actual contents into subvolumes with different btrfs features enabled or disabled.
 {{RootCmd|mkdir /mnt/newmirror}}
 {{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag /dev/sdc3 /mnt/newmirror}}
+
 
 The new root filesystem will go onto a subvolume (activeroot) which is created on the mirror and then mounted to /mnt/newroot
 {{RootCmd|mkdir /mnt/newroot}}
@@ -192,7 +193,7 @@ We mount the existing root filesystem to /mnt/rawroot and use tar to transfer th
 </pre>}}
 
 
-
+===Boot Volume===
 At this point /mnt/newroot/boot and the mountpoints for the other subvolumes we will be creating are already in place from the tar.  We keep the mount options simple for /mnt/newroot/boot.
 
 {{RootCmd|mount -t btrfs -o defaults,noatime /dev/sdc1 /mnt/newroot/boot}}
@@ -201,3 +202,36 @@ At this point /mnt/newroot/boot and the mountpoints for the other subvolumes we 
 
 short and sweet output log goes by
 </pre>}}
+
+
+===Other Volumes===
+/home is an obvious candidate for a subvolume, but they are easy to create and manage so you will probably have others.  In our example we have the following:
+
+* '''/home'''
+* '''/distfiles''' - It doesn't do any good to enable compression strategies for a directory which just has compressed tarballs for the most part.
+* '''/vm''' - Keeping your virtual machine store in a separate volume eases snapshotting and migrations.  We will enable compression here.  At various points in btrfs history the use of autodefrag had impacts and issues on vm performance.
+* '''/vmcrypt''' - If the VM uses drive encryption, the whole compression strategy gets blown out of the water.
+
+
+{{RootCmd|btrfs subvol create /mnt/newmirror/home}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag,subvol{{=}}home /dev/sdc3 /mnt/newroot/home}}
+{{RootCmd|btrfs subvol create /mnt/newmirror/distfiles}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,autodefrag,subvol{{=}}distfiles /dev/sdc3 /mnt/newroot/distfiles}}
+{{RootCmd|btrfs subvol create /mnt/newmirror/vm}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag,subvol{{=}}vm /dev/sdc3 /mnt/newroot/vm}}
+{{RootCmd|btrfs subvol create /mnt/newmirror/vmcrypt}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,autodefrag,subvol{{=}}vmcrypt /dev/sdc3 /mnt/newroot/vmcrypt}}
+
+
+This process takes place overnight and a good bit of the next day, so we will gloss over it
+
+
+
+==Chrooting into /mnt/newroot==
+We will chroot into the new root filesystem for the next set of steps:
+
+* '''Updating the kernel to use an embedded initram filesystem'''
+* '''Edit the fstab'''
+* '''Installing grub2 in place of grub0.97'''
+
+===Pre-chroot Preparation===
