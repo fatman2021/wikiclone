@@ -1,6 +1,7 @@
 {{InfoBox stack
 |{{InfoBox homepage|http://mmonit.com/monit/|header=true}}
 |{{InfoBox wikipedia|Monit}}
+|{{InfoBox ohloh}}
 }}
 
 {{Package|app-admin/monit}}[http://mmonit.com/monit/] is a utility for managing and monitoring processes, programs, files, directories and filesystems on a UNIX system. 
@@ -18,35 +19,69 @@
 {{emerge|monit}}
 
 == Configuration ==
-Config file of monit resides in {{Path|${EROOT}/etc/monitrc}}. And there is a item to specify a config directory. Uncomment if needed.
+Config file of monit resides in {{Path|/etc/monitrc}}. And there is a item to specify a config directory. Uncomment if needed.
 
-{{File|${EROOT}/etc/monitrc|config dir|<pre>
+{{File|/etc/monitrc|config dir|<pre>
 ## It is possible to include additional configuration parts from other files or
-## directories.                                                                                                                                                                                                     
-#                                                                                                                                                                                                                   
+## directories.
+#
 #  include /etc/monit.d/*
 #
 </pre>}}
+
+
+=== Users ===
+Users added to the monit or users group will be able to manipulate monit through the web interface.
+
+{{RootCmd|gpasswd -a $USER monit}}
+{{RootCmd|gpasswd -a $USER users}}
 
 {{important|for security purposes change this entry}}
 
 {{file|/etc/monitrc||
 allow admin:monit}}
 
-Start the service & load at boot.
-{{RootCmd|/etc/init.d/monit start}}
+== Boot Services ==
+=== OpenRC ===
+To start the service at boot.
 {{RootCmd|rc-update add monit default}}
+To start the service immediately.
+{{RootCmd|/etc/init.d/monit start}}
 
-== Squid memory example ==
+== Pidfile Check ==
+monit relies on the pidfile convention, it can only monitor background daemons. For daemons that do not create a pidfile, [http://mmonit.com/wiki/Monit/FAQ#pidfile a trick] is needed.
+
+pidfile approach is [http://mywiki.wooledge.org/ProcessManagement intrinsically broken] for monitforing process. Monit can overcome this by checking the pidfile frequently enough to be reliable, though.
+
+== Monitoring Monit ==
+This hourly cron script will check to make sure monit has not crashed.  As this uses pgrep, make sure to not name it monit.
+
+{{file|/etc/cron.hourly/moncheck||<pre>
+#!/bin/bash
+if ! pgrep monit >/dev/null;then
+rc-service monit restart
+fi
+</pre>}}
+
+== Examples ==
+=== Auto Restart Mysql ===
+{{file|/etc/monitrc|auto restart mysql|<pre>
+check process mysql with pidfile /var/run/mysqld/mysqld.pid
+    start program = "/bin/bash -c 'rc-service mysql start'"
+    stop program  = "/bin/bash -c 'rc-service mysql stop'"
+</pre>}}
+
+=== Squid Memory Alert ===
 {{Package|net-proxy/squid}} is a caching proxy that is memory hungry. It can control its memory consumption by itself in the configuration file, while we can make an redundent check here.
 
-{{File|${EROOT}/etc/monitrc|check squid|<pre>
+{{File|/etc/monitrc|check squid|<pre>
  check process squid with pidfile /run/squid.pid
-   start program = "rc-service squid start"
-   stop  program = "rc-service squid stop"
+   start program = "/bin/bash -c 'rc-service squid start'"
+   stop  program = "/bin/bash -c 'rc-service squid stop'"
    if totalmem > 30 MB then alert
 </pre>}}
 
+== CLI Interface ==
 We can run monit foreground and see the effect.
 
 {{RootCmd|monit -Ivv|output=<pre>
@@ -54,12 +89,7 @@ We can run monit foreground and see the effect.
 'squid' total mem amount of 30848kB matches resource limit [total mem amount>30720kB]
 </pre>}}
 
-== pidfile check ==
-monit relies on the pidfile convention, it can only monitor background daemons. For daemons that do not create a pidfile, [http://mmonit.com/wiki/Monit/FAQ#pidfile a trick] is needed.
-
-pidfile approach is [http://mywiki.wooledge.org/ProcessManagement intrinsically broken] for monitforing process. Monit can overcome this by checking the pidfile frequently enough to be reliable, though.
-
-== Web interface ==
+== Web Interface ==
 
 Navigate to http://localhost:2812/ & login using your edited configuration line or admin / monit if you have not changed it yet.
 
