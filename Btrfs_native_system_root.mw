@@ -230,8 +230,29 @@ This process takes place overnight and a good bit of the next day, so we will gl
 ==Chrooting into /mnt/newroot==
 We will chroot into the new root filesystem for the next set of steps:
 
-* '''Updating the kernel to use an embedded initram filesystem'''
 * '''Edit the fstab'''
-* '''Installing grub2 in place of grub0.97'''
+* '''Update the kernel to use an embedded initram filesystem'''
+* '''Install grub2 in place of grub0.97'''
+
+
 
 ===Pre-chroot Preparation===
+We do the usual prelims to allow grub to find things when installing.
+
+{{RootCmd|mount --bind /dev /mnt/newroot/dev}}
+{{RootCmd|mount -t proc none /mnt/newroot/proc}}
+
+
+Edit your mtab to look something like this
+{{File|/mnt/newroot/etc/mtab|the new root and boot as they will look to grub|<pre>
+/dev/sdc3 / btrfs rw,noatime,compress=lzo,autodefrag,subvol=activeroot 0 0
+/dev/sdc2 /boot btrfs rw,noatime 0 0
+</pre>}}
+
+{{RootCmd|chroot /mnt/newroot /bin/bash}}
+{{RootCmd|env-update}}
+{{RootCmd|source /etc/profile}}
+
+
+===Embedding an initram filesystem===
+As we noted in the introduction, the current kernel and grub2 combination appear to work fine at least when searching for and mounting the simple /boot mirror btrfs filesystem in the default volume.  However we put our new root in a subvolume in order to take advantage of snapshotting and rollback of root as necessary.  To do that, we will follow the guide for [[Early Userspace Mounting]] again but will also draw upon one of its references in order to have the kernel build process make the archive and then embed it in the resulting bzImage file.  This lets us make grub2_mkconfig do all of the heavy lifting without having to do a custom stanza in /etc/grub.d/40_custom.
