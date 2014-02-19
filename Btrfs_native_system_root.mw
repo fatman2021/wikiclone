@@ -142,23 +142,44 @@ Repeat the same partitioning on /dev/sdd.  Similar to sfdisk, the sgdisk utility
 == Filesystem Creation ==
 Since this is a two disk simple mirror, we specify raid1 for both metadata and data when making the two filesystems.  If you have more than two drives, the current stable versions of kernel (3.10.25) and btrfs-progs (3.12-r1) now also make raid5 and raid6 available for options alongside raid1 and raid10.
 
-{{RootCmd|mkfs -t btrfs -L BOOT -m raid1 -d raid1 /dev/sdc1 /dev/sdd1|output=<pre>
+{{RootCmd|mkfs -t btrfs -L BOOT -m raid1 -d raid1 /dev/sdc2 /dev/sdd2|output=<pre>
+SMALL VOLUME: forcing mixed metadata/data groups
 
-Warning btrfs is experimental blah blah blah
-</pre>}}
-{{RootCmd|mkfs -t btrfs -L BTROOT -m raid1 -d raid1 /dev/sdc2 /dev/sdd2|output=<pre>
+WARNING! - Btrfs v3.12 IS EXPERIMENTAL
+WARNING! - see http://btrfs.wiki.kernel.org before using
 
-TBD... paste real output
+Turning ON incompat feature 'mixed-bg': mixed data and metadata block groups
+Turning ON incompat feature 'extref': increased hardlink limit per file to 65536
+Created a data/metadata chunk of size 8388608
+adding device /dev/sdd2 id 2
+fs created label BTBOOT on /dev/sdc2
+        nodesize 4096 leafsize 4096 sectorsize 4096 size 1000.00MiB
+Btrfs v3.12
+
 </pre>}}
+{{RootCmd|mkfs -t btrfs -L BTROOT -m raid1 -d raid1 /dev/sdc3 /dev/sdd3|output=<pre>
+
+WARNING! - Btrfs v3.12 IS EXPERIMENTAL
+WARNING! - see http://btrfs.wiki.kernel.org before using
+
+Turning ON incompat feature 'extref': increased hardlink limit per file to 65536
+adding device /dev/sdd3 id 2
+fs created label BTROOT on /dev/sdc3
+        nodesize 16384 leafsize 16384 sectorsize 4096 size 3.64TiB
+</pre>}}
+
+
 
 We mount the default volume for the root partition on /mnt/newmirror but will be putting the actual contents into subvolumes with different btrfs features enabled or disabled.
 {{RootCmd|mkdir /mnt/newmirror}}
-{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag /dev/sdc2 /mnt/newmirror}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag /dev/sdc3 /mnt/newmirror}}
 
-The new root filesystem will go onto a btroot subvolume which is created on the mirror and then mounted to /mnt/newroot
+The new root filesystem will go onto a subvolume (activeroot) which is created on the mirror and then mounted to /mnt/newroot
 {{RootCmd|mkdir /mnt/newroot}}
-{{RootCmd|btrfs subvol create /mnt/newmirror/btroot}}
-{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag /dev/sdc2 /mnt/newroot}}
+{{RootCmd|btrfs subvol create /mnt/newmirror/activeroot}}
+{{RootCmd|mount -t btrfs -o defaults,noatime,compress{{=}}lzo,autodefrag,subvol{{=}}activeroot /dev/sdc3 /mnt/newroot}}
+
+
 
 We mount the existing root filesystem to /mnt/rawroot and use tar to transfer things over while avoiding the dynamic stuff.
 
@@ -169,6 +190,8 @@ We mount the existing root filesystem to /mnt/rawroot and use tar to transfer th
 
 40 or so gb worth of stuff in the output log goes by
 </pre>}}
+
+
 
 At this point /mnt/newroot/boot and the mountpoints for the other subvolumes we will be creating are already in place from the tar.  We keep the mount options simple for /mnt/newroot/boot.
 
