@@ -11,10 +11,10 @@ Emerge gptfdisk if you don't already have it.  It provides the gdisk, sgdisk and
 We followed the writeup on grub2 [[GRUB2|here]] to put together the following GPT scheme that GRUB2 can use and got it working after a false start or two.
 
 {{RootCmd|cgdisk|output=<pre>
-                                                          cgdisk 0.8.6
+                                          cgdisk 0.8.6
 
-                                                      Disk Drive: /dev/sdc
-                                                   Size: 3907029168, 1.8 TiB
+                                      Disk Drive: /dev/sdc
+                                   Size: 3907029168, 1.8 TiB
 
 Part. #     Size        Partition Type            Partition Name
 ----------------------------------------------------------------
@@ -249,10 +249,254 @@ Edit your mtab to look something like this
 /dev/sdc2 /boot btrfs rw,noatime 0 0
 </pre>}}
 
+
 {{RootCmd|chroot /mnt/newroot /bin/bash}}
-{{RootCmd|env-update}}
+{{RootCmd|env-update|output=<pre>
+>>> Regenerating /etc/ld.so.cache...
+</pre>}}
 {{RootCmd|source /etc/profile}}
+
+
+===Updating fstab===
+We edit our new fstab to make it look something like this.
+{{File|/etc/fstab|edited in the chroot so is actually /mnt/newroot/etc/fstab|<pre>
+# /etc/fstab: static file system information.
+#
+# noatime turns off atimes for increased performance (atimes normally aren't 
+# needed; notail increases performance of ReiserFS (at the expense of storage 
+# efficiency).  It's safe to drop the noatime options if you want and to 
+# switch between notail / tail freely.
+#
+# The root filesystem should have a pass number of either 0 or 1.
+# All other filesystems should have a pass number of 0 or greater than 1.
+#
+# See the manpage fstab(5) for more information.
+#
+
+# <fs>			<mountpoint>	<type>		<opts>		<dump/pass>
+/dev/sr0		/mnt/cdrom	auto		ro,noauto,users	0 0
+
+# glibc 2.2 and above expects tmpfs to be mounted at /dev/shm for 
+# POSIX shared memory (shm_open, shm_unlink).
+# (tmpfs is a dynamically expandable/shrinkable ramdisk, and will
+#  use almost no memory if not populated with files)
+shm			/dev/shm	tmpfs		nodev,nosuid,noexec	0 0
+>>> Regenerating /etc/ld.so.cache...
+
+LABEL=BTROOT	/mnt/btrfsmirror	btrfs	defaults,noatime,compress=lzo,autodefrag			0 0
+LABEL=BTROOT	/			btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=activeroot	0 0
+LABEL=BTROOT	/home			btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=home		0 0
+LABEL=BTROOT	/distfiles		btrfs	defaults,noatime,autodefrag,subvol=distfiles			0 0
+LABEL=BTROOT	/vm			btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=vm		0 0
+LABEL=BTROOT	/vmcrypt		btrfs	defaults,noatime,autodefrag,subvol=vmcrypt			0 0
+
+LABEL=BTBOOT	/boot			btrfs	defaults,noatime						0 0
+</pre>}}
+
 
 
 ===Embedding an initram filesystem===
 As we noted in the introduction, the current kernel and grub2 combination appear to work fine at least when searching for and mounting the simple /boot mirror btrfs filesystem in the default volume.  However we put our new root in a subvolume in order to take advantage of snapshotting and rollback of root as necessary.  To do that, we will follow the guide for [[Early Userspace Mounting]] again but will also draw upon one of its references in order to have the kernel build process make the archive and then embed it in the resulting bzImage file.  This lets us make grub2_mkconfig do all of the heavy lifting without having to do a custom stanza in /etc/grub.d/40_custom.
+
+{{RootCmd|cd /usr/src/linux}}
+{{RootCmd|chmod +x usr/gen_init_cpio scripts/gen_initramfs_list.sh}}
+
+
+Run menuconfig to use devtmpfs and to specify an initramfs_list that will be used to put an initramfs into the bzImage
+{{Kernel||<pre>
+General setup  --->
+    [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
+    (/usr/src/linux/initramfs/initramfs_list) Initramfs source file(s)
+Device Drivers  --->
+    Generic Driver Options  --->
+        -*- Maintain a devtmpfs filesystem to mount at /dev
+        [*]  Automount devtmpfs at /dev, after the kernel mounted the rootfs 
+</pre>}}
+
+{{cd initramfs}}
+
+====Embedded fstab=====
+We explicitly point out all of the details including drive devices in the embedded fstab to avoid a several second delay from doing a btrfs scan.
+
+{{File|/usr/src/linux/initramfs/fstab|embedded fstab|<pre>
+/dev/sda3   /mnt/root   btrfs   device=/dev/sda3,device=/dev/sdb3,defaults,noatime,compress=lzo,autodefrag,subvol=activeroot  0 0
+/dev/sda2   /boot       btrfs   device=/dev/sda2,device=/dev/sdb2,defaults,noatime                       0 0
+</pre>}}
+
+
+====initramfs_list====
+We don't want to bloat the bzImage too much so only add the essential busybox, filesystem tools and the nano editor.  Use ldd to figure out any dependencies of additional commands that you might add to yours.
+
+{{File|/usr/src/linux/initramfs/initramfs_list|File and attributes list to be used by kernel when doing the embed|<pre>
+# directory structure
+dir /proc       755 0 0
+dir /usr        755 0 0
+dir /bin        755 0 0
+dir /sys        755 0 0
+dir /var        755 0 0
+dir /lib64      755 0 0
+dir /sbin       755 0 0
+dir /mnt        755 0 0
+dir /mnt/root   755 0 0
+dir /etc        755 0 0
+dir /root       700 0 0
+dir /dev        755 0 0
+
+# busybox
+file /bin/busybox		/bin/busybox		755 0 0
+
+#
+# fsck deps
+#
+file /sbin/fsck			/sbin/fsck		755 0 0
+file /lib64/libmount.so.1	/lib64/libmount.so.1	755 0 0
+file /lib64/libblkid.so.1	/lib64/libblkid.so.1	755 0 0
+file /lib64/libc.so.6		/lib64/libc.so.6	755 0 0
+file /lib64/libuuid.so.1	/lib64/libuuid.so.1	755 0 0
+file /lib64/ld-linux-x86-64.so.2  /lib64/ld-linux-x86-64.so.2 755 0 0
+
+#
+#  fsck.ext3 and added deps
+#
+file /sbin/fsck.ext3		/sbin/fsck.ext3		755 0 0
+file /lib64/libext2fs.so.2	/lib64/libext2fs.so.2	755 0 0
+file /lib64/libcom_err.so.2	/lib64/libcom_err.so.2	755 0 0
+file /lib64/libe2p.so.2		/lib64/libe2p.so.2	755 0 0
+file /lib64/libpthread.so.0	/lib64/libpthread.so.0	755 0 0
+
+#
+# btrfs utils and added deps
+#
+file /sbin/btrfs		/sbin/btrfs		755 0 0
+file /sbin/btrfs-convert	/sbin/btrfs-convert	755 0 0
+file /sbin/btrfs-debug-tree	/sbin/btrfs-debug-tree	755 0 0
+file /sbin/btrfs-find-root	/sbin/btrfs-find-root	755 0 0
+file /sbin/btrfs-image		/sbin/btrfs-image	755 0 0
+file /sbin/btrfs-map-logical	/sbin/btrfs-map-logical	755 0 0
+file /sbin/btrfs-show-super	/sbin/btrfs-show-super	755 0 0
+file /sbin/btrfs-zero-log	/sbin/btrfs-zero-log	755 0 0
+file /sbin/btrfsck		/sbin/btrfsck		755 0 0
+file /sbin/btrfstune		/sbin/btrfstune		755 0 0
+file /sbin/mkfs.btrfs		/sbin/mkfs.btrfs	755 0 0
+file /lib64/libz.so.1		/lib64/libz.so.1	755 0 0
+file /lib64/liblzo2.so.2	/usr/lib64/liblzo2.so.2 755 0 0
+
+#
+# Nano editor and added deps
+#
+file /bin/nano			/usr/bin/nano		755 0 0
+file /lib64/libncursesw.so.5	/lib64/libncursesw.so.5	755 0 0
+file /libdl.so.2		/lib64/libdl.so.2	755 0 0
+
+#
+#  init script
+#
+file    /init                   /usr/src/linux/initramfs/init             755 0 0
+
+#
+#  pivot script
+#
+file	/doit			/usr/src/linux/initramfs/doit             755 0 0
+
+#
+#  fstab
+#
+file	/etc/fstab		/usr/src/linux/initramfs/fstab	644 0 0
+</pre>}}
+
+
+====init scripts====
+We started with the init script from the previous exercise but have it trimmed it down quite a bit.  We also always drop to a shell in order to allow for snapshot management, fsck, balances on cold subvolumes, etc, before continuing on.  At some point, we will probably add a flag file of some sort to go into the default subvolume of the BTROOT which would get parsed for automatic actions to execute on a reboot.
+
+{{File|/usr/src/linux/initramfs/init||<pre>
+#!/bin/busybox sh
+
+rescue_shell() {
+    echo "$@"
+    echo "Something went wrong. Dropping you to a shell."
+    busybox --install -s
+    exec /bin/sh
+}
+
+pause_shell() {
+    echo "Pausing in a shell.  Run doit to continue the pivot"
+    busybox --install -s
+    exec /bin/sh
+}
+
+
+mount_root() {
+#    echo "scanning for btrfs filesystems.... will take about 5-10 seconds"
+#
+#  earlier versions of btrfs required devices on scan.  As of around 0.19.11 or so 
+#  this now is a syntax error.  Also specifying the device= options in the fstab for
+#  the root subvolume probably make this unnecessary now
+#
+#    /sbin/btrfs device scan /dev/sda /dev/sdb
+#    /sbin/btrfs device scan
+    echo "mounting /mnt/root"
+    mount /mnt/root
+}
+
+# temporarily mount proc and sys
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+
+# disable kernel messages from popping onto the screen
+echo 0 > /proc/sys/kernel/printk
+
+# clear the screen
+clear
+
+# mounting rootfs on /mnt/root
+mount_root || rescue_shell "Error with uuidlabel_root"#!/bin/busybox sh
+# clean up. The init process will remount proc sys and dev later
+umount /proc
+umount /sys
+umount /dev
+
+# switch to the real root and execute init
+exec switch_root /mnt/root /sbin/init
+
+
+pause_shell
+</pre>}}
+
+
+{{File|/usr/src/linux/initramfs/doit||<pre>
+#!/bin/busybox sh
+# clean up. The init process will remount proc sys and dev later
+umount /proc
+umount /sys
+umount /dev
+
+# switch to the real root and execute init
+exec switch_root /mnt/root /sbin/init
+</pre>}}
+
+
+====Rebuilding kernel====
+{{RootCmd|cd /usr/src/linux}}
+{{RootCmd|make -j7 bzImage|output=<pre>
+(the scripts and cpio generation are actually done pretty early on if you've already built your kernel at least once)
+make[1]: Nothing to be done for `all'.
+  CHK     include/generated/uapi/linux/version.h
+  HOSTCC  scripts/kallsyms
+  HOSTCC  scripts/pnmtologo
+   .
+   .
+  HOSTCC  usr/gen_init_cpio
+  CHK     include/generated/compile.h
+  CC      init/main.o
+  AS      arch/x86/ia32/ia32entry.o
+  GEN     usr/initramfs_data.cpio
+   .
+   .
+Setup is 17100 bytes (padded to 17408 bytes).
+System is 11728 kB
+CRC 8262ef09
+Kernel: arch/x86/boot/bzImage is ready  (#3)
+</pre>}}
+
+Our kernel just got about 3-4mb bigger as a result.
