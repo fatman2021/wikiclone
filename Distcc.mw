@@ -109,80 +109,114 @@ You can put this in your {{Path|~/.bashrc}} or equivalent file to have the PATH 
 <!--T:33-->
 Then, as you would normally type <code>make</code> , you would type <code>make -jN</code> (where N is an integer). The value of N depends on your network and the types of computers you are using to compile. Test your own settings to find the number that yields the best performance. 
 
-== Cross-Compiling == <!--T:34-->
+=== Setting up Distcc to Work With ssh === <!--T:29-->
+
+<!--T:34-->
+Setting up distcc via ssh includes some pitfalls you should be aware of. First, generate a ssh key pair without password setup. Be aware that portage compiles programs as user portage. The home folder of the user portage is {{Path|/var/tmp/portage}}, which means the keys need to be stored in {{Path|/var/tmp/portage/.ssh}}.
 
 <!--T:35-->
-Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a Sparc to build a program for a ppc. This is documented in our [[Distcc/Cross-Compiling|DistCC Cross-compiling Guide]] .
+{{RootCmd|ssh-keygen -b 2048 -t rsa -f /var/tmp/portage/.ssh/id_rsa}}
 
-== Using Distcc to Bootstrap == <!--T:36-->
+<!--T:36-->
+Second, generate a section for each host in the ssh config file:
 
-=== Step 1: Configure Portage === <!--T:37-->
+<!--T:37-->
+{{RootCmd|nano -w /var/tmp/portage/.ssh/config|output=<pre>
+Host test1
+    HostName 123.456.789.1
+    Port 1234
+    User UserName
+
+Host test2
+    HostName 123.456.789.2
+    Port 1234
+    User UserName
+</pre>
+}}
 
 <!--T:38-->
-Boot your new box with a Gentoo Linux LiveCD and follow the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 installation instructions] up until the bootstrapping part. (See the [http://www.gentoo.org//doc/en/faq.xml#stage12 Gentoo FAQ] for more information about bootstrapping.) Then configure Portage to use distcc: 
+Also make sure that each host is available in the <code>known_hosts</code> file and append your public key to the <code>authorized_keys</code> file of the hosts. To set up the hosts test1 and test2 run
 
 <!--T:39-->
+{{RootCmd|/usr/bin/distcc-config --set-hosts "@test1 @test2"}}
+
+<!--T:40-->
+Please not the '@'-sign, which specifies ssh hosts for <code>distcc</code>.
+
+== Cross-Compiling == <!--T:41-->
+
+<!--T:42-->
+Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a Sparc to build a program for a ppc. This is documented in our [[Distcc/Cross-Compiling|DistCC Cross-compiling Guide]] .
+
+== Using Distcc to Bootstrap == <!--T:43-->
+
+=== Step 1: Configure Portage === <!--T:44-->
+
+<!--T:45-->
+Boot your new box with a Gentoo Linux LiveCD and follow the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 installation instructions] up until the bootstrapping part. (See the [http://www.gentoo.org//doc/en/faq.xml#stage12 Gentoo FAQ] for more information about bootstrapping.) Then configure Portage to use distcc: 
+
+<!--T:46-->
 {{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
 FEATURES="distcc"
 MAKEOPTS="-jN"
 </pre>
 }}
 
-<!--T:40-->
+<!--T:47-->
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
-=== Step 2: Getting Distcc === <!--T:41-->
+=== Step 2: Getting Distcc === <!--T:48-->
 
-<!--T:42-->
+<!--T:49-->
 Install distcc: 
 
-<!--T:43-->
+<!--T:50-->
 {{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
 
-=== Step 3: Setting Up Distcc === <!--T:44-->
-
-<!--T:45-->
-Run <code>distcc-config --install</code> to setup distcc; substitute <code>host*</code> with the IP addresses or hostnames of the participating DistCC nodes.
-
-<!--T:46-->
-{{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
-
-<!--T:47-->
-Distcc is now set up to bootstrap! Continue with the official installation instructions and ''do not forget'' to re-emerge distcc after <code>emerge system</code> . This is to make sure that all of the dependencies you want are installed as well. 
-
-<!--T:48-->
-{{Note|During bootstrap and <code>emerge system</code> distcc may not appear to be used. This is expected as some ebuilds do not work well with distcc, so they intentionally disable it.}}
-
-== Troubleshooting == <!--T:49-->
-
-=== Some Packages Don't Use Distcc === <!--T:50-->
-
-<!--T:51-->
-As you emerge various packages, you'll notice that some of them aren't being distributed (and aren't being built in parallel). This may happen because the package's Makefile doesn't support parallel operations or the maintainer of the ebuild has explicitly disabled parallel operations due to a known problem. 
+=== Step 3: Setting Up Distcc === <!--T:51-->
 
 <!--T:52-->
-Sometimes distcc might cause a package to fail to compile. If this happens for you, please [http://bugs.gentoo.org report] it to us. 
+Run <code>distcc-config --install</code> to setup distcc; substitute <code>host*</code> with the IP addresses or hostnames of the participating DistCC nodes.
 
-=== Mixed GCC Versions === <!--T:53-->
+<!--T:53-->
+{{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
 
 <!--T:54-->
-If you have different GCC versions on your hosts, there will likely be very weird problems. The solution is to make certain all hosts have the same GCC version. 
+Distcc is now set up to bootstrap! Continue with the official installation instructions and ''do not forget'' to re-emerge distcc after <code>emerge system</code> . This is to make sure that all of the dependencies you want are installed as well. 
 
 <!--T:55-->
-Recent Portage updates have made Portage use <code>${CHOST}-gcc</code> instead of <code>gcc</code> . This means that if you're mixing i686 machines with other types (i386, i586) you will run into problems. A workaround for this may be to <code>export CC='gcc' CXX='c++'</code> or to put it in {{Path|/etc/portage/make.conf}} . 
+{{Note|During bootstrap and <code>emerge system</code> distcc may not appear to be used. This is expected as some ebuilds do not work well with distcc, so they intentionally disable it.}}
 
-<!--T:56-->
-{{Important|Doing this explicitly redefines some behavior of Portage and may have some weird results in the future. Only do this if you're mixing CHOSTs.}}
+== Troubleshooting == <!--T:56-->
 
-=== -march=native === <!--T:57-->
+=== Some Packages Don't Use Distcc === <!--T:57-->
 
 <!--T:58-->
+As you emerge various packages, you'll notice that some of them aren't being distributed (and aren't being built in parallel). This may happen because the package's Makefile doesn't support parallel operations or the maintainer of the ebuild has explicitly disabled parallel operations due to a known problem. 
+
+<!--T:59-->
+Sometimes distcc might cause a package to fail to compile. If this happens for you, please [http://bugs.gentoo.org report] it to us. 
+
+=== Mixed GCC Versions === <!--T:60-->
+
+<!--T:61-->
+If you have different GCC versions on your hosts, there will likely be very weird problems. The solution is to make certain all hosts have the same GCC version. 
+
+<!--T:62-->
+Recent Portage updates have made Portage use <code>${CHOST}-gcc</code> instead of <code>gcc</code> . This means that if you're mixing i686 machines with other types (i386, i586) you will run into problems. A workaround for this may be to <code>export CC='gcc' CXX='c++'</code> or to put it in {{Path|/etc/portage/make.conf}} . 
+
+<!--T:63-->
+{{Important|Doing this explicitly redefines some behavior of Portage and may have some weird results in the future. Only do this if you're mixing CHOSTs.}}
+
+=== -march=native === <!--T:64-->
+
+<!--T:65-->
 Starting with GCC 4.3.0, the compiler supports the <code>-march=native</code> switch which turns on CPU autodetection and optimizations that are worth being enabled on the processor the GCC is running at. This is a problem with <code>distcc</code> as it allows mixing of code optimized for different processors (like AMD Athlon and Intel Pentium). ''Don't'' use <code>-march=native</code> or <code>-mtune=native</code> in your <code>CFLAGS</code> or <code>CXXFLAGS</code> when compiling with <code>distcc</code> .
 
-<!--T:71-->
+<!--T:66-->
 To know the flags that GCC would enable when called with <code>-march=native</code>, execute the following:
 
-<!--T:72-->
+<!--T:67-->
 {{Cmd|gcc -march{{=}}native -E -v - &lt;/dev/null 2&gt;&amp;1 {{!}} grep cc1|output=<pre>
 /usr/libexec/gcc/x86_64-pc-linux-gnu/4.7.3/cc1 -E -quiet -v - -march=corei7-avx \
   -mcx16 -msahf -mno-movbe -mno-aes -mpclmul -mpopcnt -mno-abm -mno-lwp -mno-fma \
