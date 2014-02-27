@@ -1,0 +1,63 @@
+==Passwords policy==
+
+===cracklib===
+
+First of all add USE=cracklib end rebuild world:
+ emerge -uDN world
+
+Install some tools:
+ emerge -n cracklib cracklib-words
+Now we can create DB:
+ create-cracklib-dict /usr/share/dict/*
+
+===SAMBA passwords polisy===
+
+====Use pdbedit====
+
+[https://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/passdb.html#pdbeditthing pdbedit] is a tool that can be used only by root. It is used to manage the passdb backend, as well as domain-wide account policy settings. pdbedit can be used to:
+* add, remove, or modify user accounts.
+* list user accounts.
+* migrate user accounts.
+* migrate group accounts.
+* manage account policies.
+* manage domain access policy settings.
+Commands will be executed to establish controls for our domain as follows:
+# min password length = 8 characters.
+# password history = last 4 passwords.
+# maximum password age = 90 days.
+# minimum password age = 7 days.
+# bad lockout attempt = 8 bad logon attempts.
+# lockout duration = forever, account must be manually reenabled.
+The following command execution will achieve these settings:
+ root#  pdbedit -P "min password length" -C 8
+ account policy value for min password length was 5
+ account policy value for min password length is now 8
+ root#  pdbedit -P "password history" -C 4
+ account policy value for password history was 0
+ account policy value for password history is now 4
+ root#  pdbedit -P "maximum password age" -C 7776000
+ account policy value for maximum password age was 4294967295
+ account policy value for maximum password age is now 7776000
+ root#  pdbedit -P "minimum password age" -C 604800
+ account policy value for minimum password age was 0
+ account policy value for minimum password age is now 7
+ root#  pdbedit -P "bad lockout attempt" -C 8
+ account policy value for bad lockout attempt was 0
+ account policy value for bad lockout attempt is now 8
+ root#  pdbedit -P "lockout duration" -C -1
+ account policy value for lockout duration was 30
+ account policy value for lockout duration is now 4294967295
+
+=====crackcheck=====
+
+Next we may use [https://lists.samba.org/archive/samba/2009-December/152634.html crackcheck] to check comlisity of passwords:
+
+Unpack samba-*.targ.z and ''cd'' to ''examples/auth/crackcheck''.  Then compile it:
+ make
+copy this to somewhere more sensible:
+ cp crackcheck /usr/local/sbin
+Edit youre samba configuration
+ # nano -w /etc/samba/smb.conf
+ check password script = /usr/local/sbin/crackcheck -s -d /usr/lib/cracklib-dict
+Reload samba configuration:
+ /etc/init.d/samba reload
