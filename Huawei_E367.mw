@@ -89,7 +89,13 @@ The modem should be /dev/ttyUSB2. You can now connect to internet using wvdial o
 
 === MTN South Africa ===
 
-This is for mtn.co.za. APN is {{internet}}.
+This is for mtn.co.za. APN is <code>internet</code>.
+
+{{Cmd|ls -l /dev/serial/by-id/usb-HUAWEI_HUAWEI_Mobile-if??-port0|output=<pre>
+lrwxrwxrwx 1 root root 13 Mar  1 13:20 /dev/serial/by-id/usb-HUAWEI_HUAWEI_Mobile-if00-port0 -> ../../ttyUSB0
+lrwxrwxrwx 1 root root 13 Mar  1 13:20 /dev/serial/by-id/usb-HUAWEI_HUAWEI_Mobile-if02-port0 -> ../../ttyUSB1
+lrwxrwxrwx 1 root root 13 Mar  1 13:20 /dev/serial/by-id/usb-HUAWEI_HUAWEI_Mobile-if03-port0 -> ../../ttyUSB2
+</pre>}}
 
 {{File|/etc/init.d/net||<pre>
 ## /dev/serial/by-id/usb-HUAWEI_HUAWEI_Mobile-if??-port0
@@ -117,4 +123,43 @@ chat_ppp1="
 	'CONNECT' ''
 	'~--' ''
 "
+</pre>}}
+
+== app-mobilephone/gnokii  ==
+
+{{File|gnokiirc-huawei_e367||<pre>
+[global]
+model = AT
+port = /dev/ttyUSB2
+connection = serial
+use_locking = yes
+#serial_baudrate = 460800
+serial_baudrate = 19200
+</pre>}}
+
+{{File|gsms||<pre>
+#!/bin/bash
+
+device="huawei_e367"
+config_file=~/etc/gnokiirc-${device}
+gnokii="gnokii --config ${config_file}"
+pin=1234
+output_file=~/gnokii-${device}-getsms
+
+# Check if phone is PIN locked
+if ${gnokii} --getsecuritycodestatus | grep PIN
+	then ${gnokii} --entersecuritycode "${pin}"
+fi
+
+${gnokii} --showsmsfolderstatus > ${output_file}
+
+# Get messages and append them to getsms_file. Delete messages from SIM.
+#gnokii --getsms SM 0 end -a getsms_file -d
+#gnokii --getsms ME 0 end -a getsms_file -d
+
+# Get messages and append them to "${output_file}". Do not delete messages from SIM.
+echo "========== SM ==========" >> ${output_file}
+${gnokii} --getsms SM 0 end -a ${output_file}
+echo "========== ME ==========" >> ${output_file}
+${gnokii} --getsms ME 0 end -a ${output_file}
 </pre>}}
