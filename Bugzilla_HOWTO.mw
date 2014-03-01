@@ -45,7 +45,7 @@ make: *** [shared] Error 2
 !!! 'emake shared' failed
 </pre>}}
 
-These errors can be quite troublesome. However, once you find them, what do you do? The following sections will look at two important tools for handling run time errors. After that, we'll take a look at compile errors, and how to handle them. Let's start out with the first tool for debugging run time errors -- <code>gdb</code> .
+These errors can be quite troublesome. However, once you find them, what do you do? The following sections will look at two important tools for handling run time errors. After that, we'll take a look at compile errors, and how to handle them. Let's start out with the first tool for debugging run time errors -- <code>gdb</code>.
 
 == Debugging using GDB ==
 
@@ -68,6 +68,8 @@ CXXFLAGS="${CFLAGS}"
 </pre>
 }}
 
+You may also want to consider using "-Wall" and "-g".  "-Wall" prints compiler warnings, and "-g" produces debugging information in the operating system's native format which also works with gdb. See [http://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html#Debugging-Options GCC Debugging Options] for details.
+
 Lastly, you can also add debug to the package's USE flags. This can be done with the {{Path|package.use}} file:
 {{Cmd|echo "category/package debug" >> /etc/portage/package.use}}
 
@@ -77,6 +79,12 @@ Then we re-emerge the package with the modifications we've done so far as shown 
 {{RootCmd|FEATURES{{=}}"nostrip" emerge package}}
 
 Now that debug symbols are setup, we can continue with debugging the program.
+
+If you need a little more help while debugging, such as being able to see the code within GDB TUI (GDB Text User Interface), install {{Package|dev-util/debugedit}} and include <code>FEATURES="installsources"</code>. You also need to specify the source code folder:
+
+{{Cmd|gdb --tui -d /usr/src/debug/app-cdr/my_app/my_app/src my_app}}
+
+Although not really needed for meaningful backtraces, this significantly helps if you're actively coding.
 
 === Running the program with GDB ===
 Let's say we have a program here called "bad_code". Some person claims that the program crashes and provides an example. You go ahead and test it out: 
@@ -108,7 +116,7 @@ Program received signal SIGSEGV, Segmentation fault.
 </pre>
 }}
 
-Here we see the program starting, as well as a notification of SIGSEGV, or Segmentation Fault. This is GDB telling us that our program has crashed. It also gives the last run function it could trace when the program crashes. However, this isn't too useful, as there could be multiple strcpy's in the program, making it hard for developers to find which one is causing the issue. In order to help them out, we do what's called a backtrace. A backtrace runs backwards through all the functions that occurred upon program execution, to the function at fault. Functions that return (without causing a crash) will not show up on the backtrace. To get a backtrace, at the (gdb) prompt, type in <code>bt</code> . You will get something like this: 
+Here we see the program starting, as well as a notification of SIGSEGV, or Segmentation Fault. This is GDB telling us that our program has crashed. It also gives the last run function it could trace when the program crashes. However, this isn't too useful, as there could be multiple strcpy's in the program, making it hard for developers to find which one is causing the issue. In order to help them out, we do what's called a backtrace. A backtrace runs backwards through all the functions that occurred upon program execution, to the function at fault. Functions that return (without causing a crash) will not show up on the backtrace. To get a backtrace, at the (gdb) prompt, type in <code>bt</code>. You will get something like this: 
 
 {{Cmd|bt|prompt=(gdb) |output=<pre>
 #0  0xb7ec6dc0 in strcpy () from /lib/libc.so.6
@@ -117,7 +125,7 @@ Here we see the program starting, as well as a notification of SIGSEGV, or Segme
 </pre>
 }}
 
-You can notice the trace pattern clearly. main() is called first, followed by run_it(), and somewhere in run_it() lies the strcpy() at fault. Things such as this help developers narrow down problems. There are a few exceptions to the output. First off is forgetting to enable debug symbols with <code>FEATURES="nostrip"</code> . With debug symbols stripped, the output looks something like this: 
+You can notice the trace pattern clearly. main() is called first, followed by run_it(), and somewhere in run_it() lies the strcpy() at fault. Things such as this help developers narrow down problems. There are a few exceptions to the output. First off is forgetting to enable debug symbols with <code>FEATURES="nostrip"</code>. With debug symbols stripped, the output looks something like this: 
 
 {{Cmd|bt|prompt=(gdb) |output=<pre>
 #0  0xb7e2cdc0 in strcpy () from /lib/libc.so.6
@@ -169,12 +177,12 @@ Here we see that a lot more information is available for developers. Not only is
 </pre>
 }}
 
-As you can see, -ggdb adds about ''13178'' more bytes to the file size over the one with debugging symbols. However, as shown above, this increase in file size can be worth it if presenting debug information to developers. The backtrace can be saved to a file by copying and pasting from the terminal (if it's a non-x based terminal, you can use gpm. To keep this doc simple, I recommend you read up on the [http://www.gentoo.org//doc/en/gpm.xml#doc_chap4 documentation for gpm] to see how to copy and paste with it). Now that we're done with <code>gdb</code> , we can quit. 
+As you can see, -ggdb adds about ''13178'' more bytes to the file size over the one with debugging symbols. However, as shown above, this increase in file size can be worth it if presenting debug information to developers. The backtrace can be saved to a file by copying and pasting from the terminal (if it's a non-x based terminal, you can use gpm. To keep this doc simple, I recommend you read up on the [[GPM]] documentation to see how to copy and paste with it). Now that we're done with <code>gdb</code>, we can quit. 
 
 {{Cmd|quit|prompt=(gdb) |output=<pre>
 The program is running. Exit anyway? (y or n) y</pre>}}
 
-This ends the walk-through of <code>gdb</code> . Using <code>gdb</code> , we hope that you will be able to use it to create better bug reports. However, there are other types of errors that can cause a program to fail during run time. One of the other ways is through improper file access. We can find those using a nifty little tool called <code>strace</code> .
+This ends the walk-through of <code>gdb</code>. Using <code>gdb</code>, we hope that you will be able to use it to create better bug reports. However, there are other types of errors that can cause a program to fail during run time. One of the other ways is through improper file access. We can find those using a nifty little tool called <code>strace</code>.
 
 == Finding file access errors using strace ==
 
@@ -203,7 +211,7 @@ read(3, "bar", 3)                       = 3
 </pre>
 }}
 
-Aha! So There's the problem. Someone moved the configuration directory to {{Path|.foobar2}} instead of {{Path|.foobar}} . We also see the program reading in "bar" as it should. In this case, we can recommend the ebuild maintainer to put a warning about it. For now though, we can copy over the config file from {{Path|.foobar}} and modify it to produce the correct results. 
+Aha! So There's the problem. Someone moved the configuration directory to {{Path|.foobar2}} instead of {{Path|.foobar}}. We also see the program reading in "bar" as it should. In this case, we can recommend the ebuild maintainer to put a warning about it. For now though, we can copy over the config file from {{Path|.foobar}} and modify it to produce the correct results.
 
 === Conclusion ===
 
@@ -238,7 +246,7 @@ make: *** [foobar2.o] Error 1
 </pre>
 }}
 
-The program is compiling smoothly when it suddenly stops and presents an error message. This particular error can be split into 3 different sections, The compile messages, the build error, and the emerge error message as shown below. 
+The program is compiling smoothly when it suddenly stops and presents an error message. This particular error can be split into 3 different sections, the compile messages, the build error, and the emerge error message as shown below. 
 
 
 {{Code|Compilation Messages|<pre>
@@ -271,10 +279,10 @@ Please make sure you always include error messages in English, even when your sy
 
 {{RootCmd|LC_ALL{{=}}C emerge sys-apps/foobar2}}
 
-{{Note|This is also about the only time you should use the <code>LC_ALL</code> environmental variable for specifying locale settings. If you are looking for a way to switch your system's language, then please consult our [http://www.gentoo.org/guide-localization.xml Localization Guide] instead.}}
+{{Note|This is also about the only time you should use the <code>LC_ALL</code> environmental variable for specifying locale settings. If you are looking for a way to switch your system's language, then please consult our [[Localization/HOWTO]] instead.}}
 Make errors are the actual error and the information the developer needs. When you see "make: ***", this is often where the error has occurred. Normally, you can copy and paste 10 lines above it and the developer will be able to address the issue. However, this may not always work and we'll take a look at an alternative shortly. 
 
-The emerge error is what <code>emerge</code> throws out as an error. Sometimes, this might also contain some important information. Often people make the mistake of posting the emerge error and that's all. This is useless by itself, but with make error and compile information, a developer can get what application and what version of the package is failing. As a side note, make is commonly used as the build process for programs ( '''but not always''' ). If you can't find a "make: ***" error anywhere, then simply copy and paste 20 lines before the emerge error. This should take care of most all build system error messages. Now let's say the errors seem to be quite large. 10 lines won't be enough to catch everything. That's where PORT_LOGDIR comes into play. 
+The emerge error is what <code>emerge</code> throws out as an error. Sometimes, this might also contain some important information. Often people make the mistake of posting the emerge error and that's all. This is useless by itself, but with make error and compile information, a developer can get what application and what version of the package is failing. As a side note, make is commonly used as the build process for programs ('''but not always'''). If you can't find a "make: ***" error anywhere, then simply copy and paste 20 lines before the emerge error. This should take care of most all build system error messages. Now let's say the errors seem to be quite large. 10 lines won't be enough to catch everything. That's where PORT_LOGDIR comes into play.
 
 === emerge and PORT_LOGDIR ===
 
@@ -335,7 +343,7 @@ make: *** [shared] Error 2
 </pre>
 }}
 
-So to begin searching, we head over to the [https://bugs.gentoo.org/ Bugzilla Homepage] . 
+So to begin searching, we head over to the [https://bugs.gentoo.org/ Bugzilla Homepage]. 
 
 We'll click on "Query Existing bug reports". The reason why we choose this over the basic bug search is because the basic bug search tends to give vague results and often hinders users from looking through the results and finding the duplicate bug. Once we click on the query screen, we reach the next page: 
 
@@ -368,33 +376,31 @@ In this chapter, we'll figure out how to use Bugzilla to file a shiny, new bug. 
 
 Despite this, some people will file ebuild bugs in portage development (assumption that portage team handles the portage tree) or infra (assumption that infra has access to mirrors and rsync and can fix it directly). This is simply not how things work. 
 
-Another common misconception occurs with our Documentation bugs. For example, a user finds a bug with the [http://www.gentoo.org//proj/en/releng/catalyst/ Catalyst Docs] . The general tendency is to file a bug under Docs-user, which gets assigned to the [http://gdp.gentoo.org GDP] , when it should actually go to a member of the [http://www.gentoo.org//proj/en/releng/ Release Engineering] team. As a rule of thumb, only documentation under {{Path|http://www.gentoo.org/doc/*}} is under the GDP. Anything under {{Path|http://www.gentoo.org/proj/*}} is under the respective teams. 
-
-{{Note|We would rather see a bug whose product was not supposed to be Gentoo Linux but has been filed under the same rather than seeing a bug which belongs the Gentoo Linux product and filed elsewhere. While neither is preferred, the former is more acceptable and understandable (except website bugs.. we might have an issue with that...).}}
+{{Note|We would rather see a bug whose product was not supposed to be Gentoo Linux but has been filed under the same rather than seeing a bug which belongs the Gentoo Linux product and filed elsewhere. While neither is preferred, the former is more acceptable and understandable (except website bugs... We might have an issue with that...).}}
 Our bug goes in Gentoo Linux as it's an ebuild bug. We head over there and are presented with the multi-step bug reporting process. Let us now proceed with Step 1... 
 
-The first step here is really important (as the red text tells you). This is where you search to see that someone else hasn't hit the same bug you have, yet. If you do skip this step and a bug like yours already exists, it will be marked as a DUPLICATE thus wasting a large amount of QA effort. To give you an idea, the bug numbers that are struck out above are duplicate bugs. Now comes step 2, where we give the information. 
+The first step here is really important (as the red text tells you). This is where you search to see that someone else hasn't hit the same bug you have, yet. If you do skip this step and a bug like yours already exists, it will be marked as a DUPLICATE thus wasting a large amount of QA effort. To give you an idea, the bug numbers that are struck out above are duplicate bugs. Now comes step 2, where we give the information.
 
 === Required Information ===
 
 Let us take a closer look at what's what. 
 
-* First, there's the Product. The product will narrow down the bug to a specific area of Gentoo like Bugzilla (for bugs relating to bugs.gentoo.org), Docs-user(for User Documentation) or Gentoo Linux (for ebuilds and the like).
+* First, there's the Product. The product will narrow down the bug to a specific area of Gentoo like Bugzilla (for bugs relating to bugs.gentoo.org), Docs-user (for User Documentation) or Gentoo Linux (for ebuilds and the like).
 * Component is where exactly the problem occurs, more specifically which part of selected product the bug comes under. This makes classification easier.
 * Hardware platform is what architecture you're running. If you were running SPARC, you would set it to SPARC.
 * Operating System is what Operating System you're using. Because Gentoo is considered a "Meta-distribution", it can run on other operating systems beside Linux.
 
-So, for our example bug, we have : 
+So, for our example bug, we have: 
 
 * Product - Gentoo Linux (Since it is an ebuild issue)
 * Component - Application (It is an application at fault, foobar2)
 * Hardware Platform - All (This error could occur across architectures)
-* Operation System - All (It could occur on all types of systems)
+* Operating System - All (It could occur on all types of systems)
 * Build Identifier is basically the User Agent of the browser that is being used to report the bugs (for logging purposes). You can just leave this as is.
 * URL is optional and is used to point to relevant information on another site (upstream bugzilla, release notes on package homepage etc.). You should never use URL to point to pastebins for error messages, logs, <code>emerge --info</code> output, screenshots or similar information. Instead, these should always be attached to the bug.
 * In the Summary, you should put the package category, name, and number.
 
-Not including the category in the summary really isn't too bad, but it's recommended. If you don't include the package name, however, we won't know what you're filling a bug for, and will have to ask you about it later. The version number is important for people searching for bugs. If 20 people filed bugs and not one put a version number, how would people looking for similar bugs be able to tell if one was there's? They'd have to look through every single bug, which isn't too hard, but if there are say, 200 bugs.. it's not that easy. After all the package information, you'll want to include a small description of the incident. 
+Not including the category in the summary really isn't too bad, but it's recommended. If you don't include the package name, however, we won't know what you're filling a bug for, and will have to ask you about it later. The version number is important for people searching for bugs. If 20 people filed bugs and not one put a version number, how would people looking for similar bugs be able to tell if one was there's? They'd have to look through every single bug, which isn't too hard, but if there are say, 200 bugs... it's not that easy. After all the package information, you'll want to include a small description of the incident. 
 
 These simple rules can make handling bugs a lot easier. Next are the details in which we put in the information about the bug. With this in place, the developer knows why we're filing the bug. They can then try to reproduce it. Reproducibility tells us how often we were able to make the problem recur. 
 
@@ -410,7 +416,7 @@ Lastly we select the severity of the bug. Please look this over carefully. In mo
 * Trivial - Things such as a misspelled word or whitespace clean up.
 * Enhancement - A request to enable a new feature in a program, or more specifically ''new ebuilds'' .
 
-Now we can submit the bug report by clicking on the Submit Bug Report box. You will now see your new bug come up. See [https://bugs.gentoo.org/show_bug.cgi?id=97265 Bug 97561] for what the result looks like. We've reported our bug! Now let's see how it's dealt with. 
+Now we can submit the bug report by clicking on the Submit Bug Report box. You will now see your new bug come up. See [https://bugs.gentoo.org/show_bug.cgi?id=97265 Bug 97561] for what the result looks like. We've reported our bug! Now let's see how it's dealt with.
 
 === Zero-day bump requests ===
 
@@ -456,7 +462,7 @@ Notice the maintainer section. This lists the maintainer of the package, which i
 
 Then hit the Commit button for the changes to take place. The bug has been reassigned to the correct developer. Shortly afterward, you notice (by email usually) that the developer responded to the bug. For instance, he might have asked to see an strace log to figure out how the program is trying to reach the configuration file. You follow the instructions on using strace and obtain an strace log. Now you need to attach it to the bug. In order to do this, click on "Create A New Attachment":
 
-* File - This is the location of the file in your machine. In this example, the location of {{Path|strace.log}} . You can use the "Browse..." button to select the file, or enter the path directly in the text field.
+* File - This is the location of the file in your machine. In this example, the location of {{Path|strace.log}}. You can use the "Browse..." button to select the file, or enter the path directly in the text field.
 * Description - A short one liner, or a few words describing the attachment. We'll just enter strace.log here, since that's quite self-explanatory.
 * Content Type - This is the type of the file we're attaching to the bug.
 * Obsoletes - If there were attachments submitted to the bug before the current one, you have an option of declaring them obsoleted by yours. Since we have no prior attachments to this bug, we need not bother.
@@ -485,15 +491,21 @@ Please attach any file mentioned like this to your bug report.
 
 Sometimes a developer might ask you to attach a diff or patch for a file. Standard diff files can be obtained through: 
 
-{{Cmd|diff -u file.original file.fixed > file.patch}}
+{{Cmd|cp file file.old
+|nano file
+|diff -u file.old file}}
 
 For C/C++ source files, the '''-p''' flag is added to show what function calls the diff applies to: 
 
-{{Cmd|diff -up file.c.original file.c.fixed > file.c.patch}}
+{{Cmd|cp file.c file.c.old
+|nano file.c
+|diff -up file.c.old file.c}}
 
-The documentation team will require the flag combination '''-Nt''' as well as '''-u''' . This mainly has to do with tab expansion. You can create such a diff with: 
+The documentation team will require the flag combination '''-Nt''' as well as '''-u'''. This mainly has to do with tab expansion. You can create such a diff with: 
 
-{{Cmd|diff -Nut file.xml.original file.xml.fixed > file.xml.patch}}
+{{Cmd|cp file.xml file.xml.old
+|nano file.xml
+|diff -Nut file.xml.old file.xml}}
 
 And your diff is created. While we're doing all this, suppose another person finds your bug by searching through bugzilla and is curious to keep track of the bug, they may do so by putting their email in the Add CC field of the bug as shown below. You could also keep track of other bugs by following the same method. 
 
@@ -503,7 +515,7 @@ After all this work, the bug can undergo various status markings. This is usuall
 * UNCONFIRMED - You're generally not going to see this too often. This means that a bug reporter has opened a bug using the advanced method and is uncertain his or her bug is an actual bug.
 * NEW - Bugs that are first opened are considered new.
 * ASSIGNED - When the person you've assigned the bug too validates your bug, it will often receive ASSIGNED status while they figure out the issue. This lets you know that they've accepted your bug as a real bug.
-* REOPENED - Someone has resolved a bug and you think the solution is not feasible or the problem still persists. At this point, you may re-open the bug. Please '''do not abuse this''' . If a developer closes the bug a second or third time, chances are that your bug is closed.
+* REOPENED - Someone has resolved a bug and you think the solution is not feasible or the problem still persists. At this point, you may re-open the bug. Please '''do not abuse this'''. If a developer closes the bug a second or third time, chances are that your bug is closed.
 * RESOLVED - A firm decision has been taken on the bug. Usually goes onto FIXED to indicate the bug is solved and the matter closed although various other resolutions are possible. We'll look into those a little later.
 * VERIFIED - The steps take to work the bug are correct. This is usually a QA thing.
 * CLOSED - Basically means RIP for the bug and it's buried under the never ending flow of new bugs.
@@ -519,7 +531,7 @@ The following is an overview of possible resolutions:
 * WORKSFORME - Developer/person assigned the bug cannot reproduce your error.
 * CANTFIX - Somehow the bug cannot be solved because of certain circumstances. These circumstances will be noted by the person taking the bug.
 * WONTFIX - This is usually applied to new ebuilds or feature requests. Basically the developer does not want to add a certain feature because it is not needed, a better alternative exists, or it's just plain broken. Sometimes you may be given a solution to get said issue resolved.
-* UPSTREAM - The bug cannot be fixed by the Gentoo development team, and have requested you take the problem upstream (the people that actually made the program) for review. Upstream has a few ways of handling bugs. These include mailing lists, irc channels, and even bug reporting systems. If you're not sure how to contact them, ask in the bug and someone will point you to the right direction.
+* UPSTREAM - The bug cannot be fixed by the Gentoo development team, and have requested you take the problem upstream (the people that actually made the program) for review. Upstream has a few ways of handling bugs. These include mailing lists, IRC channels, and even bug reporting systems. If you're not sure how to contact them, ask in the bug and someone will point you to the right direction.
 
 Sometimes, before the bug can be resolved, a developer may request that you test an updated ebuild. In the next chapter we'll take a look at testing ebuilds.
 
@@ -529,20 +541,20 @@ Sometimes, before the bug can be resolved, a developer may request that you test
 
 Let's say that you reported a bug for the foobar2 compile fix from earlier. Now developers might find out what the problem is and might need you to test the ebuild for them to be sure it works for you as well: 
 
-Some rather confusing vocabulary is used here. First off, let's see what an overlay is. An overlay is a special directory like {{Path|/usr/portage}} , the difference being that when you <code>emerge sync</code> , files contained within it will not be deleted. Luckily, a special {{Path|/usr/local/portage}} directory is created for that purpose. Let's go ahead and set our portage overlay in {{Path|/etc/portage/make.conf}} . Open make.conf up in your favorite editor and add this towards the end. 
+Some rather confusing vocabulary is used here. First off, let's see what an overlay is. An overlay is a special directory like {{Path|/usr/portage}}, the difference being that when you <code>emerge sync</code>, files contained within it will not be deleted. Luckily, a special {{Path|/usr/local/portage}} directory is created for that purpose. Let's go ahead and set our portage overlay in {{Path|/etc/portage/make.conf}} . Open {{Path|make.conf}} up in your favorite editor and add this towards the end. 
 
 {{Code|Setting Up PORTDIR_OVERLAY|<pre>
 PORTDIR_OVERLAY="/usr/local/portage"
 </pre>
 }}
 
-Now we'll want to create the appropriate directories to put our test ebuild files in. In this case, we're supposed to put them in sys-apps/foobar2. You'll notice that the second comment asks for a {{Path|files}} directory for the patch. This directory holds other required files that aren't included with the standard source archive (patches, init.d scripts, etc). This is a subdir in the package directory called {{Path|files}} . Go ahead and create these directories: 
+Now we'll want to create the appropriate directories to put our test ebuild files in. In this case, we're supposed to put them in {{Path|sys-apps/foobar2}}. You'll notice that the second comment asks for a {{Path|files}} directory for the patch. This directory holds other required files that aren't included with the standard source archive (patches, init.d scripts, etc). This is a subdir in the package directory called {{Path|files}}. Go ahead and create these directories: 
 
 {{RootCmd|mkdir -p /usr/local/portage/sys-apps/foobar2/files}}
 
 {{Note|The -p in mkdir creates not only the directory you want but also any missing parent directories as well (sys-apps and foobar2 in this case).}}
 
-Ok now, we can go ahead and download the files. First, download the ebuild into {{Path|/usr/local/portage/sys-apps/foobar2}} , and then add the patch to {{Path|/usr/local/portage/sys-apps/foobar2/files}} . Now that we have the files, we can begin working on testing the ebuild. 
+Ok now, we can go ahead and download the files. First, download the ebuild into {{Path|/usr/local/portage/sys-apps/foobar2}}, and then add the patch to {{Path|/usr/local/portage/sys-apps/foobar2/files}}. Now that we have the files, we can begin working on testing the ebuild.
 
 === Testing The ebuild ===
 
@@ -567,7 +579,7 @@ Portage overlays:
 </pre>
 }}
 
-It does seem to have worked! You'll notice the [1] next to the [ebuild] line. That points to {{Path|/usr/local/portage}} , which is the overlay we created earlier. Now we go ahead and emerge the package. 
+It does seem to have worked! You'll notice the [1] next to the [ebuild] line. That points to {{Path|/usr/local/portage}}, which is the overlay we created earlier. Now we go ahead and emerge the package. 
 
 {{Emerge|foobar2|output=<pre>
  Calculating dependencies ...done!
@@ -583,7 +595,7 @@ It does seem to have worked! You'll notice the [1] next to the [ebuild] line. Th
 </pre>
 }}
 
-In the first section we see that the emerge started off as it should. The second section shows our patch being applied successfully by the "[ ok ]" status message to the right. The last section tells us the program compiled ok. The patch works! Now we can go and let the developer know that their patch works fine, and that they can commit the fix to portage. 
+In the first section we see that the emerge started off as it should. The second section shows our patch being applied successfully by the "[ ok ]" status message to the right. The last section tells us the program compiled ok. The patch works! Now we can go and let the developer know that their patch works fine, and that they can commit the fix to portage.
 
 === Conclusion ===
 
