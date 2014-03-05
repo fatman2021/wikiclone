@@ -309,14 +309,6 @@ Device Drivers  --->
 
 {{RootCmd|cd initramfs}}
 
-====Embedded fstab====
-We explicitly point out all of the details including drive devices in the embedded fstab to avoid a several second delay from doing a btrfs scan.
-
-{{File|/usr/src/linux/initramfs/fstab|embedded fstab|<pre>
-/dev/sda3   /mnt/root   btrfs   device=/dev/sda3,device=/dev/sdb3,defaults,noatime,compress=lzo,autodefrag,subvol=activeroot  0 0
-/dev/sda2   /boot       btrfs   device=/dev/sda2,device=/dev/sdb2,defaults,noatime                       0 0
-</pre>}}
-
 ====initramfs_list====
 We don't want to bloat the bzImage too much so only add the essential busybox, filesystem tools and the nano editor.  Use ldd to figure out any dependencies of additional commands that you might add to yours.
 
@@ -331,6 +323,7 @@ dir /lib64      755 0 0
 dir /sbin       755 0 0
 dir /mnt        755 0 0
 dir /mnt/root   755 0 0
+dir /mnt/boot	755 0 0
 dir /etc        755 0 0
 dir /root       700 0 0
 dir /dev        755 0 0
@@ -377,19 +370,19 @@ file /lib64/liblzo2.so.2	/usr/lib64/liblzo2.so.2 755 0 0
 #
 # Nano editor and added deps
 #
-file /bin/nano			/usr/bin/nano		755 0 0
+file /sbin/nano			/usr/bin/nano		755 0 0
 file /lib64/libncursesw.so.5	/lib64/libncursesw.so.5	755 0 0
 file /lib64/libdl.so.2		/lib64/libdl.so.2	755 0 0
 
 #
 #  mknod and added deps
 #
-file /sbin/mknod                /bin/mknod              755 0 0
+file /sbin/mknod		/bin/mknod		755 0 0
 
 #
 #  more viewer
 #
-file /sbin/more                 /bin/more               755 0 0
+file /sbin/more			/bin/more		755 0 0
 
 #
 #  init script
@@ -397,21 +390,18 @@ file /sbin/more                 /bin/more               755 0 0
 file    /init                   /usr/src/linux/initramfs/init             755 0 0
 
 #
-#  pivot script
-#
-file	/doit			/usr/src/linux/initramfs/doit             755 0 0
-
-#
 #  fstab
 #
 file	/etc/fstab		/usr/src/linux/initramfs/fstab	644 0 0
 </pre>}}
 
-====init scripts====
-We started with the init script from the previous exercise but have it trimmed it down quite a bit.  We also always drop to a shell in order to allow for snapshot management, fsck, balances on cold subvolumes, etc, before continuing on.  At some point, we will probably add a flag file of some sort to go into the default subvolume of the BTROOT which would get parsed for automatic actions to execute on a reboot.
+====init script====
+We started with the init script from the previous exercise but have modified it to parse /proc/cmdline for the information needed to mount root.  If the mount fails, we drop to a rescue shell for a manual intervention.  The initramfs will embed a copy of your new /etc/fstab for use in case that happens.
 
 {{File|/usr/src/linux/initramfs/init||<pre>
 #!/bin/busybox sh
+
+
 
 rescue_shell() {
     echo "$@"
@@ -420,66 +410,116 @@ rescue_shell() {
     exec /bin/sh
 }
 
-pause_shell() {
-    echo "Pausing in a shell.  Run doit to continue the pivot"
-    busybox --install -s
-    exec /bin/sh
+
+
+get_opt() {
+	echo "$@" | cut -d "=" -f 2
 }
+
 
 
 mount_root() {
-#    echo "scanning for btrfs filesystems.... will take about 5-10 seconds"
-#
-#  earlier versions of btrfs required devices on scan.  As of around 0.19.11 or so 
-#  this now is a syntax error.  Also specifying the device= options in the fstab for
-#  the root subvolume probably make this unnecessary now
-#
-#    /sbin/btrfs device scan /dev/sda /dev/sdb
-#    /sbin/btrfs device scan
+    ro=""
+    root=""
+    rootflags=""
+    rootfstype="auto"
+
+    #
+    # This scan is probably not necessary, especially if the grub2 stanzas have put
+    # enough info in /proc/cmdline to find root
+    #
+    echo "Scanning for btrfs filesystems..."
+    /sbin/btrfs device scan
+    /sbin/btrfs fi show
+
+    for i in $(cat /proc/cmdline); do
+	case $i in
+	    root\=*)
+		root=${i:5}
+		;;
+	    ro)
+		ro="ro"
+		;;
+	    rootflags\=*)
+		rootflags=${i:10}
+		;;
+	    rootfstype\=*)
+		rootfstype=$(get_opt $i)
+		;;
+	esac
+    done
+
+
+    case $root in
+	UUID\=*)
+	    root="-U ${root:5}"
+	    ;;
+
+	LABEL\=*)
+	    root="-L ${root:6}"
+	    ;;
+    esac
+
+
+    if [[ ${ro} == "ro" ]] ; then
+	if [[ ${rootflags} != "" ]] ; then
+	    rootflags="ro,${rootflags}"
+	else
+	    rootflags="ro"
+	fi
+    fi
+
+	
     echo "mounting /mnt/root"
-    mount /mnt/root
+    mount -t ${rootfstype} -o ${rootflags} ${root} /mnt/root
 }
 
+
+
+
+#
 # temporarily mount proc and sys
+#
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devtmpfs none /dev
 
 #
-#  doesn't appear to be a console on that devtmpfs
-#
-mknod -m 622 console c 5 1
-mknod -m 622 tty0 c 4 0
-
 # disable kernel messages from popping onto the screen
+#
 echo 0 > /proc/sys/kernel/printk
 
+#
 # clear the screen
+#
 clear
 
-# mounting rootfs on /mnt/root
-mount_root || rescue_shell "Error with uuidlabel_root"#!/bin/busybox sh
+#
+# mount rootfs on /mnt/root
+#
+mount_root || rescue_shell "Error mounting root with /proc/cmdline=$(cat /proc/cmdline)"
+
+#
+#  If you are curious about the environment in effect at root, uncomment out these.
+#  The rootfs must not be mounted readonly though.
+#
+#cat /proc/mounts >/mnt/root/root/mounts.txt
+#ls -l / >/mnt/root/root/lsroot.txt
+#ls -l /dev >/mnt/root/root/lsdev.txt
+#env >/mnt/root/root/env.txt
+
+echo "All done. Switching to real root."
+
+#
 # clean up. The init process will remount proc sys and dev later
+#
 umount /proc
 umount /sys
 umount /dev
 
+#
 # switch to the real root and execute init
-exec switch_root /mnt/root /sbin/init
-
-
-pause_shell
-</pre>}}
-
-
-{{File|/usr/src/linux/initramfs/doit||<pre>
-#!/bin/busybox sh
-# clean up. The init process will remount proc sys and dev later
-umount /proc
-umount /sys
-umount /dev
-
-# switch to the real root and execute init
+#
 exec switch_root /mnt/root /sbin/init
 </pre>}}
 
