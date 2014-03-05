@@ -395,8 +395,13 @@ file    /init                   /usr/src/linux/initramfs/init             755 0 
 file	/etc/fstab		/usr/src/linux/initramfs/fstab	644 0 0
 </pre>}}
 
-====init script====
-We started with the init script from the previous exercise but have modified it to parse /proc/cmdline for the information needed to mount root.  If the mount fails, we drop to a rescue shell for a manual intervention.  The initramfs will embed a copy of your new /etc/fstab for use in case that happens.
+====init script Alternatives====
+We started with the init script from the previous exercise but have modified it to create two alternatives.  The first should parse the /proc/cmdline to pull the information needed to mount root.  It thus doesn't need to use the embedded fstab, but you can place a copy of your normal one in the initramfs directory in case you are dumped to the rescue shell.
+
+The second is a basic mount script that uses an embedded fstab to explicitly spell out the mount entries for root and boot.  We resorted to using this when we ran into problems with the init stage and then found that grub2 was not letting busybox open the console device.
+
+=====/proc/cmdline parsing init script=====
+This has not yet been shown to work during an actual boot, but the logic was tested against busybox on a running system.
 
 {{File|/usr/src/linux/initramfs/init||<pre>
 #!/bin/busybox sh
@@ -422,7 +427,7 @@ mount_root() {
     ro=""
     root=""
     rootflags=""
-    rootfstype="auto"
+    rootfstype="btrfs"
 
     #
     # This scan is probably not necessary, especially if the grub2 stanzas have put
@@ -521,6 +526,279 @@ umount /dev
 # switch to the real root and execute init
 #
 exec switch_root /mnt/root /sbin/init
+</pre>}}
+
+
+=====Basic mount init script=====
+This basic fstab based mount version and the accompanying fstab appears to work.
+
+{{File|/usr/src/linux/initramfs/init||<pre>
+#!/bin/busybox sh
+
+rescue_shell() {
+    echo "$@"
+    echo "Something went wrong. Dropping you to a shell."
+    busybox --install -s
+    exec /bin/sh
+}
+
+mount_root() {
+    echo "scanning for btrfs filesystems.... will take about 5-10 seconds"
+#
+#  earlier versions of btrfs required devices on scan.  As of around 0.19.11 or so 
+#  this now is a syntax error.  Also specifying the device= options in the fstab for
+#  the root subvolume probably make this unnecessary now
+#
+#    /sbin/btrfs device scan /dev/sda /dev/sdb
+    /sbin/btrfs device scan
+    echo "mounting /mnt/root"
+    mount /mnt/root
+}
+
+# temporarily mount proc and sys
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+
+# disable kernel messages from popping onto the screen
+echo 0 > /proc/sys/kernel/printk
+
+# clear the screen
+clear
+
+# mounting rootfs on /mnt/root
+mount_root || rescue_shell "Error with uuidlabel_root"
+
+cat /proc/mounts >/mnt/root/root/mounts.txt
+ls -l / >/mnt/root/root/lsroot.txt
+ls -l /dev >/mnt/root/root/lsdev.txt
+env >/mnt/root/root/env.txt
+echo "All done. Switching to real root."
+
+# clean up. The init process will remount proc sys and dev later
+umount /proc
+umount /sys
+umount /dev
+
+# switch to the real root and execute init
+exec switch_root /mnt/root /sbin/init
+</pre>}}
+
+{{File|/usr/src/linux/initramfs/fstab|very specific fstab|<pre>
+/dev/sda3	/mnt/root	btrfs	device=/dev/sda3,device=/dev/sdb3,defaults,noatime,compress=lzo,autodefrag,subvol=activeroot		0 0
+/dev/sda2	/mnt/boot	btrfs	device=/dev/sda2,device=/dev/sdb2,defaults,noatime		0 0
+</pre>}}
+
+=====Debug boot environment files=====
+It was interesting to see what the environment inside the kernel looks like.
+
+{{File|/root/mounts.txt|Result of "cat /proc/mounts"|<pre>
+rootfs / rootfs rw 0 0
+none /proc proc rw,relatime 0 0
+none /sys sysfs rw,relatime 0 0
+none /dev devtmpfs rw,relatime,size=12328636k,nr_inodes=3082159,mode=755 0 0
+/dev/sda3 /mnt/root btrfs rw,noatime,compress=lzo,space_cache,autodefrag 0 0
+</pre>}}
+
+{{File|/root/lsroot.txt|Result of "ls -l /" shows our initramfs as root|<pre>
+total 24
+drwxr-xr-x    2 0        0                0 Feb 20 22:21 bin
+drwxr-xr-x    8 0        0             3480 Mar  5 21:48 dev
+-rwxr-xr-x    1 0        0              191 Feb 20 20:36 doit
+drwxr-xr-x    2 0        0                0 Mar  5 21:48 etc
+-rwxr-xr-x    1 0        0             1286 Feb 20 22:21 init
+drwxr-xr-x    2 0        0                0 Feb 20 22:21 lib64
+-rwxr-xr-x    1 0        0            14480 Jan 23 23:17 libdl.so.2
+drwxr-xr-x    4 0        0                0 Feb 20 22:21 mnt
+dr-xr-xr-x  168 0        0                0 Mar  5 21:48 proc
+drwx------    2 0        0                0 Feb 20 22:21 root
+drwxr-xr-x    2 0        0                0 Feb 20 22:21 sbin
+dr-xr-xr-x   12 0        0                0 Mar  5 21:48 sys
+drwxr-xr-x    2 0        0                0 Feb 20 22:21 usr
+drwxr-xr-x    2 0        0                0 Feb 20 22:21 var
+</pre>}}
+
+{{File|/root/lsdev.txt|what devtmpfs gives us for device tree"|<pre>
+total 0
+crw-------    1 0        0          14,   4 Mar  5 21:48 audio
+crw-------    1 0        0          10, 235 Mar  5 21:48 autofs
+drwxr-xr-x    2 0        0              160 Mar  5 21:48 bsg
+crw-------    1 0        0          10, 234 Mar  5 21:48 btrfs-control
+drwxr-xr-x    3 0        0               60 Mar  5 21:48 bus
+crw-------    1 0        0           5,   1 Mar  5 21:48 console
+drwxr-xr-x   14 0        0              300 Mar  5 21:48 cpu
+crw-------    1 0        0          10,  57 Mar  5 21:48 cpu_dma_latency
+crw-------    1 0        0          10,  62 Mar  5 21:48 dlm-control
+crw-------    1 0        0          10,  61 Mar  5 21:48 dlm-monitor
+crw-------    1 0        0          10,  60 Mar  5 21:48 dlm_plock
+crw-------    1 0        0          14,   3 Mar  5 21:48 dsp
+crw-rw-rw-    1 0        0           1,   7 Mar  5 21:48 full
+crw-------    1 0        0         247,   0 Mar  5 21:48 hidraw0
+crw-------    1 0        0         247,   1 Mar  5 21:48 hidraw1
+crw-------    1 0        0          10, 228 Mar  5 21:48 hpet
+drwxr-xr-x    2 0        0              280 Mar  5 21:48 input
+crw-------    1 0        0           1,   2 Mar  5 21:48 kmem
+crw-r--r--    1 0        0           1,  11 Mar  5 21:48 kmsg
+crw-------    1 0        0          10, 237 Mar  5 21:48 loop-control
+brw-------    1 0        0           7,   0 Mar  5 21:48 loop0
+brw-------    1 0        0           7,   1 Mar  5 21:48 loop1
+brw-------    1 0        0           7,   2 Mar  5 21:48 loop2
+brw-------    1 0        0           7,   3 Mar  5 21:48 loop3
+brw-------    1 0        0           7,   4 Mar  5 21:48 loop4
+brw-------    1 0        0           7,   5 Mar  5 21:48 loop5
+brw-------    1 0        0           7,   6 Mar  5 21:48 loop6
+brw-------    1 0        0           7,   7 Mar  5 21:48 loop7
+drwxr-xr-x    2 0        0               60 Mar  5 21:48 mapper
+crw-------    1 0        0          10, 227 Mar  5 21:48 mcelog
+crw-------    1 0        0          10,  58 Mar  5 21:48 megadev0
+crw-------    1 0        0           1,   1 Mar  5 21:48 mem
+crw-------    1 0        0          14,   0 Mar  5 21:48 mixer
+crw-------    1 0        0          10, 221 Mar  5 21:48 mpt2ctl
+crw-------    1 0        0          10, 222 Mar  5 21:48 mpt3ctl
+crw-------    1 0        0          10, 220 Mar  5 21:48 mptctl
+crw-------    1 0        0          10,  56 Mar  5 21:48 network_latency
+crw-------    1 0        0          10,  55 Mar  5 21:48 network_throughput
+crw-rw-rw-    1 0        0           1,   3 Mar  5 21:48 null
+crw-------    1 0        0          10, 144 Mar  5 21:48 nvram
+crw-------    1 0        0           1,  12 Mar  5 21:48 oldmem
+crw-------    1 0        0           1,   4 Mar  5 21:48 port
+crw-rw-rw-    1 0        0           5,   2 Mar  5 21:48 ptmx
+brw-------    1 0        0           1,   0 Mar  5 21:48 ram0
+brw-------    1 0        0           1,   1 Mar  5 21:48 ram1
+brw-------    1 0        0           1,  10 Mar  5 21:48 ram10
+brw-------    1 0        0           1,  11 Mar  5 21:48 ram11
+brw-------    1 0        0           1,  12 Mar  5 21:48 ram12
+brw-------    1 0        0           1,  13 Mar  5 21:48 ram13
+brw-------    1 0        0           1,  14 Mar  5 21:48 ram14
+brw-------    1 0        0           1,  15 Mar  5 21:48 ram15
+brw-------    1 0        0           1,   2 Mar  5 21:48 ram2
+brw-------    1 0        0           1,   3 Mar  5 21:48 ram3
+brw-------    1 0        0           1,   4 Mar  5 21:48 ram4
+brw-------    1 0        0           1,   5 Mar  5 21:48 ram5
+brw-------    1 0        0           1,   6 Mar  5 21:48 ram6
+brw-------    1 0        0           1,   7 Mar  5 21:48 ram7
+brw-------    1 0        0           1,   8 Mar  5 21:48 ram8
+brw-------    1 0        0           1,   9 Mar  5 21:48 ram9
+crw-rw-rw-    1 0        0           1,   8 Mar  5 21:48 random
+crw-------    1 0        0         254,   0 Mar  5 21:48 rtc0
+brw-------    1 0        0           8,   0 Mar  5 21:48 sda
+brw-------    1 0        0           8,   1 Mar  5 21:48 sda1
+brw-------    1 0        0           8,   2 Mar  5 21:48 sda2
+brw-------    1 0        0           8,   3 Mar  5 21:48 sda3
+brw-------    1 0        0           8,  16 Mar  5 21:48 sdb
+brw-------    1 0        0           8,  17 Mar  5 21:48 sdb1
+brw-------    1 0        0           8,  18 Mar  5 21:48 sdb2
+brw-------    1 0        0           8,  19 Mar  5 21:48 sdb3
+brw-------    1 0        0           8,  32 Mar  5 21:48 sdc
+brw-------    1 0        0           8,  33 Mar  5 21:48 sdc1
+brw-------    1 0        0           8,  34 Mar  5 21:48 sdc2
+brw-------    1 0        0           8,  35 Mar  5 21:48 sdc3
+brw-------    1 0        0           8,  48 Mar  5 21:48 sdd
+brw-------    1 0        0           8,  49 Mar  5 21:48 sdd1
+brw-------    1 0        0           8,  50 Mar  5 21:48 sdd2
+brw-------    1 0        0           8,  51 Mar  5 21:48 sdd3
+crw-------    1 0        0          14,   1 Mar  5 21:48 sequencer
+crw-------    1 0        0          14,   8 Mar  5 21:48 sequencer2
+crw-------    1 0        0          21,   0 Mar  5 21:48 sg0
+crw-------    1 0        0          21,   1 Mar  5 21:48 sg1
+crw-------    1 0        0          21,   2 Mar  5 21:48 sg2
+crw-------    1 0        0          21,   3 Mar  5 21:48 sg3
+crw-------    1 0        0          21,   4 Mar  5 21:48 sg4
+drwxr-xr-x    2 0        0              180 Mar  5 21:48 snd
+brw-------    1 0        0          11,   0 Mar  5 21:48 sr0
+crw-------    1 0        0          10,  59 Mar  5 21:48 tgt
+crw-rw-rw-    1 0        0           5,   0 Mar  5 21:48 tty
+crw-------    1 0        0           4,   0 Mar  5 21:48 tty0
+crw-------    1 0        0           4,   1 Mar  5 21:48 tty1
+crw-------    1 0        0           4,  10 Mar  5 21:48 tty10
+crw-------    1 0        0           4,  11 Mar  5 21:48 tty11
+crw-------    1 0        0           4,  12 Mar  5 21:48 tty12
+crw-------    1 0        0           4,  13 Mar  5 21:48 tty13
+crw-------    1 0        0           4,  14 Mar  5 21:48 tty14
+crw-------    1 0        0           4,  15 Mar  5 21:48 tty15
+crw-------    1 0        0           4,  16 Mar  5 21:48 tty16
+crw-------    1 0        0           4,  17 Mar  5 21:48 tty17
+crw-------    1 0        0           4,  18 Mar  5 21:48 tty18
+crw-------    1 0        0           4,  19 Mar  5 21:48 tty19
+crw-------    1 0        0           4,   2 Mar  5 21:48 tty2
+crw-------    1 0        0           4,  20 Mar  5 21:48 tty20
+crw-------    1 0        0           4,  21 Mar  5 21:48 tty21
+crw-------    1 0        0           4,  22 Mar  5 21:48 tty22
+crw-------    1 0        0           4,  23 Mar  5 21:48 tty23
+crw-------    1 0        0           4,  24 Mar  5 21:48 tty24
+crw-------    1 0        0           4,  25 Mar  5 21:48 tty25
+crw-------    1 0        0           4,  26 Mar  5 21:48 tty26
+crw-------    1 0        0           4,  27 Mar  5 21:48 tty27
+crw-------    1 0        0           4,  28 Mar  5 21:48 tty28
+crw-------    1 0        0           4,  29 Mar  5 21:48 tty29
+crw-------    1 0        0           4,   3 Mar  5 21:48 tty3
+crw-------    1 0        0           4,  30 Mar  5 21:48 tty30
+crw-------    1 0        0           4,  31 Mar  5 21:48 tty31
+crw-------    1 0        0           4,  32 Mar  5 21:48 tty32
+crw-------    1 0        0           4,  33 Mar  5 21:48 tty33
+crw-------    1 0        0           4,  34 Mar  5 21:48 tty34
+crw-------    1 0        0           4,  35 Mar  5 21:48 tty35
+crw-------    1 0        0           4,  36 Mar  5 21:48 tty36
+crw-------    1 0        0           4,  37 Mar  5 21:48 tty37
+crw-------    1 0        0           4,  38 Mar  5 21:48 tty38
+crw-------    1 0        0           4,  39 Mar  5 21:48 tty39
+crw-------    1 0        0           4,   4 Mar  5 21:48 tty4
+crw-------    1 0        0           4,  40 Mar  5 21:48 tty40
+crw-------    1 0        0           4,  41 Mar  5 21:48 tty41
+crw-------    1 0        0           4,  42 Mar  5 21:48 tty42
+crw-------    1 0        0           4,  43 Mar  5 21:48 tty43
+crw-------    1 0        0           4,  44 Mar  5 21:48 tty44
+crw-------    1 0        0           4,  45 Mar  5 21:48 tty45
+crw-------    1 0        0           4,  46 Mar  5 21:48 tty46
+crw-------    1 0        0           4,  47 Mar  5 21:48 tty47
+crw-------    1 0        0           4,  48 Mar  5 21:48 tty48
+crw-------    1 0        0           4,  49 Mar  5 21:48 tty49
+crw-------    1 0        0           4,   5 Mar  5 21:48 tty5
+crw-------    1 0        0           4,  50 Mar  5 21:48 tty50
+crw-------    1 0        0           4,  51 Mar  5 21:48 tty51
+crw-------    1 0        0           4,  52 Mar  5 21:48 tty52
+crw-------    1 0        0           4,  53 Mar  5 21:48 tty53
+crw-------    1 0        0           4,  54 Mar  5 21:48 tty54
+crw-------    1 0        0           4,  55 Mar  5 21:48 tty55
+crw-------    1 0        0           4,  56 Mar  5 21:48 tty56
+crw-------    1 0        0           4,  57 Mar  5 21:48 tty57
+crw-------    1 0        0           4,  58 Mar  5 21:48 tty58
+crw-------    1 0        0           4,  59 Mar  5 21:48 tty59
+crw-------    1 0        0           4,   6 Mar  5 21:48 tty6
+crw-------    1 0        0           4,  60 Mar  5 21:48 tty60
+crw-------    1 0        0           4,  61 Mar  5 21:48 tty61
+crw-------    1 0        0           4,  62 Mar  5 21:48 tty62
+crw-------    1 0        0           4,  63 Mar  5 21:48 tty63
+crw-------    1 0        0           4,   7 Mar  5 21:48 tty7
+crw-------    1 0        0           4,   8 Mar  5 21:48 tty8
+crw-------    1 0        0           4,   9 Mar  5 21:48 tty9
+crw-------    1 0        0           4,  64 Mar  5 21:48 ttyS0
+crw-------    1 0        0           4,  65 Mar  5 21:48 ttyS1
+crw-------    1 0        0           4,  66 Mar  5 21:48 ttyS2
+crw-------    1 0        0           4,  67 Mar  5 21:48 ttyS3
+crw-rw-rw-    1 0        0           1,   9 Mar  5 21:48 urandom
+crw-------    1 0        0         248,   0 Mar  5 21:48 usbmon0
+crw-------    1 0        0         248,   1 Mar  5 21:48 usbmon1
+crw-------    1 0        0         248,   2 Mar  5 21:48 usbmon2
+crw-------    1 0        0         248,   3 Mar  5 21:48 usbmon3
+crw-------    1 0        0         248,   4 Mar  5 21:48 usbmon4
+crw-------    1 0        0         248,   5 Mar  5 21:48 usbmon5
+crw-------    1 0        0         248,   6 Mar  5 21:48 usbmon6
+crw-------    1 0        0         248,   7 Mar  5 21:48 usbmon7
+crw-------    1 0        0         248,   8 Mar  5 21:48 usbmon8
+crw-------    1 0        0           7,   0 Mar  5 21:48 vcs
+crw-------    1 0        0           7,   1 Mar  5 21:48 vcs1
+crw-------    1 0        0           7, 128 Mar  5 21:48 vcsa
+crw-------    1 0        0           7, 129 Mar  5 21:48 vcsa1
+crw-------    1 0        0          10,  63 Mar  5 21:48 vga_arbiter
+crw-rw-rw-    1 0        0           1,   5 Mar  5 21:48 zero
+</pre>}}
+
+{{File|/root/env.txt|barebones root environment|<pre>
+HOME=/
+TERM=linux
+BOOT_IMAGE=/kernel-3.10.25-gentoo
+PWD=/
 </pre>}}
 
 ====Rebuilding kernel====
