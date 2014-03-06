@@ -79,15 +79,24 @@ Bu komutu {{Path|~/.bashrc}} veya benzeri şekilde otomatik yüklenen bir dosyay
 
 Ardından normalde <code>make</code> komutu ile iş yaparken, <code>make -jN</code> tarzında (buradaki N bir sayıdır) kullanabilirsiniz. N değeri ağınızın hızına ve işlemci sayınıza göre değişecektir. Size en uyumlu değeri bulmak için deneme yapmanızı tavsiye ederiz. 
 
+=== Setting up Distcc to Work With ssh ===
+
 == Cross-Compiling (Çapraz derleme) ==
 
-Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a Sparc to build a program for a ppc. This is documented in our [[Distcc/Cross-Compiling|DistCC Cross-compiling Guide]] .
+{{RootCmd|ssh-keygen -b 2048 -t rsa -f /var/tmp/portage/.ssh/id_rsa}}
 
 == Distcc'yi Kurulum (Bootstrap) için Kullanmak ==
 
 === Adım 1: Portage'ı Yapılandırın ===
 
-Yeni bilgisayarı Gentoo Linux CD'si ile başlatıp [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 kurulum dökümanlarındaki] adımlardan bootstrap'a kadar gelin. (Bootstrap için detaylı bilgiyi [http://www.gentoo.org//doc/en/faq.xml#stage12 buradan] bulabilirsiniz.) Ardından portage'ı distcc kullanmak için yapılandırın: 
+Host test2
+    HostName 123.456.789.2
+    Port 1234
+    User UserName
+</pre>
+}}
+
+Yeni bilgisayarı Gentoo Linux CD'si ile başlatıp [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 kurulum dökümanlarındaki] adımlardan bootstrap'a kadar gelin. (Bootstrap için detaylı bilgiyi [http://www.gentoo.org//doc/en/faq.xml#stage12 buradan] bulabilirsiniz.) Ardından portage'ı distcc kullanmak için yapılandırın:
 
 {{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
 FEATURES="distcc"
@@ -99,49 +108,39 @@ MAKEOPTS="-jN"
 
 === Adım 2: Distcc Kurulumu ===
 
-Distcc'yi kurun: 
+Distcc'yi kurun:
 
 {{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
 
 === Adım 3: Distcc'yi Yapılandırın ===
 
-Distcc'yi yapılandırmak için <code>distcc-config --install</code> komutunu çalıştırın. Aşağıdaki komutta <code>host</code> ile başlayan yerleri DistCC derlemesine katılan cihazların IP adresi veya hostname adresi ile değiştirin:
+Distcc'yi yapılandırmak için <code>distcc-config --install</code> komutunu çalıştırın. Aşağıdaki komutta <code>host</code> ile başlayan yerleri DistCC derlemesine katılan cihazların IP adresi veya hostname adresi ile değiştirin: 
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
 
-DistCC artık bootstrap için kullanılabilir. Kuruluma normal olarak devam edin ve <code>emerge system</code> komutunun ardından distcc'yi tekrar kurmayı unutmayın. 
+DistCC artık bootstrap için kullanılabilir. Kuruluma normal olarak devam edin ve <code>emerge system</code> komutunun ardından distcc'yi tekrar kurmayı unutmayın.
 
 {{Note/tr|<code>emerge system</code> komutu ile paketler kurulurken bazne distcc çalışmıyor görülebilir. Bunun sebebi bazı paketlerin distcc ile kurulumu problemli olduğu için bu paketler için pasif konuma getirilmiş olmasıdır.}}
 
-== Olası Problemler ==
+== Olası Problemler == 
 
 === Bazı Paketler Distcc Kullanmıyor ===
 
-Bazı paketleri derlerken işlemin dağıtılmadığını (distcc'nin kullanılmadığını) farkedebilirsiniz. Bunun sebebi paketin Makefile dosyasının paralel derlemeyi desteklememesi veya paket bakıcısının bilinen bir problemden dolayı distcc kullanımını pasif duruma getirmesi olabilir. 
+Bazı paketleri derlerken işlemin dağıtılmadığını (distcc'nin kullanılmadığını) farkedebilirsiniz. Bunun sebebi paketin Makefile dosyasının paralel derlemeyi desteklememesi veya paket bakıcısının bilinen bir problemden dolayı distcc kullanımını pasif duruma getirmesi olabilir.
 
-Bazen de distcc bir paketin kurulumunda hataya sebep olabilir. Bu tür bir durum yaşarsanız lütfen bize [http://bugs.gentoo.org hata raporu] gönderin. 
+Bazen de distcc bir paketin kurulumunda hataya sebep olabilir. Bu tür bir durum yaşarsanız lütfen bize [http://bugs.gentoo.org hata raporu] gönderin.
 
 === Farklı GCC Sürümleri ===
 
 Eğer cihazlarda farklı GCC sürümleri var ise, garip hatalar almanız muhtemeldir. Bunları aşmak için tüm cihazlarda aynı sürümü kullanmanız önerilir. 
 
-Son yapılan güncellemeler Portage'ın <code>gcc</code> yerine <code>${CHOST}-gcc</code> kullanmasını sağlamakta. Bunun anlamı i686 mimarisini farklı mimariler ile (i386, i586 gibi) kullanıyorsanız problemler yaşanabilir. Çözüm olarak ortam değişkenlerine <code>export CC='gcc' CXX='c++'</code> ekleyebilir veya {{Path|/etc/portage/make.conf}} dosyasında bunu elle belirtebilirsiniz. 
+Son yapılan güncellemeler Portage'ın <code>gcc</code> yerine <code>${CHOST}-gcc</code> kullanmasını sağlamakta. Bunun anlamı i686 mimarisini farklı mimariler ile (i386, i586 gibi) kullanıyorsanız problemler yaşanabilir. Çözüm olarak ortam değişkenlerine <code>export CC='gcc' CXX='c++'</code> ekleyebilir veya {{Path|/etc/portage/make.conf}} dosyasında bunu elle belirtebilirsiniz.
 
 {{Important/tr|Bunu yapmak Portage'ın davranışını değiştireceğinden garip sorunlara yol açabilir. Yalnıca farklı CHOST değerlerini karıştırıyorsanız bu yöntemi kullanın.}}
 
 === -march=native ===
 
-GCC 4.3.0 sürümünden itibaren derleyici <code>-march=native</code> parametresi ile işlemcinizin türünü ve kullanılması gereken derleme seçeneklerini otomatik olarak tanımlayabiliyor. Bu durum <code>distcc</code> gibi farklı işlemcileri aynı anda kullanan bir sistem için problem oluşturmakta. Bu sebeple <code>distcc</code> kullanırken <code>CFLAGS</code> veya <code>CXXFLAGS</code> değerlerinizde <code>-march=native</code> or <code>-mtune=native</code> '''kullanmayın'''.
-
-GCC'ye <code>-march=native</code> verdiğinizde eklenecek bayrakları görmek için aşağıdaki komutu kullanabilirsiniz:
-
-{{Cmd|gcc -march{{=}}native -E -v - &lt;/dev/null 2&gt;&amp;1 {{!}} grep cc1|output=<pre>
-/usr/libexec/gcc/x86_64-pc-linux-gnu/4.7.3/cc1 -E -quiet -v - -march=corei7-avx \
-  -mcx16 -msahf -mno-movbe -mno-aes -mpclmul -mpopcnt -mno-abm -mno-lwp -mno-fma \
-  -mno-fma4 -mno-xop -mno-bmi -mno-bmi2 -mno-tbm -mavx -mno-avx2 -msse4.2 -msse4.1 \
-  -mno-lzcnt -mno-rdrnd -mno-f16c -mno-fsgsbase --param l1-cache-size=32 \
-  --param l1-cache-line-size=64 --param l2-cache-size=6144 -mtune=corei7-avx
-</pre>}}
+GCC 4.3.0 sürümünden itibaren derleyici <code>-march=native</code> parametresi ile işlemcinizin türünü ve kullanılması gereken derleme seçeneklerini otomatik olarak tanımlayabiliyor. Bu durum <code>distcc</code> gibi farklı işlemcileri aynı anda kullanan bir sistem için problem oluşturmakta. Bu sebeple <code>distcc</code> kullanırken <code>CFLAGS</code> veya <code>CXXFLAGS</code> değerlerinizde <code>-march=native</code> or <code>-mtune=native</code> '''kullanmayın'''. 
 
 == Distcc Ekstraları ==
 
@@ -162,6 +161,26 @@ Portage'ın distcc kullanımını görmek için aşağıdaki yöntemleri kullana
 |DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
 
 {{Important/tr|Eğer distcc dizininiz farklıysa, DISTCC_DIR değişkenini buna göre düzenlemeyi unutmayın.}}
+
+== Distcc Extras ==
+
+=== Distcc Monitors === 
+
+Distcc ships with two monitors. The text-based one is always built and is called <code>distccmon-text</code>. Running it for the first time can be a bit confusing, but it is really quite easy to use. If you run the program with no parameter it will run once. However, if you pass it a number it will update every N seconds, where N is the argument you passed. 
+
+The other monitor is only turned on if you enabled <code>gtk</code> or <code>gnome</code> in your <code>USE</code> flags. This one is GTK+ based, runs in an X environment and it is quite lovely. For Gentoo the GUI monitor has been called <code>distccmon-gui</code> for less confusion. Elsewhere it may be referred to as <code>distccmon-gnome</code>. 
+
+{{RootCmd|distccmon-text N}}
+
+or run <code>distccmon-gui</code>:
+
+{{RootCmd|distccmon-gui}}
+
+To monitor Portage's distcc usage you can use:
+{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
+|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
+
+{{Important|If your distcc directory is elsewhere, change the DISTCC_DIR variable accordingly.}}
 
 == Bilgiler ==
 
