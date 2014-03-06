@@ -79,6 +79,8 @@ Si può inserire tutto questo dentro il proprio {{Path|~/.bashrc}} o equivalente
 
 Then, as you would normally type <code>make</code> , you would type <code>make -jN</code> (where N is an integer). The value of N depends on your network and the types of computers you are using to compile. Test your own settings to find the number that yields the best performance. 
 
+=== Setting up Distcc to Work With ssh ===
+
 == Cross-Compilazione ==
 
 La cross-compilazione consiste nell'utilizzare un'architettura per costruire software che verranno eseguiti su un'altra architettura. La cosa può essere semplice come ad esempio usare un Athlon (i686) per compilare un programma per K6-2(i586), o usare uno Sparc per compilare un programma per ppc. Tutto ciò è documentato nella nostra  [[Distcc/Cross-Compiling|Guida a DistCC per la Cross-compilazione]] .
@@ -87,7 +89,14 @@ La cross-compilazione consiste nell'utilizzare un'architettura per costruire sof
 
 === Fase 1: Configurare Portage ===
 
-Avviare il computer con un Gentoo Linux LiveCD e seguire le  [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 istruzioni di installazione] fino alla parte riguardante il bootstrap (consultare le [http://www.gentoo.org//doc/en/faq.xml#stage12 Gentoo FAQ] per ulteriori informazioni riguardo il bootstrap.). In seguito, configurare Portage per l'uso di Distcc 
+Host test2
+    HostName 123.456.789.2
+    Port 1234
+    User UserName
+</pre>
+}}
+
+Avviare il computer con un Gentoo Linux LiveCD e seguire le  [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 istruzioni di installazione] fino alla parte riguardante il bootstrap (consultare le [http://www.gentoo.org//doc/en/faq.xml#stage12 Gentoo FAQ] per ulteriori informazioni riguardo il bootstrap.). In seguito, configurare Portage per l'uso di Distcc
 
 {{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
 FEATURES="distcc"
@@ -99,49 +108,39 @@ MAKEOPTS="-jN"
 
 === Fase 2: Procurarsi Distcc ===
 
-Installare distcc: 
+Installare distcc:
 
 {{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
 
 Fase 3: Configurare Distcc ===
 
-Lanciare <code>distcc-config --install</code> per configurare distcc; sostituire <code>host*</code> con gli indirizzi IP o con gli hostname delle macchine partecipanti.
+Lanciare <code>distcc-config --install</code> per configurare distcc; sostituire <code>host*</code> con gli indirizzi IP o con gli hostname delle macchine partecipanti. 
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
 
-Distcc è configurato per il bootstrap! Continuare con le istruzioni di installazioni ufficiali e '''non dimenticare''' di ri-emergere Distcc dopo aver lanciato <code>emerge system</code>, per assicurarsi che tutte le dipendenze desiderate vengano installate. 
+Distcc è configurato per il bootstrap! Continuare con le istruzioni di installazioni ufficiali e '''non dimenticare''' di ri-emergere Distcc dopo aver lanciato <code>emerge system</code>, per assicurarsi che tutte le dipendenze desiderate vengano installate.
 
 {{Note/it|Durante il bootstrap e l'<code>emerge system</code> distcc potrebbe dare l'impressione di non essere usato. Questo è un comportamento normale in quanto alcune ebuild non funzionano correttamente con distcc, e di conseguenza lo disabilitano intenzionalmente.}}
 
-== Risoluzione dei problemi ==
+== Risoluzione dei problemi == 
 
 === Alcuni pacchetti non usano Distcc ===
 
-Man mano che si emergono pacchetti, si può notare come alcuni di essi non vengano compilati in modalità distribuita (e neanche in parallelo). Questo è possibile quando il Makefile del pacchetto in questione non supporta le operazioni parallele, o quando il manutentore dell'ebuild le ha esplicitamente disabilitate, spesso a causa di problemi noti. 
+Man mano che si emergono pacchetti, si può notare come alcuni di essi non vengano compilati in modalità distribuita (e neanche in parallelo). Questo è possibile quando il Makefile del pacchetto in questione non supporta le operazioni parallele, o quando il manutentore dell'ebuild le ha esplicitamente disabilitate, spesso a causa di problemi noti.
 
-A volte distcc può causare fallimenti nelle compilazioni. Se succede, si è pregati di [http://bugs.gentoo.org comunicarlo] nel bugtracker. 
+A volte distcc può causare fallimenti nelle compilazioni. Se succede, si è pregati di [http://bugs.gentoo.org comunicarlo] nel bugtracker.
 
 === Versioni di GCC differenti ===
 
 Se si hanno diverse versioni di gcc nei propri host, molto probabilmente si manifesteranno problemi di varia natura. La soluzione consiste nell'installare in tutti gli host la stessa versione di GCC. 
 
-Gli aggiornamenti più recenti di Portage usano <code>${CHOST}-gcc</code> invece di <code>gcc</code>. Questo significa che se si stanno usando macchine i686 insieme ad altre di diverso tipo (i586,i386) si incontreranno problemi. Una soluzione può essere quella di specificare <code>export CC='gcc' CXX='c++'</code> o di inserirlo direttamente in  {{Path|/etc/portage/make.conf}}. 
+Gli aggiornamenti più recenti di Portage usano <code>${CHOST}-gcc</code> invece di <code>gcc</code>. Questo significa che se si stanno usando macchine i686 insieme ad altre di diverso tipo (i586,i386) si incontreranno problemi. Una soluzione può essere quella di specificare <code>export CC='gcc' CXX='c++'</code> o di inserirlo direttamente in  {{Path|/etc/portage/make.conf}}.
 
 {{Important/it|Effettuare questa modifica cambia alcuni comportamenti di Portage, il che potrebbe portare a strani risultati in futuro. Effettuare tutto ciò solo nel caso in cui si stiano usando CHOST differenti.}}
 
 === -march=native ===
 
-A partire da GCC 4.3.0, il compilatore supporta l'opzione <code>-march=native</code>, che abilita il rilevamento automatico della CPU e le conseguenti ottimizzazioni che val la pena utilizzare. L'uso di questa opzione rappresenta un problema per <code>distcc</code> in quanto abilita il mix di codice ottimizzato per processori differenti (come AMD Athlon e Intel Pentium). ''NON'' usare <code>-march=native</code> o <code>-mtune=native</code> nelle proprie <code>CFLAGS</code> o <code>CXXFLAGS</code> durante le compilazioni con <code>distcc</code>.
-
-Per sapere quali flag GCC abiliterebbe quando eseguito con <code>-march=native</code>, lanciare il seguente comando:
-
-{{Cmd|gcc -march{{=}}native -E -v - &lt;/dev/null 2&gt;&amp;1 {{!}} grep cc1|output=<pre>
-/usr/libexec/gcc/x86_64-pc-linux-gnu/4.7.3/cc1 -E -quiet -v - -march=corei7-avx \
-  -mcx16 -msahf -mno-movbe -mno-aes -mpclmul -mpopcnt -mno-abm -mno-lwp -mno-fma \
-  -mno-fma4 -mno-xop -mno-bmi -mno-bmi2 -mno-tbm -mavx -mno-avx2 -msse4.2 -msse4.1 \
-  -mno-lzcnt -mno-rdrnd -mno-f16c -mno-fsgsbase --param l1-cache-size=32 \
-  --param l1-cache-line-size=64 --param l2-cache-size=6144 -mtune=corei7-avx
-</pre>}}
+A partire da GCC 4.3.0, il compilatore supporta l'opzione <code>-march=native</code>, che abilita il rilevamento automatico della CPU e le conseguenti ottimizzazioni che val la pena utilizzare. L'uso di questa opzione rappresenta un problema per <code>distcc</code> in quanto abilita il mix di codice ottimizzato per processori differenti (come AMD Athlon e Intel Pentium). ''NON'' usare <code>-march=native</code> o <code>-mtune=native</code> nelle proprie <code>CFLAGS</code> o <code>CXXFLAGS</code> durante le compilazioni con <code>distcc</code>. 
 
 == Gli extra di Distcc ==
 
@@ -161,6 +160,26 @@ Per visualizzare l'uso di Distcc che fa Portage, si può usare il comando
 {{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N |DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
 
 {{Important/it|Se la propria directory di distcc non corrisponde, modificare la variabile DISTCC_DIR opportunamente.}}
+
+== Distcc Extras ==
+
+=== Distcc Monitors === 
+
+Distcc ships with two monitors. The text-based one is always built and is called <code>distccmon-text</code>. Running it for the first time can be a bit confusing, but it is really quite easy to use. If you run the program with no parameter it will run once. However, if you pass it a number it will update every N seconds, where N is the argument you passed. 
+
+The other monitor is only turned on if you enabled <code>gtk</code> or <code>gnome</code> in your <code>USE</code> flags. This one is GTK+ based, runs in an X environment and it is quite lovely. For Gentoo the GUI monitor has been called <code>distccmon-gui</code> for less confusion. Elsewhere it may be referred to as <code>distccmon-gnome</code>. 
+
+{{RootCmd|distccmon-text N}}
+
+or run <code>distccmon-gui</code>:
+
+{{RootCmd|distccmon-gui}}
+
+To monitor Portage's distcc usage you can use:
+{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
+|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
+
+{{Important|If your distcc directory is elsewhere, change the DISTCC_DIR variable accordingly.}}
 
 == Ringraziamenti ==
 
