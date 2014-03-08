@@ -154,7 +154,7 @@ bootm 0x10800000
 
 This should boot you in your Cubox-i installation and you should be able to login as root with your password. From here you can continue with a default Gentoo installation. To make this boot configuration permanent follow the next step "Default".
 
-==== Default ====
+==== Default (Hardcoded)====
 
 In the following we will make the settings permanent. The uImage file is copied to the boot partition. The first line contains the settings for loading the kernel into memory. The second holds the arguments for the kernel. The third one is the code to execute the kernel.
 
@@ -165,6 +165,38 @@ setenv mybootset setenv bootargs root=/dev/mmcblk0p2 rootfstype=btrfs ro rootwai
 setenv mybootstart bootm 0x10800000
 setenv bootcmd run mybootset mybootload mybootstart
 saveenv
+</pre>
+
+==== uEnv ====
+
+u-Boot can also read configuration values from a file. This way the boot process can be modified without going into the u-Boot console and the settings are permanent as well. The following script is modified from the original mini-image used for the installation. In the uEnv.txt file you can no add now for example rootflags to boot from a specific btrfs snapshot.
+
+<pre>
+setenv gsetmmc 'root="root=/dev/mmcblk${rootunit}p$rootpart rootfstype=$rootfs ro rootwait"' 
+
+setenv gconsole console=ttymxc0,115200
+
+setenv gbootextra init=/init
+
+setenv grootflags ""
+
+setenv gvideo mxcfb0:dev=hdmi,1920x1080M@60,if=RGB24
+
+setenv gbootpreset 'bootdev=mmc; bootunit=0; bootpart=1; bootfs=ext2; envfile=uEnv.txt; bootroot=; bootfile=uImage'
+
+setenv grootpreset 'rootunit=0; rootpart=2; rootfs=btrfs'
+
+setenv gsetenvscript setenv gbootenv "\'run gset\${bootdev}; setenv bootargs \$root \$gvideo \$gconsole \$gbootextra \$grootflags $end\'"
+
+setenv gloaduenv 'if ${bootfs}load $bootdev $bootunit:$bootpart $loadaddr $envfile; then env import -t $loadaddr $filesize; fi'
+
+setenv grootpresetup 'bootrun=bootm; loadfile=$bootfile; rootdev=$bootdev; rootunit=$bootunit; rootpart=$rootpart; rootfs=$rootfs'
+
+setenv gbootload '${bootfs}load $bootdev $bootunit:$bootpart $loadaddr $bootroot/$loadfile'
+
+setenv gbootstart '$bootrun'
+
+setenv bootcmd run gbootpreset grootpreset gsetenvscript gloaduenv grootpresetup gbootenv gbootload gbootstart
 </pre>
 
 === Continue Gentoo install ===
