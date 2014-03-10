@@ -10,7 +10,7 @@ We will update for non-x86 as we acquire details and useful examples.
 
 == Finding broken object code ==
 
-Before you can start fixing something, you got to make sure it's broken first, right? For this reason, we've developed a suite of tools named [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities] . If you are not familiar with these utilities, you should read the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities Guide] now. Gentoo users can simply do <code>emerge pax-utils</code> . Non-Gentoo users should be able to find a copy of the source tarball in the {{Path|distfiles}} on a [http://www.gentoo.org//main/en/mirrors.xml Gentoo Mirror] . Once you have the PaX Utilities setup on your system, we can start playing around with <code>scanelf</code> . 
+Before you can start fixing something, you got to make sure it's broken first, right? For this reason, we've developed a suite of tools named [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities]. If you are not familiar with these utilities, you should read the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities Guide] now. Gentoo users can simply do <code>emerge pax-utils</code> . Non-Gentoo users should be able to find a copy of the source tarball in the {{Path|distfiles}} on a [http://www.gentoo.org//main/en/mirrors.xml Gentoo Mirror]. Once you have the PaX Utilities setup on your system, we can start playing around with <code>scanelf</code>. 
 
 Keep in mind that although these utilities are named PaX Utilities, they certainly do not require PaX or anything else like that on your system. The name is a historical artifact and want of a better name, has stuck. 
 
@@ -26,7 +26,7 @@ TEXTREL  /usr/lib/libxvidcore.so.4.1
 </pre>
 }}
 
-Ideally, scanelf should not display anything, but on an x86 system, this is rarely the case. Here we can see six libraries with TEXTRELs in them. To quickly find out what package these files come from, Gentoo users can <code>emerge portage-utils</code> and use <code>qfile</code> . 
+Ideally, scanelf should not display anything, but on an x86 system, this is rarely the case. Here we can see six libraries with TEXTRELs in them. To quickly find out what package these files come from, Gentoo users can <code>emerge portage-utils</code> and use <code>qfile</code>. 
 
 {{Cmd|qfile `scanelf -qylpF%F#t`|output=<pre>
 media-libs/libdv (/usr/lib/libdv.so.4.0.2)
@@ -99,7 +99,7 @@ The output here tells us that the ''cpu_flags'' and the ''IDCT_mmx'' functions a
 </pre>
 }}
 
-As you can see here, the two lines picked out in the body of ''cpu_flags'' have absolute memory references. In this case, they both refer to memory location ''0x3d3d0'' . Since this object code may be loaded into any address, using an aboslute reference obviously won't fly. That means everytime libsmpeg is loaded into memory, the dynamic loader has to rewrite the ''0x3d3d0'' to the actual calculated address on the fly. 
+As you can see here, the two lines picked out in the body of ''cpu_flags'' have absolute memory references. In this case, they both refer to memory location ''0x3d3d0''. Since this object code may be loaded into any address, using an absolute reference obviously won't fly. That means everytime libsmpeg is loaded into memory, the dynamic loader has to rewrite the ''0x3d3d0'' to the actual calculated address on the fly. 
 
 === Dissect libdv ===
 
@@ -132,7 +132,7 @@ As you can see here, the two lines picked out in the body of ''cpu_flags'' have 
 </pre>
 }}
 
-Again, we can see that many functions (like ''dv_parse_ac_coeffs_pass0'' and ''_dv_idct_block_mmx'' ) have absolute memory references. What we also see is that a bunch of functions which refer to variables. For example, ''dv_decode_vlc'' misuses the variable ''dv_vlc_class_index_mask'' while ''dv_parse_video_segment'' misuses the variable ''dv_parse_ac_coeffs'' . Much easier to locate the problem in the source code when you have the symbol name. 
+Again, we can see that many functions (like ''dv_parse_ac_coeffs_pass0'' and ''_dv_idct_block_mmx'') have absolute memory references. What we also see is that a bunch of functions which refer to variables. For example, ''dv_decode_vlc'' misuses the variable ''dv_vlc_class_index_mask'' while ''dv_parse_video_segment'' misuses the variable ''dv_parse_ac_coeffs''. Much easier to locate the problem in the source code when you have the symbol name. 
 
 === Dissect libSDL ===
 
@@ -191,7 +191,7 @@ IDCT_mmx:
 </pre>
 }}
 
-As we suspected, both the ''cpu_flags'' and the ''IDCT_mmx'' functions are written in pure assembly code. This makes tracking down the unamed memory reference easier because the source code should closely match the output of <code>objdump</code> . If we review the output from earlier, we know the ''cpuid'' instruction is used. Since it isn't a common instruction, we search for it in the source code. 
+As we suspected, both the ''cpu_flags'' and the ''IDCT_mmx'' functions are written in pure assembly code. This makes tracking down the unamed memory reference easier because the source code should closely match the output of <code>objdump</code>. If we review the output from earlier, we know the ''cpuid'' instruction is used. Since it isn't a common instruction, we search for it in the source code. 
 
 {{Cmd|grep -A 8 cpuid video/mmxflags_asm.S|output=<pre>
         cpuid
@@ -206,7 +206,7 @@ cpu_flags.L1:
 </pre>
 }}
 
-In GNU assembler, registers are prefixed with a ''%'' and constants are prefixed with a ''$'' , that ''flags'' looks suspicious. It also lines up well with the <code>objdump</code> output from earlier. So what is ''flags'' ? 
+In GNU assembler, registers are prefixed with a ''%'' and constants are prefixed with a ''$'' , that ''flags'' looks suspicious. It also lines up well with the <code>objdump</code> output from earlier. So what is ''flags''? 
 
 {{Cmd|grep -C 2 flags video/mmxflags_asm.S|output=<pre>
 .data
@@ -302,7 +302,7 @@ int SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect,
 </pre>
 }}
 
-Another straight forward bug. An absolute reference to the ''_copy_row'' variable in assembly. If we were to let gcc handle the ''_copy_row'' reference instead though ... 
+Another straight forward bug. An absolute reference to the ''_copy_row'' variable in assembly. If we were to let gcc handle the ''_copy_row'' reference instead though... 
 
 == How to write PIC (in theory) ==
 
@@ -349,11 +349,11 @@ x86-specific rules
 
 === Don't use the PIC register ===
 
-If you come across code which uses the PIC register in some inline assembly, one fix may be to simply use a different register. For example, the x86 architecture has 6 general purpose registers ( ''eax'' , ''ebx'' , ''ecx'' , ''edx'' , ''esi'' , ''edi'' ). If the code uses just ''eax'' and ''ebx'' , just change all references to ''ebx'' to ''ecx'' and you're done! 
+If you come across code which uses the PIC register in some inline assembly, one fix may be to simply use a different register. For example, the x86 architecture has 6 general purpose registers (''eax'', ''ebx'', ''ecx'', ''edx'', ''esi'', ''edi''). If the code uses just ''eax'' and ''ebx'', just change all references to ''ebx'' to ''ecx'' and you're done! 
 
 A cleaner fix might be to just let gcc allocate the registers accordingly. If the inline assembly doesn't actually care which registers it uses, change the references from ''ebx'' to ''r'' in the clobber list, and refer to the variable by number. 
 
-Or, if the assembly uses an instruction which always clobbers ''ebx'' (e.g. ''cpuid'' ), simply hide the value in another register (like ''esi'' ). 
+Or, if the assembly uses an instruction which always clobbers ''ebx'' (e.g. ''cpuid''), simply hide the value in another register (like ''esi''). 
 
 If all else fails, you can fall back to the slow push/pop ''ebx'' on the stack method. 
 
@@ -452,7 +452,7 @@ If your get a warning/error about one of the memory inputs needing to be an lval
 
 === Thunk it in assembly ===
 
-Hand written assembly sometimes need to access variables (whether they be local or global). Since none of the previous tricks will work, you just need to grind your teeth and dig in to write real PIC references yourself using the GOT. Make sure you keep in mind the first rule of thumb: Do not mix PIC and non-PIC object code. This probably will require the hand written assembly be preprocessed before it is assembled, so an assembly source file with a ''.s'' suffix will not work. It needs to be ''.S'' . 
+Hand written assembly sometimes need to access variables (whether they be local or global). Since none of the previous tricks will work, you just need to grind your teeth and dig in to write real PIC references yourself using the GOT. Make sure you keep in mind the first rule of thumb: Do not mix PIC and non-PIC object code. This probably will require the hand written assembly be preprocessed before it is assembled, so an assembly source file with a ''.s'' suffix will not work. It needs to be ''.S''. 
 
 Also keep in mind that using @GOTOFF will return the variable while using @GOT will return a pointer to the variable. So accessing a variable with @GOT will require two steps. 
 
@@ -500,11 +500,11 @@ __i686.get_pc_thunk.bx:
 </pre>
 }}
 
-{{Note|Usage of ''ebx'' as the register to do relative addressing is not required, it is just common convention. The above examples could just as easily be done by using ''ecx'' or ''edx'' .}}
+{{Note|Usage of ''ebx'' as the register to do relative addressing is not required, it is just common convention. The above examples could just as easily be done by using ''ecx'' or ''edx''.}}
 
-Since we hide the PIC details behind the preprocessor define ''__PIC__'' , we know that the correct code will be generated for both the PIC and non-PIC cases. 
+Since we hide the PIC details behind the preprocessor define ''__PIC__'', we know that the correct code will be generated for both the PIC and non-PIC cases. 
 
-The ''__i686.get_pc_thunk.bx'' function is a standard method for acquiring the address of the GOT at runtime and storing the result in ''ebx'' . The funky name is what gcc uses by convention when generating PIC objects, so we too use the same name. The ''@GOT'' and ''@GOTOFF'' notation tells the assembler where to find the variables in memory. The ''.section .gnu.linkonce.t'' is useful because it tells the linker to only include one instance of this function in the final object code. So if you have multiple files which declare this same function which are compiled and linked into the same final library, the linker will discard all duplicate instances of the function thus saving space (which is always a good thing). 
+The ''__i686.get_pc_thunk.bx'' function is a standard method for acquiring the address of the GOT at runtime and storing the result in ''ebx''. The funky name is what gcc uses by convention when generating PIC objects, so we too use the same name. The ''@GOT'' and ''@GOTOFF'' notation tells the assembler where to find the variables in memory. The ''.section .gnu.linkonce.t'' is useful because it tells the linker to only include one instance of this function in the final object code. So if you have multiple files which declare this same function which are compiled and linked into the same final library, the linker will discard all duplicate instances of the function thus saving space (which is always a good thing). 
 
 == How to fix broken PIC (in practice) ==
 
