@@ -2,11 +2,11 @@ Handbook for proper GNU Stack management in ELF systems
 
 == Introduction ==
 
-With the rise of mainstream consumer machines with hardware stack protection (e.g. the [http://en.wikipedia.org/wiki/NX_bit NX bit] on amd64), we developers have to be doubly sure that our packages build with the correct stack settings. Keep in mind that stack protection is an issue for all architectures, not just x86 or amd64. 
+With the rise of mainstream consumer machines with hardware stack protection (e.g. the [[Wikipedia:NX_bit|NX bit]] on amd64), we developers have to be doubly sure that our packages build with the correct stack settings. Keep in mind that stack protection is an issue for all architectures, not just x86 or amd64. 
 
-The purpose of this document is to help package maintainers fix their packages when they break. We will be focusing our attention on the GNU_STACK ELF marking. ELF is simply a file format which all modern linux distros use. An ELF can be an executable (say {{Path|/bin/ls}} ) or a library (say {{Path|/lib/libncurses.so}} ). GNU_STACK is just an ELF program header which tells the system how to control the stack when the ELF is loaded into memory. 
+The purpose of this document is to help package maintainers fix their packages when they break. We will be focusing our attention on the GNU_STACK ELF marking. ELF is simply a file format which all modern linux distros use. An ELF can be an executable (say {{Path|/bin/ls}}) or a library (say {{Path|/lib/libncurses.so}}). GNU_STACK is just an ELF program header which tells the system how to control the stack when the ELF is loaded into memory. 
 
-Before getting started, you should read through the Wikipedia entry on the [http://en.wikipedia.org/wiki/NX_bit NX bit] . You can skip it of course if you're already familiar with the concept of executable versus non-executable stacks. 
+Before getting started, you should read through the Wikipedia entry on the [[Wikipedia:NX_bit|NX bit]]. You can skip it of course if you're already familiar with the concept of executable versus non-executable stacks. 
 
 == Causes of executable stack markings ==
 
@@ -16,7 +16,7 @@ ELF files end up with executable stack markings in one of three ways:
 # an object built from assembler source includes a marking indicating to the linker that it needs an executable stack (the GNU-stack note set for executable stack)
 # an object built from assembler source is missing the GNU-stack note; a very common occurrence especially for code expected to work on many platforms
 
-GCC generates code to be executed on the stack when it implements a [http://gcc.gnu.org/onlinedocs/gccint/Trampolines.html trampoline for nested functions] . To remove the need for an executable stack in this case, it is necessary to rewrite the code another way. Sometimes this is relatively easy, other times not. 
+GCC generates code to be executed on the stack when it implements a [http://gcc.gnu.org/onlinedocs/gccint/Trampolines.html trampoline for nested functions]. To remove the need for an executable stack in this case, it is necessary to rewrite the code another way. Sometimes this is relatively easy, other times not. 
 
 If an assembler source file includes a GNU-stack note that indicates it needs an executable stack, presumably this is by design. Again, in order to remove the need for an executable stack, the code probably needs to be rewritten. 
 
@@ -27,7 +27,7 @@ In the first two cases above, the executable stack marking is correct, and shoul
 
 == Finding ELFs that ask for an executable stack ==
 
-Before you can start fixing something, you have to make sure it's broken first, right? For this reason, we've developed a suite of tools named [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities] . If you are not familiar with these utilities, you should read the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities Guide] now. Gentoo users can simply do <code>emerge pax-utils</code> . Non-Gentoo users should be able to find a copy of the source tarball in the {{Path|distfiles}} on a [http://www.gentoo.org//main/en/mirrors.xml Gentoo Mirror] . Once you have the PaX Utilities setup on your system, we can start playing around with <code>scanelf</code> . 
+Before you can start fixing something, you have to make sure it's broken first, right? For this reason, we've developed a suite of tools named [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities]. If you are not familiar with these utilities, you should read the [http://www.gentoo.org//proj/en/hardened/pax-utils.xml PaX Utilities Guide] now. Gentoo users can simply do <code>emerge pax-utils</code>. Non-Gentoo users should be able to find a copy of the source tarball in the {{Path|distfiles}} on a [http://www.gentoo.org//main/en/mirrors.xml Gentoo Mirror]. Once you have the PaX Utilities setup on your system, we can start playing around with <code>scanelf</code>. 
 
 Let's see if your system has any ELFs that want an executable stack. 
 
@@ -47,7 +47,7 @@ RWX --- ---  /usr/bin/mplayer
 </pre>
 }}
 
-We really only need to look at the first column (which corresponds to the ELF GNU_STACK markings). Most of the time, if we fix that field, all the others fall into place. As we can see above, many files are marked with an executable stack ( ''RWX'' ). We want to make sure all files are marked with ''RW-'' . The large majority of the time this means the package was compiled incorrectly, so not much will have to be done with patching up the source code. 
+We really only need to look at the first column (which corresponds to the ELF GNU_STACK markings). Most of the time, if we fix that field, all the others fall into place. As we can see above, many files are marked with an executable stack (''RWX''). We want to make sure all files are marked with ''RW-''. The large majority of the time this means the package was compiled incorrectly, so not much will have to be done with patching up the source code. 
 
 == What needs to be fixed ==
 
@@ -60,7 +60,7 @@ So we first have to compile smpeg before we can analyze it.
 {{Cmd|ebuild /usr/portage/media-libs/smpeg/smpeg-0.4.4-r6.ebuild clean unpack compile
 |cd /var/tmp/portage/smpeg-0.4.4-r6/work/smpeg-0.4.4/}}
 
-Now we need to look at each object file and see if it has a ''.note.GNU-stack'' ELF section. Chances are, the object which is causing us trouble lacks this section completely. In that case, the compiler will assume that the ELF should not be restricted at all and mark it as ''RWX'' . The <code>scanelf</code> utility will display output slightly different when presented with an object that is missing the ELF section. The '''!WX''' below means that "Oh no, the GNU-stack is missing and write/execute permissions will be used by default!" 
+Now we need to look at each object file and see if it has a ''.note.GNU-stack'' ELF section. Chances are, the object which is causing us trouble lacks this section completely. In that case, the compiler will assume that the ELF should not be restricted at all and mark it as ''RWX''. The <code>scanelf</code> utility will display output slightly different when presented with an object that is missing the ELF section. The '''!WX''' below means that "Oh no, the GNU-stack is missing and write/execute permissions will be used by default!" 
 
 {{Cmd|scanelf -qeR .|output=<pre>
 !WX --- ---  ./video/mmxflags_asm.o
@@ -70,7 +70,7 @@ Now we need to look at each object file and see if it has a ''.note.GNU-stack'' 
 </pre>
 }}
 
-Sure enough, these objects lack the ''.note.GNU-stack'' ELF section and they are linked into the final {{Path|libsmpeg.so}} library. If we were to patch the source files {{Path|video/mmxflags_asm.S}} and {{Path|video/mmxidct_asm.S}} so that they contain ''.note.GNU-stack'' , everything would be peachy. 
+Sure enough, these objects lack the ''.note.GNU-stack'' ELF section and they are linked into the final {{Path|libsmpeg.so}} library. If we were to patch the source files {{Path|video/mmxflags_asm.S}} and {{Path|video/mmxidct_asm.S}} so that they contain ''.note.GNU-stack'', everything would be peachy. 
 
 === Check objects by hand ===
 
@@ -187,7 +187,7 @@ append-ldflags -Wl,-z,noexecstack
 
 === If all else fails ... ===
 
-If all else fails, ask around on #gentoo-dev on the irc server irc.freenode.net. Or send an e-mail to the [http://www.gentoo.org/main/en/lists.xml gentoo-dev mailing list] . If no one can seem to answer your question, give me a poke either on irc (nickname SpanKY/vapier) or via {{Mail|e-mail}}. 
+If all else fails, ask around on #gentoo-dev on the irc server irc.freenode.net. Or send an e-mail to the [http://www.gentoo.org/main/en/lists.xml gentoo-dev mailing list]. If no one can seem to answer your question, give me a poke either on irc (nickname SpanKY/vapier) or via {{Mail|e-mail}}. 
 
 == Arch Status ==
 
@@ -247,7 +247,7 @@ If all else fails, ask around on #gentoo-dev on the irc server irc.freenode.net.
 
 * thanks to the [http://pax.grsecurity.net/ PaX team] for holding my hand
 * Roland McGrath's [http://www.redhat.com/archives/fedora-devel-list/2003-November/msg00838.html brain dump]
-* [http://en.wikipedia.org/wiki/NX_bit NX bit] Wikipedia entry
+* [[Wikipedia:NX_bit|NX bit]] Wikipedia entry
 
 == Acknowledgements ==
 
