@@ -1,0 +1,67 @@
+This mini-doc supposes you're using Gentoo for running Catalyst.
+
+You need emerge catalyst
+{{Emerge|dev-util/catalyst}}
+
+== Seed tarball ==
+For creating a stage3 we first need a seed tarball. The seed is needed because catalyst will chroot onto it and emerge the packages for the new stages inside it, so it doesn't pollute your system.
+
+The seed tarball needs to create
+{{RootCmd|mkdir -p /var/tmp/catalyst/builds/default && cd /var/tmp/catalyst/builds/default}}
+directory unless you changed the catalyst configuration where you specify the temporary directory. In that case you should put the seed in the directory you specified.
+
+The seed tarball can be a current stage3 you can get from the [http://www.gentoo.org/main/en/where.xml mirrors].
+example: {{RootCmd|wget http://distfiles.gentoo.org/releases/x86/autobuilds/current-stage3/stage3-i686-20140304.tar.bz2}}
+
+
+== Snapshot ==
+We need to have a snapshot of the gentoo-x86 portage tree. Catalyst can create a snapshot of your /usr/portage tree with the command: catalyst -s ${NAME}
+The snapshot will be saved on /var/tmp/catalyst/snapshots/portage-${NAME}.tar.bz2
+example: {{RootCmd|catalyst -s my_own_snapshot}}
+Another option is using one of the snapshots available on the mirrors
+
+== Specs ==
+Catalyst uses specs files for reading the parameters to create a stage. For building a stage3 we currently need to build before a stage1 and a stage2. Therefore we need a spec for each of the stages.
+
+You can find the specs we use for autobuilds in the releng repository: http://git.overlays.gentoo.org/gitweb/?p=proj/releng.git;a=tree;f=releases/weekly/specs;hb=HEAD
+
+In this guide i'm going to use the specs for x86: http://git.overlays.gentoo.org/gitweb/?p=proj/releng.git;a=tree;f=releases/weekly/specs/x86;hb=HEAD
+
+{{RootCmd
+|wget -O stage1.spec "http://git.overlays.gentoo.org/gitweb/?p{{=}}proj/releng.git;a{{=}}blob_plain;f{{=}}releases/weekly/specs/x86/stage1.spec;hb{{=}}HEAD"
+|wget -O stage2.spec "http://git.overlays.gentoo.org/gitweb/?p{{=}}proj/releng.git;a{{=}}blob_plain;f{{=}}releases/weekly/specs/x86/stage2.spec;hb{{=}}HEAD"
+|wget -O stage3.spec "http://git.overlays.gentoo.org/gitweb/?p{{=}}proj/releng.git;a{{=}}blob_plain;f{{=}}releases/weekly/specs/x86/stage3.spec;hb{{=}}HEAD"}}
+
+You need to download those three files. These specs are really simple and the three of them contain the same parameters except some differences, lets check stage1.spec:
+
+{{Code||<pre>subarch: i486
+target: stage1
+version_stamp: 2008.0
+rel_type: default
+profile: default/linux/x86/13.0
+snapshot: 2008.0
+source_subpath: default/stage3-i486-latest
+update_seed: yes
+</pre>}}
+
+* subarch: is the subarchitecture we are building for, you can check the available subarchitectures in /usr/lib/catalyst/arch/${ARCH}.py, ${ARCH} being the arch we're building for. subarch simply sets the CHOST and CFLAGS/CXXFLAGS accordingly.
+
+* version_stamp: The version of the stage we're building, on the autobuilds we use the date. This parameter will be used on the output tarball(stage1-${ARCH}-${version_stamp}.tar.bz2), temporary directories, etc...
+
+* target: this is what makes an spec differ from another, this specifies we'll build a stage1.
+
+* rel_type: leaving default is fine, its simply used in case you want to differentiate the builds, for example if you were building hardened or uclibc stages. Changing it will change the subdirectory inside /var/tmp/catalyst/builds from default to whatever you set here.
+
+* profile: this is the profile it will use to build the new stage. It must be one of the profiles available on /usr/portage/profiles
+
+* snapshot: The snapshot of the portage tree it will use. See the chapter of creating an snapshot to see how you can create it. If you use 2008.0 like in the example, it will use the snapshot available on /var/tmp/catalyst/snapshots/portage-2008.0.tar.bz2
+
+* source_subpath: This is the relative path where the seed tarball is to be found. In the example, it will use /var/tmp/catalyst/builds/default/stage3-sh4a-2008.0.tar.bz2 as the seed tarball.
+
+On stage2 and stage3, the source_subpath needs to be the stage1 and stage2 built respectively. An example: if we use 20100908 as version_stamp, the source_subpath for stage2 should be: default/stage1-sh4a-20100908, and the source_subpath for stage3 should be:  default/stage2-sh4a-20100908.
+
+== Running catalyst ==
+Once we have reviewed the specs, we can run catalyst. Its really simple:
+{{RootCmd|catalyst -f stage1.spec && catalyst -f stage2.spec && catalyst -f stage3.spec}}
+
+If everything went fine, we should have our stage3 built on /var/tmp/catalyst/builds/default/.
