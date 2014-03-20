@@ -2,8 +2,7 @@
 
 Recently it has been made possible to use Netflix in linux via [[Wine]] with good performance.
 
-Check [http://www.compholio.com/wine-compholio/ the “Compholio” Wine patches page] & [http://fds-team.de/cms/articles/2013-08/pipelight-using-silverlight-in-linux-browsers.html the FDS-Team Pipelight page] for the latest information. At the time of this writing, Wine version 1.7.5 seemed to be targeted, which is not currently in portage.
-
+Check [https://github.com/compholio/wine-compholio-daily the Wine “Compholio” github page] & [http://fds-team.de/cms/pipelight-installation.html the FDS-Team Pipelight page] for the latest information. The patchset will be updated continuously until all of the necessary features are upstream in vanilla Wine. At the time of writing Wine version 1.7.14 is the latest one.
 ==Preconfiguring==
 
 ===xattr===
@@ -34,106 +33,112 @@ See [[Kernel/Upgrade]] for in-depth kernel rebuild instructions.
 If you were only missing the option in <code>/etc/fstab</code>:
 {{rootCmd|mount / -o remount}}
 
+==Wine==
+Even when Wine 1.7.5+ is in Portage, it doesn't include all the required additional patches, so the easiest route is to compile it.
 
-==emerge==
+At first make sure that you have the attr header files installed, which are required in order to compile Wine with XATTR support.
 {{rootCmd|emerge -atv crossdev attr}}
 
-==Wine==
-Even when Wine 1.7.5+ is in Portage, all the patches might never be in the official Wine source code, so the easiest route is by compiling it.
+As a next step grab the latest [http://sourceforge.net/projects/wine/files/?source=navbar Wine source code] (1.7.14 as of writing) and grab the wine-patches from the [http://fds-team.de/cms/pipelight-compile-wine.html wine-compholio repository]:
 
-first off, grab the latest source code (1.7.9 as of writing)
+{{Cmd
+|wget http://prdownloads.sourceforge.net/wine/wine-1.7.14.tar.bz2
+|wget https://github.com/compholio/wine-compholio-daily/archive/v1.7.14.tar.gz}}
 
-[http://sourceforge.net/projects/wine/files/?source=navbar]
+Extract the archives:
 
-and grab the wine-patches archive here:
+{{Cmd
+|tar xvjf wine-1*.tar.bz2
+|cd wine-1*
+|tar xvzf ../v1.7.14.tar.gz --strip-components=1}}
 
-[http://fds-team.de/cms/pipelight-compile-wine.html]
+and apply the patches:
 
-
-then extract the archives:
-
-{{Cmd|tar xvzf wine-patches.tar.gz && tar xjvf wine-1*.tar.gz}}
-
-and cd into the wine source code and apply the patches:
-
-{{Cmd|cd wine-1.* && (cat ../patches/*.patch {{!}} patch -p1) {{!}}{{!}} echo "FAILED TO APPLY PATCHES"}}
+{{Cmd|make -C ./patches DESTDIR{{=}}$(pwd) install}}
 
 then build the source code and install it:
 
-{{Cmd|autoreconf}}
+{{Cmd
+|./tools/make_requests
+|autoreconf
+|./configure --with-xattr}}
 
-{{Cmd|./configure}}
+Before you continue you should make sure that configure doesn't show any warnings (look at the end of the output). If there are any warnings it is recommended to install the missing header files and run the last configure step again.
+
+Afterwards compile and install Wine.
 
 {{Cmd|make}}
-
 {{rootCmd|make install}}
 
-Now move onto pipelight
+Now move on to Pipelight.
 
 ==Pipelight==
-Since Pipelight is later than most current versions in overlays, the only viable way to install Pipelight itself is to compile it.
+Since most of the available Pipelight overlays are outdated the only viable way to install Pipelight itself is to compile it. To do this follow the instructions below. Please note that some additional browser configuration is required, take a look at the next section for more details.
 
-==Compile Pipelight==
+===Compile Pipelight===
 First, get the needed tarballs for the pipelight source and precompiled binary:
-{{Cmd|wget https://bitbucket.org/mmueller2012/pipelight/get/v0.2.3.tar.gz && wget https://launchpad.net/pipelight/trunk/0.2/+download/pluginloader-prebuilt-v0.2.3.tar.xz}}
+{{Cmd
+|wget https://bitbucket.org/mmueller2012/pipelight/get/v0.2.5.tar.gz
+|wget http://repos.fds-team.de/pluginloader/v0.2.5/pluginloader.tar.gz}}
 
 Next extract the files:
-{{Cmd|tar xvzf v0.2.3.tar.gz && tar xvf pluginloader-prebuilt-v0.2.3.tar.xz}}
+{{Cmd
+|tar xvzf v0.2.5.tar.gz
+|cd mmueller2012-pipelight-*
+|tar xvzf ../pluginloader.tar.gz}}
 
-And move the pluginloader binary to the pipelight src/windows directory:
+And build it:
 
-{{Cmd|mv pluginloader.exe mmueller2012-pipelight-4006752d5f96/src/windows}}
+{{Cmd
+|./configure --prefix{{=}}/usr --wine-path{{=}}/usr/local/bin/wine --moz-plugin-path{{=}}/usr/lib/nsbrowser/plugins/ --win32-prebuilt
+|make}}
 
-Then cd into the pipelight source directory configure and build it:
+Then install it:
 
-{{Cmd|cd ~/mmueller2012-pipelight-4006752d5f96/ && ./configure --wine-path{{=}}/usr/local/bin/wine --moz-plugin-path{{=}}/usr/lib/nsbrowser/plugins/ --win32-prebuilt && make}}
+{{rootCmd
+|make install
+|/usr/bin/pipelight-plugin --create-mozilla-plugins}}
 
-then install it:
+===Initialization===
 
-{{rootCmd| make install}}
+After the installation just initialize the plugin(s) you want to use. To use Netflix you have to enable Silverlight.
 
-==Initialization==
-Before you use the plugin, you have to initialize it, first run
+{{Cmd
+|/usr/bin/pipelight-plugin --enable silverlight
+|/usr/bin/pipelight-plugin --enable flash}}
 
-{{rootCmd|/usr/local/bin/pipelight-plugin --create-mozilla-plugins}}
-
-Then initialize the plugin(s) you want:
-
-{{Cmd|/usr/local/bin/pipelight-plugin --enable silverlight}}
-{{Cmd|/usr/local/bin/pipelight-plugin --enable flash}}
-
-Then run Firefox (or your chosen web browser) from the Terminal to check to see if the plugin will run, i.e. for firefox-bin:
+Press Y to accept the plugin license. Then run Firefox (or your chosen web browser) from the Terminal to check if the plugin will run, i.e. for firefox-bin:
 
 {{Cmd|firefox-bin}}
 
-and watch the startup in the terminal for any errors, if any are found, check that you properly installed Wine and Pipelight according to this page, if not, proceed.
+and watch the startup in the terminal for any errors. The plugin installation either starts immediately, or when visiting about:plugins in your webbrowser. If there are some errors please check again that you really installed Wine and Pipelight according to this page, if not then proceed with the following steps.
 
-Then you have to install corefonts in Pipelight (which isn't installed by default. To do so you have to use Winetricks, to get them, cd to your home directory and grab the script:
+===Microsoft Corefonts (optional)===
 
+For Wine-Compholio < 1.7.14 this step was required such that Silverlight works properly (see this [https://answers.launchpad.net/pipelight/+faq/2441 FAQ entry]). With Wine-Compholio 1.7.14 the patchset already includes a [https://github.com/compholio/wine-compholio-daily/tree/master/patches/10-Missing_Fonts Arial replacement font], which seems to be sufficient for the Silverlight plugin.
+
+To install the Corefonts you have to use Winetricks. Just download the Winetricks script (for example to your home directory):
 {{Cmd|wget http://winetricks.org/winetricks}}
 
 Mark it as executable:
 {{Cmd|chmod +x winetricks}}
 
 Then run it:
-{{Cmd| WINEPREFIX{{=}}/home/<username>/.wine-pipelight ./winetricks}}
-(replace <username> with your username)
+{{Cmd| WINEPREFIX{{=}}$HOME/.wine-pipelight ./winetricks}}
 
-Then select Select the default wineprefix->Install a font->corefonts and click "Okay"
+Then select "Select the default wineprefix" -> "Install a font" -> "corefonts" and click "Okay".
 
-The next section details a bit of extra configuration needed for services such as Netflix
-
-
-==Netflix==
-Install an extension listed at http://answers.launchpad.net/pipelight/+faq/2351 such as http://addons.mozilla.org/en-us/firefox/addon/uacontrol/ and configure <code>netflix.com</code> to be sent a UA string, such as this one:[http://answers.launchpad.net/pipelight/+faq/2351 *]
-<pre>Mozilla/5.0 (Windows NT 6.1; rv:23.0) Gecko/20131011 Firefox/23.0</pre>
+===Netflix===
+Install an extension listed at http://answers.launchpad.net/pipelight/+faq/2351 such as https://addons.mozilla.org/en-US/firefox/addon/user-agent-overrider and configure a Windows UA string, such as this one:[http://answers.launchpad.net/pipelight/+faq/2351 *]
+<pre>Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20120427 Firefox/15.0a1</pre>
 
 Enjoy improved Netflix.
 
 ==Troubleshooting==
 *Try different UA strings
+*(Re)Move <code>~/.wine-pipelight</code>
 *(Re)Move <code>pluginreg.dat</code> from <code>~/.mozilla</code> (<code>find ~/.mozilla/ -name 'pluginreg.dat'</code>)
-*Check paths & other variables in <code>~/.config/pipelight</code> (or if nonexistant, <code>/usr/share/pipelight/pipelight</code>)
+*Check paths & other variables in <code>~/.config/pipelight-silverlight5.1</code> (or if nonexistant, <code>/usr/share/pipelight/configs/pipelight-silverlight5.1</code>)
 {{rootCmd|eselect opengl list}}
 {{rootCmd|eselect opengl set #}}
 
