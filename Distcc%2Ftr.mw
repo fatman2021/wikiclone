@@ -16,7 +16,7 @@ Distcc kullanabilmek için ağınızdaki tüm bilgisayarların yakın GCC sürü
 
 Distcc kurulumu yapmadan önce dikkat etmeniz gereken bazı noktalar var. 
 
-Distcc giden görevlerin gösterilmesi için bir arayüze sahip. Eğer GNOME masaüstü kullanıyorsanız use bayraklarınıza "gnome" eklediğinize emin olun. Eğer GNOME kullanmıyor ve monitör arayüzünü istiyorsanız bayraklarınıza "gtk" ekleyin. 
+Distcc ships with a graphical monitor to monitor tasks that a computer is sending away for compilation, enabled with the <code>gtk</code> <code>USE</code> flag.
 
 {{Emerge|distcc}}
 
@@ -81,13 +81,17 @@ Ardından normalde <code>make</code> komutu ile iş yaparken, <code>make -jN</co
 
 === Setting up Distcc to Work With ssh ===
 
-== Cross-Compiling (Çapraz derleme) ==
+Setting up distcc via ssh includes some pitfalls you should be aware of. First, generate a ssh key pair without password setup. Be aware that portage compiles programs as user portage. The home folder of the user portage is {{Path|/var/tmp/portage}}, which means the keys need to be stored in {{Path|/var/tmp/portage/.ssh}}.
 
 {{RootCmd|ssh-keygen -b 2048 -t rsa -f /var/tmp/portage/.ssh/id_rsa}}
 
-== Distcc'yi Kurulum (Bootstrap) için Kullanmak ==
+Second, generate a section for each host in the ssh config file:
 
-=== Adım 1: Portage'ı Yapılandırın ===
+{{RootCmd|nano -w /var/tmp/portage/.ssh/config|output=<pre>
+Host test1
+    HostName 123.456.789.1
+    Port 1234
+    User UserName
 
 Host test2
     HostName 123.456.789.2
@@ -96,7 +100,21 @@ Host test2
 </pre>
 }}
 
-Yeni bilgisayarı Gentoo Linux CD'si ile başlatıp [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 kurulum dökümanlarındaki] adımlardan bootstrap'a kadar gelin. (Bootstrap için detaylı bilgiyi [http://www.gentoo.org//doc/en/faq.xml#stage12 buradan] bulabilirsiniz.) Ardından portage'ı distcc kullanmak için yapılandırın:
+Also make sure that each host is available in the {{Path|known_hosts}} file and append your public key to the {{Path|authorized_keys}} file of the hosts. To set up the hosts test1 and test2 run
+
+{{RootCmd|/usr/bin/distcc-config --set-hosts "@test1 @test2"}}
+
+Please not the '@'-sign, which specifies ssh hosts for <code>distcc</code>.
+
+== Cross-Compiling ==
+
+Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a Sparc to build a program for a ppc. This is documented in our [[Distcc/Cross-Compiling|DistCC Cross-compiling Guide]] .
+
+== Using Distcc to Bootstrap ==
+
+=== Step 1: Configure Portage ===
+
+Boot your new box with a Gentoo Linux LiveCD and follow the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 installation instructions] up until the bootstrapping part. (See the [[FAQ|Gentoo FAQ]] for more information about bootstrapping.) Then configure Portage to use distcc: 
 
 {{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
 FEATURES="distcc"
@@ -106,61 +124,51 @@ MAKEOPTS="-jN"
 
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
-=== Adım 2: Distcc Kurulumu ===
+=== Step 2: Getting Distcc ===
 
-Distcc'yi kurun:
+Install distcc: 
 
 {{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
 
-=== Adım 3: Distcc'yi Yapılandırın ===
+=== Step 3: Setting Up Distcc ===
 
-Distcc'yi yapılandırmak için <code>distcc-config --install</code> komutunu çalıştırın. Aşağıdaki komutta <code>host</code> ile başlayan yerleri DistCC derlemesine katılan cihazların IP adresi veya hostname adresi ile değiştirin: 
+Run <code>distcc-config --install</code> to setup distcc; substitute <code>host*</code> with the IP addresses or hostnames of the participating DistCC nodes.
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
 
-DistCC artık bootstrap için kullanılabilir. Kuruluma normal olarak devam edin ve <code>emerge system</code> komutunun ardından distcc'yi tekrar kurmayı unutmayın.
+Distcc is now set up to bootstrap! Continue with the official installation instructions and ''do not forget'' to re-emerge distcc after <code>emerge system</code>. This is to make sure that all of the dependencies you want are installed as well. 
 
-{{Note/tr|<code>emerge system</code> komutu ile paketler kurulurken bazne distcc çalışmıyor görülebilir. Bunun sebebi bazı paketlerin distcc ile kurulumu problemli olduğu için bu paketler için pasif konuma getirilmiş olmasıdır.}}
+{{Note|During bootstrap and <code>emerge system</code> distcc may not appear to be used. This is expected as some ebuilds do not work well with distcc, so they intentionally disable it.}}
 
-== Olası Problemler == 
+== Troubleshooting ==
 
-=== Bazı Paketler Distcc Kullanmıyor ===
+=== Some Packages Don't Use Distcc ===
 
-Bazı paketleri derlerken işlemin dağıtılmadığını (distcc'nin kullanılmadığını) farkedebilirsiniz. Bunun sebebi paketin Makefile dosyasının paralel derlemeyi desteklememesi veya paket bakıcısının bilinen bir problemden dolayı distcc kullanımını pasif duruma getirmesi olabilir.
+As you emerge various packages, you'll notice that some of them aren't being distributed (and aren't being built in parallel). This may happen because the package's Makefile doesn't support parallel operations or the maintainer of the ebuild has explicitly disabled parallel operations due to a known problem. 
 
-Bazen de distcc bir paketin kurulumunda hataya sebep olabilir. Bu tür bir durum yaşarsanız lütfen bize [http://bugs.gentoo.org hata raporu] gönderin.
+Sometimes distcc might cause a package to fail to compile. If this happens for you, please [https://bugs.gentoo.org/ report] it to us.
 
-=== Farklı GCC Sürümleri ===
+=== Mixed GCC Versions ===
 
-Eğer cihazlarda farklı GCC sürümleri var ise, garip hatalar almanız muhtemeldir. Bunları aşmak için tüm cihazlarda aynı sürümü kullanmanız önerilir. 
+If you have different GCC versions on your hosts, there will likely be very weird problems. The solution is to make certain all hosts have the same GCC version. 
 
-Son yapılan güncellemeler Portage'ın <code>gcc</code> yerine <code>${CHOST}-gcc</code> kullanmasını sağlamakta. Bunun anlamı i686 mimarisini farklı mimariler ile (i386, i586 gibi) kullanıyorsanız problemler yaşanabilir. Çözüm olarak ortam değişkenlerine <code>export CC='gcc' CXX='c++'</code> ekleyebilir veya {{Path|/etc/portage/make.conf}} dosyasında bunu elle belirtebilirsiniz.
+Recent Portage updates have made Portage use <code>${CHOST}-gcc</code> instead of <code>gcc</code> . This means that if you're mixing i686 machines with other types (i386, i586) you will run into problems. A workaround for this may be to <code>export CC='gcc' CXX='c++'</code> or to put it in {{Path|/etc/portage/make.conf}} . 
 
-{{Important/tr|Bunu yapmak Portage'ın davranışını değiştireceğinden garip sorunlara yol açabilir. Yalnıca farklı CHOST değerlerini karıştırıyorsanız bu yöntemi kullanın.}}
+{{Important|Doing this explicitly redefines some behavior of Portage and may have some weird results in the future. Only do this if you're mixing CHOSTs.}}
 
 === -march=native ===
 
-GCC 4.3.0 sürümünden itibaren derleyici <code>-march=native</code> parametresi ile işlemcinizin türünü ve kullanılması gereken derleme seçeneklerini otomatik olarak tanımlayabiliyor. Bu durum <code>distcc</code> gibi farklı işlemcileri aynı anda kullanan bir sistem için problem oluşturmakta. Bu sebeple <code>distcc</code> kullanırken <code>CFLAGS</code> veya <code>CXXFLAGS</code> değerlerinizde <code>-march=native</code> or <code>-mtune=native</code> '''kullanmayın'''. 
+Starting with GCC 4.3.0, the compiler supports the <code>-march=native</code> switch which turns on CPU autodetection and optimizations that are worth being enabled on the processor the GCC is running at. This is a problem with <code>distcc</code> as it allows mixing of code optimized for different processors (like AMD Athlon and Intel Pentium). ''Don't'' use <code>-march=native</code> or <code>-mtune=native</code> in your <code>CFLAGS</code> or <code>CXXFLAGS</code> when compiling with <code>distcc</code> .
 
-== Distcc Ekstraları ==
+To know the flags that GCC would enable when called with <code>-march=native</code>, execute the following:
 
-=== Distcc İzleme Araçları ===
-
-Distcc iki tane izleme aracı ile gelmekte. Bunlardan metin tabanlı olanı <code>distccmon-text</code>. İlk kez kullanıyorsanız biraz kafa karıştırıcı olabilir ancak kullanımı kolaydır. Eğer herhangi bir parametre vermezseniz bir defa, herhangi bir numara -örneğin N- verirseniz her N saniyede bir çalışacaktır. 
-
-Diğer izleme aracı da <code>USE</code> bayraklarınızda <code>gtk</code> veya <code>gnome</code> açık durumda ise derlenecek olan, GTK+ temelli grafiksel arayüzdür. Diğer dağıtımlarda genellikle <code>distccmon-gnome</code> ismiyle bilinen bu arayüz Gentoo'da karışıklığa sebep olmamak için <code>distccmon-gui</code> ismindedir. 
-
-{{RootCmd|distccmon-text N}}
-
-veya <code>distccmon-gui</code> için:
-
-{{RootCmd|distccmon-gui}}
-
-Portage'ın distcc kullanımını görmek için aşağıdaki yöntemleri kullanabilirsiniz:
-{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
-|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
-
-{{Important/tr|Eğer distcc dizininiz farklıysa, DISTCC_DIR değişkenini buna göre düzenlemeyi unutmayın.}}
+{{Cmd|gcc -march{{=}}native -E -v - &lt;/dev/null 2&gt;&amp;1 {{!}} grep cc1|output=<pre>
+/usr/libexec/gcc/x86_64-pc-linux-gnu/4.7.3/cc1 -E -quiet -v - -march=corei7-avx \
+  -mcx16 -msahf -mno-movbe -mno-aes -mpclmul -mpopcnt -mno-abm -mno-lwp -mno-fma \
+  -mno-fma4 -mno-xop -mno-bmi -mno-bmi2 -mno-tbm -mavx -mno-avx2 -msse4.2 -msse4.1 \
+  -mno-lzcnt -mno-rdrnd -mno-f16c -mno-fsgsbase --param l1-cache-size=32 \
+  --param l1-cache-line-size=64 --param l2-cache-size=6144 -mtune=corei7-avx
+</pre>}}
 
 == Distcc Extras ==
 
@@ -168,7 +176,7 @@ Portage'ın distcc kullanımını görmek için aşağıdaki yöntemleri kullana
 
 Distcc ships with two monitors. The text-based one is always built and is called <code>distccmon-text</code>. Running it for the first time can be a bit confusing, but it is really quite easy to use. If you run the program with no parameter it will run once. However, if you pass it a number it will update every N seconds, where N is the argument you passed. 
 
-The other monitor is only turned on if you enabled <code>gtk</code> or <code>gnome</code> in your <code>USE</code> flags. This one is GTK+ based, runs in an X environment and it is quite lovely. For Gentoo the GUI monitor has been called <code>distccmon-gui</code> for less confusion. Elsewhere it may be referred to as <code>distccmon-gnome</code>. 
+The other monitor is only enabled through the <code>gtk</code> <code>USE</code> flag.  This one is GTK+ based, runs in an X environment and it is quite lovely.  For Gentoo, the GUI monitor has been called <code>distccmon-gui</code> for less confusion.  Elsewhere it may be referred to as <code>distccmon-gnome</code>.
 
 {{RootCmd|distccmon-text N}}
 
