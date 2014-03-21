@@ -16,7 +16,7 @@ Afin d'utiliser Distcc, tous les ordinateurs sur votre réseau doivent posséder
 
 Il y a quelques options dont vous devriez être conscient avec d'installer distcc. 
 
-Distcc arrive avec un surveillant graphique pour surveiller les tâches que votre ordinateur envoie à l'extérieur pour compilation. Si vous utilisez Gnome, alors mettez 'gnome' dans les options de votre variable USE. Cependant, si vous n'utilisez pas Gnome et désirez quand-même avoir le surveillant, vous devriez mettre 'gtk' dans ces options. 
+Distcc ships with a graphical monitor to monitor tasks that a computer is sending away for compilation, enabled with the <code>gtk</code> <code>USE</code> flag.
 
 {{Emerge|distcc}}
 
@@ -81,13 +81,17 @@ Ensuite, là où vous taperiez normalement  <code>make</code> , vous devriez tap
 
 === Setting up Distcc to Work With ssh ===
 
-== Compilation croisée ==
+Setting up distcc via ssh includes some pitfalls you should be aware of. First, generate a ssh key pair without password setup. Be aware that portage compiles programs as user portage. The home folder of the user portage is {{Path|/var/tmp/portage}}, which means the keys need to be stored in {{Path|/var/tmp/portage/.ssh}}.
 
-La compilation croisée consiste à  compiler les programmes sur une architecture pour les exécuter sur une autre architecture. C'est aussi simple que d'utiliser un Athlon (i686) pour compiler les programmes destinés à un K6-2 (i586), ou d'utiliser un Sparc pour compiler un programme destiné à un ppc. Ceci est documenté dans notre [[Distcc/Cross-Compiling|Guide de compilation croisée avec DistCC]] .
+{{RootCmd|ssh-keygen -b 2048 -t rsa -f /var/tmp/portage/.ssh/id_rsa}}
 
-== Utiliser  Distcc pour compiler les outils de compilation ==
+Second, generate a section for each host in the ssh config file:
 
-=== Étape 1: Configurer Portage ===
+{{RootCmd|nano -w /var/tmp/portage/.ssh/config|output=<pre>
+Host test1
+    HostName 123.456.789.1
+    Port 1234
+    User UserName
 
 Host test2
     HostName 123.456.789.2
@@ -96,7 +100,21 @@ Host test2
 </pre>
 }}
 
-Démarrez votre nouvel machine avec un LiveCD de Gentoo et suivez les [http://www.gentoo.org/doc/fr/handbook/handbook-x86.xml?part=1 instructions d'installation] jusqu'à la partie compiler la chaîne des outils de compilation (bootstraping). Puis configurer Portage pour l'utilisation de distcc :
+Also make sure that each host is available in the {{Path|known_hosts}} file and append your public key to the {{Path|authorized_keys}} file of the hosts. To set up the hosts test1 and test2 run
+
+{{RootCmd|/usr/bin/distcc-config --set-hosts "@test1 @test2"}}
+
+Please not the '@'-sign, which specifies ssh hosts for <code>distcc</code>.
+
+== Cross-Compiling ==
+
+Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a Sparc to build a program for a ppc. This is documented in our [[Distcc/Cross-Compiling|DistCC Cross-compiling Guide]] .
+
+== Using Distcc to Bootstrap ==
+
+=== Step 1: Configure Portage ===
+
+Boot your new box with a Gentoo Linux LiveCD and follow the [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 installation instructions] up until the bootstrapping part. (See the [[FAQ|Gentoo FAQ]] for more information about bootstrapping.) Then configure Portage to use distcc: 
 
 {{RootCmd|nano -w /etc/portage/make.conf|output=<pre>
 FEATURES="distcc"
@@ -106,61 +124,51 @@ MAKEOPTS="-jN"
 
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
-=== Étape 2: Obtenir Distcc ===
+=== Step 2: Getting Distcc ===
 
-Installez distcc:
+Install distcc: 
 
 {{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
 
-=== Étape 4: Configurer Distcc ===
+=== Step 3: Setting Up Distcc ===
 
-Exécutez  <code>distcc-config --install</code> pour configurer distcc ; remplacez  <code>host*</code> par l'adresse  IP ou le nom d'hôte des nœuds participants de distcc. 
+Run <code>distcc-config --install</code> to setup distcc; substitute <code>host*</code> with the IP addresses or hostnames of the participating DistCC nodes.
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
 
-Distcc est désormais configuré pour la compilation de la chaîne des outils de compilation ! Continuez avec l'installation officielle et ''n'oubliez pas'' de ré-installer distcc après <code>emerge system</code> . Ceci pour être sûr que toutes des dépendances désirées sont aussi installées.
+Distcc is now set up to bootstrap! Continue with the official installation instructions and ''do not forget'' to re-emerge distcc after <code>emerge system</code>. This is to make sure that all of the dependencies you want are installed as well. 
 
-{{Note|Pendant la compilation de la chaîne des outils de compilation et l'exécution de <code>emerge system</code>, distcc peut apparaître comme non utilisé. Ceci n'est pas surprenant dans la mesure où quelques ebuilds ne fonctionnent pas bien avec distcc et  le désactivent intentionnellement. }}
+{{Note|During bootstrap and <code>emerge system</code> distcc may not appear to be used. This is expected as some ebuilds do not work well with distcc, so they intentionally disable it.}}
 
-== Dépannage == 
+== Troubleshooting ==
 
-=== Quelques paquets n'utilisent pas Distcc ===
+=== Some Packages Don't Use Distcc ===
 
-Tandis que vous installez des paquets divers, vous noterez que la compilation de quelques uns d'entre-eux n'est pas distribuée (et qu'ils ne sont pas compilés en parallèle). Ceci peut arriver parce que le Makefile du paquet ne prend pas en charge  les opérations en parallèle ou que le mainteneur de l'ebuild a explicitement désactivé les opérations en parallèle à cause de problèmes identifiés.
+As you emerge various packages, you'll notice that some of them aren't being distributed (and aren't being built in parallel). This may happen because the package's Makefile doesn't support parallel operations or the maintainer of the ebuild has explicitly disabled parallel operations due to a known problem. 
 
-Parfois, distcc peut provoquer un échec de la compilation d'un paquet. Si cela vous arrive, [http://bugs.gentoo.org rapportez-le] nous.
+Sometimes distcc might cause a package to fail to compile. If this happens for you, please [https://bugs.gentoo.org/ report] it to us.
 
-=== Verisons mélangées de  GCC  ===
+=== Mixed GCC Versions ===
 
-Si vous avez différentes versions de GCC sur vos hôtes, vous rencontrerez très probablement d'étranges problèmes. La solution est d'installer la même version de GCC sur tous les hôtes. 
+If you have different GCC versions on your hosts, there will likely be very weird problems. The solution is to make certain all hosts have the same GCC version. 
 
-Des mises à jour récentes de Portage ont fait que Portage utilise  <code>${CHOST}-gcc</code> à la place de  <code>gcc</code>. Ceci signifie que si vous mélangez des machines i686 avec d'autres types de machines (i386, i586), vous allez rencontrer des problèmes. Un façon de contourner cela peut être d'utiliser la commande <code>export CC='gcc' CXX='c++'</code> ou de la mettre dans votre fichier {{Path|/etc/portage/make.conf}} .
+Recent Portage updates have made Portage use <code>${CHOST}-gcc</code> instead of <code>gcc</code> . This means that if you're mixing i686 machines with other types (i386, i586) you will run into problems. A workaround for this may be to <code>export CC='gcc' CXX='c++'</code> or to put it in {{Path|/etc/portage/make.conf}} . 
 
-{{Important|Faire ceci explicitement redéfinit quelques comportements de Portage et peut avoir d'étranges conséquences dans le futur. Ne faites cela que si vous utilisez des   ''CHOSTs'' différents. }}
+{{Important|Doing this explicitly redefines some behavior of Portage and may have some weird results in the future. Only do this if you're mixing CHOSTs.}}
 
 === -march=native ===
 
-Depuis  GCC 4.3.0, le compilateur prend en charge le commutateur  <code>-march=native</code> qui active la détection automatique du processeur et les optimisations qui valent la peine d'être activées pour le processeur sur lequel GCC tourne. Ceci est un problème avec <code>distcc</code> dans la mesure où ça autorise le mélange de code  optimisés pour différents processeurs (comme AMD Athlon et Intenl Pentium). ''N'utilisez-pas'' <code>-march=native</code> ou <code>-mtune=native</code> dans les options de votre variable <code>CFLAGS</code> lorsque vous compilez avec <code>distcc</code>. 
+Starting with GCC 4.3.0, the compiler supports the <code>-march=native</code> switch which turns on CPU autodetection and optimizations that are worth being enabled on the processor the GCC is running at. This is a problem with <code>distcc</code> as it allows mixing of code optimized for different processors (like AMD Athlon and Intel Pentium). ''Don't'' use <code>-march=native</code> or <code>-mtune=native</code> in your <code>CFLAGS</code> or <code>CXXFLAGS</code> when compiling with <code>distcc</code> .
 
-== Compléments à Distcc  ==
+To know the flags that GCC would enable when called with <code>-march=native</code>, execute the following:
 
-=== Surveillants Distcc  ===
-
-Distcc est fourni avec deux surveillants. Le surveillant textuel est toujous compilé et est appelé  <code>distccmon-text</code>. L'exécuter pour la première fois peut générer un peu de trouble, mais il est réellement facile à utiliser. Si vous exécutez le programme sans paramètre, il s'exécutera une fois. Cependant, si vous lui passez un nombre N, il fera une mise à jour toute les N secondes. 
-
-L'autre surveillant n'est activé que si vous avez activé les options  <code>gtk</code> ou <code>gnome</code> de votre variable  <code>USE</code>. Celui-ci est basé sur GTK+, tourne dans un environnement X et est très agréable. Pour Gentoo, le surveillant graphique a été appelé <code>distccmon-gui</code>  pour éviter les confusions. Dans d'autres distributions, il peut être appelé <code>distccmon-gnome</code>. 
-
-{{RootCmd|distccmon-text N}}
-
-ou exécutez <code>distccmon-gui</code>:
-
-{{RootCmd|distccmon-gui}}
-
-Pour surveiller l'utilisation du distcc de Portage, vous pouvez utiliser :
-{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
-|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
-
-{{Important|Si votre répertoire distcc se trouve ailleurs, changez la variable  DISTCC_DIR en conséquence.}}
+{{Cmd|gcc -march{{=}}native -E -v - &lt;/dev/null 2&gt;&amp;1 {{!}} grep cc1|output=<pre>
+/usr/libexec/gcc/x86_64-pc-linux-gnu/4.7.3/cc1 -E -quiet -v - -march=corei7-avx \
+  -mcx16 -msahf -mno-movbe -mno-aes -mpclmul -mpopcnt -mno-abm -mno-lwp -mno-fma \
+  -mno-fma4 -mno-xop -mno-bmi -mno-bmi2 -mno-tbm -mavx -mno-avx2 -msse4.2 -msse4.1 \
+  -mno-lzcnt -mno-rdrnd -mno-f16c -mno-fsgsbase --param l1-cache-size=32 \
+  --param l1-cache-line-size=64 --param l2-cache-size=6144 -mtune=corei7-avx
+</pre>}}
 
 == Distcc Extras ==
 
@@ -168,7 +176,7 @@ Pour surveiller l'utilisation du distcc de Portage, vous pouvez utiliser :
 
 Distcc ships with two monitors. The text-based one is always built and is called <code>distccmon-text</code>. Running it for the first time can be a bit confusing, but it is really quite easy to use. If you run the program with no parameter it will run once. However, if you pass it a number it will update every N seconds, where N is the argument you passed. 
 
-The other monitor is only turned on if you enabled <code>gtk</code> or <code>gnome</code> in your <code>USE</code> flags. This one is GTK+ based, runs in an X environment and it is quite lovely. For Gentoo the GUI monitor has been called <code>distccmon-gui</code> for less confusion. Elsewhere it may be referred to as <code>distccmon-gnome</code>. 
+The other monitor is only enabled through the <code>gtk</code> <code>USE</code> flag.  This one is GTK+ based, runs in an X environment and it is quite lovely.  For Gentoo, the GUI monitor has been called <code>distccmon-gui</code> for less confusion.  Elsewhere it may be referred to as <code>distccmon-gnome</code>.
 
 {{RootCmd|distccmon-text N}}
 
