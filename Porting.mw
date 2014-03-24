@@ -1,0 +1,125 @@
+Porting Gentoo to new architectures/platforms/etc...
+
+{{Metadata|abstract=A howto for porting Gentoo to new/alternative platforms}}
+
+== Introduction ==
+
+As devs expand Gentoo to new architectures and platforms, they may find there
+isn't any real collection of knowledge which explains all the little details
+of portage and moving a platform into the experimental release stage.  This
+document aims to address that.  Here we port Gentoo Linux to the SuperH (sh)
+architecture, but the details should be pretty straight forward for other
+arches/operating systems.
+
+== Getting The System Running ==
+
+This is the hardest step by far (really!).  There are two ways to get going.
+You can start with an existing Linux port out there (Debian, RedHat, some
+random hobbyist distro, etc...), or you can cross compile the entire system.
+The first route is the easiest, so we will cover that first.  Simply boot up
+the system with the existing port and make sure it has all the important
+packages installed for development.  A quick checklist (with recommended
+minimum versions):
+
+* binutils (2.20)
+* gcc      (4.4)
+* glibc    (2.11)
+* python   (2.7)
+* rsync
+* wget
+* tar
+* gzip
+* bzip2
+* bash     (must be 2.05b or newer, ver 3 is best)
+
+== Converting To Gentoo ==
+
+Once you have these packages, you can easily install portage.  This script has been written to do this.  Simply download it and run:
+{{RootCmd|wget https://dev.gentoo.org/~vapier/bootstrap-portage
+|sh ./bootstrap-portage}}
+''todo: move this file to the portage tree and parse the portage ebuild ...''
+
+Then we need to make a profile for our new arch.
+{{RootCmd|mkdir -p /usr/local/portage/profiles/default/linux/sh
+|cd /usr/local/portage/profiles/default/linux/sh
+|echo '..' > parent
+|cat << EOF > make.defaults<br>ARCH{{=}}"sh"<br>ACCEPT_KEYWORDS{{=}}"sh"<br>GRP_STAGE23_USE{{=}}"pam"<br>EOF
+|mkdir -p /etc/portage
+|cd /etc/portage
+|ln -sfT ../usr/local/portage/profiles/default/linux/sh make.profile
+|echo "PORTDIR_OVERLAY{{=}}/usr/local/portage" >> make.conf}}
+
+Finally, sync up and we should have our portage tree!
+{{RootCmd|emerge sync}}
+
+== Preparing A Seed For Catalyst ==
+
+Since none of the ebuilds in portage know about our new arch, we can cheat with
+package.keywords and using x86 as our reference arch.
+{{RootCmd
+|mkdir -p /etc/portage
+|printf '%s x86\n' $(USE{{=}}"-*" ACCEPT_KEYWORDS{{=}}x86 emerge @system -qep --cols {{!}} awk '{print $2}') >> package.keywords}}
+
+Then we simply emerge our system into a new root and create a seed tarball with
+the result:
+{{RootCmd|env ROOT{{=}}~/gentoo-seed/ USE{{=}}"-*" emerge @system
+|tar jpcf ~/seed.tar.bz2 ~/gentoo-seed/}}
+
+== Preparing A Portage Snapshot For Catalyst ==
+
+Now, take the list generated in package.keywords, and add the "sh" KEYWORD to
+them.  If you use 'ekeyword' from the app-portage/gentoolkit-dev package,
+things will go much faster.  Once your portage tree has been updated, create
+a catalyst snapshot:
+{{RootCmd|catalyst -C target{{=}}snapshot version_stamp{{=}}sh}}
+
+Before we can make stages with catalyst, we need to teach catalyst something
+about our new arch.  Go into /usr/lib/catalyst/arch/ and copy one of the small
+py modules to sh.py.  Then edit it to reflect the sh architecture.  Finally
+edit the generic_stage_target.py file in /usr/lib/catalyst/modules/.  You just
+have to update the targetmap and machinemap variables.
+
+Then try building a stage1 with catalyst and the seed.
+{{RootCmd
+|mkdir -p /var/tmp/catalyst/builds
+|mv ~/seed.tar.bz2 /var/tmp/catalyst/builds/
+|catalyst -C \<br>&nbsp;&nbsp;snapshot{{=}}sh version_stamp{{=}}sh \<br>&nbsp;&nbsp;subarch{{=}}sh profile{{=}}default/linux/sh \<br>&nbsp;&nbsp;rel_type{{=}}default target{{=}}stage1 \<br>&nbsp;&nbsp;source_subpath{{=}}seed}}
+
+If everything goes well, you should end up with a stage1 tarball which you can
+then make a stage2 and a stage3 from.
+
+=== Alternative ===
+
+If you don't like the idea of running `catalyst` by hand (i know, it sucks),
+you can grab this script:
+
+http://dev.gentoo.org/~vapier/build-stages
+
+It will generate the portage snapshot and stage[123] files for you.  Simply
+edit the settings at the top of the script (see above for proper settings).
+You will still have to move the seed tarball to the catalyst dir.
+
+== Pushing Work Into The Portage Tree ==
+
+If we don't want all this work to be for nothing, we have to share it :).
+Here's what needs to be updated so you don't start committing half broken
+work (and making other developers very angry).
+
+=== Create the profiles ===
+
+Our first profile was just a 'make it work' solution.  Now you have to create
+a much more complete one.  After you've committed the profile, update the
+following files in the profiles/ subdir:
+* arch.list
+* profiles.desc
+You should declare the profile status in profiles.desc as 'exp' for now
+(it'll keep people from yelling at you, trust me on this).
+
+=== Start committing KEYWORDS ===
+
+At this point, you should be able to start updating ebuilds in the tree with
+the new KEYWORD.
+
+== Acknowledgements ==
+
+* Author: {{user|vapier}}
