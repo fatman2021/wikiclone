@@ -1,0 +1,197 @@
+{{Lowercase title}}
+
+<languages />
+
+
+{{Metadata|abstract=The q applets are a collection of small and fast portage helper tools written in C. This guide covers some common uses of these helper tools, also known as the app-portage/portage-utils package.}}
+
+The q applets are a collection of small and fast portage helper tools written in C. This guide covers some common uses of these helper tools, also known as the {{Package|app-portage/portage-utils}} package.
+
+== Quick Reference ==
+
+You can install them as usual with:
+
+{{Emerge|app-portage/portage-utils}}
+
+To see the available applets with a short description of their function, do:
+
+{{Cmd|q --help|output=<pre>
+Usage: q <applet> <args>  : invoke a portage utility applet
+  
+Currently defined applets:
+        q <applet> <args> : virtual applet
+    qatom <pkg>           : split atom strings
+   qcache <action> <args> : search the metadata cache
+   qcheck <pkgname>       : verify integrity of installed packages
+ qdepends <pkgname>       : show dependency info
+    qfile <filename>      : list all pkgs owning files
+    qglsa <action> <list> : check GLSAs against system
+    qgrep <misc args>     : grep in ebuilds
+    qlist <pkgname>       : list files owned by pkgname
+     qlop <pkgname>       : emerge log analyzer
+   qmerge <pkgnames>      : fetch and merge binary package
+     qpkg <misc args>     : manipulate Gentoo binpkgs
+  qsearch <regex>         : search pkgname/desc
+    qsize <pkgname>       : calculate size usage
+    qtbz2 <misc args>     : manipulate tbz2 packages
+     quse <useflag>       : find pkgs using useflags
+    qxpak <misc args>     : manipulate xpak archives
+  
+Options: -[irmM:vqChV]
+  -i, --install        * Install symlinks for applets
+  -r, --reinitialize   * Reinitialize ebuild cache
+  -m, --metacache      * Reinitialize metadata cache
+  -M, --modpath  <arg> * Module path
+  -v, --verbose        * Make a lot of noise
+  -q, --quiet          * Tighter output; suppress warnings
+  -C, --nocolor        * Don't output color
+  -h, --help           * Print this help and exit
+  -V, --version        * Print version and exit</pre>
+}} 
+
+You may need to initialize the cache as root first:
+
+{{RootCmd|q -r}}
+
+== Introduction ==
+
+<code>portage-utils</code> is a collection of very fast utilities written in C, which are meant to offer a faster but more limited alternative to their <code>gentoolkit</code> counterparts. Please note that <code>portage-utils</code> is not meant to replace <code>gentoolkit</code>. Its utilities are much more efficient than the equivalent ones from <code>gentoolkit</code> and might be better suited to be used in scripts that need to call Portage repeatedly, but <code>portage-utils</code> does not offer the same functionalities. It does not consider eclasses at all and does not provide tools like <code>revdep-rebuild</code> and <code>glsa-check</code>. 
+
+More information about <code>gentoolkit</code> can be found in the [[Gentoolkit]] guide. 
+
+You can view the complete list of applications in <code>portage-utils</code> by typing <code>man q</code> or <code>q --help</code>. Please read the man page for each utility described, as this guide is only meant to be a short reference for the most useful functions and does not include all the information about each application. 
+
+== Usage ==
+
+=== How to find a package to which a file belongs ===
+
+<code>qfile</code> finds the package to which a file belongs: 
+
+{{Cmd|qfile /etc/fonts/fonts.conf|output=<pre>
+media-libs/fontconfig (/etc/fonts/fonts.conf)
+</pre>}}
+
+{{Cmd|qfile /usr/share/keymaps/atari/atari-uk-falcon.map.gz|output=<pre>
+sys-apps/kbd (/usr/share/keymaps/atari/atari-uk-falcon.map.gz)
+</pre>}}
+
+=== Verifying package integrity ===
+
+If you want to check MD5 sums or mtimes of the files installed by some package, you can do it using the <code>qcheck</code> application: 
+
+{{Cmd|qcheck portage-utils|output=<pre>
+Checking app-portage/portage-utils-0.1.13 ...
+  * 36 out of 36 files are good
+</pre>}}
+
+Of course, all the files which were changed after installation will be reported here. If the application reports configuration files which you have manually edited after installation, there's nothing to worry about. 
+
+=== Listing packages which depend on some package ===
+
+Of course there's also an application which allows you to list all the packages which depend on some package. This is done using <code>qdepends</code>. Use the <code>-a</code> flag to show all the DEPEND, RDEPEND, and PDEPEND information for a package. 
+
+{{Cmd|qdepends -a pygtk|output=<pre>
+ * DEPEND
+dev-python/pygtk-2.8.2: >=dev-lang/python-2.3 >=x11-libs/gtk+-2.8.0
+>=dev-libs/glib-2.8.0 >=x11-libs/pango-1.10.0 >=dev-libs/atk-1.8.0
+>=gnome-base/libglade-2.5.0 >=dev-python/pycairo-0.9.0 dev-python/numeric
+virtual/opengl dev-python/pyopengl >=x11-libs/gtkglarea-1.99
+>=dev-util/pkgconfig-0.9 sys-devel/patch
+ * RDEPEND
+dev-python/pygtk-2.8.2: >=dev-lang/python-2.3 >=x11-libs/gtk+-2.8.0
+>=dev-libs/glib-2.8.0 >=x11-libs/pango-1.10.0 >=dev-libs/atk-1.8.0
+>=gnome-base/libglade-2.5.0 >=dev-python/pycairo-0.9.0 dev-python/numeric
+virtual/opengl dev-python/pyopengl >=x11-libs/gtkglarea-1.99
+ * PDEPEND
+</pre>}}
+
+=== Listing files that belong to an ebuild ===
+
+<code>qlist</code> gives you a list of all files that belong to an ebuild. 
+
+{{Cmd|qlist vim|output=<pre>
+/usr/bin/gvim
+/usr/bin/gvimdiff
+/usr/bin/evim
+/usr/bin/eview
+/usr/bin/gview
+/usr/bin/rgvim
+[...]
+</pre>}}
+
+=== Looking for packages that use some USE flag ===
+
+This is done with <code>quse</code>, which must be run as root. It may take some time to first create/update the ebuild cache. 
+
+{{Cmd|quse firefox|output=<pre>
+app-misc/tracker/tracker-0.12.10-r1.ebuild applet doc eds elibc_glibc exif firefox-bookmarks flac flickr gif
+[...]
+</pre>}}
+
+=== Finding package sizes ===
+
+This is done with <code>qsize</code> application and is as simple as: 
+
+{{Cmd|qsize vim|output=<pre>
+app-editors/gvim-6.4: 10 files, 7 non-files, 2327.516 KB
+app-editors/vim-6.4: 6 files, 2 non-files, 2058.14 KB
+app-editors/vim-core-6.4: 1024 files, 68 non-files, 10950.984 KB
+[...]
+</pre>}}
+
+=== Searching the Portage tree ===
+
+One of the most powerful tools of <code>portage-utils</code> is <code>qsearch</code>. This tool allows you to search your Portage tree much faster than default <code>emerge -s</code>. 
+
+Here are some examples of its usage: 
+
+{{Cmd|qsearch terminus|output=<pre>
+media-fonts/terminus-font A clean fixed font for the console and X11
+</pre>}}
+
+I want to thank the guy who made them. What's his homepage?:
+{{Cmd|qsearch -H terminus|output=<pre>
+media-fonts/terminus-font http://www.is-vn.bg/hamster/jimmy-en.html
+</pre>}}
+
+I need a jabber client and I need it now:
+
+{{Cmd|qsearch -S "jabber client"|output=<pre>
+app-emacs/emacs-jabber A Jabber client for Emacs.
+net-im/gajim Jabber client written in PyGTK
+net-im/gnome-jabber Gnome Jabber Client
+net-im/gossip Lightweight Jabber client for GNOME
+net-im/imcom Python commandline Jabber Client
+net-im/psi QT 3.x Jabber Client, with Licq-like interface
+net-im/tkabber Featureful Jabber client for tcl/tk.
+x11-themes/psi-themes Iconsets for Psi, a QT 3.x Jabber Client
+</pre>}}
+
+=== Extracting information from emerge logs ===
+
+There is also a tool that allows you to extract useful information from your {{Path|emerge.log}} file. It's called <code>qlop</code> and it can be useful when you want to estimate package compilation times or compare with your friends whose computer compiles faster. It also allows you to check what's compiling at the moment and how long it will take - which is handy when you're working in the console and don't have any other means to check it. 
+
+I'm starting to emerge perl and I want an estimate on how long it usually takes:
+
+{{Cmd|qlop -tH perl|output=<pre>
+perl: 7 minutes, 52 seconds for 4 merges
+</pre>}}
+
+Now let's see what's emerging at the moment:
+
+{{Cmd|qlop -c|output=<pre>
+* perl-5.8.8-r23
+    started: Mon May 21 12:41:11 2007
+    elapsed: 19 seconds
+</pre>}}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Åukasz Damentko
+* Joshua Saddler
+* Marcelo Góes
+
+[[Category:Portage tools]]
