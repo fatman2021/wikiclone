@@ -32,7 +32,6 @@ Set the LAMP stack to start upon boot
 {{RootCmd|rc-update add apache2 default}}
 
 == Install ==
-
 === Unmask ===
 
 At the time of writing, {{Package|www-apps/drupal}} is masked as experimental only. If you run a "stable" system, you'll have to add it to your {{Path|/etc/portage/package.keywords}}.
@@ -40,62 +39,45 @@ At the time of writing, {{Package|www-apps/drupal}} is masked as experimental on
 www-apps/drupal
 </pre>}}
 
-=== Install ===
+=== Emerge ===
 Now we can get on with emerging:
 
 {{Emerge|drupal}}
 
-If you have the vhosts USE flag set, you will have to run webapp-config manually.
+You will have to run webapp-config manually.
 
-{{RootCmd|webapp-config -I -h <FQDN_hostname> -u root -d /drupal drupal 4.6.2}}
+{{RootCmd|webapp-config -I -h localhost -u root -d /drupal drupal 7.26}}
 
-where <FQDN_hostname> is the FQDN (fully qualified domain name) hostname of your virtual host.
+you may change localhost to the hostname of your virtual host/website.
 
-If you do not have the vhosts USE flag set, then webapp-config will get run for you during the emerge.
+== Database ==
+=== Mysql ===
 
-==== Create Drupal database ====
-Drupal requires a bit of setup to get working. So here's what you'll need to do. Copy this script to your drupal/ directory. [Where is the drupal/ directory?]
+{{important|change the dbpass to your own password}}
 
-{{File|drupal-script|Drupal database creation script|<pre>
-USE mysql;
-INSERT INTO user (host, user, password, select_priv, insert_priv, update_priv) VALUES ('localhost', 'drupal', PASSWORD('passwd'), 'Y', 'Y', 'Y'); 
-CREATE database drupal;
-USE drupal;
-GRANT ALL PRIVILEGES ON drupal.* TO drupal@'%' IDENTIFIED BY 'passwd';
-FLUSH privileges;
+{{RootCmd
+|mysql -u root -p
+|output=<pre>
+mysql> CREATE DATABASE IF NOT EXISTS `drupal` DEFAULT CHARACTER SET `utf8` COLLATE `utf8_unicode_ci`;
+mysql> CREATE USER 'drupal'@'localhost' IDENTIFIED BY 'dbpass!!! change me';
+mysql> GRANT LOCK TABLES, SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER ON `drupal`.* TO 'drupal'@'localhost' IDENTIFIED BY 'dbpass!!! change me';
+mysql> \q
 </pre>}}
 
-Where 'passwd' is the password required to log in as the MySQL user.
+== Web Install ==
 
-Then execute the script:
+if you are using apache 2.4 or newer run this sed command once.
 
-{{RootCmd|mysql -u root -p < drupal-script}}
+{{RootCmd|sed -i 's\Order allow,deny\Require all granted\' /var/www/localhost/htdocs/drupal/.htaccess}}
 
-This will create a new user 'drupal' and a database 'drupal' for your Drupal site and load the drupal database scheme.
-{{Note|For Drupal 5.2: There is not an install script, to install pick your browser to http://localhost/drupal/install.php}}
+point your browser to http://localhost/drupal/install.php
 
-==== Configure Drupal base options ====
-Before you can run Drupal, you must set the database URL and the base URL to the web site. Open the configuration file and edit the line to match the database defined in the previous steps:
-{{File|/var/www/localhost/htdocs/drupal/sites/default/settings.php|Drupal Configuration file|<pre>
-...
-</pre>}}
-
-username and passwords are the ones you used with the GRANT command in mysql.
-
-$db_url = 'mysql://drupal:passwd@localhost/drupal';
-
-Drupal will make all links start with this, so make sure you are using something accessible to everyone. If you are installing drupal somewhere other than the root directory, add a slash followed by your directory within the quotation. Never leave a slash at the end.
-
-$base_url = 'http://www.example.com';
-
-==== Add Drupal entry to cron ====
+=== Cron ===
 Many Drupal modules have periodic tasks that must be triggered by a cron job. To activate these tasks, you must call the cron page. This will pass control to the modules and the modules will decide if and what they must do.
 
 The following example crontab line will activate the cron script on the hour (you can edit the crontab with crontab -e:
 
-<pre>0 * * * * wget -O - -q http://localhost/cron.php</pre>
-
-You can now point your browser to http://localhost/install.php .. your drupal database will be setup, and you are ready to go!!
+<pre>0 * * * * wget -O - -q http://localhost/drupal/cron.php</pre>
 
 == Installing Drupal modules ==
 
@@ -104,7 +86,5 @@ Installing and configuring modules for Drupal is a lot of fun. You can browse th
 For example, if you want to install the Daily module, and your user for mysql is drupal:
 
 {{RootCmd|mysql -u drupal -ppassword drupal < daily.mysql}}
-
-Retrieved from "http://www.gentoo-wiki.info/Drupal"
 
 [[Category:Web application]]
