@@ -15,11 +15,18 @@ Ce guide vous explique comment configurer distcc pour la compilation croisée à
 
 Tout d'abord, vous devez installer <code>crossdev</code> sur toutes les machines qui seront impliquées dans le processus de compilation. <code>crossdev</code> est un outil qui permet une compilation facile de la chaîne des outils de compilation croisée. Il a été écrit à l'origine par Joshua Kinard et a été réécrit totalement par Mike Frysinger. Son utilisation est assez directe : <code>crossdev -t sparc</code> compile une chaîne d'outils complète en ciblant l'architecture Sparc. Ceci inclut binutils, gcc, glibc, et linux-headers. Si vous avez besoin de plus d'aide, essayez d'exécuter  <code>crossdev --help</code> . Évidemment, vous devrez installer la chaîne des outils de compilation croisée  sur tous les ordinateurs participants.
 
-Ensuite, vous devez installer <code>distcc</code> sur toutes les machines impliquées dans le processus de compilation. Ceci inclut l'ordinateur qui exécute la commande  et les ordinateurs avec les compilateurs croisés. Reportez-vous à la [http://www.gentoo.org//doc/fr/distcc.xml Documentation Gentoo sur distcc] pour plus d'information sur la manière d'installer et d'utiliser <code>distcc</code> .
+If you want to fine tune the cross-toolchain, here is a script that will produce a command line with the exact versions of the cross development packages to be built on the helper boxes (the script is to be run on the target box).
 
-=== Notes spécifiques par architecture ===
+{{Code|Script to fine-tune cross development tools|<pre>
+#! /bin/bash
+A="sys-devel/binutils" ; B=`equery l $A` ; BINUTILS_VER=`echo $B | cut -d- -f3-`
+A=`/usr/bin/gcc-config -c` ; B=`echo $A | cut -d- -f5` ; GCC_VER=`equery l sys-devel/gcc | grep $B | cut -d- -f3-`
+KERNEL_VER=`uname -r | sed s/-gentoo//`
+A="sys-libs/glibc" ; B=`equery l $A` ; LIBC_VER=`echo $B | cut -d- -f3-`
+echo "crossdev --b =$BINUTILS_VER --g =$GCC_VER --k =$KERNEL_VER --l =$LIBC_VER -t `uname -m`"
+</pre>}}
 
-Si vous effectuez une compilation croisée entre différentes sous-architectures pour Intel x86 (par exemple, i586 et i686), vous devez quand-même compiler une chaîne des outils de compilation croisée pour le CHOST désiré, sinon la compilation plantera. Ceci est dû au fait que i586 et i686 sont des CHOSTs différents en réalité, malgré le fait qu'elles sont toutes les deux considérées comme étant des ''x86''. Pensez à ça quand vous compilez votre chaîne des outils de compilation. Par exemple, si la machine cible est i586, ceci signifie que vous devez construire des chaînes d'outils de compilation i586 sur vos machines participantes i686.
+Next, you will need to emerge <code>distcc</code> on all the machines that will be involved in the process. This includes the box that will run emerge and the boxes with the cross-compilers. Please see the [[Distcc|Gentoo Distcc Documentation]] for more information on setting up and using <code>distcc</code>.
 
 === Arch-specific notes ===
 
@@ -95,6 +102,25 @@ lrwxrwxrwx  1 root root 15 Nov 21 10:42 sparc-unknown-linux-gnu-g++ -> /usr/bin/
 lrwxrwxrwx  1 root root 15 Jul 27 10:52 sparc-unknown-linux-gnu-gcc -> /usr/bin/distcc
 -rwxr-xr-x  1 root root 70 Jan 18 14:20 sparc-unknown-linux-gnu-wrapper
 </pre>
+}}
+
+Next we want to make sure that these wrappers stay available after upgrading the distcc package as it will overwrite the symbolic links. We can do this through a {{Path|/etc/portage/bashrc}} file that looks like so:
+
+{{Code|/etc/portage/bashrc|<pre>
+case ${CATEGORY}/${PN} in
+	sys-devel/distcc)
+		# Hey man, how come that CONFIG PROTECT don't work?
+		if [ "${EBUILD_PHASE}" == "postinst" ] || [ "${EBUILD_PHASE}" == "postrm" ];
+		then
+			cd /usr/lib/distcc/bin
+			rm cc c++ gcc g++
+			ln -s sparc-unknown-linux-gnu-wrapper cc
+			ln -s sparc-unknown-linux-gnu-wrapper c++
+			ln -s sparc-unknown-linux-gnu-wrapper gcc
+			ln -s sparc-unknown-linux-gnu-wrapper g++
+		fi
+	;;
+esac</pre>
 }}
 
 Félicitations ! Vous disposez maintenant d'une configuration distcc de compilation croisée fonctionnelle.
