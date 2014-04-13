@@ -163,11 +163,18 @@ If more physical volumes should be displayed, then <code>pvscan</code> can detec
 </pre>}}
 
 ==== Remove PV ====
-LVM automatically distributed the data onto all available PV, if not told otherwise. To make sure there is no data left on our device before we remove it, use the following command:
-{{RootCmd|pvmove -v /dev/sdX1}}
-This might take a long time and once finished, there should be no data left on /dev/sdX1. We first remove the PV from our Volume Group (VG) and then the actual PV:
-{{RootCmd|vgreduce vg0 /dev/sdX1 && pvremove /dev/sdX1}}
-{{Note|If a whole hard drives was once initialized as PV, then you have to remove it before it can be properly partitioned again. That is because PV have no valid MBR table}}
+
+LVM automatically distributes the data onto all available physical volumes (unless told otherwise) but in a linear approach. If a requested logical volume (within a volume group) is smaller than the amount of free space on a single physical volume, then all space for the logical volume is claimed on that (single) physical volume in a contiguous manner. This is done for performance reasons.
+
+If a physical volume needs to be removed from a volume group, the data first needs to be moved away from the physical volume. With the <code>pvmove</code> command, all data on a physical volume is moved to other physical volumes within the same volume group.
+
+{{RootCmd|pvmove -v /dev/sda1}}
+
+Such an operation can take a while depending on the amount of data that needs to be moved. Once finished, there should be no data left on the device. Verify with <code>pvdisplay</code> that the physical volume is no longer used by any logical volume.
+
+The next step is to remove the physical volume from the volume group using <code>vgreduce</code> after which the device can be "deselected" as a physical volume using <code>pvremove</code>:
+
+{{RootCmd|vgreduce vg0 /dev/sda1 && pvremove /dev/sda1}}
 
 === VG (Volume Group) ===
 Volume Groups (VG) consist of one or more Physical Volumes (PV) and show up as /dev/<VG name>/ in the device file system.
