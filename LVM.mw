@@ -177,30 +177,70 @@ The next step is to remove the physical volume from the volume group using <code
 {{RootCmd|vgreduce vg0 /dev/sda1 && pvremove /dev/sda1}}
 
 === VG (Volume Group) ===
-Volume Groups (VG) consist of one or more Physical Volumes (PV) and show up as /dev/<VG name>/ in the device file system.
+
+A volume group (VG) groups a number of physical volumes and show up as {{Path|/dev/VG_NAME}} in the device file system. The name of a volume group is chosen by the administrator.
 
 ==== Create VG ====
-The following command creates a Volume Group (VG) named ''vg0'' on two previously initialized Physical Volumes (PV) named /dev/sdX1 and /dev/sdY1:
-{{RootCmd|vgcreate vg0 /dev/sd[X-Y]1}}
+
+The following command creates a volume group called ''vg0'' with two physical volumes assigned to it: {{Path|/dev/sda1}} and {{Path|/dev/sdb1}}.
+
+{{RootCmd|vgcreate vg0 /dev/sd[ab]1}}
 
 ==== List VG ====
-The folloing command lists all active Volume Groups (VG) in the system:
-{{RootCmd|vgdisplay}}
-You can scan for VG in the system, to troubleshoot not properly created or lost VGs:
-{{RootCmd|vgscan}}
+
+To list all active volume groups, use the <code>vgdisplay</code> command:
+
+{{RootCmd|vgdisplay|output=<pre>
+  --- Volume group ---
+  VG Name               vg0
+  System ID             
+  Format                lvm2
+  Metadata Areas        1
+  Metadata Sequence No  8
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                6
+  Open LV               6
+  Max PV                0
+  Cur PV                1
+  Act PV                1
+  VG Size               320.02 GiB
+  PE Size               4.00 MiB
+  Total PE              81924
+  Alloc PE / Size       36864 / 144.00 GiB
+  Free  PE / Size       45056 /176.01 GiB
+  VG UUID               mFPXj3-DdPi-7YJ5-9WKy-KA5Y-Vd4S-Lycxq3
+</pre>}}
+
+If volume groups are missing, use the <code>vgscan</code> command to locate volume groups:
+
+{{RootCmd|vgscan|output=<pre>
+  Reading all physical volumes.  This may take a while...
+  Found volume group "vg0" using metadata type lvm2
+</pre>}}
 
 ==== Extend VG ====
-With the following command, we extend the existing Volume Group (VG) vg0 onto the Physical Volume (PV) /dev/sdZ1:
-{{RootCmd|vgextend vg0 /dev/sdZ1}}
+
+Volume groups group physical volumes, allowing administrators to use a pool of storage resources to allocate to file systems. When a volume group does not hold enough storage resources, it is necessary to extend the volume group with additional physical volumes.
+
+The next example extends the volume group ''vg0'' with a physical volume at {{Path|/dev/sdc1}}:
+
+{{RootCmd|vgextend vg0 /dev/sdc1}}
+
+Remember that the physical volume first needs to be initialized as such!
 
 ==== Reduce VG ====
-Before we can remove a Physical Volume (PV), we need to make sure that LVM has no data left on the device. To move all data off that PV and distribute it onto the other available, use the following command:
-{{RootCmd|pvmove -v /dev/sdX1}}
-This might take a while and once finished, we can remove the PV from our VG:
-{{RootCmd|vgreduce vg0 /dev/sdX1}}
+
+If physical volumes need to be removed from the volume group, all data still in use on the physical volume needs to be moved to other physical volumes in the volume group. As seen before, this is handled through the <code>pvmove</code> command, after which the physical volume can be removed from the volume group using <code>vgreduce</code>:
+
+{{RootCmd|pvmove -v /dev/sdc1
+|vgreduce vg0 /dev/sdc1}}
 
 ==== Remove VG ====
-Before we can remove a Volume Group (VG), we have to remove all existing Snapshots, all Logical Volumes (LV) and all Physical Volumes (PV) but one. The following command removes the VG named vg0:
+
+If a volume group is no longer necessary (or, in other words, the storage pool that it represents is no longer used and the physical volumes in it need to be freed for other purposes) then the volume group can be removed with <code>vgremove</code>. This only works if no logical volume is defined for the volume group, and all but one physical volume have already been removed from the pool.
+
 {{RootCmd|vgremove vg0}}
 
 === LV (Logical Volume) ===
