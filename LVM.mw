@@ -332,60 +332,96 @@ With the volume unmounted and deactivated, it can now be removed, freeing the ex
 
 {{RootCmd|lvremove /dev/vg0/lvol1}}
 
-=== Thin metadata, pool, and LV ===
-Recent versions of LVM2 (2.02.89) support "thin" volumes. Thin volumes are to block devices what sparse files are to filesystems. Thus, a thin LV within a pool can be "overcommitted" - it can even be larger than the pool itself. Just like a sparse file, the "holes" are filled as the block device gets populated. If the filesystem has "discard" support, as files are deleted, the "holes" can be recreated, reducing utilization of the thin pool.
+== Features ==
 
-==== Create thin pool ====
-{{Warning|If the thin pool metadata overflows, the pool will be corrupted. '''LVM cannot recover from this'''.}} 
-{{Note|If the thin pool gets exhausted, any process that would cause thin pool to overrun will be stuck in "killable sleep" state until either the thin pool is extended or the process recieves SIGKILL.}}   
-Each thin pool has some metadata associated with it, which is added to the thin pool size. You can specify it explicitly, otheriwse lvm2 will compute one based on the size of the thin pool as the minimum of <tt>pool_chunks * 64 bytes</tt> or 2MiB, whichever is larger.
+LVM provides quite a few interesting features for storage administrators, including (but not limited to)
+* thin provisioning (over-committing storage)
+* snapshot support
+
+=== Thin provisioning ===
+
+Recent versions of LVM2 (2.02.89) support "thin" volumes. Thin volumes are to block devices what sparse files are to file systems. Thus, a thin logical volume within a pool can be "over-committed": its presented size can be larger than the allocated size - it can even be larger than the pool itself. Just like a sparse file, the extents are allocated as the block device gets populated. If the file system has ''discard'' support extents are freed again as files are removed, reducing space utilization of the pool.
+
+Within LVM, such a thin pool is a special type of logical volume, which itself can host logical volumes.
+
+==== Creating a thin pool ====
+
+{{Warning|If an overflow occurs within the thin pool metadata, then the pool will be corrupted. '''LVM cannot recover from this'''.}} 
+
+{{Note|If the thin pool gets exhausted, any process that would cause the thin pool to allocate more (unavailable) extents will be stuck in "killable sleep" state until either the thin pool is extended or the process recieves SIGKILL.}}
+
+Each thin pool has metadata associated with it, which is added to the thin pool size. LVM will compute the size of the metadata based on the size of the thin pool as the minimum of <tt>pool_chunks * 64 bytes</tt> or 2MiB, whichever is larger. The administrator can select a different metadata size as well.
+
+To create a thin pool, add the ''--type thin-pool --thinpool thin_pool'' parameters to <code>lvcreate</code>:
+
 {{RootCmd|lvcreate -L 150M --type thin-pool --thinpool thin_pool vg0}}
-This create a thin pool named "thin_pool" with a size of 150MB (actually, it slightly bigger than 150MB because of the metadata).
-{{RootCmd|lvcreate -L 150M --metadatasize 2M --type thin-pool --thinpool thin_pool vg0}}
-This create a thin pool named "thin_pool" with a size of 150MB and an explicit metadata size of 2MiB.
 
-Unfortunately, because the metasize is added to thin pool size, the intuitive way of filling a VG wit ha thin pool doesn't work:[https://bugzilla.redhat.com/show_bug.cgi?id=812726]
-{{RootCmd|lvcreate -l 100%FREE --type thin-pool --thinpool thin_pool vg0|output=Insufficient suitable allocatable extents for logical volume thin_pool: 549 more required}}
+The above example creates a thin pool called ''thin_pool'' with a total size of 150 MB. This is the real allocated size for the thin pool (and thus the total amount of actual storage that can be used).
+
+To explicitly ask for a certain metadata size, use the ''--metadatasize'' parameter:
+
+{{RootCmd|lvcreate -L 150M --metadatasize 2M --type thin-pool --thinpool thin_pool vg0}}
+
+Due to the metadata that is added to the thin pool, the intuitive way of using all available size in a volume group for a logical volume does not work (see LVM bug [https://bugzilla.redhat.com/show_bug.cgi?id=812726|812726]):
+
+{{RootCmd|lvcreate -l 100%FREE --type thin-pool --thinpool thin_pool vg0|output=<pre>
+Insufficient suitable allocatable extents for logical volume thin_pool: 549 more required
+</pre>}}
 
 Note the thin pool does not have an associated device node like other LV's.
 
-==== Create a thin LV ====
-A Thin LV is somewhat unusual in LVM - the thin pool itself is an LV, so a thin LV is a "LV-within-an-LV". Since the volumes are sparse, a virtual size instead of a physical size is specified:
+==== Creating a thin logical volume ====
+
+A ''thin logical volume'' is a logical volume inside the thin pool (which itself is a logical volume). As thin logical volumes are ''sparse'', a virtual size instead of a physical size is specified using the ''-V'' parameter:
+
 {{RootCmd|lvcreate -T vg0/thin_pool -V 300M -n lvol1}}
-Note how the LV is larger then the pool it is create in. Its also possible to create the thin metadata, pool and LV on the same command:
+
+In this example, the (thin) logical volume ''lvol1'' is exposed as a 300MB-sized device, even though the underlying pool only holds 150MB of real allocated storage.
+
+It is also possible to create both the thin pool as well as the logical volume inside the thin pool in one command:
+
 {{RootCmd|lvcreate -T vg0/thin_pool -V 300M -L150M -n lvol1}}
-==== List thin pool and thin LV ====
-Thin LV are just like any other lv are are displayed using the <tt>lvdisplay</tt> and scanned using <tt>lvscan</tt>
-==== Extend thin pool ====
+
+==== Listing thin pools and thin logical volumes ====
+
+Thin pools and thin logical volumes are special types of logical volumes, and as such as displayed through the <code>lvdisplay</code> command. The <code>lvscan</code> command will also detect these logical volumes.
+
+==== Extending a thin pool ====
+
 {{Warning|As of LVM2 2.02.89, the metadata size of the thin pool cannot be expanded, it is fixed at creation}}
-The thin pool is expanded like a non-thin LV:
+
+The thin pool is expanded like a non-thin LV using <code>lvextend</code>. For instance:
+
 {{RootCmd|lvextend -L500M vg0/thin_pool}}
-or
-{{RootCmd|lvextend -L+350M vg0/thin_pool}}
-==== Extend thin LV ====
-A Thin LV is expanded just like a regular LV:
+
+==== Extending a thin logical volume ====
+
+A thin logical volume is expanded just like a regular one:
+
 {{RootCmd|lvextend -L1G vg0/lvol1}}
-or
-{{RootCmd|lvextend -L+700M vg0/lvol1l}}
-Note this is asymmetric from create where the virtual size was specified with -V instead of -L/-l. The filesystem can then be expanded using that filesystem's tools.
-==== Reduce thin pool ====
-Currently, LVM cannot reduce the size of the thin pool[https://bugzilla.redhat.com/show_bug.cgi?id=812731].
-==== Reduce thin LV ====
-Before shrinking an LV, shrink the filesystem first using that filesystem's tools. Some filesystems do not support shrinking.
-A Thin LV is reduced just like a regular LV:
+
+Note that the <code>lvextend</code> command uses the ''-L'' option (or ''-l'' if extent counts are used) and not a "virtual size" option as was used during the creation. 
+
+==== Reducing a thin pool ====
+
+Currently, LVM cannot reduce the size of the thin pool. See LVM bug [https://bugzilla.redhat.com/show_bug.cgi?id=812731|812731].
+
+==== Reducing a thin logical volume ====
+
+Thin logical volumes are reduced just like regular logical volumes.
+
+For instance:
 {{RootCmd|lvreduce -L300M vg0/lvol1l}}
-or
-{{RootCmd|lvreduce -L-700M vg0/lvol1}}
-Note this is asymmetric from create where the virtual size was specified with -V instead of -L/-l.
-==== Thin pool Permissions ====
-It is not possible to change the permission on the thin pool (nor would it make any sense to).
-==== Thin LV Permissions ====
-A thin LV can be set read-only/read-write the same waya regular LV is
-==== Thin pool Removal ====
-The thin pool cannot be removed until all the thin LV within it are removed. Once that is done, it can be removed:
+
+Note that the <code>lvreduce</code> command uses the ''-L'' option (or ''-l'' if extent counts are used) and not a "virtual size" option as was used during the creation.
+
+==== Removing thin pools ====
+
+Thin pools cannot be removed until all the thin logical volumes inside it are removed.
+
+When a thin pool no longer services any thin logical volume, it can be removed through the <code>lvremove</code> command:
+
 {{RootCmd|lvremove vg0/thin_pool}}
-==== Thin LV Removal ====
-A thin is removed like a regular LV
 
 == Examples ==
 We can create some scenarios using loopback devices, so no real storage devices are used.
