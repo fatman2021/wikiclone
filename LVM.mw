@@ -423,6 +423,62 @@ When a thin pool no longer services any thin logical volume, it can be removed t
 
 {{RootCmd|lvremove vg0/thin_pool}}
 
+=== LVM2 snapshots and thin snapshots ===
+
+A snapshot is a logical volume that acts as copy of another logical volume. It displays the state of the original logical volume at the time of snapshot creation.
+
+==== Creating a snapshot logical volume ====
+
+A snapshot logical volume is created using the ''-s'' option to <code>lvcreate</code>. Snapshot logical volumes are still given allocated storage as LVM "registers" all changes made to the original logical volume and stores these changes in the allocated storage for the snapshot. When querying the snapshot state, LVM will start from the original logical volume and then check all changes registered, "undoing" the changes before showing the result to the user.
+
+A snapshot logical volume henceforth "growths" at the rate that changes are made on the original logical volume. When the allocated storage for the snapshot is completely used, then the snapshot will be removed automatically from the system.
+
+{{RootCmd|lvcreate -l 10%VG -s -n 20140412_lvol1 /dev/vg0/lvol1}}
+
+The above example creates a snapshot logical volume called ''20140412_lvol1'', based on the logical volume ''lvol1'' in volume group ''vg0''. It uses 10% of the space (extents actually) allocated to the volume group.
+
+==== Accessing a snapshot logical volume ====
+
+Snapshot logical volumes can be mounted like regular logical volumes. They are even not restricted to read-only operations - it is possible to modify snapshots and thus use it for things such as testing changes before doing these on a "production" file system.
+
+As long as snapshot logical volumes exist, the regular/original logical volume cannot be reduced in size or removed.
+
+==== LVM thin snapshots ====
+
+{{Note|A thin snapshot can only be taken on a thin pool for a thin logical volume. The thin device mapper target supports thin snapshots of read-only non-thin logical volumes, but the LVM2 tooling does not support this. However, its is possible to create a regular (non-thin) snapshot logical volume of a thin logical volume.}}
+
+To create a thin snapshot, the <code>lvcreate</code> command is used with the <code>-s</code> option. No size declaration needs to be passed on:
+
+{{RootCmd|lvcreate -s -n 20140413_lvol1 /dev/vg0/lvol1}}
+
+Thin logical volume snapshots have the same size as their original thin logical volume, and use a physical allocation of 0 just like all other thin logical volumes. 
+
+{{Important|If ''-l'' or ''-L'' is specified, a snapshot will still be created, but the resulting snapshot will be a regular snapshot, not a thin snapshot.}}
+
+It is also possible to take snapshots of snapshots:
+
+{{RootCmd|lvcreate -s -n 1_20140413_lvol1 /dev/vg0/20140413_lvol1}}
+
+Thin snapshots have several advantages over regular snapshots. First, thin snapshots are independent of their original logical volume once created. The original logical volume can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficiently created recursively (snapshots of snapshots) without the "chaining" overhead of regular recursive LVM snapshots.
+
+==== Rolling back to snapshot state ====
+
+To rollback the logical volume to the version of the snapshot, use the following command:
+
+{{RootCmd|lvconvert --merge /dev/vg0/20140413_lvol1}}
+
+This might take a couple of minutes, depending on the size of the volume.
+
+{{Important|The snapshot will disappear and this change is not revertible}}
+
+==== Rolling back thin snapshots ====
+
+For thin volumes, <code>lvconvert --merge</code> does not work. Instead, delete the original logical volume and rename the snapshot:
+
+{{RootCmd|umount /dev/vg0/lvol1
+|lvremove /dev/vg0/lvol1
+|lvrename vg0/20140413_lvol1 lvol1}}
+
 == Examples ==
 We can create some scenarios using loopback devices, so no real storage devices are used.
 
