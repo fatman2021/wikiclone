@@ -482,6 +482,221 @@ For thin volumes, <code>lvconvert --merge</code> does not work. Instead, delete 
 
 === Different storage allocation methods ===
 
+LVM supports different allocation methods for storage:
+* linear volumes (which is the default)
+* mirrored volumes (in a more-or-less active/standby setup)
+* striping (RAID0)
+* mirrored volumes (RAID1 - which is more an active/active setup)
+* striping with parity (RAID4 and RAID5)
+* striping with double parity (RAID6)
+* striping and mirroring (RAID10)
+
+==== Linear volumes ====
+
+Linear volumes are the most common kind of LVM volumes. LVM will attempt to allocate the logical volume to be as physically contiguous as possible. If there is a physical volume large enough to hold the entire logical volume, then LVM will allocate it there, otherwise it will split it up into as few pieces as possible.
+
+The commands introduced earlier on to create volume groups and logical volumes create linear volumes.
+
+Because linear volumes have no special requirements, they are the easiest to manipulate and can be resized and relocated at will. If a logical volume is allocated across multiple physical volumes, and any of the PV become unavailable, then that LV cannot be started anymore and will be unusable.
+
+==== Mirrored volumes ====
+
+LVM supports ''mirrored'' volumes, which provide fault tolerance in the event of drive failure. Unlike RAID1, there is no performance benefit - all reads and writes are delivered to a single side of the mirror.
+
+To keep track of the mirror state, LVM requires a ''log'' to be kept. It is recommended (and often even mandatory) to position this log on a physical volume that does not contain any of the mirrored logical volumes. There are three kind of logs that can be used for mirrors:
+
+# '''Disk''' is the default log type. All changes made are logged into extra metadata extents, which LVM manages. If a device fails, then the changes are kept in the log until the mirror can be restored again.
+# '''Mirror''' logs are '''disk''' logs that are themselves mirrored. 
+# '''Core''' mirror logs record the state of the mirror in memory only. LVM will have to rebuild the mirror every time it is activated. This type is useful for temporary mirrors.
+
+To create a logical volume with a single mirror, pass the ''-m 1'' argument (to select standard mirroring) with optionally ''--mirrorlog'' to select a particular log type:
+
+{{RootCmd|lvcreate -m 1 --mirrorlog mirror -l 40%VG --nosync -n lvol1 vg0}}
+
+The <tt>-m 1</tt> tells LVM to create one (additional) mirror, so requiring 2 physical volumes. The <tt>--nosync</tt> option is an optimization - without it LVM will try synchronize the mirror by copying empty sectors from one LV to another.
+
+It is possible to create a mirror of an existing logical volume:
+
+{{RootCmd|lvconvert -m 1 -b vg0/lvol1}}
+
+The ''-b'' option does the conversion in the background as this can take quite a while.
+
+To remove a mirror, set the number of mirrors (back) to 0:
+
+{{RootCmd|lvconvert -m0 vg0/lvol1}}
+
+If part of the mirror is unavailable (usually because the disk containing the physical volume has failed), the volume group will need to be brought up in degraded mode:
+
+{{RootCmd|vgchange -ay --partial vg0}}
+
+On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces available. A 3-way mirror with a missing physical volume will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. If the failure is only transient, and the missing physical volume returns after LVM has broken the mirror, the mirrored logical volume will need to be recreated on it. 
+
+To recover the mirror, the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on that one). Then the mirror can be recreated with <tt>lvconvert</tt> at which point the old physical volume can be removed from the volume group:
+
+{{RootCmd||vgextend vg0 /dev/sdc1
+|lvconvert -b -m 1 --mirrorlog disk vg0/lvol1
+|vgreduce --removemissing vg0}}
+
+It is possible to have LVM recreate the mirror with free extents on a different physical volume if one side fails. To accomplish that, set <code>mirror_image_fault_policy</code> to ''allocate'' in {{Path|lvm.conf}}.
+
+==== Thin mirrors ====
+
+It is not (yet) possible to create a mirrored thin pool or thin volume. It is possible to create a mirrored thin pool my creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the volume group. Also, conversion of a mirror into a thin pool '''destroys''' all existing data in the mirror!}}
+
+{{RootCmd|lvcreate -m 1 --mirrorlog mirrored -l40%VG -n thin_pool vg0
+|lvcreate -m 1 --mirrorlog mirrored -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
+
+==== Striping (RAID0) ====
+
+Instead of a linear volume, where multiple contiguous physical volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance. This will alternate storage allocations across the available physical volumes.
+
+To create a striped volume over three physical volumes:
+
+{{RootCmd|lvcreate -i 3 -l 20%VG -n lvol1_stripe vg0|output=<pre>
+Using default stripesize 64.00 KiB
+</pre>}}
+
+The -i option indicates over how many physical volumes the striping should be done.
+
+It is possible to mirror a stripe set. The -i and -m options can be combined to create a striped mirror:
+
+{{RootCmd|lvcreate -i 2 -m 1 -l 10%VG vg0}}
+
+This creates a 2 physical volume stripe set and mirrors it on 2 different physical volumes, for a total of 4 physical volumes. An existing stripe set can be mirrored with <tt>lvconvert</tt>.
+
+A thin pool can be striped like any other logical volume. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
+
+It is not possible to stripe an existing volume, nor reshape the stripes across more/less physical volumes, nor to convert to a different RAID level/linear volume. A stripe set can be mirrored. It is possible to extend a stripe set across additional physical volumes, but they must be added in multiples of the original stripe set (which will effectively linearly append a new stripe set).
+
+==== Mirroring (RAID1) ====
+
+Unlike RAID 0, which is striping, RAID 1 is mirroring, but implemented differently than the original LVM mirror. Under RAID1, reads are spread out across physical volumes, improving performance. RAID1 mirror failures do not cause I/O to block because LVM does not need to break it on write.
+
+Any place where an LVM mirror could be used, a RAID 1 mirror can be used in its place. Its possible to have LVM create RAID1 mirrors instead of regular mirrors implicitly by setting <tt>mirror_segtype_default</tt> to ''raid1'' in {{Path|lvm.conf}}.
+
+To create a logical volume with a single mirror:
+
+{{RootCmd|lvcreate -m 1 --type raid1 -l 40%VG --nosync -n lvm_raid1 vg0}}
+
+Note the difference for creating a mirror: There is no ''mirrorlog'' specified, because RAID1 logical volumes do not have an explicit mirror log - it built-in to the logical volume.
+
+It is possible to convert an existing logical volume to RAID 1:
+
+{{RootCmd|lvconvert -m 1 --type raid1 -b vg0/lvol1}}
+
+To remove a RAID 1 mirror, set the number of mirrors to 0:
+
+{{RootCmd|lvconvert -m0 vg0/lvm_raid1}}
+
+If part of the RAID1 is unavailable (usually because the disk containing the physical volume has failed), the volume group will need to be brought up in degraded mode:
+
+{{RootCmd|vgchange -ay --partial vg0}}
+
+Unlike an LVM mirror, writing does NOT breaking the mirroring. If the failure is only transient, and the missing physical volume returns, LVM will resync the mirror by copying cover the out-of-date segments instead of the entire logical volume. If the failure is permanent, then the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on a different PV). The mirror can then be repaired with ''lvconvert'', and the old physical volume can be removed from the volume group:
+
+{{RootCmd|vgextend vg0 /dev/sdc1
+|lvconvert --repair -b vg0/lvm_raid1
+|vgreduce --removemissing vg0}}
+
+==== Thin RAID1 ====
+
+It is not (yet) possible to create a RAID 1 thin pool or thin volume. It is possible to create a RAID 1 thin pool by creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will then merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID 1 into a thin pool '''destroys''' all existing data in the mirror!}}
+
+{{RootCmd|lvcreate -m 1 --type raid1 -l40%VG -n thin_pool vg0
+|lvcreate -m 1 --type raid1 -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg00/thin_meta}}
+
+==== Striping with parity (RAID4 and RAID5) ====
+
+{{Note|Striping with parity requires at least 3 physical volumes.}}
+
+RAID 0 is not fault-tolerant - if any of the physical volumes fail then the logical volume is unusable. By adding a parity stripe to RAID 0 the logical volume can still function if a physical volume is missing. A new physical volume can then be added to restore fault tolerance.
+
+Stripsets with parity come in 2 flavors: RAID 4 and RAID 5. Under RAID 4, all the parity stripes are stored on the same physical volume. This can become a bottleneck because all writes hit that physical volume, and it gets worse the more physical volumes are in the array. With RAID 5, the parity data is distributed evenly across the physical volumes so none of them become a bottleneck. For that reason, RAID 4 is rare and is considered obsolete/historical. In practice, all stripesets with parity are RAID 5.
+
+{{RootCmd||lvcreate --type raid5 -l 20%VG -i 2 -n lvm_raid5 vg0}}
+
+Only the data physical volumes are specified with -i, LVM adds one to it automatically for the parity. So for a 3 physical volume RAID5, ''-i 2'' is passed on and not ''-i 3''.
+
+When a physical volume fails, then the volume group will need to be brought up in degraded mode:
+
+{{RootCmd|vgchange -ay --partial vg0}}
+
+The volume will work normally at this point, however this degrades the array to RAID 0 until a replacement physical volume is added. Performance is unlikely to be affected while the array is degraded - although it does need to recompute its missing data via parity, it only requires simple XOR for the parity block with the remaining data. The overhead is negligible compared to the disk I/O.
+
+To repair the RAID5:
+
+{{RootCmd|lvconvert --repair vg0/lvm_raid5
+|vgreduce --removemissing vg0}}
+
+It is possible to replace a still working physical volume in RAID5 as well:
+
+{{RootCmd|lvconvert --replace /dev/sdb1 vg0/lvm_raid5
+|vgreduce vg0 /dev/sdb1}}
+
+The same restrictions of stripe sets apply to stripe sets with parity as well: it is not possible to enable striping with parity on an existing volume, nor reshape the stripes with parity across more/less physical volumes, nor to convert to a different RAID level/linear volume. A stripe set with parity can be mirrored. It is possible to extend a stripe set with parity across additional physical volumes, but they must be added in multiples of the original stripe set with parity (which will effectively linearly append a new stripe set with parity).
+
+==== Thin RAID5 logical volumes ====
+
+It is not (yet) possible to create stripe set with parity (RAID5) thin pools or thin logical volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 logical volume and then converting the logical volume into a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
+
+{{RootCmd|lvcreate --type raid5 -i 2  -l20%VG -n thin_pool vg0
+|lvcreate --type raid5 -i 2 -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg00/thin_meta}}
+
+==== Striping with double parity (RAID6) ====
+
+{{Note|RAID6 requires at least 5 physical volumes.}}
+
+RAID 6 is similar to RAID 5, however RAID 6 can survive up to '''two''' physical volume failures, thus offering more fault tolerance than RAID5 at the expense of extra physical volumes. 
+
+{{RootCmd|lvcreate --type raid6 -l 20%VG -i 3 -n lvm_raid6 vg00}}
+
+Like raid5, the -i option is used to specify the number of physical volumes to stripe, excluding the 2 physical volumes for parity. So for a 5 physical volume RAID6, pass on ''-i 3'' and not ''-i 5''.
+
+Recovery for RAID6 is the same as RAID5.
+
+{{Note|Unlike RAID5 where parity block is cheap to recompute vs disk I/O, this is only half true in RAID6. RAID6 uses 2 parity stripes: One stripe is computed the same way as RAID5 (simple XOR). The second parity stripe is much harder to compute - see [https://www.kernel.org/pub/linux/kernel/people/hpa/raid6.pdf|raid6 (pdf)] for more information.}}
+
+==== Thin RAID6 logical volumes ====
+
+It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 logical volume and then converting the logical volume into a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
+
+{{RootCmd|lvcreate --type raid6 -i 2  -l20%VG -n thin_pool vg0
+|lvcreate --type raid6 -i 2 -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
+
+==== LVM RAID10 ====
+
+{{Note|RAID10 requires at least 4 physical volumes. Also LVM syntax requires the number of physical volumes be multiple of the numbers stripes and mirror, even though RAID10 format does not}}
+
+RAID10 is a combination of RAID0 and RAID1. It is more powerful than RAID0+RAID1 as the mirroring is done at the stripe level instead of the logical volume level, and therefore the layout doesn't need to be symmetric. A RAID10 volume can tolerate at least a single missing physical volume, and possibly more.
+
+{{Note|LVM currently limits RAID10 to a single mirror.}}
+
+{{RootCmd|lvcreate --type raid10 -l 1020 -i 2 -m 1 --nosync -n lvm_raid10 vg0}}
+
+Both the ''-i and -m'' options are specified: ''-i'' is the number of stripes and ''-m'' is the number of mirrors. Two stripes and 1 mirror requires 4 physical volumes.
+
+==== Thin RAID10 ====
+
+It is not (yet) possible to create a RAID10 thin pool or thin volumes. It is possible to create a RAID10 thin pool by creating a normal RAID10 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+ 
+{{Warning|Conversion of a RAID10 logical volume into a thin pool '''destroys''' all existing data in the logical volume!}}
+
+{{RootCmd|lvcreate -i 2 -m 1 --type raid10 -l 1012 -n thin_pool vg0
+|lvcreate -i 2 -m 1 --type raid10 -l 6 -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
+
 == Examples ==
 We can create some scenarios using loopback devices, so no real storage devices are used.
 
