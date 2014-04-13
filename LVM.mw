@@ -741,29 +741,36 @@ The {{Path|/dev/loop[0-4]}} devices are now available to use as any other hard d
 {{Note|On the next reboot, all the loopback devices will be released and the folder {{Path|/var/lib/lvm_img}} can be deleted.}}
 
 == Troubleshooting ==
-LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
+
+LVM has a few features that already provide some level of redundancy. However, there are situations where it is possible to restore lost physical volumes or logical volumes.
+
 === vgcfgrestore utility ===
-By default, on any change to a LVM PV, VG, or LV, LVM2 create a backup file of the metadata in /etc/lvm/archive. These files can be used to recover from an accidental change (like deleting the wrong LV), LVM also keeps a backup copy of the most recent metadata in /etc/lvm/backup. These can be used to restore metadata to a replacement disk, or repair corrupted metadata.
- 
-To see what states of the VG are available to be restored (this is just partial output)
-{{RootCmd|vgcfgrestore --list vg00
-|output=<pre>  File:		/etc/lvm/archive/vg00_00042-302371184.vg
-  VG name:    	vg00
-  Description:	Created *before* executing 'lvremove vg00/lvm_raid1'
+
+By default, on any change to a LVM physical volume, volume group, or logical volume, LVM2 create a backup file of the metadata in {{Path|/etc/lvm/archive}}. These files can be used to recover from an accidental change (like deleting the wrong logical volume). LVM also keeps a backup copy of the most recent metadata in {{Path|/etc/lvm/backup}}. These can be used to restore metadata to a replacement disk, or repair corrupted metadata.
+
+To see what states of the volume group are available to be restored (partial output to improve readability):
+
+{{RootCmd|vgcfgrestore --list vg00|output=<pre>
+  File:		/etc/lvm/archive/vg0_00042-302371184.vg
+  VG name:    	vg0
+  Description:	Created *before* executing 'lvremove vg0/lvm_raid1'
   Backup Time:	Sat Jul 13 01:41:32 201
 </pre>}}
 
-==== Recovering an accidently deleted LV ====
-Suppose LV ''lvm_raid1'' was accidentally removed from VG ''vg00''. It is possible to recover it:
-{{RootCmd|vgcfgrestore -f /etc/lvm/archive/vg00_00042-302371184.vg vg00}}
-{{Important|<tt>vgcfgrestore</tt> only restores LVM metadata, NOT the data inside the LV. However <tt>pvremove</tt>, <tt>vgremove</tt>, and <tt>lvremove</tt> only wipe metadata, leaving any data intact. However, if <tt>issue_discards</tt> is set in /etc/lvm/lvm.conf then these command ARE destructive to data.}}
+==== Recovering an accidentally deleted logical volume ====
 
-==== Replacing a failed PV ====
-In the above examples, when a disk containing a PV failed, an "add/remove" technique was used: a new PV was created on a new disk, the VG extended to it, the LV repaired and the old PV removed from the VG. However it possible to do a true "replace" and recreate the metadata on the disk to be the same as the old disk.
+Assuming the logical volume ''lvm_raid1'' was accidentally removed from volume group ''vg0'', it is possible to recover it as follows:
 
-Following the above example for a failed RAID 1:
-{{RootCmd|vgdisplay --partial --verbose
-|output=<pre>  --- Physical volumes ---
+{{RootCmd|vgcfgrestore -f /etc/lvm/archive/vg0_00042-302371184.vg vg0}}
+
+{{Important|<tt>vgcfgrestore</tt> only restores LVM metadata, ''not'' the data inside the logical volume. However <code>pvremove</code>, <code>vgremove</code>, and <code>lvremove</code> only wipe metadata, leaving any data intact. If <code>issue_discards</code> is set in {{Path|/etc/lvm/lvm.conf}} though, then these command ''are'' destructive to data.}}
+
+==== Replacing a failed physical volume ====
+
+It possible to do a true "replace" and recreate the metadata on the new physical volume to be the same as the old physical volume:
+
+{{RootCmd|vgdisplay --partial --verbose|output=<pre>
+  --- Physical volumes ---
   PV Name               /dev/loop0     
   PV UUID               iLdp2U-GX3X-W2PY-aSlX-AVE9-7zVC-Cjr5VU
   PV Status             allocatable
@@ -774,25 +781,41 @@ Following the above example for a failed RAID 1:
   PV Status             allocatable
   Total PE / Free PE    511 / 102
 </pre>}}
+
 The important line here is the UUID "unknown device". 
-{{RootCmd|pvcreate --uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY --restorefile /etc/lvm/backup/vg00 /dev/loop1
-|output=<pre>  Couldn't find device with uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY.
+
+{{RootCmd|pvcreate --uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY --restorefile /etc/lvm/backup/vg0 /dev/loop1|output=<pre>
+  Couldn't find device with uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY.
   Physical volume "/dev/loop1" successfully created</pre>}}
-This recreates the PV metadata, but not the missing LV or VG data on the PV.
-{{RootCmd|vgcfgrestore -f /etc/lvm/backup/vg00 vg00
-|output=<pre>  Restored volume group vg00</pre>}}
-This now reconstructs all the missing metadata on the PV, including the LV and VG data. However it doesn't restore the data, so the mirror is out of sync.
-{{RootCmd|vgchange -ay vg00
-|output=<pre>  device-mapper: reload ioctl on  failed: Invalid argument
-  1 logical volume(s) in volume group "vg00" now active</pre>}}
-{{RootCmd|lvchange --resync vg00/lvm_raid1
-|output=<pre>Do you really want to deactivate logical volume lvm_raid1 to resync it? [y/n]: y</pre>}}
+
+This recreates the physical volume metadata, but not the missing logical volume or volume group data on the physical volume.
+
+{{RootCmd|vgcfgrestore -f /etc/lvm/backup/vg0 vg0|output=<pre>
+  Restored volume group vg0
+</pre>}}
+
+This now reconstructs all the missing metadata on the physical volume, including the logical volume and volume group data. However it doesn't restore the data, so the mirror is out of sync.
+
+{{RootCmd|vgchange -ay vg0|output=<pre>
+  device-mapper: reload ioctl on  failed: Invalid argument
+  1 logical volume(s) in volume group "vg0" now active
+</pre>}}
+
+{{RootCmd|lvchange --resync vg0/lvm_raid1|output=<pre>
+Do you really want to deactivate logical volume lvm_raid1 to resync it? [y/n]: y
+</pre>}}
+
 This will resync the mirror. This works with RAID 4,5 and 6 as well. 
-=== Deactivate LV ===
-You can deactivat a LV with the following command:
+
+=== Deactivating a logical volume ===
+
+It is possible to deactivate a logical volume with the following command:
+
 {{RootCmd|umount /dev/vg0/lvol1
 |lvchange -a n /dev/vg0/lvol1}}
-You will not be able to mount the LV anywhere before it got reactivated:
+
+It is not possible to mount the logical volume anywhere before it gets reactivated:
+
 {{RootCmd|lvchange -a y /dev/vg0/lvol1}}
 
 == External resources ==
