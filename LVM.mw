@@ -244,50 +244,92 @@ If a volume group is no longer necessary (or, in other words, the storage pool t
 {{RootCmd|vgremove vg0}}
 
 === LV (Logical Volume) ===
-Logical Volumes (LV) are created and managed in Volume Groups (VG), once created they show up as /dev/<VG name>/<LV name> and can be used like normal partitions.
+
+Logical volumes are the final meta devices which are made available to the system, usually to create file systems on. They are created and managed in volume groups and show up as {{Path|/dev/VG_NAME/LV_NAME}}. Like with volume groups, the name used for a logical volume is decided by the administrator.
 
 ==== Create LV ====
-With the following command, we create a Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 with a size of 150MB:
+
+To create a logical volume, the <code>lvcreate</code> command is used. The parameters to the command consist out of the requested size for the logical volume (which cannot be larger than the amount of free space in the volume group), the volume group from which the space is to be claimed and the name of the logical volume to be created.
+
+In the next example, a logical volume named ''lvol1'' is created from the volume group named ''vg0'' and with a size of 150MB:
+
 {{RootCmd|lvcreate -L 150M -n lvol1 vg0}}
-There are other useful options to set the size of a new LV like:
-* -l 100%FREE = maximum size of the LV within the VG
-* -l 50%VG = 50% size of the whole VG
+
+It is possible to tell <code>lvcreate</code> to use all free space inside a volume group. This is done through the ''-l'' parameter which selects the amount of ''extents'' rather than a (human readable) size. Logical volumes are split into ''logical extents'' which are data chunks inside a volume group. All extents in a volume group have the same size. With the ''-l'' parameter <code>lvcreate</code> can be asked to allocate all free extents:
+
+{{RootCmd|lvcreate -l 100%FREE -n lvol1 vg0}}
+
+Next to ''FREE'' the ''VG'' key can be used to denote the entire size of a volume group.
 
 ==== List LV ====
-The following command lists all Logical Volumes (LV) in the system:
+
+To list all logical volumes, use the <code>lvdisplay</code> command:
+
 {{RootCmd|lvdisplay}}
-You can scan for LV in the system, to troubleshoot not properly created or lost LVs:
+
+If logical volumes are missing, then the <code>lvscan</code> command can be used to scan for logical volumes on all available volume groups.
+
 {{RootCmd|lvscan}}
 
 ==== Extend LV ====
-With the following command, we can extend the Logical Volume (LV) named lvol1 in Volume Group (VG) vg0 to 500MB:
+
+When a logical volume needs to be expanded, then the <code>lvextend</code> command can be used to grow the allocated space for the logical volume.
+
+For instance, to extend the logical volume ''lvol1'' to a total of 500 MB:
+
 {{RootCmd|lvextend -L500M /dev/vg0/lvol1}}
-{{Note|use -L+350M to increase the current size of a LV by 350MB}}
-Once the LV is extended, we need to grow the file system as well (in this example we used [[ext4]] and the LV is mounted to /mnt/data):
-{{Note|Some file systems do support online-resizing, like ext4 otherwise you have to umount the file system first}}
+
+It is also possible to use the size to be added rather than the total size:
+
+{{RootCmd|lvextend -L+350MB /dev/vg0/lvol1}}
+
+An extended volume group does not immediately provide the additional storage to the end users. For that, the file system on top of the volume group needs to be increased in size as well. Not all file systems allow online resizing, so check the documentation for the file system in question for more information.
+
+For instance, to resize an ext4 file system to become 500MB in size:
+
 {{RootCmd|resize2fs /mnt/data 500M}}
 
 ==== Reduce LV ====
-Before we can reduce the size of our Logical Volume (LV) without corrupting existing data, we have to shrink the file system on it. In this example we used ext4, the LV needs to be unmounted to shrink the file system:
+
+If a logical volume needs to be reduced in size, first shrink the file system itself. Not all file systems support online shrinking.
+
+For instance, ext4 does not support online shrinking so the file system needs to be unmounted first. It is also recommended to do a file system check to make sure there are no inconsistencies:
+
 {{RootCmd|umount /mnt/data
 |e2fsck -f /dev/vg0/lvol1
 |resize2fs /dev/vg0/lvol1 150M}}
-Now we are ready to reduce the size of our LV:
+
+With a reduced file system, it is now possible to reduce the logical volume as well:
+
 {{RootCmd|lvreduce -L150M /dev/vg0/lvol1}}
-{{Note|use -L-350M to reduce the current size of a LV by 350MB}}
 
 ==== LV Permissions ====
-Logical Volumes (LV) can be set to be ''read only'' storage devices.
-{{RootCmd|lvchange -p r /dev/vg0/lvol1}}
-The LV needs to be remounted for the changes to take affect:
-{{RootCmd|mount -o remount /dev/vg0/lvol1}}
-To set the LV to be read/write again:
+
+LVM supports permission states on the logical volumes.
+
+For instance, a logical volume can be set to ''read only'' using the <code>lvchange</code> command:
+
+{{RootCmd|lvchange -p r /dev/vg0/lvol1
+|mount -o remount /dev/vg0/lvol1}}
+
+The remount is needed as the change is not enforced immediately.
+
+To mark the logical volume as writable again, use the ''rw'' permission bit:
+
 {{RootCmd|lvchange -p rw /dev/vg0/lvol1 && mount -o remount /dev/vg0/lvol1}}
 
 ==== Remove LV ====
-Before we remove a Logical Volume (LV) we should unmount and deactivate, so no further write activity can take place:
-{{RootCmd|umount /dev/vg0/lvol1 && lvchange -a n /dev/vg0/lvol1}}
-The following command removes the LV named lvol1 from VG named vg0:
+
+Before removing a logical volume, make sure it is no longer mounted:
+
+{{RootCmd|umount /dev/vg0/lvol1}}
+
+Deactivate the logical volume so that no further write activity can take place:
+
+{{RootCmd|lvchange -a n /dev/vg0/lvol1}}
+
+With the volume unmounted and deactivated, it can now be removed, freeing the extents allocated to it for use by other logical volumes in the volume group:
+
 {{RootCmd|lvremove /dev/vg0/lvol1}}
 
 === Thin metadata, pool, and LV ===
