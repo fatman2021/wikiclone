@@ -697,35 +697,48 @@ It is not (yet) possible to create a RAID10 thin pool or thin volumes. It is pos
 |lvcreate -i 2 -m 1 --type raid10 -l 6 -n thin_meta vg0
 |lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
 
-== Examples ==
-We can create some scenarios using loopback devices, so no real storage devices are used.
+== Experimenting with LVM ==
 
-=== Preparation ===
-First we need to make sure the loopback module is loaded. If you want to play around with partitions, use the following option:
+It is possible to experiment with LVM without using real storage devices. To accomplish this, loopback devices are created.
+
+First make sure to have the loopback module loaded. 
+
 {{RootCmd|modprobe -r loop && modprobe loop max_part{{=}}63}}
-{{Note|you cannot reload the module, if it is built into the kernel}}
-Now we need to either tell LVM to not use [[udev]] to scan for devices or change the filters in /etc/lvm/lvm.conf. In this case we just temporarily do not use udev:
-{{File|/etc/lvm/lvm.conf||<pre>
+
+{{Note|If loopback support is built into the kernel, then use <code>loop.max_part{{=}}63</code> as boot option.}}
+
+Next configure LVM to not use [[udev]] to scan for devices:
+
+{{File|/etc/lvm/lvm.conf|Disabling udev in LVM config|<pre>
 obtain_device_list_from_udev = 0
 </pre>}}
-{{Important|this is for testing only, you want to change the setting back when dealing with real devices since it is much faster}}
-We create some image files, that will become our storage devices (uses ~10GB of real hard drive space):
+
+{{Important|This is for testing only, make sure to change the setting back when dealing with real devices since it is much faster to use udev!}}
+
+Create some image files which will become the storage devices. The next example uses five files for a total of about ~10GB of real hard drive space:
+
 {{RootCmd|mkdir /var/lib/lvm_img
 |dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm0.img bs{{=}}1024 seek{{=}}2097152
 |dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm1.img bs{{=}}1024 seek{{=}}2097152
 |dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm2.img bs{{=}}1024 seek{{=}}2097152
 |dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm3.img bs{{=}}1024 seek{{=}}2097152
 |dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm4.img bs{{=}}1024 seek{{=}}2097152}}
+
 Check which loopback devices are available:
+
 {{RootCmd|losetup -a}}
-We assume all loopback devices are available and create our hard drives:
+
+Assuming all loopback devices are available, next create the devices:
+
 {{RootCmd|losetup /dev/loop0 /var/lib/lvm_img/lvm0.img
 |losetup /dev/loop1 /var/lib/lvm_img/lvm1.img
 |losetup /dev/loop2 /var/lib/lvm_img/lvm2.img
 |losetup /dev/loop3 /var/lib/lvm_img/lvm3.img
 |losetup /dev/loop4 /var/lib/lvm_img/lvm4.img}}
-Now we can use /dev/loop[0-4] as we would use any other hard drive in the system.
-{{Note|On the next reboot, all the loopback devices will be released and the folder /var/lib/lvm_img can be deleted}}
+
+The {{Path|/dev/loop[0-4]}} devices are now available to use as any other hard drive in the system (and thus be perfect for physical volumes).
+
+{{Note|On the next reboot, all the loopback devices will be released and the folder {{Path|/var/lib/lvm_img}} can be deleted.}}
 
 == Troubleshooting ==
 LVM has only MIRROR and snapshots to provide some level of redundancy. However there are certain situations where one might be able to restore lost PV or LV.
