@@ -1,0 +1,140 @@
+== Hardware Support ==
+
+=== Summary ===
+{|class="wikitable"
+!Device
+!Works?
+!Description
+|-
+|Processor
+|{{Yes}}
+|4th Gen Intel Core i5-4200U 1.6Ghz
+|-
+|Screen
+|{{Yes}}
+|14.1" 1366x768 LED Wide Screen
+|-
+|Wireless
+|{{Yes}}
+|802.11N Atheros Wifi (freedom compatible chipset)
+|-
+|Webcam
+|Untested
+|Built-in 1.3 Mega Pixel Camera
+|-
+|Card Reader
+|{{Yes}}
+|SD/MMC Card Reader
+|-
+|Optical Drive
+|{{Yes}}
+|Super-Multi Drive (DVD-RAM/R/RW/+/-/CD-R/RW)
+|-
+|Graphics
+|{{Yes}}
+|Intel® HD Graphics 4400
+|-
+|Built-in Audio & Mic
+|Untested
+|Yes, Intel HD
+|-
+|LAN
+|{{Yes}}
+|10/100/1000 Mbps Gigabit Ethernet
+|-
+|VGA
+|{{Yes}}
+|
+|-
+|USB 2.0 x 3
+|{{Yes}}
+|
+|-
+|Microphone-in
+|Untested
+|
+|-
+|Headphone-out
+|Untested
+|
+|}
+
+=== Extra Hardware Information ===
+{{RootCmd|lspci|output=<pre>
+00:00.0 Host bridge: Intel Corporation Haswell-ULT DRAM Controller (rev 09)
+00:02.0 VGA compatible controller: Intel Corporation Haswell-ULT Integrated Graphics Controller (rev 09)
+00:03.0 Audio device: Intel Corporation Device 0a0c (rev 09)
+00:14.0 USB controller: Intel Corporation Lynx Point-LP USB xHCI HC (rev 04)
+00:16.0 Communication controller: Intel Corporation Lynx Point-LP HECI #0 (rev 04)
+00:1b.0 Audio device: Intel Corporation Lynx Point-LP HD Audio Controller (rev 04)
+00:1c.0 PCI bridge: Intel Corporation Lynx Point-LP PCI Express Root Port 3 (rev e4)
+00:1c.3 PCI bridge: Intel Corporation Lynx Point-LP PCI Express Root Port 4 (rev e4)
+00:1d.0 USB controller: Intel Corporation Lynx Point-LP USB EHCI #1 (rev 04)
+00:1f.0 ISA bridge: Intel Corporation Lynx Point-LP LPC Controller (rev 04)
+00:1f.2 SATA controller: Intel Corporation Lynx Point-LP SATA Controller 1 [AHCI mode] (rev 04)
+00:1f.3 SMBus: Intel Corporation Lynx Point-LP SMBus Controller (rev 04)
+01:00.0 Unassigned class [ff00]: Realtek Semiconductor Co., Ltd. Device 5289 (rev 01)
+01:00.2 Ethernet controller: Realtek Semiconductor Co., Ltd. RTL8111/8168/8411 PCI Express Gigabit Ethernet Controller (rev 0a)
+02:00.0 Network controller: Qualcomm Atheros AR9285 Wireless Network Adapter (PCI-Express) (rev 01)
+</pre>}}
+
+{{RootCmd|lsusb|output=<pre>
+Bus 001 Device 004: ID 174f:14a1 Syntek 
+Bus 001 Device 002: ID 8087:8000 Intel Corp. 
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+</pre>}}
+
+== Configuration ==
+
+=== Touchpad ===
+{{Kernel||
+Device Drivers  --->
+    Input device support  --->
+        -*- Generic input layer (needed for keyboard, mouse, ...)
+        [*]   Mice  --->
+            <*>   PS/2 mouse
+            [*]      Elantech PS/2 mouse protocol extension
+}}
+
+The Touchpad takes a lot of physical physical space under the keyboard, and it's easy to accidentally move the mouse cursor while typing.  [http://docs.xfce.org/xfce/xfce4-settings/mouse#touchpad Xfce allows you to "Disable touchpad while typing"] to address this, which just shuts off the touchpad for 2 seconds using <code>syndaemon -i 2.0 -K -R</code>.  Since the <code>syndaemon</code> program is installed by the {{Package|x11-drivers/xf86-input-synaptics}}, follow the [[Synaptics#Driver|synaptics driver installation instructions]].
+
+=== Backlight ===
+{{Kernel||
+Device Drivers  --->
+    Graphics support  --->
+        -*- Backlight & LCD device support  --->
+            <*>   Lowlevel LCD controls
+            -*-   Lowlevel Backlight controls
+}}
+
+The kernel parameter <code>acpi_backlight=vendor</code> must be added to make the backlight adjustable.
+
+The backlight setting is not persistent between reboots, but it is persistent between suspend.  Create a local service to save and apply the backlight setting:
+
+{{File|/etc/local.d/backlight.stop|Save backlight setting|<pre>
+#!/bin/sh
+einfo "Saving backlight brightness"
+cat /sys/class/backlight/intel_backlight/brightness > /var/tmp/backlight_brightness
+</pre>}}
+
+{{File|/etc/local.d/backlight.start|Restore backlight setting|<pre>
+#!/bin/sh
+brightness=`cat /var/tmp/backlight_brightness`
+max_brightness=`cat /sys/class/backlight/intel_backlight/max_brightness`
+percent() {
+    # Returns string in percent.
+    # Example:
+    #     $(percent 2 3) -> "66%"
+    a=$1
+    b=$2
+    tens=$((a * 100 / b))
+    echo "${tens}%"
+}
+# The COMPAL display brightness allows very low intensity values which
+# black out the screen!  We don't want this to happen, so ignore low
+# brightness values.
+if [ $brightness > 4 ]; then
+    einfo "Restoring backlight brightness to $(percent brightness max_brightness)"
+    echo $brightness > /sys/class/backlight/intel_backlight/brightness
+fi
+</pre>}}
