@@ -17,7 +17,7 @@ The way bridging works on Linux is that a bridging device is created (brX) that 
 Install {{Package|net-misc/bridge-utils}}:
 {{Emerge|bridge-utils}}
 
-== Host Configuration ==
+== Host Configuration (using OpenRC init scripts) ==
 First, we need to add the bridge device to the {{Path|/etc/conf.d/net}} file. As an example, bridge configuration with DHCP:
 
 {{Note|Note that it is important to include 'setfd 0' and 'sethello 10' in order to bring the interface up quickly.  Other values will cause network packets to be dropped for the first 30 seconds after the bridge has become active.  This in turn could prevent DHCP from working.}}
@@ -45,6 +45,54 @@ Next, create the init script and start the interface as follows:
 
 Finally, to make sure the bridge is automatically set up on subsequent boots, run:
 {{RootCmd|rc-update add net.br0 default}}
+
+== Host Configuration (using systemd) ==
+First, we need to add the bridge device to the {{Path|/etc/conf.d/net}} file. As an example, bridge configuration with fixed IP address (192.168.1.2 connected to the gateway 192.168.1.1 by eth0):
+
+{{Note|Include 'setfd 0' and 'sethello 10' in order to bring the interface up quickly (see above)}}
+
+{{File|/etc/conf.d/net||<pre>
+# bridge ports defined empty to avoid DHCP being run for their configuration
+config_eth0="null"
+#Bridge-config
+config_br0="192.168.1.2 netmask 255.255.255.0 broadcast 192.168.1.255"
+routes_br0="192.168.1.1"
+brctl_br0="setfd 0 sethello 10 stp off"
+bridge_br0="eth0"
+</pre>}}
+
+Next, create a systemd unit script and start the interface as follows:
+{{File|/etc/systemd/system/bridge@.service||<pre>
+[Unit]
+Description=network bridge %I
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+EnvironmentFile=/etc/conf.d/net
+
+ExecStart=/sbin/brctl addbr %i
+ExecStart=/bin/ifconfig %i ${config_%i} up
+ExecStart=/bin/ifconfig ${bridge_%i} up
+ExecStart=/sbin/brctl addif %i ${bridge_%i}
+ExecStart=/bin/ip route add default via ${routes_%i}
+
+ExecStop=/bin/ip route del default via ${routes_%i}
+ExecStop=/bin/ifconfig ${bridge_%i} down
+ExecStop=/bin/ifconfig ${bridge_%i} down
+ExecStop=/sbin/brctl delbr ${bridge_%i}
+
+[Install]
+WantedBy=multi-user.target
+</pre>}}
+
+{{RootCmd|systemctl start bridge@br0.service
+}}
+
+Finally, to make sure the bridge is automatically set up on subsequent boots, run:
+{{RootCmd|systemctl enable bridge@br0.service}}
 
 == External Resources ==
 
