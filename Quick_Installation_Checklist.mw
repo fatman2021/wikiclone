@@ -1,0 +1,113 @@
+== Format drive ==
+=== Bios/MBR ===
+In this example we create 3 partitions. 128MB /boot, 1024MB swap and rest for /.
+{{RootCmd|cfdisk /dev/sda}}
+{{RootCmd|mkfs.ext4 /dev/sda1}}
+{{RootCmd|mkfs.ext4 /dev/sda3}}
+{{RootCmd|mkswap /dev/sda2 && swapon /dev/sda2}}
+
+=== UEFI/GPT ===
+
+== Mount partitions ==
+{{RootCmd|mkdir -p /mnt/gentoo}}
+{{RootCmd|mount /dev/sda3 /mnt/gentoo}}
+{{RootCmd|mkdir /mnt/gentoo/boot}}
+{{RootCmd|mount /dev/sda1 /mnt/gentoo/boot}}
+
+== Install stage3 ==
+Find nearest mirror from: http://www.gentoo.org/main/en/mirrors2.xml
+{{RootCmd|cd /mnt/gentoo}}
+{{RootCmd|wget http://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64/stage3-amd64-20140410.tar.bz2}}
+Replace amd64 with your arch.
+{{RootCmd|tar xjpf stage3*}}
+
+== Chroot ==
+{{RootCmd|mount -t proc none proc}}
+{{RootCmd|mount --rbind /sys sys}}
+{{RootCmd|mount --rbind /dev dev}}
+{{RootCmd|cp /etc/resolv.conf etc}}
+{{RootCmd|env -i HOME=/root TERM=$TERM chroot . bash -l}}
+
+== Create user accounts ==
+Change root password.
+{{RootCmd|passwd}}
+Create user.
+{{RootCmd|useradd -g users -G wheel,portage,audio,video,usb,cdrom -m username}}
+{{RootCmd|passwd username}}
+
+== Download portage tree ==
+{{RootCmd|mkdir /usr/portage}}
+{{RootCmd|emerge-webrsync}}
+
+== Configure system ==
+{{File|/etc/fstab||<pre>
+/dev/sda1		/boot		ext4		noauto,noatime	1 2
+/dev/sda3		/		ext4		noatime		0 1
+/dev/sda2		none		swap		sw		0 0
+/dev/cdrom		/mnt/cdrom	auto		noauto,ro	0 0
+</pre>}}
+
+{{File|/etc/portage/make.conf||<pre>
+CFLAGS="-march=native -O2 -pipe"
+CXXFLAGS="${CFLAGS}"
+CHOST="x86_64-pc-linux-gnu"
+
+USE="mmx mmxext sse sse2 sse3 ssse3 sse4_1 avr avx avx2 threads alsa dri opengl vaapi usb"
+
+PORTDIR="/usr/portage"
+DISTDIR="${PORTDIR}/distfiles"
+PKGDIR="${PORTDIR}/packages"
+
+ACCEPT_KEYWORDS="~amd64"
+ACCEPT_LICENSE="*"
+
+MAKEOPTS="-j4"
+EMERGE_DEFAULT_OPTS="--jobs 2 --load-average 4"
+
+INPUT_DEVICES="evdev synaptics"
+VIDEO_CARDS="intel i965"
+
+GENTOO_MIRRORS="http://distfiles.gentoo.org/"
+</pre>}}
+
+{{File|/etc/env.d/02locale||<pre>
+LANG="en_US.UTF-8"
+LC_COLLATE="C"
+</pre>}}
+
+Also edit /etc/conf.d/hostname, /etc/conf.d/keymaps and /etc/conf.d/hwclock.
+
+Set timezone.
+{{RootCmd|ln -sf /usr/share/zoneinfo/Europe/Helsinki /etc/localtime}}
+
+== Install kernel ==
+Gentoo-sources is vanilla kernel with gentoo patchset. You could also use vanilla-sources. Linux-firmware contains binary blobs needed for some hardware like wlan cards.
+{{RootCmd|emerge -av gentoo-sources linux-firmware}}
+{{RootCmd|cd /usr/src/linux}}
+Find out needed modules for your hardware. You should enable these modules in menuconfig. You can search module names by pressing "/" in menuconfig.
+{{RootCmd|lspci -nnk}}
+{{RootCmd|make menuconfig}}
+{{RootCmd|make -j2}}
+{{RootCmd|make modules_install}}
+{{RootCmd|make install}}
+
+== Install bootloader ==
+{{RootCmd|emerge -av grub}}
+{{RootCmd|grub2-install /dev/sda}}
+Edit grub config.
+{{RootCmd|nano /boot/grub/grub.cfg}}
+Here is simple example config.
+{{File|/boot/grub/grub.cfg||<pre>
+set default=0
+set timeout=1
+
+menuentry "Gentoo" {
+linux (hd0,msdos1)/3.14.0 root=/dev/sda3 rootfstype=ext4 net.ifnames=0 quiet ro
+}
+</pre>}}
+
+== Exit chroot, unmount and reboot ==
+{{RootCmd|exit}}
+{{RootCmd|cd /mnt}}
+{{RootCmd|umount -l gentoo}}
+{{RootCmd|reboot}}
