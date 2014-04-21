@@ -1,15 +1,14 @@
-{{stub}}
-
-
 {{InfoBox stack
 |{{InfoBox homepage|http://www.thekelleys.org.uk/dnsmasq/doc.html|header=true}}
 |{{InfoBox wikipedia|Dnsmasq|header=true}}
 }}
 
-[http://thekelleys.org.uk/dnsmasq/doc.html Dnsmasq] is a simple DHCP/DNS server which can be used in a local network of up to a 1000 clients. Key features are easy configuration and a small system footprint. 
+[http://thekelleys.org.uk/dnsmasq/doc.html Dnsmasq] is a simple DHCP/DNS server which can be used in a local network of up to a 1000 clients. Key features are easy configuration and a small system footprint. It also has support for IPv6.
 
 == Installation ==
-===Useflags===
+
+The installation of dnsmasq is fully supported by the package manager and portage tree. At first, make a proper USE flag selection.
+
 {{USEflag|package=net-dns/dnsmasq
 |dbus
 |dhcp
@@ -23,14 +22,32 @@
 |tftp
 }}
 
-===Emerge===
-{{Emerge|net-dns/dnsmasq}}
-{{RootCmd|/etc/init.d/dnsmasq start}}
-{{RootCmd|rc-update add dnsmasq default}}
+Next, install {{Package|net-dns/dnsmasq}} and add it to the default runlevel if it needs to be started automatically.
 
+{{Emerge|net-dns/dnsmasq}}
+
+{{RootCmd|/etc/init.d/dnsmasq start
+|rc-update add dnsmasq default}}
 
 == Configuration ==
-A common sample configuration is listed below. Many more configuration options are available; the installed {{Path|/etc/dnsmasq.conf}} file contains the full (commented) list of options. After editing, the service should be restarted for the changes to take effect.
+
+There are various resources that can be modified to change dnsmasq behavior. These include
+* the command line options as provided through {{Path|/etc/conf.d/dnsmasq}}
+* the main configuration file ({{Path|/etc/dnsmasq.conf}})
+
+=== Service configuration ===
+
+In {{Path|/etc/conf.d/dnsmasq}}, the command line options passed on to the dnsmasq daemon at start-up can be configured.
+
+{{File|/etc/conf.d/dnsmasq|Example dnsmasq service configuration|<pre>
+DNSMASQ_OPTS="--user=dnsmasq --group=dnsmasq -H /srv/virt/gentoo/hosts --max-cache-ttl=10"
+</pre>}}
+
+=== Main configuration file ===
+
+The main configuration of dnsmasq is done through its configuration file, {{Path|/etc/dnsmasq.conf}}. The file uses a <code>key[=value]</code> syntax and the one provided by the package is well documented and recommended to read through. Inside the file, or through the command line options, additional resources can be referred to (such as a DHCP hosts file).
+
+Below is a sample configuration file:
 
 {{File|/etc/dnsmasq.conf||<pre>
 # Listen only to this interface
@@ -48,31 +65,98 @@ tftp-root=/var/lib/tftpboot
 dhcp-boot=/pxelinux.0
 </pre>}}
 
-{{RootCmd|/etc/init.d/dnsmasq restart}}
-
-===Dns Only===
-
-{{Important|Place other upstream DNS servers in {{Path|/etc/resolv.dnsmasq.conf}}.}}
-{{RootCmd|echo "nameserver 8.8.8.8" >> /etc/resolv.dnsmasq.conf}}
-
-{{RootCmd|<nowiki>echo "resolv-file=/etc/resolv.dnsmasq.conf" >> /etc/dnsmasq.conf</nowiki>}}
-{{RootCmd|<nowiki>echo "listen-address=127.0.0.1" >> /etc/dnsmasq.conf</nowiki>}}
+After editing the configuration file, the service has to be restarted - reloading is supported, but for other resources.
 
 {{RootCmd|/etc/init.d/dnsmasq restart}}
 
-{{Note|Now your localhost / 127.0.0.1 is your primary DNS to point net connection scripts to}}
+=== Hosts file ===
 
-== Maintenance ==
-Some maintenance tasks are explained below.
+The dnsmasq application uses the {{Path|/etc/hosts}} file as one of its sources for providing DNS services, unless the <code>-h</code> (<code>--no-hosts</code>) command line argument is passed along.
 
-=== Resetting Leases ===
-When switching network cards you will want to update the MAC adress of a certain IP adress in your configuration. However you might not get the intended IP, because it was leased to the old MAC adress. The correct way to handle this is to stop the service, edit the leases file at {{Path|/var/lib/misc/dnsmasq.leases}}, and start the service.
-{{RootCmd|/etc/init.d/dnsmasq stop}}
-{{File|/var/lib/misc/dnsmasq.leases|remove any leases you like|<pre>
-1321167121 00:b0:d0:ed:ec:80 192.168.0.23 dantooine *
-1321114991 00:16:35:02:91:14 192.168.0.22 dagobah *
-1321159899 00:01:03:ba:b9:34 192.168.3.13 hoth 01:00:01:03:ba:b9:34
+If the {{Path|/etc/hosts}} file is updated, the dnsmasq service needs to receive a SIGHUP signal in order to reload the settings. This is also supported through the init scripts' ''reload'' command:
+
+{{RootCmd|/etc/init.d/dnsmasq reload}}
+
+This behavior can also be disabled through the <code>no-hosts</code> parameter in the configuration file.
+
+=== Additional hosts file ===
+
+It is possible to refer to an (additional) hosts file to use as source for DNS queries. To do so, add the <code>-H /path/to/hostsfile</code> (<code>--addn-hosts=/path/to/hostsfile</code>) command line option. It is also possible to pass a directory; in that case, all files inside that directory will be treated as additional hosts files.
+
+Similar to the standard hosts file, a SIGHUP signal reloads the file.
+
+This behavior can also be set through the <code>addn-hosts</code> parameter in the configuration file.
+
+=== Upstream nameservers ===
+
+By default, dnsmasq uses the name servers specified in {{Path|/etc/resolv.conf}} as its upstream nameservers.
+
+A different file can be used through the <code>-r</code> (<code>--resolv-file</code>) command line option.
+
+This behavior can also be set through the <code>resolv-file</code> parameter in the configuration file.
+
+== Features ==
+
+Dnsmasq supports DNS, TFTP, PXE, router advertisements and DHCP services. As such, it is a versatile network management tool for small and medium-sized networks.
+
+=== DNS services ===
+
+In order to (only) provide DNS services, first identify the ''upstream nameserver'' to use. If this is the same nameserver as specified in {{Path|/etc/resolv.conf}} then no additional steps need to be taken. Otherwise, point dnsmasq to the proper {{Path|resolv.conf}} file through the <code>-r</code> (<code>--resolv-file</code>) command line. Its syntax is the one used by the {{Path|/etc/resolv.conf}} file, although dnsmasq only looks at the ''nameserver'' definitions.
+
+For instance:
+
+{{RootCmd|echo "nameserver 8.8.8.8" >> /etc/dnsmasq.conf.resolv}}
+
+Next point dnsmasq to this file through the configuration file:
+
+{{File|/etc/dnsmasq.conf|Configuring a custom resolv file|<pre>
+resolv-file=/etc/dnsmasq.conf.resolv
 </pre>}}
-{{RootCmd|/etc/init.d/dnsmasq start}}
+
+To verify that the service is running (after restarting as the configuration file has just been changed), use the <code>dig</code> command (provided through {{Package|net-dns/bind-tools}}), asking the DNS server (running on localhost in the following example) to resolve a local or remote address:
+
+{{Cmd|dig @localhost +short www.gentoo.org|output=<pre>
+www-bytemark-v4v6.gentoo.org.
+89.16.167.134
+</pre>}}
+
+=== DHCP services ===
+
+In order to enable the DHCP services of dnsmasq, use the <code>dhcp-range</code> configuration setting.
+
+For instance, to enable IPv6 address configuration through RA with infinite lease time, and IPv4 address configuration also with infinite lease time:
+
+{{File|/etc/dnsmasq.conf|Enabling IPv6 and IPv4 leases|<pre>
+dhcp-range=2001:db8:81:e2::,ra-only,infinite
+dhcp-range=192.168.100.100,192.168.100.149,infinite
+</pre>}}
+
+It is possible to use static definitions for known hosts, either through the main configuration file (<code>dhcp-host=</code> settings) or through a separate file. If a separate file is used, point dnsmasq to it through the <code>--dhcp-hostsfile</code> command line option. The advantage of the latter approach is that it is sufficient to send a SIGHUP signal (or reload the service) in order to reread the entries, whereas definitions in the configuration file require a full service restart.
+
+For more information about the syntax of the <code>dhcp-host</code> parameter please refer to the manual page or configuration file as its syntax is very extensive.
+
+== Usage ==
+
+This section covers various usage scenarios (maintenance and operational tasks) for the dnsmasq service.
+
+=== Resetting leases ===
+
+Clients that had a network interface update which results in a different MAC address might not get the intended IP address immediately. This is because the dnsmasq service has provided this IP address to the old MAC address, and will wait until the lease of this address has expired before re-assigning it.
+
+The dnsmasq service stores its leases in {{Path|/var/lib/misc/dnsmasq.leases}}. If the lease needs to be removed faster, shut down the dnsmasq service, remove the lease from the {{Path|dnsmasq.leases}} file and start the service again.
+
+{{RootCmd|/etc/init.d/dnsmasq stop
+|nano -w /var/lib/misc/dnsmasq.leases
+|/etc/init.d/dnsmasq start}}
+
+=== Reloading non-main configuration settings ===
+
+Next to the {{Path|dnsmasq.conf}} file, the dnsmasq service can use external definitions for the following services:
+* DHCP host configuration entries (through <code>--dhcp-hostsfile</code> command line option)
+* DHCP options (through <code>--dhcp-optsfile</code> command line option)
+
+When these files are modified, a SIGHUP signal has dnsmasq reload these configuration files.
+
+{{Note|The {{Path|resolv.conf}} files are by default polled by dnsmasq; changes on these files are automatically picked up unless the <code>-n</code> (<code>--no-poll</code>) command line option is set or the <code>no-poll</code> configuration parameter is used.}}
 
 [[Category:Software]]
