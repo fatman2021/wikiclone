@@ -5,8 +5,9 @@
 <!--T:98-->
 {{Metadata|abstract=This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.}}
 
-<!--T:1-->
+
 This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.
+
 
 == Getting Started with OpenLDAP == <!--T:2-->
 
@@ -46,7 +47,7 @@ Since you don't feed data to the database in this ascii-art like manner, every n
 <!--T:12-->
 Interested users are encouraged to read the [http://www.openldap.org/doc/admin24/ OpenLDAP Admin Guide].
 
-=== So... What's the Use? === <!--T:13-->
+=== So... What can it be used for? === <!--T:13-->
 
 <!--T:14-->
 LDAP can be used for various things. This document focuses on centralised user management, keeping all user accounts in a single LDAP location (which doesn't mean that it's housed on a single server, LDAP supports high availability and redundancy), yet other goals can be achieved using LDAP as well. 
@@ -66,10 +67,12 @@ LDAP can be used for various things. This document focuses on centralised user m
 <!--T:19-->
 * System Class Configuration Directives (keeping track of several server configurations)
 
+* Centralised Authentication (PosixAccount)
+
 <!--T:20-->
 * ...
 
-== Configuring OpenLDAP == <!--T:21-->
+== Configuring OpenLDAP Server == <!--T:21-->
 
 
 === Initial Configuration === <!--T:22-->
@@ -77,16 +80,16 @@ LDAP can be used for various things. This document focuses on centralised user m
 <!--T:23-->
 {{Note|In this document we use the genfic.com address as an example. You will ofcourse have to change this. However, make sure that the top node is an official top level domain (net, com, cc, be, ...).}}
 
+
 <!--T:24-->
-Let's first emerge OpenLDAP: 
+Let's first emerge OpenLDAP: Ensure the following use flags are used (berkdb crypt gnutls ipv6 sasl ssl syslog tcpd)
 
 <!--T:25-->
 {{Emerge|openldap}}
 
+
 <!--T:26-->
-Now generate an encrypted password we'll use later on: 
-
-
+Now generate an encrypted password we'll use in the slapd.conf file: 
 
 <!--T:27-->
 {{RootCmd|slappasswd|output=<pre>
@@ -96,8 +99,9 @@ Re-enter new password: my-password
 </pre>
 }}
 
+
 <!--T:28-->
-Now edit the LDAP Server config at {{Path|/etc/openldap/slapd.conf}}. Below we'll give a sample configuration file to get things started. For a more detailed analysis of the configuration file, we suggest that you work through the OpenLDAP Administrator's Guide. 
+Now edit the LDAP Server config at {{Path|/etc/openldap/slapd.conf}}. The slapd.conf already there is from the original openLDAP source. Below is a sample configuration file one can use to replace it with to get things started. 
 
 <!--T:29-->
 {{Code|/etc/openldap/slapd.conf|<pre>
@@ -110,10 +114,17 @@ include	/etc/openldap/schema/misc.schema
 pidfile  /var/run/openldap/slapd.pid
 argsfile /var/run/openldap/slapd.args
  
-## serverID used in case of replication
+## ## ServerID used in case of replication
 serverID 0 
 loglevel 0
- 
+
+## ## Certificate/SSL Section
+TLSCipherSuite HIGH:MEDIUM:-SSLv2
+TLSCACertificateFile: /etc/openldap/ssl/ldap.crt
+TLSCertificateFile /etc/openldap/ssl/ldap.pem
+TLSCertificateKeyFile /etc/openldap/ssl/ldap.key
+TLSVerifyClient: never
+
 ## ## Access Controls
 access to dn.base="" by * read
 access to dn.base="cn=Subschema" by * read
@@ -153,25 +164,31 @@ syncprov-checkpoint 100 10
 </pre>
 }}
 
-<!--T:30-->
-Next we edit the LDAP Client configuration file: 
 
-<!--T:31-->
-{{RootCmd|nano -w /etc/openldap/ldap.conf|output=<pre>
-## (Add the following...)
-BASE         dc=genfic, dc=com
-URI          ldap://ldap.genfic.com:389/ ldap://ldap1.genfic.com:389/ ldap://ldap2.genfic.com:389/
-TLS_REQCERT  allow
-TIMELIMIT    2
-</pre>
-}}
+For a more detailed analysis of the configuration file, we suggest that you work through the OpenLDAP Administrator's Guide. 
 
-<!--T:32-->
-Now edit {{Path|/etc/conf.d/slapd}} and set the following OPTS line: 
+Once you have finnished customising the slapd.conf you can check it with this command.
+
+{{Cmd|slaptest -v -d 1 -f /etc/openldap/slapd.conf}}
+
+Vary the debug level (the "-d 1" above) for more info. If all goes well you will see: "config file testing succeeded".
+If there's an error, slaptest will list the line number in slapd.conf.
+
+Note that OpenLDAP can store its configuration in two places. One in the original slapd.conf and also in slapd.d . The second is the new place and designed not be edited with a text editor but generated from the slapd.conf using slattest in the following manor in /etc/openldap/ . Its not required to convert the config and use slapd.d for now but the time will come.
+
+{{RootCmd|mkdir /etc/openldap/slapd.d}}
+{{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
+{{RootCmd|chown -R ldap slapd.d}}
+
+Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the slapd.conf is updated. 
+The directory and all sub contents needs to be owned by ldap. 
+
+
+Next see this self commented file for instructions. The below line will enable the slapd.d configuration method. 
 
 <!--T:33-->
 {{Code|/etc/conf.d/slapd|<pre>
-OPTS="-h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
+OPTS="-F /etc/openldap/slapd.d -h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
 </pre>
 }}
 
@@ -183,15 +200,6 @@ Finally, create the {{Path|/var/lib/openldap-ldbm}} structure:
 |chown ldap:ldap /var/lib/openldap-ldbm
 |chmod 700 /var/lib/openldap-ldbm}}
 
-<!--T:36-->
-You can test {{Path|/etc/openldap/slapd.conf}} with the following command: 
-
-<!--T:37-->
-{{Cmd|slaptest -v -d 1 -f /etc/openldap/slapd.conf}}
-
-<!--T:38-->
-Vary the debug level (the "-d 1" above) for more info. If all goes well you will see: "config file testing succeeded".
-If there's an error, slaptest will list the line number in slapd.conf.
 
 <!--T:39-->
 Start slapd: 
@@ -199,8 +207,23 @@ Start slapd:
 <!--T:40-->
 {{RootCmd|/etc/init.d/slapd start}}
 
+If it does not start then increase the loglevel above to 4 or more, and look in the /var/log/messages 
+
+== Configuring the OpenLDAP Client tools== 
+
+Edit the LDAP Client configuration file. This is files is read by ldapsearch and other ldap command line tools.
+
+{{RootCmd|nano -w /etc/openldap/ldap.conf|output=<pre>
+## (Add the following...)
+BASE         dc=genfic, dc=com
+URI          ldap://ldap.genfic.com:389/ ldap://ldap1.genfic.com:389/ ldap://ldap2.genfic.com:389/
+TLS_REQCERT  allow
+TIMELIMIT    2
+</pre>
+}}
+
 <!--T:99-->
-You can test with the following command: 
+You can test the running server with the following command: 
 
 <!--T:100-->
 {{Cmd|ldapsearch -x -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -W}}
@@ -208,51 +231,7 @@ You can test with the following command:
 <!--T:101-->
 If you receive an error, try adding <code>-d 255</code> to increase the verbosity and solve the issue you have.
 
-== Replication == <!--T:41-->
-
-=== If you need high availability === <!--T:42-->
-
-<!--T:43-->
-If your environment requires high availability, then you need to setup replication of changes across multiple LDAP systems. Replication within OpenLDAP is, in this guide, set up using a specific replication account ( <code>ldapreader</code> ) which has read rights on the primary LDAP server and which pulls in changes from the primary LDAP server to the secondary. 
-
-<!--T:44-->
-This setup is then mirrored, allowing the secondary LDAP server to act as a primary. Thanks to OpenLDAP's internal structure, changes are not re-applied if they are already in the LDAP structure.
-
-=== Setting Up Replication === <!--T:45-->
-
-<!--T:46-->
-To setup replication, first setup a second OpenLDAP server, similarly as above. However take care that, in the configuration file, 
-
-<!--T:47-->
-* the ''sync replication provider'' is pointing to the ''other'' system
-
-<!--T:48-->
-* the ''serverID'' of each OpenLDAP system is different
-
-<!--T:49-->
-Next, create the synchronisation account. We will create an LDIF file (the format used as data input for LDAP servers) and add it to each LDAP server: 
-
-<!--T:50-->
-{{Cmd|slappasswd -s myreaderpassword|output=<pre>
- {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
-</pre>}}
-
-<!--T:51-->
-{{Cmd|cat ldapreader.ldif|output=<pre>
-dn: cn=ldapreader,dc=genfic,dc=com
-userPassword: {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
-objectClass: organizationalRole
-objectClass: simpleSecurityObject
-cn: ldapreader
-description: LDAP reader used for synchronization
-</pre>}}
-
-<!--T:52-->
-{{Cmd|ldapadd -x -W -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -f ldapreader.ldif|output=<pre>
-Password: ## enter the administrative password
-</pre>}}
-
-== Client Configuration == <!--T:53-->
+== Centralised Authentication Client Configuration == <!--T:53-->
 
 === Migrate existing data to ldap === <!--T:54-->
 
@@ -404,6 +383,50 @@ shadow:         files ldap
 
 <!--T:75-->
 If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
+
+== Replication == <!--T:41-->
+
+=== If you need high availability === <!--T:42-->
+
+<!--T:43-->
+If your environment requires high availability, then you need to setup replication of changes across multiple LDAP systems. Replication within OpenLDAP is, in this guide, set up using a specific replication account ( <code>ldapreader</code> ) which has read rights on the primary LDAP server and which pulls in changes from the primary LDAP server to the secondary. 
+
+<!--T:44-->
+This setup is then mirrored, allowing the secondary LDAP server to act as a primary. Thanks to OpenLDAP's internal structure, changes are not re-applied if they are already in the LDAP structure.
+
+=== Setting Up Replication === <!--T:45-->
+
+<!--T:46-->
+To setup replication, first setup a second OpenLDAP server, similarly as above. However take care that, in the configuration file, 
+
+<!--T:47-->
+* the ''sync replication provider'' is pointing to the ''other'' system
+
+<!--T:48-->
+* the ''serverID'' of each OpenLDAP system is different
+
+<!--T:49-->
+Next, create the synchronisation account. We will create an LDIF file (the format used as data input for LDAP servers) and add it to each LDAP server: 
+
+<!--T:50-->
+{{Cmd|slappasswd -s myreaderpassword|output=<pre>
+ {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
+</pre>}}
+
+<!--T:51-->
+{{Cmd|cat ldapreader.ldif|output=<pre>
+dn: cn=ldapreader,dc=genfic,dc=com
+userPassword: {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: ldapreader
+description: LDAP reader used for synchronization
+</pre>}}
+
+<!--T:52-->
+{{Cmd|ldapadd -x -W -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -f ldapreader.ldif|output=<pre>
+Password: ## enter the administrative password
+</pre>}}
 
 == LDAP Server Security Settings == <!--T:76-->
 
