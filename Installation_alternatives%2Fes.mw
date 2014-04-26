@@ -1,0 +1,369 @@
+<languages />
+
+
+{{Metadata|abstract=This HOWTO is meant to be a repository of alternative Gentoo installation methods, for those with special installation needs such as lack of a cdrom or a computer that can't boot CDs.}}
+
+This HOWTO is meant to be a repository of alternative Gentoo installation methods, for those with special installation needs such as lack of a cdrom or a computer that can't boot CDs.
+
+== About this document ==
+
+If the standard boot-from-CD install method doesn't work for you (or you just don't like it), help is now here. This document serves to provide a repository of alternative Gentoo Linux installation techniques to those who need them. Or, if you prefer, it serves as a place to put your wacky installation methods. If you have an installation method that you yourself find useful, or you have devised an amusing way of installing Gentoo, please don't hesitate to write something up and post it on [https://bugs.gentoo.org/ Bugzilla].
+
+== Booting the Install CD with Smart BootManager ==
+
+Download Smart BootManager available from [http://btmgr.sourceforge.net/download.html http://btmgr.sourceforge.net/download.html]. Linux source or binary format and windows .exe versions are available as well as many language packs. However, at this time, the preferred method would be to use the binary format, as the source will not compile with newer versions of NASM. 
+
+Either compile the package from source or just grab the binary. There are several options that can be utilized while creating your boot floppy, as seen below. 
+
+{{Code|Smart BootManager Options|<pre>
+sbminst [-t theme] [-d drv] [-b backup_file] [-u backup_file]
+  
+   -t theme       select the theme to be used, in which the theme could be:
+                    us = English theme       de = German theme
+                    hu = Hungarian theme     zh = Chinese theme
+                    ru = Russian theme       cz = Czech theme
+                    es = Spanish theme       fr = French theme
+                    pt = Portuguese theme
+  
+   -d drv         set the drive that you want to install Smart BootManager on;
+                  for Linux:
+                    /dev/fd0 is the first floppy driver,
+                    /dev/hda is the first IDE harddisk driver.
+                    /dev/sda is the first SCSI harddisk driver.
+                  for DOS:
+                    0   is the first floppy drive
+                    128 is the first hard drive;
+  
+   -c             disable CD-ROM booting feature;
+  
+   -b backup_file backup the data that will be overwritten for
+                  future uninstallation;
+  
+   -u backup_file uninstall Smart BootManager, should be used alone;
+  
+   -y             do not ask any question or warning.
+</pre>
+}}
+
+Use <code>sbminst</code> to build the boot floppy:
+
+{{RootCmd|sbminst -t us  -d /dev/fd0}}
+
+{{Note|Replace {{Path|fd0}} with your respective floppy device name if yours is different.}}
+
+Now simply place the floppy in the floppy drive of the computer you'd like to boot the Install CD on, as well as placing the Install CD in the CD-ROM and boot the computer. 
+
+You'll be greeted with the Smart BootManager dialog. Select your CD-ROM and press ENTER to boot the Install CD. Once booted proceed with the standard installation instructions. 
+
+Further information on Smart BootManager may be found at [http://btmgr.sourceforge.net/ http://btmgr.sourceforge.net/].
+
+== Installation from non-Gentoo LiveCDs ==
+
+=== Introduction ===
+
+{{Important|The Gentoo developers cannot support you if something goes wrong with a non-Gentoo LiveCD, as there's no way to fix, troubleshoot, or document every quirk of every LiveCD out there. Only Gentoo LiveCDs are officially supported. If you run into problems with alternative installation media, please visit the [https://forums.gentoo.org/ Gentoo Forums] for community help.}}
+
+It is possible to boot some other LiveCD besides the Gentoo-provided CDs. This will give you a functional environment to use while you're compiling and installing Gentoo. The instructions provided here should work in principle with just about any other LiveCD. 
+
+There are too many LiveCDs out there to [http://distrowatch.com/search.php list], but you might try [http://www.knoppix.org/ Knoppix]. It provides a full graphical desktop, with office applications, web browsers, and games to keep you busy. Knoppix is only available for x86 users, so depending on your needs you may need to find a different LiveCD. 
+
+{{Warning|Be aware that if you save anything in your LiveCD's home directory while waiting for your Gentoo system to install, it will not be available when you reboot into Gentoo. Be sure to save important files on the hard disk or on some other computer!}}
+
+=== Installation instructions ===
+
+Boot from your LiveCD. Open a terminal and run <code>su -</code> so you can change your password. This lets you set the root password for the CD. You can now configure <code>sshd</code> for remote login, if you need to install Gentoo remotely. Next, you'll need to create the {{Path|/mnt/gentoo}} mount point. 
+
+{{RootCmd|mkdir /mnt/gentoo}}
+
+At this point, you can pick up with the standard install documentation at [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part{{=}}1&chap{{=}}4 part 4]. However, when you are asked to mount the proc system, issue the following command instead: 
+
+{{RootCmd|mount -o bind /proc /mnt/gentoo/proc}}
+
+When you're ready to unpack the stage tarball in [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part{{=}}1&chap{{=}}5#doc_chap2_sect2 part 5], you will need to use a different <code>tar</code> command to ensure that proper group IDs are enforced on the unpacked stage: 
+
+{{RootCmd|tar --numeric-owner -xvjpf stage3-*.tar.bz2}}
+
+Once you're ready to chroot into your unpacked stage in [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part{{=}}1&chap{{=}}6#doc_chap1 part 6], you will need to use a different chroot command sequence. This ensures that your environment variables are properly setup. 
+
+{{Note|Some LiveCDs use a funny environment setup, hence the <code>env -i</code> option for
+cleaning it up to a reasonable state.}}
+
+{{RootCmd|chroot /mnt/gentoo /bin/env -i TERM{{=}}$TERM /bin/bash
+|env-update
+|source /etc/profile
+|export PS1{{=}}"(chroot) $PS1"}}
+
+Finally, know that some Portage FEATURES may not work in your LiveCD. Especially watch out for <code>userpriv</code> and <code>usersandbox</code>. If you find yourself getting errors, it might be wise to disable some or all of the optional FEATURES. 
+
+== Diskless install using PXE boot ==
+
+=== Requirements ===
+
+PXE (Preboot eXecution Environment) is a method for booting computers over a PXE-capable network interface (and using a PXE-supporting BIOS). It is also supported as a boot method from block devices (like CDs or USBs) in case the system does not support PXE boot from the network interface or BIOS. In such cases, a minimal boot environment mimics the PXE supporting network card (see also [http://etherboot.org Etherboot/gPXE]). 
+
+=== Server base setup ===
+
+Create directories: The first thing to do is to create the directories where your diskless system will be stored. Create a directory called {{Path|/diskless}} which houses a directory for each diskless client. For the rest of this howto we'll be working on the client 'eta'. 
+
+{{RootCmd|mkdir /diskless
+|mkdir /diskless/eta
+|mkdir /diskless/eta/boot}}
+
+DHCP and TFTP setup: The client will get boot informations using DHCP and download all the required files using TFTP. 
+
+For dhcpd, just run <code>emerge dhcp</code> (or any other DHCP server of your choice). Make sure that the correct interface is selected in {{Path|/etc/conf.d/dhcpd}}, and configure it for your basic needs. Then, add the following on {{Path|/etc/dhcp/dhcpd.conf}}. 
+
+{{Note|This provides a static IP address for the client and the path of a PXE boot image, here {{Path|pxegrub}}. You have to replace the MAC address of the ethernet card of the client and the directory where you will put the client files with the one you use.}}
+
+{{File|dhcpd.conf||<pre>
+option option-150 code 150 = text ;
+ddns-update-style none ;
+host eta {
+hardware ethernet 00:00:00:00:00:00;
+fixed-address ip.add.re.ss;
+option option-150 "/eta/boot/grub.lst";
+filename "/eta/boot/pxegrub";
+}
+</pre>
+}}
+
+Next you'll need to configure your interface in {{Path|/etc/conf.d/net}} so that it doesn't get cleared at bootup. See {{Path|/usr/share/doc/openrc-*/net.example.bz2}} for more information. 
+
+{{File|/etc/conf.d/net|Ensure your interface (here eth0 as example) is not reconfigured at boot|<pre>
+config_eth0=( "noop" )
+</pre>
+}}
+
+For TFTP, emerge <code>net-ftp/tftp-hpa</code>. In {{Path|/etc/conf.d/in.tftpd}}, put the following: 
+
+{{File|in.tftpd||<pre>
+INTFTPD_PATH="/diskless"
+INTFTPD_USER="nobody"
+INTFTPD_OPTS="-u ${INTFTPD_USER} -l -vvvvvv -p -c -s ${INTFTPD_PATH}"
+</pre>
+}}
+
+Setup GRUB: To provide PXE booting I use GRUB with the <code>netboot</code> USE flag enabled. Once GRUB is compiled, copy the PXE image to the diskless client's boot directory. Then edit its {{Path|grub.lst}} config file. 
+
+{{RootCmd|echo "sys-boot/grub netboot" >> /etc/portage/package.use
+|emerge -av grub
+|cp /usr/lib/grub/pxegrub /diskless/eta/boot/pxegrub
+|nano -w /diskless/eta/boot/grub.lst}}
+
+{{File|grub.lst||<pre>
+default 0
+timeout 30
+  
+title=Diskless Gentoo
+root (nd)
+kernel /eta/bzImage ip=dhcp root=/dev/nfs nfsroot=ip.add.re.ss:/diskless/eta
+  
+# For the nfsroot option, the IP address is the one of the server and
+the directory is the one where your diskless client files are located (on the server).
+</pre>
+}}
+
+Setup NFS: NFS is quite easy to configure. The only thing you have to do is to add a line on the {{Path|/etc/exports}} config file: 
+
+{{File|/etc/exports||<pre>
+/diskless/eta eta(rw,sync,no_root_squash)
+</pre>
+}}
+
+Update your hosts: One important thing to do now is to modify your {{Path|/etc/hosts}} file to fit your needs. 
+
+{{File|/etc/hosts||<pre>
+127.0.0.1 localhost
+192.168.1.10 eta.example.com eta
+192.168.1.20 sigma.example.com sigma
+</pre>
+}}
+
+=== Creating the system on the server ===
+
+You might want to reboot the server with a Gentoo Install CD, although you can very well continue immediately if you know how to proceed with the Gentoo Installation Instructions from an existing installation. Follow the standard install procedure as explained in the [http://www.gentoo.org/doc/en/handbook/ Gentoo Handbook] BUT with the following differences: When you mount the file system, do the following (where {{Path|sdaX}} is the partition where you created the {{Path|/diskless}} directory). You do not need to mount any other partitions as all of the files will reside in the {{Path|/diskless/eta}} directory. 
+
+{{RootCmd|mount /dev/sdaX /mnt/gentoo}}
+
+Stage tarballs and chroot: This example uses a stage3 tarball. Mount {{Path|/proc}} to your diskless directory and chroot into it to continue with the install. Then follow the installation manual until kernel configuration. 
+
+{{Warning|Be very careful where you extract your stage tarball. You don't want to end up extracting over your existing installation.}}
+
+{{RootCmd|cd /mnt/gentoo/diskless/eta/
+|tar -xvjpf  /mnt/cdrom/gentoo/stage3-*.tar.bz2
+|mount -t proc /proc /mnt/gentoo/diskless/eta/proc
+|cp /etc/resolv.conf /mnt/gentoo/diskless/eta/etc/resolv.conf
+|chroot /mnt/gentoo/diskless/eta/ /bin/bash
+|env-update
+|source /etc/profile}}
+
+Kernel configuration: When you do the <code>make menuconfig</code> of your kernel configuration, don't forget to enable the following options with the others recommended into the install howto. 
+
+{{Kernel|Necessary options for diskless installations|<pre>
+- Your network card device support
+(In the kernel, *not* as a module!)
+  
+- Under "Networking options" :
+  
+[*] TCP/IP networking
+[*] IP: kernel level autoconfiguration
+[*] IP: DHCP support
+[*] IP: BOOTP support
+  
+- Under "File systems --> Network File Systems" :
+  
+<*> NFS file system support
+[*] Provide NFSv3 client support
+[*] Root file system on NFS
+</pre>
+}}
+
+Save the kernel in your chrooted {{Path|/}} (not in {{Path|/boot}}) according to the pxegrub setting defined earlier. Next configure your diskless client's {{Path|/etc/fstab}}. 
+
+{{File|/etc/fstab||<pre>
+/dev/cdroms/cdrom0 /mnt/cdrom iso9660 noauto,ro 0 0
+</pre>
+}}
+
+You also need to prevent the client to run a filesystem check: 
+
+{{RootCmd|touch /fastboot
+|echo "touch /fastboot" >> /etc/conf.d/local.start}}
+
+Install <code>nfs-utils</code> since your client will heavily depend on it: 
+
+{{Emerge|nfs-utils}}
+
+Bootloader. Don't install another bootloader because we already have one - pxegrub. Simply finish the install and restart the server. Start the services you'll need to boot the new client: DHCP, TFTPD, and NFS. 
+
+{{RootCmd|/etc/init.d/dhcp start
+|/etc/init.d/in.tftpd start
+|/etc/init.d/nfs start}}
+
+=== Booting the new client ===
+
+For the new client to boot properly, you'll need to configure the BIOS and the network card to use PXE as the first boot method - before CD-ROM or floppy. For help with this consult your hardware manuals or manufacturers website. The network card should get an IP address using DHCP and download the GRUB PXE image using TFTP. Then, you should see a nice black and white GRUB bootmenu where you will select the kernel to boot and press Enter. If everything is ok the kernel should boot, mount the root filesystem using NFS and provide you with a login prompt. Enjoy. 
+
+== Installing Gentoo from an existing Linux distribution ==
+
+=== Requirements ===
+
+In order to install Gentoo from your existing Linux distribution you need to have chroot command installed, and have a copy of the Gentoo installation tarball or ISO you want to install. A network connection would be preferable if you want more than what's supplied in your tarball. (by the way, a tarball is just a file ending in .tbz or .tar.gz). Let's get started! 
+
+=== Overview ===
+
+We will first allocate a partition to Gentoo by resizing our existing Linux partition, mount the partition, untar the tarball to the partition that is mounted, chroot inside the pseudo-system and start building. Once the bootstrap process is done, we will do some final configuration on the system so as to make sure it boots, then we are ready to reboot and use Gentoo. 
+
+=== How should we make space for Gentoo? ===
+
+The root partition is the filesystem mounted under {{Path|/}} . A quick run of <code>mount</code> on my system shows what I am talking about. We well also use <code>df</code> (disk free) to see how much space I have left and how I will be resizing. Note that it is not mandatory to resize your root partition! You could be resizing anything else supported by our resizer, but let's talk about that later. 
+
+{{RootCmd|mount|output=<pre>
+/dev/sdb2 on / type ext3 (rw)
+none on /proc type proc (rw)
+none on /dev/pts type devpts (rw,gid=5,mode=620)
+none on /dev/shm type tmpfs (rw,nodev,nosuid,noexec)
+</pre>}}
+
+{{RootCmd|df -h|output=<pre>
+Filesystem           Size Used Avail Use% Mounted on
+/dev/sdb2            4.0G 1.9G  2.4G  82% /
+none                  38M    0   38M   0% /dev/shm
+</pre>
+}}
+
+As we can see, the partition mounted as {{Path|/}} named {{Path|/dev/sdb2}} has 2.4 gigabytes free. In my case, I think I will resize it as to leave 400Megs free of space, therefore allocating 2 gigabytes for Gentoo. Not bad, I could have quite some stuff installed. However, I think that even one gigabyte is enough for most users. So let's partition this thing! 
+
+=== Building parted to resize partition ===
+
+Parted is an utility supplied by the GNU foundation, an old and respectable huge project whose software you are using in this very moment. There is one tool, however, that is extremely useful for us at the moment. It's called parted, partition editor and we can get it from [http://www.gnu.org/software/parted/ http://www.gnu.org/software/parted/].
+
+{{Note|There are other tools for doing resize of partitions as well, but the author is unsure/uninterested whether PartitionMagic or other software of the kind do the job. It's the reader's job to check them out}}
+
+Look up on that page the type of file system you want to resize and see if parted can do it. If not, you're out of luck, you will have to destroy some partition to make space for Gentoo, and reinstall back. Go ahead by downloading the software, install it. Here we have a problem. We want to resize our Linux root partition, therefore we must boot from a floppy disk a minimal linux system and use previously-compiled parted copied to a diskette in order to resize {{Path|/}}. However, if you can unmount the partition while still in Linux you are lucky, you don't need to do what follows. Just compile parted and run it on an unmounted partition you chose to resize. Here's how I did it for my system. 
+
+{{Important|Make sure that the operations you want to do on your partition are supported by parted!}}
+
+Get the mininux boot/root disk (a 2.4-powered mini Linux distribution on a floppy - free of charge) from [http://mininux.free.fr/uk/ http://mininux.free.fr/uk/], create a floppy as suggested in the Documentation that accompanies the software package and insert a new floppy in the drive for the next step. 
+
+{{Note|Note again that Linux is synonym of "There's one more way to do it". Your objective is to run parted on an unmounted partition so it can do its work. You might use some boot/root diskset other than mininux. You might not even need to do this step at all, ie. you might only have umount the filesystem you want to repartition in your Linux session and run parted on it.}}
+
+{{RootCmd|mkfs.minix /dev/fd0|output=<pre>
+480 inodes
+1440 blocks
+Firstdatazone=19 (19)
+Zonesize=1024
+Maxsize=268966912
+</pre>
+}}
+
+We will now proceed with the build of parted. If it's not already downloaded and untarred, do so now and <code>cd</code> into the corresponding directory. Now run the following set of commands to build the utility and copy it to your floppy disk. 
+
+{{RootCmd|mkdir /floppy
+|mount -t minix /dev/fd0 /floppy
+|export CFLAGS{{=}}"-O3 -pipe -fomit-frame-pointer -static"
+|./configure
+|make
+|cp parted/parted /floppy
+|umount /floppy }}
+
+Congratulations, you are ready to reboot and resize your partition. Do this only after taking a quick look at the parted documentation on the GNU website. The resize should take under 30 minutes for the largest hard-drives, be patient. Reboot your system with the mininux boot disk (just pop it inside), and once you are logged in, switch the disk in the drive with your utility disk we have created above and type <code>mount /dev/fd0 /floppy</code> to have parted under {{Path|/floppy}}. There you go. Run parted and you will be able to resize your partition. Once this lenghty process done, we are ready to have the real fun, by installing Gentoo. Reboot back into your old Linux system for now. The drive you wish to operate on is the drive containing the partition we want to resize. For example, if we want to resize /dev/sda3, the drive is /dev/sda. 
+
+{{RootCmd|mount /dev/fd0 /floppy 
+|cd /floppy
+|./parted <drive>}}
+
+{{Cmd|print|prompt=(parted) |output=<pre>
+Disk geometry for /dev/sdb: 0.000-9787.148 megabytes
+Disk label type: msdos
+Minor    Start       End     Type      Filesystem  Flags
+1          0.031   2953.125  primary   ntfs
+3       2953.125   3133.265  primary   linux-swap
+2       3133.266   5633.085  primary   ext3
+4       5633.086   9787.148  extended
+5       5633.117   6633.210  logical
+6       6633.242   9787.148  logical   ext3</pre>}}
+
+{{Cmd|help resize|prompt=(parted) |output=<pre>
+(parted)  help resize 
+  resize MINOR START END        resize filesystem on partition MINOR
+  
+        MINOR is the partition number used by Linux.  On msdos disk labels, the
+        primary partitions number from 1-4, and logical partitions are 5
+        onwards.
+        START and END are in megabytes
+</pre>}}
+
+{{Cmd|resize 2 3133.266 4000.000|prompt=(parted) }}
+
+{{Important|Be patient! The computer is working! Just look at the harddrive LED on your case to see that it is really working. This should take between 2 and 30 minutes.}}
+
+Once you have resized, boot back into your old linux as described. Then go to [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part{{=}}1&chap{{=}}4 The Gentoo Handbook: Preparing the Disks] and follow the instructions. When chrooting, use the following command to flush your environment: 
+
+{{RootCmd|env -i HOME{{=}}$HOME TERM{{=}}$TERM chroot /mnt/gentoo /bin/bash
+|/usr/sbin/env-update
+|source /etc/profile}}
+
+Enjoy!
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Gerald Normandin Jr.
+* Travis Tilley
+* Oleg Raisky
+* Alex Garbutt
+* Alexandre Georges
+* Magnus Backanda
+* Faust A. Tanasescu
+* Daniel Ahlberg
+* Sven Vermeulen
+* Ken Nowack
+* Tiemo Kieft
+* Benny Chuang
+* Jonathan Smith
+* nightmorph
+
+[[Category:Core system]]
