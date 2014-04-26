@@ -1,0 +1,146 @@
+<languages />
+
+{{Metadata|abstract=This article describes the manual configuration and setup of the Linux kernel. For an authomatic method, see the genkernel article.}}
+
+This article describes the manual configuration and setup of the [[Kernel|Linux kernel]]. For an automatic method see the [[genkernel]] article.
+
+== Set symlink ==
+
+The symlink {{Path|/usr/src/linux}} should always point to the kernel sources that is currently being used. This can be done in one of three ways:
+
+; 1. Installing the kernel sources with active ''symlink'' [[USE flag]]
+: This will make the {{Path|/usr/src/linux}} point to your newly installed kernel sources. If necessary, it can still be modified later with the following two methods:
+
+; 2. Setting the symlink with '''eselect''':
+
+: {{RootCmd| eselect kernel list |
+  |output=Available kernel symlink targets:<br/> &nbsp; [1] linux-3.3.8-gentoo *<br/> &nbsp; [2] linux-3.4.9-gentoo
+}}
+
+: This outputs the available kernel sources. The asterisk indicates the chosen sources. To change the kernel sources, e.g. to the second entry, do:
+
+: {{RootCmd|eselect kernel set 2}}
+
+; 3. Setting the symlink manually:
+
+: {{RootCmd|ln -sf /usr/src/linux-3.4.9-gentoo /usr/src/linux |
+  |ls -l /usr/src/linux |
+  |output=lrwxrwxrwx 1 root root 11 Aug 29 22:10 /usr/src/linux -> /usr/src/linux-3.4.9-gentoo}}
+<!-- The output is the same as the target file in the ln command. -->
+
+== Configuration tools ==
+
+The kernel offers several tools to configure itself:
+
+; '''make config'''
+: Text based configuration. The options are prompted one after another. All options need to be answered, and out-of-order access to former options is not possible.
+
+; '''make menuconfig'''
+: Graphical menu (only text input). You can navigate through the menu and change the options you want.
+
+; '''make nconfig'''
+: Graphical menu based on ncurses. Requires {{Package|sys-libs/ncurses}} to be installed.
+
+; '''make xconfig'''
+: Graphical menu using Qt4. Requires {{Package|dev-qt/qtgui}} to be installed.
+
+; '''make gconfig'''
+: Graphical menu using GTK+. Requires {{Package|x11-libs/gtk+}}, {{Package|dev-libs/glib}} and {{Package|gnome-base/libglade}} to be installed.
+
+; '''make oldconfig'''
+: Review changes between kernel versions and update to create new {{Path|.config}} for kernel.
+
+
+There are also several scripts to create miscellaneous default configurations. See:
+
+{{RootCmd|make help}}
+
+== Configuration ==
+
+This article describes the configuration using '''make menuconfig''', but the procedure is similar for the other menus.
+
+{{RootCmd|cd /usr/src/linux
+|make menuconfig}}
+
+=== Usage ===
+
+In the shown menu the blue bar indicates your position. With the arrow keys {{Key|up}} and {{Key|down}} you can change the position. The arrow keys {{Key|left}} and {{Key|right}} traverse the menu bar in the bottom and define what happens when you hit the {{Key|Enter}} key. '''Select''' switches to a sub menu - the menu entries ending with ''--->'' - , while '''Exit''' exits a sub menu. As an alternative you can also hit the {{Key|Esc}} key twice.
+
+Menu entries, which start with brackets, are drivers or features which can be activated:
+
+; [ ], [*]
+: Options in square brackets can be activated or deactivated. The asterisk marks the menu entry as activated. You change the value with the {{Key|space}} key or press {{Key|Y}} ('''Y'''es) to activate or {{Key|N}} ('''N'''o) to deactivate the entry.
+: Is the option is activated, the chosen driver will be built into the kernel and will always be available at boot time.
+
+; < >, <M>, <*>
+: Options in angle brackets can be activated or deactivated, but also activated as module (indicated by a ''M''). You change the value as before and press key {{Key|M}} for activate as module.
+: See the [[Kernel Modules]] article for differentiation.
+
+; {M}, {*}
+: Options in curly brackets can be activated or activated as module but not be deactivated, because another driver needs this activated in either way.
+
+; -M-, -*-
+: Options between hyphens are activated in the shown way by another driver. There is no choice.
+
+
+Furthermore some menu entries have a tag at the end:
+
+; (NEW)
+: This driver is new in the kernel and is maybe not stable enough.
+
+; (EXPERIMENTAL)
+: This driver is experimental and most likely not stable enough.
+
+; (DEPRECATED)
+: This driver is deprecated and not needed for most systems.
+
+; (OBSOLETE)
+: This driver is obsolete and should not be activated.
+
+
+Most options have a description, which get by pressing the {{Key|H}} key or choose in the menu bar '''Help'''.
+
+=== Driver selection ===
+
+See the [[hardware detection]] article and the articles in the [[:Category:Hardware|Hardware]] category.
+
+=== Search modules ===
+Within ''menuconfig'', you can use {{Key|/}} to search modules by name.
+
+=== Enabling Gentoo Linux common settings ===
+
+There is a kernel configuration option called <code>CONFIG_GENTOO_LINUX</code> only present in {{Package|sys-kernel/gentoo-sources}} and other [[Project:Kernel|Kernel Project]] maintained kernels. It does nothing on its own, but sets various required configuration options for typical installations.
+
+This setting automatically selects tmpfs and devtmpfs support, which are needed for handling {{Path|/dev}} on Gentoo Linux, but might be expanded in the future to enable other mandatory settings for a Gentoo Linux system. For more information, read the help information available through the kernel configuration system as described earlier in this guide.
+
+== Build ==
+
+After configuring the kernel you have to compile it:
+
+{{RootCmd|make}}
+
+If you have a processor with multiple cores, you can let all the cores do the work. For this add the parameter '''-j(NUMBER_CORES +1)'''. For a dual core processor:
+
+{{RootCmd|make -j3}}
+
+== Setup ==
+
+If activated drivers as modules, you have to install them:
+
+{{RootCmd|make modules_install}}
+
+The modules will be copied to a sub directory of {{Path|/lib/modules}}.
+
+To install the actual kernel:
+
+{{RootCmd|make install}}
+
+This command executes '''/sbin/installkernel''', which is part of the {{Package|sys-apps/debianutils}} package. ''The new kernel is installed into {{Path|/boot/vmlinuz-{version}}}. If a symbolic link {{Path|/boot/vmlinuz}} already exists, it is refreshed by making a link from {{Path|/boot/vmlinuz}} to the new kernel, and the previously installed kernel is available as {{Path|/boot/vmlinuz.old}}.'' (''installkernel'' [[man page]]). The same for {{Path|config}} and {{Path|System.map}} files. These symlinks are handy, because they point always to the newest kernel without changing the file path (e.g. you can use them in the bootloader configuration).
+
+== Bootloader ==
+
+Change your [[bootloader]] configuration to pick up at boot the new kernel.
+
+Finally restart your system with the new kernel.
+
+[[Category:Kernel]]
