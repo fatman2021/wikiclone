@@ -3,7 +3,9 @@
 
 {{Metadata|abstract=이 안내서는 LDAP 기초를 소개하고 그룹과 젠투 머신 사이에 인증 목적으로 OpenLDAP 를 어떻게 설치하는지 보여드립니다.}}
 
-이 안내서는 LDAP 기초를 소개하고 그룹과 젠투 머신 사이에 인증 목적으로 OpenLDAP 를 어떻게 설치하는지 보여드립니다.
+
+This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.
+
 
 == OpenLDAP 시작하기 ==
 
@@ -50,6 +52,8 @@ LDAP can be used for various things. This document focuses on centralised user m
 
 * 시스템 수준 설정 지시문(몇가지 서버 설정 유지)
 
+* Centralised Authentication (PosixAccount)
+
 * ...
 
 == OpenLDAP 설정 ==
@@ -59,13 +63,13 @@ LDAP can be used for various things. This document focuses on centralised user m
 
 {{Note/ko|이 문서에서 genfic.com 주소를 예로 들겠습니다. 물론 바꿀 수도 있습니다. 그러나 상위 노드가 공식 상위 레벨 도메인(net, com, cc, be, ...)인지 확인하십시오.}}
 
-먼저 OpenLDAP를 이머지 하기로 하겠습니다: 
+
+먼저 OpenLDAP를 이머지 하기로 하겠습니다:
 
 {{Emerge|openldap}}
 
+
 이제 다음에 사용할 암호화 처리한 암호를 만드십시오: 
-
-
 
 {{RootCmd|slappasswd|output=<pre>
 New password: my-password
@@ -73,6 +77,7 @@ Re-enter new password: my-password
 {SSHA}EzP6I82DZRnW+ou6lyiXHGxSpSOw2XO4
 </pre>
 }}
+
 
 {{Path|/etc/openldap/slapd.conf}}에 있는 LDAP 서버 설정을 편집하십시오. 아래 제공할 예제 설정 파일로 시작하십시오. 설정 파일의 자세한 분석은 OpenLDAP 관리자 안내서를 통해 진행해보십시오. 
 
@@ -86,9 +91,16 @@ include	/etc/openldap/schema/misc.schema
 pidfile  /var/run/openldap/slapd.pid
 argsfile /var/run/openldap/slapd.args
  
-## serverID used in case of replication
+## ## ServerID used in case of replication
 serverID 0 
 loglevel 0
+ 
+## ## Certificate/SSL Section
+TLSCipherSuite normal
+TLSCACertificateFile /etc/openldap/ssl/ldap.crt
+TLSCertificateFile /etc/openldap/ssl/ldap.pem
+TLSCertificateKeyFile /etc/openldap/ssl/ldap.key
+TLSVerifyClient never
  
 ## ## Access Controls
 access to dn.base="" by * read
@@ -129,7 +141,52 @@ syncprov-checkpoint 100 10
 </pre>
 }}
 
-다음 LDAP 클라이언트 설정 파일을 편집하십시오: 
+For a more detailed analysis of the configuration file, we suggest that you work through the OpenLDAP Administrator's Guide. 
+
+=== Verifying the configuration ===
+
+After customizing the {{Path|slapd.conf}} file you can check it with the following command.
+
+{{Cmd|slaptest -v -d 1 -f /etc/openldap/slapd.conf}}
+
+Vary the debug level (the "-d 1" above) for more info. If all goes well you will see ''config file testing succeeded''.
+If there's an error, <code>slaptest</code> will list the line number to which it applies (of the {{Path|slapd.conf}} file).
+
+Note that OpenLDAP can store its configuration in two places. One in the original {{Path|slapd.conf}} and also in {{Path|slapd.d/}}. The second is the new place and designed not be edited with a text editor but generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. It is not required to convert the configuration and use {{Path|slapd.d/}} for now but the time will come.
+
+{{RootCmd|mkdir /etc/openldap/slapd.d}}
+{{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
+{{RootCmd|chown -R ldap slapd.d}}
+
+Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the {{Path|slapd.conf}} is updated. The directory and all files and directories in it need to be owned by the ldap service account. 
+
+For more instructions read the in-line comments of the generated files.
+
+The below line will enable the {{Path|slapd.d/}} configuration method. 
+
+{{Code|/etc/conf.d/slapd|<pre>
+OPTS="-h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
+</pre>
+}}
+
+=== Finishing the initial setup ===
+
+마지막으로, {{Path|/var/lib/openldap-ldbm}} 구조를 만드십시오: 
+
+{{RootCmd|mkdir -p /var/lib/openldap-ldbm
+|chown ldap:ldap /var/lib/openldap-ldbm
+|chmod 700 /var/lib/openldap-ldbm}}
+
+
+Start slapd: 
+
+{{RootCmd|/etc/init.d/slapd start}}
+
+If it does not start then increase the loglevel variable in {{Path|slapd.conf}} to 4 or more, and look in {{Path|/var/log/messages}} for more information.
+
+== Configuring the OpenLDAP Client tools== 
+
+Edit the LDAP Client configuration file. This file is read by ldapsearch and other ldap command line tools.
 
 {{RootCmd|nano -w /etc/openldap/ldap.conf|output=<pre>
 ## (Add the following...)
@@ -140,70 +197,11 @@ TIMELIMIT    2
 </pre>
 }}
 
-이제 {{Path|/etc/conf.d/slapd}}를 편집하고 다음 OPTS 줄을 설정하십시오: 
-
-{{Code|/etc/conf.d/slapd|<pre>
-OPTS="-h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
-</pre>
-}}
-
-마지막으로, {{Path|/var/lib/openldap-ldbm}} 구조를 만드십시오: 
-
-{{RootCmd|mkdir -p /var/lib/openldap-ldbm
-|chown ldap:ldap /var/lib/openldap-ldbm
-|chmod 700 /var/lib/openldap-ldbm}}
-
-You can test {{Path|/etc/openldap/slapd.conf}} with the following command: 
-
-{{Cmd|slaptest -v -d 1 -f /etc/openldap/slapd.conf}}
-
-Vary the debug level (the "-d 1" above) for more info. If all goes well you will see: "config file testing succeeded".
-If there's an error, slaptest will list the line number in slapd.conf.
-
-Start slapd: 
-
-{{RootCmd|/etc/init.d/slapd start}}
-
-You can test with the following command: 
+You can test the running server with the following command: 
 
 {{Cmd|ldapsearch -x -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -W}}
 
 If you receive an error, try adding <code>-d 255</code> to increase the verbosity and solve the issue you have.
-
-== 복제 ==
-
-=== 고가용성이 필요한 경우 ===
-
-고가용성을 필요로 하는 환경일 경우, 다중 LDAP 시스템에 걸친 변경 복제를 설정해야 합니다. OpenLDAP 내의 복제는 이 안내서에서 특정 복제 계정을 사용하여 설정하며(<code>ldapreader</code>), 첫번째 LDAP 서버에 대한 읽기 권한을 부여하고, 두번째 LDAP 서버에 첫번째 LDAP서버의 바뀐점을 보냅니다. 
-
-두번째 LDAP 서버가 첫번째 서버의 동작과 유사한 동작을 허용한 상태에서 이 설정을 복제합니다. OpenLDAP의 내부 구조에 감사해야 할 일은 LDAP 구조상 바뀐 내용이 또 있다 할지라도 중복 적용하지 않습니다.
-
-=== 복제 설정 ===
-
-복제를 설정하려면, 먼저 위에서 진행한 바와 같이 두번째 OpenLDAP 서버를 설정해야 합니다. 그러나, 설정 파일에 대해서는 다음을 신경쓰십시오. 
-
-* ''동기화 복제 제공자''는 ''다른'' 시스템을 가리킵니다
-
-* 각각의 OpenLDAP의 ''서버ID''는 다릅니다
-
-다음, 동기화 계정을 만드십시오. LDIF 파일(LDAP서버 에서 데이터 입력할때 사용하는 형식)을 만들고 LDAP 서버 각각에 이를 추가하겠습니다. 
-
-{{Cmd|slappasswd -s myreaderpassword|output=<pre>
- {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
-</pre>}}
-
-{{Cmd|cat ldapreader.ldif|output=<pre>
-dn: cn=ldapreader,dc=genfic,dc=com
-userPassword: {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
-objectClass: organizationalRole
-objectClass: simpleSecurityObject
-cn: ldapreader
-description: LDAP reader used for synchronization
-</pre>}}
-
-{{Cmd|ldapadd -x -W -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -f ldapreader.ldif|output=<pre>
-Password: ## enter the administrative password
-</pre>}}
 
 == 클라이언트 설정 ==
 
@@ -303,7 +301,7 @@ session    optional     pam_ldap.so
 ## #host 127.0.0.1
 ## #base dc=padl,dc=com
  
-suffix          "dc=genfic,dc=com"
+base dc=genfic,dc=com
 ## #rootbinddn uid=root,ou=People,dc=genfic,dc=com
 bind_policy soft
 bind_timelimit 2
@@ -336,6 +334,41 @@ shadow:         files ldap
 }}
 
 If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
+
+== 복제 ==
+
+=== 고가용성이 필요한 경우 ===
+
+고가용성을 필요로 하는 환경일 경우, 다중 LDAP 시스템에 걸친 변경 복제를 설정해야 합니다. OpenLDAP 내의 복제는 이 안내서에서 특정 복제 계정을 사용하여 설정하며(<code>ldapreader</code>), 첫번째 LDAP 서버에 대한 읽기 권한을 부여하고, 두번째 LDAP 서버에 첫번째 LDAP서버의 바뀐점을 보냅니다. 
+
+두번째 LDAP 서버가 첫번째 서버의 동작과 유사한 동작을 허용한 상태에서 이 설정을 복제합니다. OpenLDAP의 내부 구조에 감사해야 할 일은 LDAP 구조상 바뀐 내용이 또 있다 할지라도 중복 적용하지 않습니다.
+
+=== 복제 설정 ===
+
+복제를 설정하려면, 먼저 위에서 진행한 바와 같이 두번째 OpenLDAP 서버를 설정해야 합니다. 그러나, 설정 파일에 대해서는 다음을 신경쓰십시오. 
+
+* ''동기화 복제 제공자''는 ''다른'' 시스템을 가리킵니다
+
+* 각각의 OpenLDAP의 ''서버ID''는 다릅니다
+
+다음, 동기화 계정을 만드십시오. LDIF 파일(LDAP서버 에서 데이터 입력할때 사용하는 형식)을 만들고 LDAP 서버 각각에 이를 추가하겠습니다. 
+
+{{Cmd|slappasswd -s myreaderpassword|output=<pre>
+ {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
+</pre>}}
+
+{{Cmd|cat ldapreader.ldif|output=<pre>
+dn: cn=ldapreader,dc=genfic,dc=com
+userPassword: {SSHA}XvbdAv6rdskp9HgFaFL9YhGkJH3HSkiM
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: ldapreader
+description: LDAP reader used for synchronization
+</pre>}}
+
+{{Cmd|ldapadd -x -W -D "cn{{=}}Manager,dc{{=}}genfic,dc{{=}}com" -f ldapreader.ldif|output=<pre>
+Password: ## enter the administrative password
+</pre>}}
 
 == LDAP 서버 보안 설정 ==
 
