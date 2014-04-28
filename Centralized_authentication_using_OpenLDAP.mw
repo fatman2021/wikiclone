@@ -244,31 +244,32 @@ If you receive an error, try adding <code>-d 255</code> to increase the verbosit
 
 == Client Configuration for Centralised Authentication  == <!--T:53-->
 
-There are numerous methods/tools that can be used for remote authentication. Some distributions also have there own easy to use configuration tool. Here are some in order, of security and popularity. Its possible to combine local users and centrally authorised accounts at the same time. This being important because if the LDAP server cannot be access one can still login as root for example.
+There are numerous methods/tools that can be used for remote authentication. Some distributions also have their own easy to use configuration tool. Below there are some in no particular order. It is possible to combine local users and centrally authorized accounts at the same time. This is important because, for instance, if the LDAP server cannot be accessed one can still login as root.
 
-* SSSD  (Single Sign-on Services Daemon). Its primary function is to provide access to identity and authentication remote resource through a common framework that can provide caching and offline support to the system. It provides PAM and NSS modules, and in the future will D-BUS based interfaces for extended user information. It provides also a better database to store local users as well as extended user data.
+* SSSD  (Single Sign-on Services Daemon). Its primary function is to provide access to identity and authentication remote resource through a common framework that can provide caching and offline support to the system. It provides PAM and NSS modules, and in the future will support D-Bus interfaces for extended user information. It also provides a better database to store local users as well as extended user data.
 
-* Use the pam_ldap to login to the LDAP server and authenticate. Passwords are not sent over the network.  
+* Use <code>pam_ldap</code> to login to the LDAP server and authenticate. Passwords are ''not'' sent over the network in clear text.  
 
-* NSLCD (Name Service Look up Daemon). Similar thing to above, can be used, but is older.
+* NSLCD (Name Service Look up Daemon). Similar to SSSD, but older.
 
-* NSS (Name Service Switch) using the traditional pam_unix module to fetch password hashes over the network. To permit user to update their password this has to be combined with the pam_ldap method.
+* NSS (Name Service Switch) using the traditional <code>pam_unix</code> module to fetch password hashes over the network. To permit users to update their password this has to be combined with the <code>pam_ldap</code> method.
 
 The first two are demonstrated below with the minimum necessary configuration options to get working.
 
 === Client PAM configuration SSSD Method === <!--T:63-->
 
-However, here is the more direct method. The three files that are required to edit are below. 
-{{Code|/etc/sssd/sssd.conf|<pre>
+Here is the more direct method. The three files that are required to be edited are mentioned below. 
+
+{{File|/etc/sssd/sssd.conf||<pre>
 [sssd]
 config_file_version = 2
 services = nss, pam
 domains = genfic
 debug_level = 5
-
+  
 [nss]
 filter_users = root,ldap,named,avahi,haldaemon,dbus,radiusd,news,nscd
-
+  
 [domain/genfic]
 id_provider = ldap
 auth_provider = ldap
@@ -279,20 +280,21 @@ ldap_uri = ldap://X.X.X.X,ldap://X.X.X.X
 </pre>}}
 
 
-Add sss to the end like below to enable the look up to handed to the sssd system service. Once you have finished editing start the sssd daemon.
-{{Code|/etc/nsswitch.conf|<pre>
+Add sss to the end as shown below to enable the lookup to be handed to the sssd system service. Once you have finished editing start the sssd daemon.
+
+{{File|/etc/nsswitch.conf|Example nsswitch.conf with SSSD support|<pre>
 passwd:     files sss
 shadow:     files sss
 group:      files sss
-
+  
 netgroup:   files sss
 automount:  files sss
 sudoers:    files sss
 </pre>}}
 
+The last file is the most critical. Open an extra root terminal as a fallback before editing this. The lines in bold have been added to enable remote authentication. Note the use of {{Path|pam_mkhomedir.so}} to support creating the user home directories.
 
-The last file is the most critical open a few extra root windows as a backup before editing this. The lines in bold have been added to enable remote authentication. Note pam_mkhomedir.so will make the home directory.
-{{Code|/etc/pam.d/system-auth|<pre>
+{{File|/etc/pam.d/system-auth|Enable pam_sss support|<pre>
 #%PAM-1.0
 # This file is auto-generated.
 # User changes will be destroyed the next time authconfig is run.
@@ -301,18 +303,18 @@ auth        sufficient    pam_unix.so nullok try_first_pass
 auth        requisite     pam_succeed_if.so uid >= 500 quiet
 '''auth        sufficient    pam_sss.so use_first_pass'''
 auth        required      pam_deny.so
-
+  
 account     required      pam_unix.so
 account     sufficient    pam_localuser.so
 account     sufficient    pam_succeed_if.so uid < 500 quiet
 '''account     [default=bad success=ok user_unknown=ignore] pam_sss.so'''
 account     required      pam_permit.so
-
+  
 password    requisite     pam_cracklib.so try_first_pass retry=3
 password    sufficient    pam_unix.so md5 shadow nullok try_first_pass use_authtok
 '''password    sufficient    pam_sss.so use_authtok'''
 password    required      pam_deny.so
-
+  
 session     required      pam_mkhomedir.so skel=/etc/skel/ umask=0077
 session     optional      pam_keyinit.so revoke
 session     required      pam_limits.so
@@ -321,7 +323,7 @@ session     required      pam_unix.so
 '''session     optional      pam_sss.so'''
 </pre>}}
 
-That's it now try logging in from another box.
+Now try logging in from another box.
 
 === Client PAM configuration the pam_ldap Module Method === <!--T:64-->
 
@@ -403,7 +405,6 @@ shadow:         files ldap
 
 <!--T:75-->
 If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
-
 
 == Migrate existing data to ldap == <!--T:54-->
 
