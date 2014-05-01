@@ -4,7 +4,7 @@
 {{Metadata|abstract=이 안내서는 LDAP 기초를 소개하고 그룹과 젠투 머신 사이에 인증 목적으로 OpenLDAP 를 어떻게 설치하는지 보여드립니다.}}
 
 
-This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.
+This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of computers.
 
 
 == OpenLDAP 시작하기 ==
@@ -34,11 +34,11 @@ uid: ..   John            ## (OU-specific data)
 </pre>
 }}
 
-아스키 이미지 같은 방식으로 데이터베이스에 데이터를 넣지 않았기 때문에 모든 트리의 노드를 반드시 정의해야 ㅎ바니다. 이 노드에 이름을 부여하기 위해 LDAP에서는 작명 스킴을 사용합니다. 대부분의 LDAP 배포(OpenLDAP 포함)에서는 이미 설정한 스킴과 설정 몇가지를 포함합니다. inetorgperson 같은 경우, 사용자를 정의하는 스킴을 자주 사용합니다. 
+아스키 이미지 같은 방식으로 데이터베이스에 데이터를 넣지 않았기 때문에 모든 트리의 노드를 반드시 정의해야 ㅎ바니다. 이 노드에 이름을 부여하기 위해 LDAP에서는 작명 스킴을 사용합니다. 대부분의 LDAP 배포(OpenLDAP 포함)에서는 이미 설정한 스킴과 설정 몇가지를 포함합니다. inetorgperson 같은 경우, 사용자를 정의하는 스킴을 자주 사용합니다.
 
 흥미로운 사용자라면 [http://www.openldap.org/doc/admin24/ OpenLDAP 관리자 안내서]를 보십시오.
 
-=== 그래서 사용하는게 뭐죠? ===
+=== So... What can it be used for? ===
 
 LDAP can be used for various things. This document focuses on centralised user management, keeping all user accounts in a single LDAP location (which doesn't mean that it's housed on a single server, LDAP supports high availability and redundancy), yet other goals can be achieved using LDAP as well. 
 
@@ -56,20 +56,17 @@ LDAP can be used for various things. This document focuses on centralised user m
 
 * ...
 
-== OpenLDAP 설정 ==
-
-
-=== 초기 설정 ===
+== OpenLDAP Server Configuration  ==
 
 {{Note/ko|이 문서에서 genfic.com 주소를 예로 들겠습니다. 물론 바꿀 수도 있습니다. 그러나 상위 노드가 공식 상위 레벨 도메인(net, com, cc, be, ...)인지 확인하십시오.}}
 
 
-먼저 OpenLDAP를 이머지 하기로 하겠습니다:
+Let's first emerge OpenLDAP. Ensure the USE flags ''berkdb, crypt, gnutls, ipv6, sasl, ssl, syslog'' and ''tcpd'' are used.
 
 {{Emerge|openldap}}
 
 
-이제 다음에 사용할 암호화 처리한 암호를 만드십시오: 
+OpenLDAP has a main user "rootdn" (Root Distinguished Name) password which is generated with the below command and needs to be placed in the {{Path|slapd.conf}} as noted later on.
 
 {{RootCmd|slappasswd|output=<pre>
 New password: my-password
@@ -79,7 +76,7 @@ Re-enter new password: my-password
 }}
 
 
-{{Path|/etc/openldap/slapd.conf}}에 있는 LDAP 서버 설정을 편집하십시오. 아래 제공할 예제 설정 파일로 시작하십시오. 설정 파일의 자세한 분석은 OpenLDAP 관리자 안내서를 통해 진행해보십시오. 
+Now edit the LDAP Server configuration in {{Path|/etc/openldap/slapd.conf}}. The provided {{Path|slapd.conf}} is from the original openLDAP source. Below is a sample configuration file one can use to replace it with to get things started. 
 
 {{Code|/etc/openldap/slapd.conf|<pre>
 include	/etc/openldap/schema/core.schema
@@ -117,7 +114,7 @@ checkpoint 32 30
 rootdn "cn=Manager,dc=genfic,dc=com"
 ## ## rootpwd generated earlier via slappasswd command
 rootpw "{SSHA}EzP6I82DZRnW+ou6lyiXHGxSpSOw2XO4" 
-directory "/var/lib/openldap-ldbm"
+directory "/var/lib/openldap-data"
 index objectClass eq
  
 ## ## Synchronisation (pull from other LDAP server)
@@ -152,24 +149,22 @@ After customizing the {{Path|slapd.conf}} file you can check it with the followi
 Vary the debug level (the "-d 1" above) for more info. If all goes well you will see ''config file testing succeeded''.
 If there's an error, <code>slaptest</code> will list the line number to which it applies (of the {{Path|slapd.conf}} file).
 
-Note that OpenLDAP can store its configuration in two places. One in the original {{Path|slapd.conf}} and also in {{Path|slapd.d/}}. The second is the new place and designed not be edited with a text editor but generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. It is not required to convert the configuration and use {{Path|slapd.d/}} for now but the time will come.
+Note that OpenLDAP can store its configuration in two places. One in the original {{Path|slapd.conf}} and also in {{Path|slapd.d/}}. The second is the new place and designed not be edited with a text editor but generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. It is not required to convert the configuration and use {{Path|slapd.d/}} for now, but support for the currently documented approach will be removed in future versions of this document.
 
 {{RootCmd|mkdir /etc/openldap/slapd.d}}
 {{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
 {{RootCmd|chown -R ldap slapd.d}}
 
-Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the {{Path|slapd.conf}} is updated. The directory and all files and directories in it need to be owned by the ldap service account. 
+Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the {{Path|slapd.conf}} is updated. The directory and its contents need to be owned by the ldap service account. 
 
 For more instructions read the in-line comments of the generated files.
 
 The below line will enable the {{Path|slapd.d/}} configuration method. 
 
 {{Code|/etc/conf.d/slapd|<pre>
-OPTS="-h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
+OPTS="-F /etc/openldap/slapd.d -h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
 </pre>
 }}
-
-=== Finishing the initial setup ===
 
 마지막으로, {{Path|/var/lib/openldap-ldbm}} 구조를 만드십시오: 
 
@@ -188,8 +183,7 @@ If it does not start then increase the loglevel variable in {{Path|slapd.conf}} 
 
 Edit the LDAP Client configuration file. This file is read by ldapsearch and other ldap command line tools.
 
-{{RootCmd|nano -w /etc/openldap/ldap.conf|output=<pre>
-## (Add the following...)
+{{File|/etc/openldap/ldap.conf|Add the following|<pre>
 BASE         dc=genfic, dc=com
 URI          ldap://ldap.genfic.com:389/ ldap://ldap1.genfic.com:389/ ldap://ldap2.genfic.com:389/
 TLS_REQCERT  allow
@@ -203,60 +197,88 @@ You can test the running server with the following command:
 
 If you receive an error, try adding <code>-d 255</code> to increase the verbosity and solve the issue you have.
 
-== 클라이언트 설정 ==
+== Client Configuration for Centralised Authentication  ==
 
-=== 기존 데이터를 LDAP로 이전 ===
+There are numerous methods/tools that can be used for remote authentication. Some distributions also have their own easy to use configuration tool. Below there are some in no particular order. It is possible to combine local users and centrally authorized accounts at the same time. This is important because, for instance, if the LDAP server cannot be accessed one can still login as root.
 
-Configuring OpenLDAP for centralized administration and management of common Linux/Unix items isn't easy, but thanks to some tools and scripts available on the Internet, migrating a system from a single-system administrative point-of-view towards an OpenLDAP-based, centralized managed system isn't hard either. 
+* SSSD  (Single Sign-on Services Daemon). Its primary function is to provide access to identity and authentication remote resource through a common framework that can provide caching and offline support to the system. It provides PAM and NSS modules, and in the future will support D-Bus interfaces for extended user information. It also provides a better database to store local users as well as extended user data.
 
-Go to [http://www.padl.com/OSS/MigrationTools.html http://www.padl.com/OSS/MigrationTools.html] and fetch the scripts there. You'll need the migration tools and the {{Path|make_master.sh}} script. 
+* Use <code>pam_ldap</code> to login to the LDAP server and authenticate. Passwords are ''not'' sent over the network in clear text.  
 
-Next, extract the tools and copy the {{Path|make_master.sh}} script inside the extracted location: 
+* NSLCD (Name Service Look up Daemon). Similar to SSSD, but older.
 
-{{RootCmd|mktemp -d|output=<pre>
-/tmp/tmp.zchomocO3Q
+* NSS (Name Service Switch) using the traditional <code>pam_unix</code> module to fetch password hashes over the network. To permit users to update their password this has to be combined with the <code>pam_ldap</code> method.
+
+The first two are demonstrated below with the minimum necessary configuration options to get working.
+
+=== Client PAM configuration SSSD Method ===
+
+Here is the more direct method. The three files that are required to be edited are mentioned below. 
+
+{{File|/etc/sssd/sssd.conf||<pre>
+[sssd]
+config_file_version = 2
+services = nss, pam
+domains = genfic
+debug_level = 5
+  
+[nss]
+filter_users = root,ldap,named,avahi,haldaemon,dbus,radiusd,news,nscd
+  
+[domain/genfic]
+id_provider = ldap
+auth_provider = ldap
+ldap_search_base = dc=genfic,dc=com
+ldap_tls_reqcert = never
+# primary and backup ldap servers below [first server and],[second server]
+ldap_uri = ldap://X.X.X.X,ldap://X.X.X.X
 </pre>}}
 
-{{RootCmd|cd /tmp/tmp.zchomocO3Q
-|tar xvzf /path/to/MigrationTools.tgz
-|mv /path/to/make_master.sh MigrationTools-47
-|cd MigrationTools-47</pre>}}
 
-The next step now is to migrate the information of your system to OpenLDAP. The {{Path|make_master.sh}} script will do this for you, after you have provided it with the information regarding your LDAP structure and environment. 
+Add sss to the end as shown below to enable the lookup to be handed to the sssd system service. Once you have finished editing start the sssd daemon.
 
-작성하는 도중에, 도구에서 다음 입력사항을 요구합니다: 
+{{File|/etc/nsswitch.conf|Example nsswitch.conf with SSSD support|<pre>
+passwd:     files sss
+shadow:     files sss
+group:      files sss
+  
+netgroup:   files sss
+automount:  files sss
+sudoers:    files sss
+</pre>}}
 
-{| class="wikitable" style="text-align: left;" 
-|- 
-! 입력
-! 설명
-! 예제
-|- 
-| LDAP BaseDN
-| 트리 기반 위치 (루트)
-| dc=genfic,dc=com
-|- 
-| Mail domain
-| 이메일 주소에 사용하는 도메인
-| genfic.com
-|- 
-| Mail host
-| 메일 서버 인프라스트럭처의 FQDN
-| smtp.genfic.com
-|- 
-| LDAP Root DN
-| LDAP 구조상 관리 계정 정보
-| cn=Manager,dc=genfic,dc=com
-|- 
-| LDAP Root Password
-| 이전 <code>slappasswd</code> 명령 결과와 비교한 관리 계정 암호
-| 
-|-
-|}
+The last file is the most critical. Open an extra root terminal as a fallback before editing this. The lines in bold have been added to enable remote authentication. Note the use of {{Path|pam_mkhomedir.so}} to support creating the user home directories.
 
-또한 도구에서 옮길 계정과 설정이 어떤건지 물어봅니다. 
+{{File|/etc/pam.d/system-auth|Enable pam_sss support|<pre>
+#%PAM-1.0
+# This file is auto-generated.
+# User changes will be destroyed the next time authconfig is run.
+auth        required      pam_env.so
+auth        sufficient    pam_unix.so nullok try_first_pass
+auth        requisite     pam_succeed_if.so uid >= 500 quiet
+'''auth        sufficient    pam_sss.so use_first_pass'''
+auth        required      pam_deny.so
+  
+account     required      pam_unix.so
+account     sufficient    pam_localuser.so
+account     sufficient    pam_succeed_if.so uid < 500 quiet
+'''account     [default=bad success=ok user_unknown=ignore] pam_sss.so'''
+account     required      pam_permit.so
+  
+password    requisite     pam_cracklib.so try_first_pass retry=3
+password    sufficient    pam_unix.so md5 shadow nullok try_first_pass use_authtok
+'''password    sufficient    pam_sss.so use_authtok'''
+password    required      pam_deny.so
+  
+session     required      pam_mkhomedir.so skel=/etc/skel/ umask=0077
+session     optional      pam_keyinit.so revoke
+session     required      pam_limits.so
+session     [success=1 default=ignore] pam_succeed_if.so service in crond quiet use_uid
+session     required      pam_unix.so
+'''session     optional      pam_sss.so'''
+</pre>}}
 
-{{Warning/ko|pam.d/system-auth를 바꿀 필요는 없습니다}}
+Now try logging in from another box.
 
 === PAM 설정 ===
 
@@ -264,7 +286,7 @@ First, we will configure PAM to allow LDAP authorization. Install {{Package|sys-
 
 {{Emerge|pam_ldap nss_ldap}}
 
-이제 {{Path|/etc/pam.d/system-auth}}의 오른편에 다음 줄을 추가하십시오: 
+The last file is the most critical open a few extra root windows as a backup before editing this. The lines in bold have been added to enable remote authentication.
 
 {{Code|/etc/pam.d/system-auth|<pre>
 ## # Note: only add them. Don't kill stuff already in there or your box won't let you login again!
@@ -334,6 +356,59 @@ shadow:         files ldap
 }}
 
 If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
+
+=== 기존 데이터를 LDAP로 이전 ===
+
+Configuring OpenLDAP for centralized administration and management of common Linux/Unix items isn't easy, but thanks to some tools and scripts available on the Internet, migrating a system from a single-system administrative point-of-view towards an OpenLDAP-based, centralized managed system isn't hard either. 
+
+Go to [http://www.padl.com/OSS/MigrationTools.html http://www.padl.com/OSS/MigrationTools.html] and fetch the scripts there. You'll need the migration tools and the {{Path|make_master.sh}} script. 
+
+Next, extract the tools and copy the {{Path|make_master.sh}} script inside the extracted location: 
+
+{{RootCmd|mktemp -d|output=<pre>
+/tmp/tmp.zchomocO3Q
+</pre>}}
+
+{{RootCmd|cd /tmp/tmp.zchomocO3Q
+|tar xvzf /path/to/MigrationTools.tgz
+|mv /path/to/make_master.sh MigrationTools-47
+|cd MigrationTools-47</pre>}}
+
+The next step now is to migrate the information of your system to OpenLDAP. The {{Path|make_master.sh}} script will do this for you, after you have provided it with the information regarding your LDAP structure and environment. 
+
+작성하는 도중에, 도구에서 다음 입력사항을 요구합니다: 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! 입력
+! 설명
+! 예제
+|- 
+| LDAP BaseDN
+| 트리 기반 위치 (루트)
+| dc=genfic,dc=com
+|- 
+| Mail domain
+| 이메일 주소에 사용하는 도메인
+| genfic.com
+|- 
+| Mail host
+| 메일 서버 인프라스트럭처의 FQDN
+| smtp.genfic.com
+|- 
+| LDAP Root DN
+| LDAP 구조상 관리 계정 정보
+| cn=Manager,dc=genfic,dc=com
+|- 
+| LDAP Root Password
+| 이전 <code>slappasswd</code> 명령 결과와 비교한 관리 계정 암호
+| 
+|-
+|}
+
+또한 도구에서 옮길 계정과 설정이 어떤건지 물어봅니다. 
+
+{{Warning/ko|pam.d/system-auth를 바꿀 필요는 없습니다}}
 
 == 복제 ==
 
@@ -412,7 +487,7 @@ This example gives root and John access to read/write/search for everything in t
 
 === 디렉터리 관리 ===
 
-아파치/proftpd/qmail/삼바에서 사용자를 인증할 때 디렉터리를 사용하는걸로 시작할 수 있습니다. 쉬운 관리 인터페이스를 제공하는 phpldapadmin,diradm, jxplorer, lat으로 관리할 수 있습니다. 
+아파치/proftpd/qmail/삼바에서 사용자를 인증할 때 디렉터리를 사용하는걸로 시작할 수 있습니다. 쉬운 관리 인터페이스를 제공하는 phpldapadmin,diradm, jxplorer, lat으로 관리할 수 있습니다.
 
 == 감사문 ==
 
