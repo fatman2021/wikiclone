@@ -1,10 +1,10 @@
 <languages />
 
 
-{{Metadata|abstract=This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.}}
+{{Metadata|abstract=This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of computers.}}
 
 
-This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of Gentoo boxes.
+This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of computers.
 
 
 == Getting Started with OpenLDAP ==
@@ -13,7 +13,7 @@ This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for
 
 LDAP stands for ''Lightweight Directory Access Protocol''. Based on X.500 it encompasses most of its primary functions, but lacks the more esoteric functions that X.500 has. Now what is this X.500 and why is there an LDAP? 
 
-X.500 is a model for Directory Services in the OSI concept. It contains namespace definitions and the protocols for querying and updating the directory. However, X.500 has been found to be overkill in many situations. Enter LDAP. Like X.500 it provides a data/namespace model for the directory and a protocol too. However, LDAP is designed to run directly over the TCP/IP stack. See LDAP as a slim-down version of X.500. 
+X.500 is a model for Directory Services in the OSI concept. It contains namespace definitions and the protocols for querying and updating the directory. However, X.500 has been found to be overkill in many situations. Enter LDAP. Like X.500 it provides a data/namespace model for the directory and a protocol. However, LDAP is designed to run directly over the TCP/IP stack. See LDAP as a slim-down version of X.500. 
 
 === I don't get it. What is a directory? ===
 
@@ -34,7 +34,7 @@ uid: ..   John            ## (OU-specific data)
 </pre>
 }}
 
-Since you don't feed data to the database in this ascii-art like manner, every node of such a tree must be defined. To name such nodes, LDAP uses a naming scheme. Most LDAP distributions (including OpenLDAP) already contain quite a number of predefined (and general approved) schemes, such as the inetorgperson, a frequently used scheme to define users. 
+Since you don't feed data to the database in this ascii-art like manner, every node of such a tree must be defined. To name such nodes, LDAP uses a naming scheme. Most LDAP distributions (including OpenLDAP) already contain quite a number of predefined (and general approved) schemas, such as the ''inetOrgPerson'', or a frequently used schema to define users which Unix/Linux boxes can use, called ''posixAccount''. Note there are GUI web based tools to make managing LDAP painless: see [[#Working_with_OpenLDAP|Working with OpenLDAP]] for an non-exhaustive list.
 
 Interested users are encouraged to read the [http://www.openldap.org/doc/admin24/ OpenLDAP Admin Guide].
 
@@ -56,12 +56,9 @@ LDAP can be used for various things. This document focuses on centralised user m
 
 * ...
 
-== Configuring OpenLDAP Server ==
+== OpenLDAP Server Configuration  ==
 
-
-=== Initial Configuration ===
-
-{{Note|In this document we use the genfic.com address as an example. You will ofcourse have to change this. However, make sure that the top node is an official top level domain (net, com, cc, be, ...).}}
+The domain genfic.com is an example in this guide. You will of course want to change this. However, make sure that the top node is an official top level domain (net, com, cc, be, ...).
 
 
 Let's first emerge OpenLDAP. Ensure the USE flags ''berkdb, crypt, gnutls, ipv6, sasl, ssl, syslog'' and ''tcpd'' are used.
@@ -69,7 +66,7 @@ Let's first emerge OpenLDAP. Ensure the USE flags ''berkdb, crypt, gnutls, ipv6,
 {{Emerge|openldap}}
 
 
-Now generate an encrypted password we'll use in the {{Path|slapd.conf}} file: 
+OpenLDAP has a main user "rootdn" (Root Distinguished Name) password which is generated with the below command and needs to be placed in the {{Path|slapd.conf}} as noted later on.
 
 {{RootCmd|slappasswd|output=<pre>
 New password: my-password
@@ -79,7 +76,7 @@ Re-enter new password: my-password
 }}
 
 
-Now edit the LDAP Server config at {{Path|/etc/openldap/slapd.conf}}. The provided {{Path|slapd.conf}} is from the original openLDAP source. Below is a sample configuration file one can use to replace it with to get things started. 
+Now edit the LDAP Server configuration in {{Path|/etc/openldap/slapd.conf}}. The provided {{Path|slapd.conf}} is from the original openLDAP source. Below is a sample configuration file one can use to replace it with to get things started. 
 
 {{Code|/etc/openldap/slapd.conf|<pre>
 include	/etc/openldap/schema/core.schema
@@ -117,7 +114,7 @@ checkpoint 32 30
 rootdn "cn=Manager,dc=genfic,dc=com"
 ## ## rootpwd generated earlier via slappasswd command
 rootpw "{SSHA}EzP6I82DZRnW+ou6lyiXHGxSpSOw2XO4" 
-directory "/var/lib/openldap-ldbm"
+directory "/var/lib/openldap-data"
 index objectClass eq
  
 ## ## Synchronisation (pull from other LDAP server)
@@ -152,13 +149,13 @@ After customizing the {{Path|slapd.conf}} file you can check it with the followi
 Vary the debug level (the "-d 1" above) for more info. If all goes well you will see ''config file testing succeeded''.
 If there's an error, <code>slaptest</code> will list the line number to which it applies (of the {{Path|slapd.conf}} file).
 
-Note that OpenLDAP can store its configuration in two places. One in the original {{Path|slapd.conf}} and also in {{Path|slapd.d/}}. The second is the new place and designed not be edited with a text editor but generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. It is not required to convert the configuration and use {{Path|slapd.d/}} for now but the time will come.
+Note that OpenLDAP can store its configuration in two places. One in the original {{Path|slapd.conf}} and also in {{Path|slapd.d/}}. The second is the new place and designed not be edited with a text editor but generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. It is not required to convert the configuration and use {{Path|slapd.d/}} for now, but support for the currently documented approach will be removed in future versions of this document.
 
 {{RootCmd|mkdir /etc/openldap/slapd.d}}
 {{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
 {{RootCmd|chown -R ldap slapd.d}}
 
-Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the {{Path|slapd.conf}} is updated. The directory and all files and directories in it need to be owned by the ldap service account. 
+Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the {{Path|slapd.conf}} is updated. The directory and its contents need to be owned by the ldap service account. 
 
 For more instructions read the in-line comments of the generated files.
 
@@ -169,13 +166,11 @@ OPTS="-F /etc/openldap/slapd.d -h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenl
 </pre>
 }}
 
-=== Finishing the initial setup ===
+Finally, create the {{Path|/var/lib/openldap-data}} structure: 
 
-Finally, create the {{Path|/var/lib/openldap-ldbm}} structure: 
-
-{{RootCmd|mkdir -p /var/lib/openldap-ldbm
-|chown ldap:ldap /var/lib/openldap-ldbm
-|chmod 700 /var/lib/openldap-ldbm}}
+{{RootCmd|mkdir -p /var/lib/openldap-data
+|chown ldap:ldap /var/lib/openldap-data
+|chmod 700 /var/lib/openldap-data}}
 
 
 Start slapd: 
@@ -188,8 +183,7 @@ If it does not start then increase the loglevel variable in {{Path|slapd.conf}} 
 
 Edit the LDAP Client configuration file. This file is read by ldapsearch and other ldap command line tools.
 
-{{RootCmd|nano -w /etc/openldap/ldap.conf|output=<pre>
-## (Add the following...)
+{{File|/etc/openldap/ldap.conf|Add the following|<pre>
 BASE         dc=genfic, dc=com
 URI          ldap://ldap.genfic.com:389/ ldap://ldap1.genfic.com:389/ ldap://ldap2.genfic.com:389/
 TLS_REQCERT  allow
@@ -203,9 +197,160 @@ You can test the running server with the following command:
 
 If you receive an error, try adding <code>-d 255</code> to increase the verbosity and solve the issue you have.
 
-== Centralised Authentication Client Configuration ==
+== Client Configuration for Centralised Authentication  ==
 
-=== Migrate existing data to ldap ===
+There are numerous methods/tools that can be used for remote authentication. Some distributions also have their own easy to use configuration tool. Below there are some in no particular order. It is possible to combine local users and centrally authorized accounts at the same time. This is important because, for instance, if the LDAP server cannot be accessed one can still login as root.
+
+* SSSD  (Single Sign-on Services Daemon). Its primary function is to provide access to identity and authentication remote resource through a common framework that can provide caching and offline support to the system. It provides PAM and NSS modules, and in the future will support D-Bus interfaces for extended user information. It also provides a better database to store local users as well as extended user data.
+
+* Use <code>pam_ldap</code> to login to the LDAP server and authenticate. Passwords are ''not'' sent over the network in clear text.  
+
+* NSLCD (Name Service Look up Daemon). Similar to SSSD, but older.
+
+* NSS (Name Service Switch) using the traditional <code>pam_unix</code> module to fetch password hashes over the network. To permit users to update their password this has to be combined with the <code>pam_ldap</code> method.
+
+The first two are demonstrated below with the minimum necessary configuration options to get working.
+
+=== Client PAM configuration SSSD Method ===
+
+Here is the more direct method. The three files that are required to be edited are mentioned below. 
+
+{{File|/etc/sssd/sssd.conf||<pre>
+[sssd]
+config_file_version = 2
+services = nss, pam
+domains = genfic
+debug_level = 5
+  
+[nss]
+filter_users = root,ldap,named,avahi,haldaemon,dbus,radiusd,news,nscd
+  
+[domain/genfic]
+id_provider = ldap
+auth_provider = ldap
+ldap_search_base = dc=genfic,dc=com
+ldap_tls_reqcert = never
+# primary and backup ldap servers below [first server and],[second server]
+ldap_uri = ldap://X.X.X.X,ldap://X.X.X.X
+</pre>}}
+
+
+Add sss to the end as shown below to enable the lookup to be handed to the sssd system service. Once you have finished editing start the sssd daemon.
+
+{{File|/etc/nsswitch.conf|Example nsswitch.conf with SSSD support|<pre>
+passwd:     files sss
+shadow:     files sss
+group:      files sss
+  
+netgroup:   files sss
+automount:  files sss
+sudoers:    files sss
+</pre>}}
+
+The last file is the most critical. Open an extra root terminal as a fallback before editing this. The lines in bold have been added to enable remote authentication. Note the use of {{Path|pam_mkhomedir.so}} to support creating the user home directories.
+
+{{File|/etc/pam.d/system-auth|Enable pam_sss support|<pre>
+#%PAM-1.0
+# This file is auto-generated.
+# User changes will be destroyed the next time authconfig is run.
+auth        required      pam_env.so
+auth        sufficient    pam_unix.so nullok try_first_pass
+auth        requisite     pam_succeed_if.so uid >= 500 quiet
+'''auth        sufficient    pam_sss.so use_first_pass'''
+auth        required      pam_deny.so
+  
+account     required      pam_unix.so
+account     sufficient    pam_localuser.so
+account     sufficient    pam_succeed_if.so uid < 500 quiet
+'''account     [default=bad success=ok user_unknown=ignore] pam_sss.so'''
+account     required      pam_permit.so
+  
+password    requisite     pam_cracklib.so try_first_pass retry=3
+password    sufficient    pam_unix.so md5 shadow nullok try_first_pass use_authtok
+'''password    sufficient    pam_sss.so use_authtok'''
+password    required      pam_deny.so
+  
+session     required      pam_mkhomedir.so skel=/etc/skel/ umask=0077
+session     optional      pam_keyinit.so revoke
+session     required      pam_limits.so
+session     [success=1 default=ignore] pam_succeed_if.so service in crond quiet use_uid
+session     required      pam_unix.so
+'''session     optional      pam_sss.so'''
+</pre>}}
+
+Now try logging in from another box.
+
+=== Client PAM configuration the pam_ldap Module Method ===
+
+First, we will configure PAM to allow LDAP authorization. Install {{Package|sys-auth/pam_ldap}} so that PAM supports LDAP authorization, and {{Package|sys-auth/nss_ldap}} so that your system can cope with LDAP servers for additional information (used by {{Path|nsswitch.conf}}). 
+
+{{Emerge|pam_ldap nss_ldap}}
+
+The last file is the most critical open a few extra root windows as a backup before editing this. The lines in bold have been added to enable remote authentication.
+
+{{Code|/etc/pam.d/system-auth|<pre>
+#%PAM-1.0
+ 
+auth       required     pam_env.so
+auth       sufficient   pam_unix.so try_first_pass likeauth nullok
+'''auth       sufficient   pam_ldap.so use_first_pass'''
+auth       required     pam_deny.so
+ 
+'''account    sufficient   pam_ldap.so'''
+account    required     pam_unix.so
+ 
+password   required     pam_cracklib.so difok=2 minlen=8 dcredit=2 ocredit=2 try_first_pass retry=3
+password   sufficient   pam_unix.so try_first_pass use_authtok nullok md5 shadow
+'''password   sufficient   pam_ldap.so use_authtok use_first_pass'''
+password   required     pam_deny.so
+ 
+session    required     pam_limits.so
+session    required     pam_unix.so
+'''session    optional     pam_ldap.so'''
+</pre>
+}}
+
+Now change {{Path|/etc/ldap.conf}} to read: 
+
+{{Code|/etc/ldap.conf|<pre>
+## #host 127.0.0.1
+## #base dc=padl,dc=com
+ 
+base dc=genfic,dc=com
+## #rootbinddn uid=root,ou=People,dc=genfic,dc=com
+bind_policy soft
+bind_timelimit 2
+ldap_version 3
+nss_base_group ou=Group,dc=genfic,dc=com
+nss_base_hosts ou=Hosts,dc=genfic,dc=com
+nss_base_passwd ou=People,dc=genfic,dc=com
+nss_base_shadow ou=People,dc=genfic,dc=com
+pam_filter objectclass=posixAccount
+pam_login_attribute uid
+pam_member_attribute memberuid
+pam_password exop
+scope one
+timelimit 2
+uri ldap://ldap.genfic.com/ ldap://ldap1.genfic.com ldap://ldap2.genfic.com
+</pre>
+}}
+
+Next, copy over the (OpenLDAP) {{Path|ldap.conf}} file from the server to the client so the clients are aware of the LDAP environment: 
+
+{{RootCmd|scp ldap-server:/etc/openldap/ldap.conf /etc/openldap}}
+
+Finally, configure your clients so that they check the LDAP for system accounts: 
+
+{{Code|/etc/nsswitch.conf|<pre>
+passwd:         files ldap
+group:          files ldap
+shadow:         files ldap
+</pre>
+}}
+
+If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
+
+== Migrate existing data to ldap ==
 
 Configuring OpenLDAP for centralized administration and management of common Linux/Unix items isn't easy, but thanks to some tools and scripts available on the Internet, migrating a system from a single-system administrative point-of-view towards an OpenLDAP-based, centralized managed system isn't hard either. 
 
@@ -258,88 +403,11 @@ The tool will also ask you which accounts and settings you want to migrate.
 
 {{Warning| You don't need to make changes to pam.d/system-auth}}
 
-=== Configuring PAM ===
-
-First, we will configure PAM to allow LDAP authorization. Install {{Package|sys-auth/pam_ldap}} so that PAM supports LDAP authorization, and {{Package|sys-auth/nss_ldap}} so that your system can cope with LDAP servers for additional information (used by {{Path|nsswitch.conf}}). 
-
-{{Emerge|pam_ldap nss_ldap}}
-
-Now add the following lines in the right places to {{Path|/etc/pam.d/system-auth}}: 
-
-{{Code|/etc/pam.d/system-auth|<pre>
-## # Note: only add them. Don't kill stuff already in there or your box won't let you login again!
-auth       sufficient   pam_ldap.so use_first_pass
-account    sufficient   pam_ldap.so
-password   sufficient   pam_ldap.so use_authtok use_first_pass
-session    optional     pam_ldap.so
- 
-## # Example file:
-#%PAM-1.0
- 
-auth       required     pam_env.so
-auth       sufficient   pam_unix.so try_first_pass likeauth nullok
-auth       sufficient   pam_ldap.so use_first_pass
-auth       required     pam_deny.so
- 
-account    sufficient   pam_ldap.so
-account    required     pam_unix.so
- 
-password   required     pam_cracklib.so difok=2 minlen=8 dcredit=2 ocredit=2 try_first_pass retry=3
-password   sufficient   pam_unix.so try_first_pass use_authtok nullok md5 shadow
-password   sufficient   pam_ldap.so use_authtok use_first_pass
-password   required     pam_deny.so
- 
-session    required     pam_limits.so
-session    required     pam_unix.so
-session    optional     pam_ldap.so
-</pre>
-}}
-
-Now change {{Path|/etc/ldap.conf}} to read: 
-
-{{Code|/etc/ldap.conf|<pre>
-## #host 127.0.0.1
-## #base dc=padl,dc=com
- 
-base dc=genfic,dc=com
-## #rootbinddn uid=root,ou=People,dc=genfic,dc=com
-bind_policy soft
-bind_timelimit 2
-ldap_version 3
-nss_base_group ou=Group,dc=genfic,dc=com
-nss_base_hosts ou=Hosts,dc=genfic,dc=com
-nss_base_passwd ou=People,dc=genfic,dc=com
-nss_base_shadow ou=People,dc=genfic,dc=com
-pam_filter objectclass=posixAccount
-pam_login_attribute uid
-pam_member_attribute memberuid
-pam_password exop
-scope one
-timelimit 2
-uri ldap://ldap.genfic.com/ ldap://ldap1.genfic.com ldap://ldap2.genfic.com
-</pre>
-}}
-
-Next, copy over the (OpenLDAP) {{Path|ldap.conf}} file from the server to the client so the clients are aware of the LDAP environment: 
-
-{{RootCmd|scp ldap-server:/etc/openldap/ldap.conf /etc/openldap}}
-
-Finally, configure your clients so that they check the LDAP for system accounts: 
-
-{{Code|/etc/nsswitch.conf|<pre>
-passwd:         files ldap
-group:          files ldap
-shadow:         files ldap
-</pre>
-}}
-
-If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
-
 == Replication ==
 
-=== If you need high availability ===
+=== High availability ===
 
-If your environment requires high availability, then you need to setup replication of changes across multiple LDAP systems. Replication within OpenLDAP is, in this guide, set up using a specific replication account ( <code>ldapreader</code> ) which has read rights on the primary LDAP server and which pulls in changes from the primary LDAP server to the secondary. 
+To setup replication of changes across multiple LDAP systems. Replication within OpenLDAP is, in this guide, set up using a specific replication account ( <code>ldapreader</code> ) which has read rights on the primary LDAP server and which pulls in changes from the primary LDAP server to the secondary. 
 
 This setup is then mirrored, allowing the secondary LDAP server to act as a primary. Thanks to OpenLDAP's internal structure, changes are not re-applied if they are already in the LDAP structure.
 
@@ -412,7 +480,7 @@ This example gives root and John access to read/write/search for everything in t
 
 === Maintaining the directory ===
 
-You can start using the directory to authenticate users in apache/proftpd/qmail/samba. You can manage it with phpldapadmin, diradm, jxplorer, or lat, which provide easy management interfaces. 
+You can start using the directory to authenticate users in apache/proftpd/qmail/samba. You can manage it with [https://www.ldap-account-manager.org/lamcms/ LAM (Ldap Account Manager)], phpldapadmin, diradm, jxplorer, or lat, which provide easy management interfaces.
 
 == Acknowledgements ==
 
