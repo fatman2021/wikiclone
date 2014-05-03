@@ -228,3 +228,40 @@ SELinux users can be given a default clearance set, and the login mappings can r
 Multi-level security is supported in Gentoo through the ''mls'' policy store. The ''mcs'' policy store also supports MLS, but only with a single sensitivity.
 
 == Integration ==
+
+So far for all the features, but how is SELinux integrated in Gentoo then?
+
+First of all, the SELinux support in the applications is enabled through the ''selinux'' USE flag. This flag is not configurable by end users - for that a SELinux profile needs to be enabled.
+
+{{RootCmd|eselect profile list {{!}} grep selinux|output=<pre>
+ [2]   default/linux/amd64/13.0/selinux
+ [12]  hardened/linux/amd64/selinux *
+ [14]  hardened/linux/amd64/no-multilib/selinux
+</pre>}}
+
+But just enabling this profile isn't sufficient as a set of actions need to be taken to convert a system to become a SELinux system. These instructions are available in the [http://www.gentoo.org/proj/en/hardened/selinux/selinux-handbook.xml SELinux handbook] for now, and will be in the [[SELinux/Installation|Installation]] page on the wiki later.
+
+The SELinux policy is provided through the various <code>sec-policy/selinux-*</code> packages, with a {{Package|sec-policy/selinux-base}} package that contains the base policy (a minimal set of policies that cannot be segregated from each other) and a {{Package|sec-policy/selinux-base-policy}} package that contains the minimal set of SELinux policy modules for a Gentoo system.
+
+The SELinux policy itself is compiled in a binary format, whose resulting files are available at {{Path|/usr/share/selinux/*}} and all have an <code>.pp</code> suffix. These binary ''policy packages'' are loaded by the <code>semodule</code> command, similar to how Linux kernel modules are loaded by the <code>insmod</code> command.
+
+For instance, to load the base policy:
+
+{{RootCmd|semodule -b /usr/share/selinux/strict/base.pp}}
+
+To load a SELinux policy module for ''screen'' (which is the SELinux policy module that contains all screen related rules):
+
+{{RootCmd|semodule -i /usr/share/selinux/strict/screen.pp}}
+
+Policy modules can be listed using <code>semodule -l</code> and removed using <code>semodule -r</code>.
+
+Thanks to the USE flag integration, depending policies are automatically loaded when a user installs software that has a policy module for. Applications that have specific SELinux support (such as the core utilities to display SELinux labels) will also build in this support when <code>USE="selinux"</code> is set.
+
+Binary files however are not that interesting. In order to query the currently loaded SELinux policy, we can use the <code>sesearch</code> command. For instance, to see which file types <code>user_t</code> has write access to:
+
+{{Cmd|sesearch -s user_t -c file -p write -A|output=<pre>
+Found 80 semantic av rules:
+  allow user_t mozilla_plugin_tmpfs_t : file { ... write ... };
+  allow user_t user_home_t : file { ... write ... };
+...
+</pre>}}
