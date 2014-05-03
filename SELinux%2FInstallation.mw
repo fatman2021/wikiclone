@@ -270,6 +270,37 @@ Next, install the additional SELinux tools that might be needed in the future to
 
 === Reboot and relabel ===
 
+{{Important|Repeat these steps every time the system is rebooted from a non-SELinux enabled mode into a SELinux enabled mode, as running with a non-SELinux enabled kernel will not update the security attributes of the files created or manipulated during day-to-day activities on the system.}}
+
+First reboot the system so that the installed policies are loaded.
+
+{{RootCmd|shutdown -r now}}
+
+Next relabel all devices and openrc related files. This will apply the correct security contexts (labels) onto the necessary files. We start by bind-mounting {{Path|/}} onto {{Path|/mnt/gentoo}}. This will allow us to relabel the mount points themselves rather than the mounted file systems that are already mounted on the main file system.
+
+{{RootCmd|mkdir /mnt/gentoo
+|mount -o bind / /mnt/gentoo}}
+
+In the following commands, substitute ''strict'' in the next command with ''targeted'' (or other policy store name) depending on the <code>SELINUXTYPE</code> value.
+Also, use {{Path|lib}} instead of {{Path|lib64}} if the system is a 32-bit system.
+
+{{RootCmd|setfiles -r /mnt/gentoo /etc/selinux/strict/contexts/files/file_contexts /mnt/gentoo/dev
+|setfiles -r /mnt/gentoo /etc/selinux/strict/contexts/files/file_contexts /mnt/gentoo/lib64
+|umount /mnt/gentoo}}
+
+If the system uses a swapfile rather than a swap partition, label it accordingly:
+
+{{RootCmd|semanage fcontext -a -t swapfile_t "/swapfile"
+|restorecon /swapfile}}
+
+Now relabel the entire file system. The next command will apply the correct security context onto the files on the entire file system, based on the security context information provided by the SELinux policy modules installed.
+
+{{RootCmd|rlpkg -a -r}}
+
+If a SELinux policy module for a package is installed after that particular package, then <code>rlpkg</code> needs to be run for that package to make sure that the security contexts for its files are set correctly. For instance, if {{Package|sec-policy/selinux-screen}} would be installed manually (due to a missing dependency) after installing {{Package|app-misc/screen}}:
+
+{{RootCmd|rlpkg screen}}
+
 === Enable the selinux_gentoo service ===
 
 === Reboot and set SELinux booleans ===
