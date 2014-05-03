@@ -1,0 +1,66 @@
+SELinux is an access control mechanism, supported through the Linux kernel, that works alongside the Linux regular access controls. But unlike the regular access controls, it is a ''mandatory'' access control system, ensuring that users cannot work around the rules set by the administrator. But before we get into the gritty details of SELinux, let's first see how the regular access controls on a Linux system work. Then, we continue with the SELinux features one by one, explaining most of the models supported by SELinux.
+
+== Regular Linux access control ==
+
+Assume a user wants to execute a script, then the Linux discretionary access control system will check the information of the process that the user is running (which is most likely a shell process) and that of the script itself to decide if the execution can go further.
+
+[[File:Linux_DAC_permissions.png|Schematic overview of a script execution|link=]]
+
+In the example above, Linux will allow the execution, because the permissions on the file (which are <code>-rwxr-xr-x</code>) allow other users to execute it.
+
+The discretionary part comes from the fact that the owner of the file can decide on the access rights to the file. Even if the file wasn't executable at first, the user could easily assign the proper permission set to the file:
+
+{{Cmd|chmod o+x /path/to/script}}
+
+On a multi-user system, a user will be able to share whatever resources he has access to with the other users. All he needs to do is to open up the rights to these resources for other users (or if they all share the same group, to the group owner). And although the example of "sharing" files is a simple one, it can go further than that. In some enterprises, access to particular software on a system is governed through the group membership. Developers might be assigned a ''developer'' group, allowing them access to the system compiler. But once a developer can access the compiler, he can easily also copy all compiler files into his own directory and share that directory with other, non-developer users who can then call the compiler as well.
+
+The discretionary part of the Linux permission system goes further than just users. Services too, such as the Apache web server, can decide how they open up their resources. And although it might not be by design, a malfunctioning service might expose sensitive data to users through this aspect. 
+
+== Mandatory access control ==
+
+With a mandatory access control, the permissions are not governed by the owner of the resource, nor can they be worked around by users. Instead, they are set in stone by the security administrator. In SELinux, this is done through the SELinux policy that is loaded at the start of the system.
+
+[[File:SELinux_MAC_permissions.png|Schematic overview of a script execution under SELinux|link=]]
+
+The interaction shown is still the same, but an ''additional'' set of components is added: the SELinux subsystem (running in the Linux kernel) and the policy.
+
+=== SELinux security subsystem ===
+
+SELinux is a security subsystem that works inside the Linux kernel. It uses Linux Security Modules (LSM) hooks provided by the Linux kernel developers to intercept any call and check if the call is allowed or not. If it is, then the activity can go through. Otherwise, a ''Permission Denied'' error is returned to the system and a denial message is sent to the audit subsystem. This way, administrators can investigate denials (as they usually reflect unwanted behavior being exerted on the system) and rest assured that security rules cannot be worked around.
+
+It is important to understand that the SELinux permission check happens ''after'' the Linux DAC check. In other words, SELinux cannot be used to override access controls on the system. If the regular permission system disallows an activity, then SELinux is not even consulted.
+
+=== Context based approach ===
+
+SELinux uses ''contexts'' to identify resources. In the example, two contexts take part in the activity: 
+# the context of the user process (such as a shell), which is <code>user_u:user_r:user_t</code>
+# the context of the target file, which is <code>system_u:object_r:lib_t</code>
+
+A context in SELinux consists out of 3, sometimes 4 parts:
+# it starts with a SELinux user (which is ''not'' the same as a Linux user),
+# followed by the SELinux role,
+# followed by the SELinux type,
+# and then ''optionally'' followed by a sensitivity
+
+Or, in a regular schematic representation:
+
+[[File:SELinux_context.png|Schematic overview of a SELinux context|link=]]
+
+Each field is used by SELinux for deciding access controls. Most of the rules however are made for the ''SELinux type'' of a context, which is why contexts are often reduced to just the type.
+
+=== SELinux policy ===
+
+The SELinux security subsystem checks any access attempt through the policy. SELinux uses a deny-by-default setup, so it looks for explicit allow statements on the ''SELinux type''. In our case, it looks for an allow rule that allows <code>user_t</code> <code>execute</code> rights on a <code>file</code> resource with the <code>lib_t</code> type assigned to it:
+
+{{Code|Small set of SELinux policy rules|<pre>
+...
+allow user_t bin_t:file { execute };
+allow user_t user_bin_t:file { execute };
+...
+</pre>}}
+
+In our example, it doesn't find such a rule, so it denies the execution attempt.
+
+== Features ==
+
+== Integration ==
