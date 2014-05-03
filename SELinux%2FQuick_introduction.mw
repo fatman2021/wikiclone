@@ -147,6 +147,59 @@ Security administrators will usually design ''least privilege access'' through t
 
 === Used-based access control ===
 
+The first part of a context is the SELinux user. The idea behind the SELinux user is that it has to remain immutable, unlike roles which can be switched on user request.
+
+The SELinux user decides which roles someone is allowed to go to. For instance, the <code>user_u</code> SELinux user specifies that only the <code>user_r</code> role is allowed, whereas the <code>staff_u</code> user specifies that the allowed roles are <code>staff_r</code> and <code>sysadm_r</code>. This can be seen by either <code>seinfo</code> or <code>semanage</code>:
+
+{{RootCmd|seinfo -ustaff_u -x|output=<pre>
+  staff_u
+    roles:
+      staff_r
+      sysadm_r
+</pre>}}
+
+{{RootCmd|semanage user -l|output=<pre>
+SELinux User       SELinux Roles
+
+root               staff_r sysadm_r
+staff_u            staff_r sysadm_r
+sysadm_u           sysadm_r
+system_u           system_r
+user_u             user_r
+</pre>}}
+
+On SELinux systems, Linux users are ''mapped'' to a SELinux user. This mapping is what decides what a user is allowed to do on a system.
+
+Mappings can be seen (and managed) using <code>semanage login</code>:
+
+{{RootCmd|semanage login -l|output=<pre>
+Login Name         SELinux User
+
+__default__        user_u
+swift              staff_u
+root               root
+</pre>}}
+
+This is still part of the role-based access control, but important to know as we can now go to the used-based access control.
+
+On Gentoo, if <code>USE="ubac"</code> is set, User Based Access Control (UBAC) is enabled. This ensures that unprivileged users with a different SELinux user cannot access each others' resources even if the types would allow this. 
+
+Remember the example of one user sharing access to his files to other users? Well, if all users run with the <code>user_t</code> type (which is normal for unprivileged users) and have the files labeled as <code>user_home_t</code> (which is normal for the contents in the user {{Path|/home/*}} locations) then type enforcement would still allow one user to access another users' resources if that user opened up his home directory. After all, SELinux has the following rule to allow users to manage their own files:
+
+{{Code|SELinux rule allowing regular users to manage their files|<pre>
+allow user_t user_home_t:dir { read write execute close open ... };
+allow user_t user_home_t:file { read write execute close open ... };
+</pre>}}
+
+However, we can create SELinux users for each user individually, and map each Linux user to a specific SELinux user. With that in place, the contexts of userA's and userB's files differ:
+
+{{RootCmd|ls -ldZ /home/userA/somefile /home/userB/somefile|output=<pre>
+-rwx------. userA userA  userA_u:object_r:user_home_t /home/userA/somefile
+-rwxrw-rw-. userB userB  userB_u:object_r:user_home_t /home/userB/somefile
+</pre>}}
+
+In the example, ''userB'' has opened up access to his {{Path|/home/userB/somefile}} file (making it world writable). But userA will not be able to access it, as userA will run with the <code>userA_u</code> SELinux user, which is not allowed to access <code>userB_u</code> labeled resources of type <code>user_home_t</code> (UBAC works on a per type basis, not all types are what is called ''ubac-constrained'').
+
 === Multi-level security ===
 
 == Integration ==
