@@ -1,0 +1,143 @@
+Getting a SELinux-powered Gentoo installation doesn't require weird actions. What is needed is to install Gentoo Linux with the correct profile, correct kernel configuration and some file system relabeling. It is seriously recommended to use SELinux together with other hardening improvements (such as PaX / grSecurity).
+
+== Installing Gentoo (Hardened) ==
+
+This document assumes the reader starts with an existing Gentoo Linux system which needs to be converted to Gentoo with SELinux. It is possible to make the right decisions during a Gentoo installation to immediately start with a SELinux system. However, this article is focusing on a ''conversion'' of an existing system as that is the most common approach.
+
+=== Performing a standard installation ===
+
+Install Gentoo Linux according to the Gentoo Handbook installation instructions. It is recommended to use the hardened stage 3 tarballs and hardened-sources kernel instead of the standard ones, but standard stage installations are also supported for SELinux. Perform a full installation to the point that the system is booted into a (primitive) Gentoo base installation. 
+
+=== Switching to python 2 ===
+
+For now, the SELinux management utilities are not all compatible with Python 3 so it is necessary to switch to Python 2 until the packages are updated and fixed. 
+
+First, deploy {{Package|dev-lang/python:2.7}}:
+
+{{Emerge|dev-lang/python:2.7}}
+
+Next, switch the system interpreter to this version.
+
+{{RootCmd|eselect python list|output=<pre>
+Available Python interpreters:
+  [1]   python2.7
+  [2]   python3.3 *
+</pre>}}
+
+{{RootCmd|eselect python set 1}}
+
+=== Choosing a SELinux policy type ===
+
+Gentoo supports four policy types within SELinux: ''strict'', ''targeted'', ''mcs'' and ''mls''.
+
+The differentiation between ''strict'' and ''targeted'' is based upon the ''unconfined'' domain. When loaded, the processes on the system that are not specifically confined within a particular policy module will be part of the unconfined domains whose purpose is to allow most activities by default (rather than deny by default). As a result, processes that run inside unconfined domains have no restrictions apart from those already enforced by standard Linux security. Although running without the unconfined domains is considered more secure, it will also be more challenging for the administrator to make sure the system still functions properly as there are no policy modules for each and every application "out there".
+
+Next to ''targeted'' and ''strict'', administrators can opt for ''mcs'' to allow categorization of resources. This is useful on multi-tenant systems such as web servers, virtualization hosts, ... where multiple processes will be running, most of them in the same security domain, but in different categories. Note though that to take advantage of the additional category support, either the applications themselves (such as the web server or hypervisor tools) need to configure the SELinux categories (so they need to support SELinux) or the administrator will need to script around to start the individual instances with separate categories. Otherwise, ''mcs'' is just the same as ''targeted'' or ''strict''.
+
+Finally, Gentoo also provides ''mls'' to support a true multi-level security system. However, MLS is currently still considered experimental in Gentoo and as such not recommended.
+
+In case of ''mcs'' or ''mls'', the unconfined USE flag needs to be used to enable or disable unconfined domains in these policy types. The ''strict'' policy store does not use the USE flag at all (as it does not support unconfined domains at all) and the ''targeted'' policy store (which uses unconfined domains) requires the USE flag set.
+
+Save the choice for the policy store in {{Path|/etc/portage/make.conf}}. That way, Portage will only install the policy modules for that SELinux policy store. By default, the SELinux profiles enable ''strict'' and ''targeted'' (with strict being the default active type).
+
+{{File|/etc/portage/make.conf|Setting the supported policy stores|<pre>
+POLICY_TYPES="strict"
+</pre>}}
+
+Multiple stores can be defined, although only one store can be active at any point in time. This is handled through the SELinux configuration itself, which is covered later in the installation.
+
+=== Setting file system contexts ===
+
+If the {{Path|/tmp}} location is a tmpfs-mounted file system, then it is necessary to tell the kernel that the root context of this location is <code>tmp_t</code> instead of <code>tmpfs_t</code>, which is the default context assigned to tmpfs-mounted file systems.
+
+To configure the {{Path|/tmp}} mount, edit the {{Path|/etc/fstab}} file:
+
+{{File|/etc/fstab|Setting the rootcontext for the /tmp mount|<pre>
+# For a "targeted" or "strict" policy type:
+tmpfs  /tmp  tmpfs  defaults,noexec,nosuid,rootcontext=system_u:object_r:tmp_t  0 0
+  
+# For an "mls" or "mcs" policy type:
+tmpfs  /tmp  tmpfs  defaults,noexec,nosuid,rootcontext=system_u:object_r:tmp_t:s0  0 0
+</pre>}}
+
+Next, set the next line in {{Path|/etc/fstab}} to configure the context for the {{Path|/run}} location:
+
+{{File|/etc/fstab|Setting the rootcontext for the /run mount|<pre>
+# For a "targeted" or "strict" policy type:
+tmpfs  /run   tmpfs  mode=0755,nosuid,nodev,rootcontext=system_u:object_r:var_run_t  0 0
+  
+# For an "mls" or "mcs" policy type:
+tmpfs  /run   tmpfs  mode=0755,nosuid,nodev,rootcontext=system_u:object_r:var_run_t:s0  0 0
+</pre>}}
+
+=== Change the Gentoo profile ===
+
+Switch the Gentoo profile to the right SELinux profile (for instance, {{Path|hardened/linux/amd64/no-multilib/selinux}}).
+
+
+{{RootCmd|eselect profile list|output=<pre>
+Available profile symlink targets:
+  [1]   default/linux/amd64/13.0
+  [2]   default/linux/amd64/13.0/selinux
+  [3]   default/linux/amd64/13.0/desktop
+  [4]   default/linux/amd64/13.0/desktop/gnome
+  [5]   default/linux/amd64/13.0/desktop/gnome/systemd
+  [6]   default/linux/amd64/13.0/desktop/kde
+  [7]   default/linux/amd64/13.0/desktop/kde/systemd
+  [8]   default/linux/amd64/13.0/developer
+  [9]   default/linux/amd64/13.0/no-multilib
+  [10]  default/linux/amd64/13.0/x32
+  [11]  hardened/linux/amd64  *
+  [12]  hardened/linux/amd64/selinux
+  [13]  hardened/linux/amd64/no-multilib
+  [14]  hardened/linux/amd64/no-multilib/selinux
+  [15]  hardened/linux/amd64/x32
+  [16]  hardened/linux/uclibc/amd64
+</pre>}}
+
+{{RootCmd|eselect profile set 12}}
+
+{{Warning|Do not rebuild the system right now - wait until this is instructed by this document later. Rebuilding the system will pull in SELinux policies which could make the system unreachable if we reboot after it without taking proper countermeasures.}}
+
+Starting from the profile change, Portage will warn after every installation that it was "Unable to set SELinux security labels". This is to be expected, because the tools and capabilities that Portage requires to set the security labels aren't available yet. This warning will vanish the moment the SELinux installation is completed.
+
+Don't update the system yet - a couple of packages need to be installed first in a particular order that Portage isn't aware of.
+
+=== Updating make.conf ===
+
+Take a look at the following USE flags and decide which ones to enable or disable.
+
+{{USEflag|
+|peer_perms+Yes+Yes+The peer_perms capability controls the SELinux policy network peer controls. If set, the access control mechanisms that SELinux uses for network based labelling are consolidated. This setting is recommended as the policy is also updated to reflect this. If not set, the old mechanisms (NetLabel and Labeled IPsec) are used side by side.
+|open_perms+Yes+Yes+The open_perms capability enables the SELinux permission "open" for files and file-related classes. Support for the "open" call was added a bit later than others so support was first made optional. However, the policies have matured sufficiently to have the open permission set.
+|ubac+Yes+Yes+When disabled, the SELinux policy is built without user-based access control.
+|unconfined+No++When set, policy builds (except for the "strict" policy) will include the unconfined module (thus allowing unconfined domains to exist on the system).
+}}
+
+Update the USE variable in {{Path|/etc/portage/make.conf}} or in an appropriate {{Path|/etc/portage/package.use}} location for the {{Package|sec-policy/selinux-base}} package.
+
+=== Manual system changes ===
+
+=== Installing a SELinux kernel ===
+
+=== Update fstab ===
+
+=== Reboot ===
+
+== Configure SELinux ==
+
+=== Installing policies and utilities, part one ===
+
+=== Configuring the SELinux policy ===
+
+=== Installing policies and utilities, part two ===
+
+=== Reboot and relabel ===
+
+=== Enable the selinux_gentoo service ===
+
+=== Reboot and set SELinux booleans ===
+
+=== Define the administrator accounts ===
+
+=== Supporting service administration ===
