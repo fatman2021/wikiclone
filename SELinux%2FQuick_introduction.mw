@@ -267,3 +267,68 @@ Found 80 semantic av rules:
 </pre>}}
 
 == Administration ==
+
+Once a system is SELinux-enabled, some additional administration is needed.
+
+=== Label management ===
+
+The most common administrative set of commands are related to labeling of resources. Remember that for SELinux, everything is managed through the contexts. When problems arise, administrators will need to check and, if necessary, update the context of the resources in order to have everything working again.
+
+The context (label) of a file can be displayed using <code>ls -Z</code>:
+
+{{Cmd|ls -lZ /etc/resolv.conf|output=<pre>
+-r--r--r--. root root  system_u:object_r:net_conf_t  /etc/resolv.conf
+</pre>}}
+
+Contexts can be set explicitly using <code>chcon</code>:
+
+{{RootCmd|chcon -t net_conf_t /etc/resolv.conf}}
+
+However, SELinux utilities have a specific database in which the "correct" labels for all files are stored. This database uses path expressions to match a file path against and to decide what the right context should be. If this database is correctly defined, then a ''relabeling'' operation can help to ''reset'' the context of a file. This can be done using <code>restorecon</code>:
+
+{{RootCmd|restorecon /etc/resolv.conf}}
+
+If all files of a Gentoo package need to be relabeled, <code>rlpkg</code> can be used. For instance, to relabel all files provided by the {{Package|app-misc/screen}} package:
+
+{{RootCmd|rlpkg screen}}
+
+Administrators can query the current file label list using <code>semanage</code>:
+
+{{RootCmd|semanage fcontext -l {{!}} grep resolv|output=<pre>
+/etc/resolv\.conf.*                       regular file     system_u:object_r:net_conf_t
+/usr/libexec/polkit-resolve-exe-helper.*  regular file     system_u:object_r:policykit_resolve_exec_t
+</pre>}}
+
+The file label list can be updated as well. For instance, to have {{Path|/etc/puppet-resolv.conf}} also marked as <code>net_conf_t</code>:
+
+{{RootCmd|semanage fcontext -a -t net_conf_t /etc/puppet-resolv\.conf}}
+
+After updating the database, the file needs to be relabeled to reset its context to the newly defined value:
+
+{{RootCmd|restorecon /etc/puppet-resolv.conf}}
+
+=== User management ===
+
+SELinux users are managed through <code>semanage user</code> whereas Linux user account mappings are managed with <code>semanage login</code>.
+
+For instance, to map the Linux account 'john' to the <code>staff_u</code> SELinux user:
+
+{{RootCmd|semanage login -a -s staff_u john}}
+
+=== Troubleshooting denials ===
+
+When SELinux prevents an access, it will log this in the audit subsystem (or to the system logger if auditing isn't enabled).
+
+To query the audit logs, <code>ausearch</code> can be used:
+
+{{RootCmd|ausearch -m avc -ts recent|output=<pre>
+----
+time->Sat Apr 26 22:06:22 2014
+type=MMAP msg=audit(1398542782.012:19315): fd=24 flags=0x11
+type=SYSCALL msg=audit(1398542782.012:19315): arch=c000003e syscall=9 success=no exit=-13 a0=1000 a1=a0000 a2=7 a3=11 items=0 ppid=15803 pid=15856 auid=4294967295 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=(none) ses=4294967295 comm="edidvbe" exe="/usr/nsh/NSH/nativetool/libexec/platform/linux-2.6-x86/edidvbe" subj=system_u:system_r:unconfined_t:s0 key=(null)
+type=AVC msg=audit(1398542782.012:19315): avc:  denied  { mmap_zero } for  pid=15856 comm="edidvbe" scontext=system_u:system_r:nsh_t:s0 tcontext=system_u:system_r:nsh_t:s0 tclass=memprotect
+</pre>}}
+
+In this example, the <code>nsh_t</code> domain wanted to call ''mmap_zero'' for the ''memprotect'' class but was prevented to do so by SELinux.
+
+==== Adding SELinux policy rules ====
