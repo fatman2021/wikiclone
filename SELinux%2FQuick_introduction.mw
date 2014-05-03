@@ -123,6 +123,28 @@ With such a vast set of possible access vectors, policy development is a large u
 
 === Role-based access control ===
 
+From the ''SELinux type'', we now get into the realm of the ''SELinux role''. Remember the context in our example? It had <code>user_r</code> as the SELinux role in the context of the process that was trying to execute a file.
+
+Roles are like caps that a user can put on. A user is always assigned to a role, but can decide to switch roles (of course if allowed to switch to a role). An unprivileged user might only have access to one role (<code>user_r</code>) whereas an administrator might have access to several roles (<code>staff_r</code> for regular operations, and <code>sysadm_r</code> for system administrative tasks). This is also how roles in organizations are used. There are developer roles, system engineer roles, system administrator roles, it architect roles, database administrator roles, etc.
+
+In SELinux, roles decide which types a process context can be in. The <code>user_r</code> role has the right to have processes run in the <code>user_t</code> type. Types for processes are also called '''domains'''. So the role-based access control decides which ''domains'' a role is allowed to have.
+
+Consider a regular user role (<code>user_r</code>) versus database administrator role (<code>dbadm_r</code>). The regular user will not have access to the backup infrastructure, so the <code>backup_t</code> domain is not allowed for the <code>user_r</code> role. Even if the user would somehow be able to run backup software (say from a USB stick) this software will be running in the user domain (<code>user_t</code>) and not the backup domain (<code>backup_t</code>). And as the user domain is not allowed to access database files directly, the user will not be able to backup or restore data.
+
+Unlike the database administrator, whose <code>dbadm_r</code> role is allowed to access <code>backup_t</code>. The database administrator can therefor execute backup software, which (assuming the policies are all correct) run in the <code>backup_t</code> domain, which is allowed to manage database files. As a result, the database administrator can backup and restore databases.
+
+The set of domains that a role has access to can be requested on a SELinux system through the <code>seinfo</code> command:
+
+{{Cmd|seinfo -ruser_r -x|output=<pre>
+  user_r
+    Types:
+      git_session_t
+      httpd_user_script_t
+      ...
+</pre>}}
+
+Security administrators will usually design ''least privilege access'' through the role-based access controls, and then assign the roles to the users on a need-to-have basis. So privileges are not assigned to users individually (as that doesn't scale well) but to the domains, which are assigned to the roles, and users are assigned one or more roles to perform their duties.
+
 === Used-based access control ===
 
 === Multi-level security ===
