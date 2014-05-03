@@ -202,4 +202,29 @@ In the example, ''userB'' has opened up access to his {{Path|/home/userB/somefil
 
 === Multi-level security ===
 
+The last access control to discuss is the ''multi-level'' security.
+
+In the security world, the sensitivity can be seen as the classification of data. For instance, you can have ''strictly confidential'' data, ''confidential'' data, ''internal'' data and ''public'' data. There usually is a strict order in this classification. Someone who has clearance to read confidential data can read internal and public data as well, but not strictly confidential data. Similarly, someone working on confidential data should not at the same time be allowed to write to internal or public data (as that would lead to information leakage).
+
+This gives an information flow model that is often mentioned as "no read up, no write down". 
+
+In SELinux, this model is supported through the sensitivity of a context. In that case, a user context could look like <code>user_u:user_r:user_t:s0</code> or <code>sysadm_u:sysadm_r:sysadm_t:s0-s0:c0.c1024</code>. Note however that the added part is just a single set, so <code>s0-s0:c0.c1024</code> is ''one'' added field to the context.
+
+This added field is the sensitivity, and contains one, sometimes two parts.
+# The first part is the sensitivity level, which is an integer representation
+# The second part is the category set, which are integers as well
+
+The sensitivity level represents the classification. For instance, <code>s0</code> is public data, <code>s1</code> internal, <code>s2</code> confidential and <code>s3</code> strictly confidential. It is up to the security administrator to decide how many layers he wants.
+
+The category represents a set of integers which can be assigned to resources. Each integer is some sort of "tag" on a resource, and can be used to differentiate classes of data. One could use a category for every department in an organization, or a category for every company on a multi-tenant system. A few examples of category sets are:
+- <code>c0</code> meaning category 0
+- <code>c0,c4</code> meaning categories 0 and 4
+- <code>c0.c4</code> meaning categories 0 up to 4 (so 0, 1, 2, 3 and 4)
+
+The clearance shows what a domain is allowed to access. A clearance of <code>s0-s1:c0,c4.c8</code> means that the process runs in the sensitivity level <code>s0</code> and is allowed to access resources with sensitivity up to <code>s1</code> and categories 0 and 4 to 8. A resource with a subset of categories assigned is also accessible, but a resource that has another category that is not part of the clearance will not be accessible by that domain.
+
+SELinux users can be given a default clearance set, and the login mappings can reduce the clearance of users even further.
+
+Multi-level security is supported in Gentoo through the ''mls'' policy store. The ''mcs'' policy store also supports MLS, but only with a single sensitivity.
+
 == Integration ==
