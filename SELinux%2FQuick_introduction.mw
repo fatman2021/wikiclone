@@ -61,6 +61,70 @@ allow user_t user_bin_t:file { execute };
 
 In our example, it doesn't find such a rule, so it denies the execution attempt.
 
-== Features ==
+== Access controls ==
+
+The SELinux subsystem has various access controls in place. One of them we roughly saw, which is called the ''type enforcement''. Next to this, SELinux also supports ''role-based access control'' and ''user-based access control''. The last access control system we'll briefly cover is the ''multi-level security'' model.
+
+=== Type enforcement ===
+
+The ''type enforcement'' access control system focuses on the ''SELinux type'' within a SELinux context. It is also what most of the SELinux rules are written for and covers the vast majority of SELinux rules in a SELinux policy.
+
+The access check that SELinux performs as part of the type enforcement is based on the '''access vector''' built up from the attempt. Such an access vector contains
+- the source context (such as <code>user_t</code>)
+- the target context (such as <code>lib_t</code>)
+- the class of the target (such as <code>file</code>)
+- the activity that is invoked (such as <code>execute</code>)
+
+If an allow statement exists for the entire access vector, then the activity is allowed. If not, it is denied. The allow statement for our example would look like so:
+
+{{Code|Allow executing lib_t for user_t|<pre>
+allow user_t lib_t : file { execute };
+</pre>}}
+
+The source context type and target context type are defined by the policy developer (or security administrator). On an average SELinux system several hundreds, if not thousands of types exist. These types are declared every time differentiation is needed on the access. For instance, policy developers noticed that there were cases where a shell script only needed to call the shell interpreter itself (such as <code>bash</code>) but no other binaries. If the shell interpreter was labeled as <code>bin_t</code> then these shell scripts had access to all binaries labeled <code>bin_t</code>. So the policy developers created a second type, <code>shell_exec_t</code>, so that shell scripts only needed access to that type and were prevented from executing other, generic binaries.
+
+{{Note|Labeling is the action of putting a context on a resource. The context of a file is often called the label of that file. A relabeling operation means that the label of the files is reset to the right value.}}
+
+Next to the types, SELinux also supports a large set of classes. This allows SELinux to differentiate accesses based on the class of a resource. Privileges on a <code>lib_t</code> file versus those of a <code>lib_t</code> socket file or directory are completely separate for SELinux. This is unlike the discretionary access controls on a Linux system.
+
+The set of classes can be seen on a SELinux enabled system like so:
+
+{{RootCmd|ls /sys/fs/selinux/class|output=<pre>
+appletalk_socket  db_procedure  file            netlink_audit_socket           node           socket              x_cursor     x_screen
+association       db_schema     filesystem      netlink_dnrt_socket            nscd           sock_file           x_device     x_selection
+blk_file          db_sequence   ipc             netlink_firewall_socket        packet         system              x_drawable   x_server
+capability        db_table      kernel_service  netlink_ip6fw_socket           packet_socket  tcp_socket          x_event      x_synthetic_event
+capability2       db_tuple      key             netlink_kobject_uevent_socket  passwd         tun_socket          x_extension
+chr_file          dbus          key_socket      netlink_nflog_socket           peer           udp_socket          x_font
+context           db_view       lnk_file        netlink_route_socket           process        unix_dgram_socket   x_gc
+db_blob           dccp_socket   memprotect      netlink_selinux_socket         rawip_socket   unix_stream_socket  x_keyboard
+db_column         dir           msg             netlink_socket                 security       x_application_data  x_pointer
+db_database       fd            msgq            netlink_tcpdiag_socket         sem            x_client            x_property
+db_language       fifo_file     netif           netlink_xfrm_socket            shm            x_colormap          x_resource
+</pre>}}
+
+Each class has its own set of supported privileges. The supported permissions of a regular file for instance:
+
+{{RootCmd|ls /sys/fs/selinux/class/file/perms/|output=<pre>
+append      execmod           getattr  lock     quotaon      relabelto  swapon
+create      execute           ioctl    mounton  read         rename     unlink
+entrypoint  execute_no_trans  link     open     relabelfrom  setattr    write
+</pre>}}
+
+The supported permissions for a TCP socket:
+
+{{RootCmd|ls /sys/fs/selinux/class/tcp_socket/perms/|output=<pre>
+accept      bind       create   ioctl   name_bind     node_bind  recv_msg     send_msg  setopt
+acceptfrom  connect    getattr  listen  name_connect  read       relabelfrom  sendto    shutdown
+append      connectto  getopt   lock    newconn       recvfrom   relabelto    setattr   write
+</pre>}}
+
+With such a vast set of possible access vectors, policy development is a large undertaking. Luckily, distributions such as Gentoo Linux come with a complete set of default policies to use, with thanks to the [http://oss.tresys.com/projects/refpolicy reference policy] project which manages a base policy for distributions to work with.
+
+=== Role-based access control ===
+
+=== Used-based access control ===
+
+=== Multi-level security ===
 
 == Integration ==
