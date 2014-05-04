@@ -20,6 +20,25 @@ type=AVC msg=audit(1399135333.470:115): avc:  denied  { block_suspend } for  pid
 
 The most important part of the denial is the permission (between <code>{ ... }</code>), class (as referenced by the <code>tclass=</code> parameter) and contexts (<code>scontext</code> for the source context, and <code>tcontext</code> for the target context).
 
+=== Reasons for denials ===
+
+A denial is due to the SELinux policy. However, it is not always due to a missing access vector rule. For instance, the following denial might occur, even when a proper access vector rule is available for it:
+
+{{Code|AVC denial for accessing user content|<pre>
+type=AVC msg=audit(1399205508.252:603): avc:  denied  { getattr } for  pid=751 comm="pool" path="/home/swift" dev="dm-0" ino=1048584 scontext=oper_u:user_r:user_t tcontext=staff_u:object_r:user_home_dir_t tclass=dir
+</pre>}}
+
+{{RootCmd|sesearch -s user_t -t user_home_dir_t -c dir -p getattr -Ad|output=<pre>
+Found 1 semantic av rules:
+   allow user_t user_home_dir_t : dir { ioctl read write create getattr setattr lock relabelfrom relabelto unlink link rename add_name remove_name reparent search rmdir open } ;
+</pre>}}
+
+In the above case, the denial came from a feature called ''User-Based Access Control'', where resources of one [[SELinux/Users_and_logins|SELinux user]] (<code>staff_u</code>) are not accessible for processes of another SELinux user (<code>oper_u</code>).
+
+Such a feature is implemented through SELinux constraints, which not only focuses on the types in a context (<code>user_t</code> and <code>user_home_dir_t</code>) but also the relation of SELinux users and SELinux roles.
+
+In the vast majority of cases though, denials are due to missing access vector rules.
+
 == Audit logs ==
 
 === Listing recent AVC denials ===
