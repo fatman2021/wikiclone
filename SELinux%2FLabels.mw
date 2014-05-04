@@ -16,11 +16,84 @@ On a SELinux system, everything needs to have a context / label assigned. Even r
 
 == Managing file labels ==
 
+Although file labels are set as extended attributes in most cases, managing file labels goes further than just ensuring that that particular extended attribute is correctly set. The SELinux user space maintains a database of file path expressions together with the file context to be assigned to these resources. This allows administrators to verify if a file context is correct or not, and to reset the context of a file.
+
 === Listing file labels ===
+
+The Linux core utilities support displaying of SELinux labels.
+
+For instance, using <code>ls -Z</code> (the <code>-Z</code> option is often used for displaying SELinux contexts):
+
+{{Cmd|ls -lZ /etc/resolv.conf|output=<pre>
+-rw-r--r--. 1 root root system_u:object_r:net_conf_t 68 May  4 18:14 /etc/resolv.conf
+</pre>}}
+
+Similarly, the <code>stat</code> command displays the label as well, here on an MLS-enabled system:
+
+{{Cmd|stat /etc/resolv.conf|output=<pre>
+  File: '/etc/resolv.conf'
+  Size: 149             Blocks: 16         IO Block: 4096   regular file
+Device: fb02h/64258d    Inode: 394204      Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Context: system_u:object_r:net_conf_t:s0
+Access: 2013-01-13 13:24:01.402000000 +0100
+Modify: 2014-05-04 19:43:03.563000000 +0200
+Change: 2014-05-04 19:43:03.573000000 +0200
+</pre>}}
+
+The context of a file can also be directly read through the <code>getfattr</code> command, used to obtain a file's extended attributes:
+
+{{Cmd|getfattr -m . -d /etc/resolv.conf|output=<pre>
+getfattr: Removing leading '/' from absolute path names
+# file: etc/resolv.conf
+security.evm=0sAoTjX3aOeDQdWxbOfOUV930tWoDA
+security.ima=0sAYC508o0Lz4iAA9ucVAVsvK02tV/
+security.selinux="system_u:object_r:net_conf_t:s0"
+</pre>}}
+
+In the above output, next to the [[Integrity|integrity]] related extended attributes, the <code>security.selinux</code> attribute is shown, which contains the SELinux context of the file.
+
+=== Relabeling files ===
+
+Relabeling files means that the context of one or more files is ''reset'' towards the definition stored by the SELinux user space utilities.
+
+Such a relabeling operation is usually done through the <code>setfiles</code> or <code>restorecon</code> command:
+
+{{RootCmd|restorecon /etc/resolv.conf}}
+
+To relabel the entire file system, use <code>rlpkg</code> (which is a Gentoo-specific tool):
+
+{{RootCmd|rlpkg -a -r}}
+
+The <code>rlpkg</code> application also supports relabeling all files provided by a single Gentoo package. For instance, to relabel all files provided by the <code>firefox-bin</code> package:
+
+{{RootCmd|rlpkg firefox-bin}}
 
 === Temporarily modifying file labels ===
 
+To set a file context, the <code>chcon</code> command can be used:
+
+{{RootCmd|chcon -t net_conf_t /etc/puppet-resolv.conf}}
+
+However, the <code>chcon</code> tool does not update the SELinux user space definition list. As a result, when the administrator relabels a file, it will be reset to the original value.
+
 === Permanently modifying file labels ===
+
+To ensure that a new file context remains, even after a relabeling operation, the administrator needs to update the SELinux user space definition list first.
+
+The definition list uses PCRE-based regular expressions and can be managed through <code>semanage fcontext</code>.
+
+For instance, to add {{Path|/etc/puppet-resolv.conf}} to the list and assign it the <code>net_conf_t</code> type:
+
+{{RootCmd|semanage fcontext -a -t net_conf_t "/etc/puppet-resolv\.conf"}}
+
+The use of PCRE expressions allows for a denser set of rules that matches entire subdirectories easily:
+
+{{RootCmd|semanage fcontext -a -t bin_t "/usr/lib/portage/bin(/.*)?"}}
+
+After updating the definition list, the context of the file(s) isn't set yet. For this, the files need to be relabeled:
+
+{{RootCmd|restorecon -R /etc/puppet-resolv.conf /usr/lib/portage/bin}}
 
 == Managing TCP and UDP port labels ==
 
