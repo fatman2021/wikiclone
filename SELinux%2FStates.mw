@@ -1,0 +1,90 @@
+SELinux can be easily disabled or put in a more permissive mode. For many administrators, disabling SELinux is used as a fast way of working around permission failures on a system. However, disabling SELinux is similar to removing a firewall between systems because it was preventing a network connection. Sure, the access is now allowed, but administrators ought to look at the reason why the failure occurred and resolve that, rather than removing the security measure itself.
+
+== Introduction ==
+
+SELinux can be disabled or enabled. When enabled, it can be in a permissive mode or enforcing mode. When running in enforcing mode, it is possible to mark specific domains as permissive.
+
+=== Enabled or not ===
+
+When the Linux kernel has SELinux support enabled (which is of course a prerequisite for having an SELinux-enabled system) the SELinux subsystem starts in a permissive mode (unless the <code>selinux=0</code> kernel boot parameter is used). The Linux init system then locates the SELinux policy and SELinux configuration file ({{Path|/etc/selinux/config}}). If the configuration has <code>SELINUX=disabled</code> then SELinux will not do anything further and has the system boot without SELinux support.
+
+Assuming <code>SELINUX=permissive</code> or <code>SELINUX=enforcing</code>, then the SELinux policy is loaded. If no policy can be found, but <code>SELINUX=enforcing</code> is set, then the system will freeze; otherwise the system will continue to boot without SELinux (as no policy could be found). In most cases though, the init system will successfully load the SELinux policy and the system will boot further with SELinux enabled.
+
+=== Permissive or enforcing ===
+
+When SELinux is configured to start in permissive mode (or through the <code>enforcing=0</code> kernel parameter) then SELinux is enabled and will log every action that it ''would'' deny. However, as the name implies, SELinux will not actually enforce any policy decisions. 
+
+That doesn't mean that the system will behave as if there is no SELinux though. Some applications are ''SELinux-aware'', meaning that their code checks SELinux information (policies, but also SELinux state) and alters its own behavior based on this information. If such a SELinux-aware application does not properly check the mode (permissive or not) then it might deny any action that the policy says shouldn't occur - even if SELinux is running in permissive mode.
+
+In enforcing mode of course, the SELinux security subsystem will enforce policy decisions.
+
+=== Permissive domains ===
+
+The SELinux policy supports marking domains as permissive. In this case, the mentioned domain runs in a permissive mode (SELinux will not enforce policy decisions for any action taken by that domain) while the rest of the system is in enforcing mode.
+
+{{Note|Other distributions often use permissive domains as a default approach for newly defined SELinux policies. In Gentoo however, no domains are marked as permissive by default.}}
+
+== Managing SELinux state ==
+
+=== Disabling SELinux ===
+
+To disable SELinux, it is sufficient to edit {{Path|/etc/selinux/config}} and set <code>SELINUX=disabled</code>.
+
+{{File|/etc/selinux/config|Disabling SELinux|<pre>
+SELINUX=disabled
+</pre>}}
+
+Then reboot the system.
+
+To disable SELinux during a single boot, it is also possible to use the <code>selinux=0</code> kernel boot parameter.
+
+{{Warn|Booting a system without SELinux supports also means that the file labels are not maintained. Newly created files will not have any label associated with them. When the system boots back with SELinux support, the entire file system will need to be relabeled.}}
+
+=== Switching permissive and enforcing mode ===
+
+To mark SELinux in permissive or enforcing mode, edit {{Path|/etc/selinux/config}} and set <code>SELINUX</code> to ''permissive'' or ''enforcing'' depending on the requirement.
+
+{{File|/etc/selinux/config|Booting in enforcing mode|<pre>
+SELINUX=enforcing
+</pre>}}
+
+Then reboot the system.
+
+It is also possible to switch between permissive and enforcing mode directly. For this, the <code>setenforce</code> command can be used.
+
+For instance, to have SELinux run in permissive mode:
+
+{{RootCmd|setenforce 0}}
+
+=== Querying current SELinux state ===
+
+The current state of SELinux can be obtained through the <code>sestatus</code> command:
+
+{{RootCmd|sestatus {{!}} grep mode|output=<pre>
+Current mode:               enforcing
+</pre>}}
+
+=== Listing permissive domains ===
+
+With <code>semanage</code>, the current list of permissive domains can be queried:
+
+{{RootCmd|semanage permissive -l|output=<pre>
+Builtin Permissive Types 
+  
+  
+Customized Permissive Types
+  
+portage_t
+</pre>}}
+
+=== Marking a domain as permissive ===
+
+To mark a domain as permissive domain, use <code>semanage</code>:
+
+{{RootCmd|semanage permissive -a portage_t}}
+
+=== Removing the permissive state of a domain ===
+
+To remove a permissive state from a domain, use <code>semanage</code>:
+
+{{RootCmd|semanage permissive -d portage_t}}
