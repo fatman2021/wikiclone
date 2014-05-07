@@ -233,20 +233,28 @@ If your root partition is located on a logical volume, you need to include the L
 Now you can enable your LVM root partition in {{Highlight|color=darkgreen|'''/init'''}}. This example assumes that your volume group is called '''VG''', and your root volume is called '''Root'''. Replace them with the names you chose when creating the volume.
 
 {{File|/usr/src/initramfs/init||<pre>
-lvm vgscan --mknodes
+lvm vgscan --mknodes # creates /dev/mapper/control
 lvm lvchange -a ly VG/Root
+lvm vgscan --mknodes # creates /dev/mapper/VG-Root and /dev/VG/root
 </pre>}}
 
 Your root partition may then be called {{Path|/dev/VG/Root}} or {{Path|/dev/mapper/VG-Root}}.
 
-Only if you are not using udev in your initramfs, you need to include '''/etc/lvm/lvm.conf''' and disable the ''udev_rules'' option so LVM will create '''/dev/lvm''' and its nodes by itself.
-{{File|/usr/src/initramfs/etc/lvm/lvm.conf||<pre>
-    # Set to 0 to disable the udev rules installed by LVM2 (if built with
-    # --enable-udev_rules). LVM2 will then manage the /dev nodes and symlinks
-    # for active logical volumes directly itself.
-    # N.B. Manual intervention may be required if this setting is changed
-    # while any logical volumes are active.
+{{Note|Calling {{Highlight|'''vgscan'''}} is optional, but recommended, just in case device nodes are missing.}}
+
+Recent versions of {{Package|sys-fs/lvm2}} rely on {{Package|sys-fs/udev}} to create the named LV device nodes, but there is no udev in a simple ''initramfs''. You have the following choices:
+
+* use {{Highlight|'''vgscan'''}} as shown above (simplest solution)
+* [[#Mount_by_UUID_or_LABEL|Mount by UUID or LABEL]] instead of using {{Path|/dev/VG/Root}}. It works because {{Highlight|'''findfs'''}} is happy with just {{Path|/dev/dm-42}}
+* build a LVM binary with the '''-udev''' USE-Flag (specifically for your ''initramfs'' only!)
+* disable udev dependency by including a minimal {{Path|/etc/lvm/lvm.conf}} in your ''initramfs'':
+  {{File|/usr/src/initramfs/etc/lvm/lvm.conf||<pre>
+activation {
+    # Set to 0 to disable udev synchronisation (if compiled into the binaries).
+    udev_sync = 0
+    # Set to 0 to disable the udev rules installed by LVM2
     udev_rules = 0
+}
 </pre>}}
 
 === Software RAID ===
