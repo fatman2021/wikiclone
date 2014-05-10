@@ -1,0 +1,27 @@
+User-based access control (UBAC) is not a generic security concept by itself. However, in the SELinux context, UBAC is an addition to the type enforcement and role-based access control meant to support additional mandatory segregation that cannot be enforced otherwise.
+
+== Problem ==
+
+As SELinux is primarily a [[SELinux/Type_enforcement|type enforcement]] implementation, access controls on user basis fall back to the regular Linux DAC permissions.
+
+For instance, having read access to a user file is provided by the following SELinux rule:
+
+{{Code|Users can read home files|<pre>
+allow user_t user_home_t:file read_file_perms;
+</pre>}}
+
+Sadly, this doesn't take into account that there are different users. Regular users run in the <code>user_t</code> domain so are allowed to read files with the <code>user_home_t</code> label assigned, which is done regardless of the end user.
+
+This is an issue as the idea in [http://en.wikipedia.org/wiki/Mandatory_access_control mandatory access control] is that it wouldn't be possible to override access rights set in the MAC system. Although the above perfectly fits this - the MAC actually allows something administrators might not want.
+
+== Using the SELinux user bit ==
+
+As a solution, SELinux supports more than just type enforcement. Additional constraints can be set based on the role and SELinux user part.
+
+One of the constraints that is enabled (optionally) is the UBAC constraint, which roughly translates to "Interaction between a domain and a resource is only allowed if the SELinux user of both match, one of them is the <code>system_u</code> SELinux user or one of them does not have the <code>ubac_constrained_type</code> attribute set."
+
+In our example, this means that we are able now to restrict access between users ''if'' the users are separate SELinux users. So even though two users both assigned the <code>user_u</code> SELinux user can, policy-wise, still read each others' resources (if allowed by the DAC rules of course), separate SELinux users cannot do this anymore.
+
+And as creating SELinux users is a matter of system administration, it is possible to create separate SELinux users for every Linux user. However, know that UBAC cannot be exempted on a user-basis. Instead, exemption is done based on user domain level. For instance, the <code>sysadm_t</code> domain has exemptions for file, file descriptor and processes.
+
+[[Category:SELinux]]
