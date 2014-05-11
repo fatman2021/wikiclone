@@ -220,7 +220,29 @@ mount -o ro $(findfs UUID=845b2454-42a3-19ef-6ec5-238a358c365b) /mnt/root
 mount -o ro $(findfs LABEL=myroot) /mnt/root
 </pre>}}
 
-Doing it this way is simple, but it means that your UUID or LABEL is hardcoded in {{Highlight|color=darkgreen|'''/init'''}}. If you want to pass it as a kernel parameter instead, you will have to parse {{Path|/proc/cmdline}}.
+Doing it this way is simple, but it means that your UUID or LABEL is hardcoded in {{Highlight|color=darkgreen|'''/init'''}}. Alternatively, you can also use [[#Kernel_Parameters|Kernel Parameters]].
+
+==== Kernel Parameters ====
+
+If you want to use kernel parameters instead of hardcoding device names or UUIDs, you will have to parse {{Path|/proc/cmdline}}. There are many ways to do so, the following method is just an example to give you the general idea. It uses string manipulation of the shell and only supports <code>key=value</code> parameters. Add the following function to your {{Highlight|color=darkgreen|'''/init'''}} and call it whenever you need a kernel parameter.
+
+{{File|/usr/src/initramfs/init||<pre>
+cmdline() {
+    local value
+    value=" $(cat /proc/cmdline) "
+    value="${value##* $1=}"
+    value="${value%% *}"
+    [ "$value" != "" ] && echo "$value"
+}
+</pre>}}
+
+The function is called with the name of the kernel parameter you are interested in. In the example below, it uses the root parameter to mount the root partition.
+
+{{File|/usr/src/initramfs/init||<pre>
+mount -o ro $(findfs $(cmdline root)) /mnt/root
+</pre>}}
+
+It works for both <code>root=/dev/sda1</code> and <code>root=UUID=845b2454</code> but fails when the parameter is missing.
 
 === LVM ===
 
