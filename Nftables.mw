@@ -6,6 +6,35 @@
 }}
 '''nftables''' is the successor to [[iptables]]. It replaces the existing iptables, ip6tables, arptables and ebtables framework. It uses a new userspace utility called nft and also provides a compatibility layer for the ip(6)tables and framework.
 
+==Introduction==
+As with the iptables framework, nftables is build upon rules which specify the actions. These rules are attached to chains. A chain can contain a collection of rules and is registered into the netfilter hooks. Chains are stored inside tables. A table is specific for one of the layer 3 protocols. One of the main differences with iptables is that there are no predefined tables and chains anymore.
+
+===Tables===
+A table is nothing more than a container for your chains. With nftables there are no predefined tables (filter, raw, mangle...) anymore. You are free to recreate the iptables-like structure, but anything might do.
+Currently there are 4 different kinds of tables:
+* ip
+* ip6
+* arp 
+* bridge
+There is a so-called inet table scheduled for the 3.14 series kernel that should be a hybrid ipv4 and ipv6 table
+
+===Chains===
+Chains are used to group together rules. As with the tables, nftables does not have any predefined chains. Chains are grouped in base and non-base types. Base chains are registered in one of the netfilter hooks. A base chain has a hook its registered with, a type and a priority.  non-base chains are not attached to a hook and they don't see any traffic by default. They can be used to arrange a rule-set in a tree of chains.
+There are currently three types of chains:
+* '''filter''': for filtering packets
+* '''route''': for reroutig packets
+* '''nat''': for performing Network Address Translation. Only the first packet of a flow hits this chain, making it impossible to use it for filtering.
+The hooks that can be used are:
+* '''prerouting''': This is before the routing decision, all packets entering the machine hits this chain
+* '''input''': All packets for the local system hits this hook
+* '''forward''': Packets not for the local system, those that need to be forwarded hits this hook
+* '''output''': Packets that originate from the local system pass this hook
+* '''postrouting''': This hook is after the routing decision, all packets leaving the machine hits this chain
+
+===Rules===
+Rules specify which action has to be taken for which packets. Rules are attached to chains. Each rule can has a conditional to match packets with and one or multiple actions when matching. Main differences with iptables is that it is possible to specify multiple actions and that by default counters are off. It must be specified explicitly in rules if you want packet- and byte-counters for a rule.
+Each rule has a unique handle number by which it can be distingished.
+
 == Install ==
 === Kernel ===
 According to [https://forums.gentoo.org/viewtopic-p-7505164.html#7505164 this] forum post these kernel options must be set.
@@ -40,6 +69,61 @@ According to [https://forums.gentoo.org/viewtopic-p-7505164.html#7505164 this] f
 ===Software===
 install {{Package|net-firewall/nftables}}
 
+==Usage==
+All nftable commands are done with the nft ultility from {{Package|net-firewall/nftables}}.
+===Tables===
+====Creating tables====
+The following command adds a table called filter for the ip(v4) layer
+{{RootCmd|nft add table ip filter}}
+Likewise a table for arp can be created with
+{{RootCmd|nft add table arp filter}}
+{{Note|The name "filter" used here is completly arbitrary. It could have any name}}
+====Listing tables====
+The following command lists all tables for the ip(v4) layer
+{{RootCmd|nft list tables ip|output=<pre>
+table filter
+</pre>}}
+The contents of the table filter can be listed with:
+{{RootCmd|nft list table ip filter|output=<pre>
+table ip filter {
+}
+</pre>}}
+====Deleting tables====
+The following command deletes the table called filter for the ip(v4) layer:
+{{RootCmd|nft delete table ip filter}}
+
+===chains===
+====Adding chains====
+The following command adds a chain called input to the ip filter table and registered to the input hook with priority 0. It is of the type filter.
+{{RootCmd|nft add chain ip filter input { type filter hook input priority 0 \; }}}
+{{Note|If You're running this command from Bash you need to escape the semicolon}}
+A non-base chain can be added by not specifying the chain configurations between the curly braces.
+
+====Removing chains====
+The following command deletes the chain called input
+{{RootCmd|nft delete chain ip filter input}}
+
+===rules===
+====Adding rules====
+The following command adds a rule to the chain called input, on the ip filter table, dropping all traffic to port 80:
+{{RootCmd|nft add rule ip filter input tcp dport 80 drop}}
+
+====Deleting Rules====
+To delete a rule, you first need to get the handle number of the rule. This can be done by using the -a flag on nft:
+{{RootCmd|nft  rule ip filter input tcp dport 80 drop|output=<pre>
+table ip filter {
+        chain input {
+                 type filter hook input priority 0;
+                 tcp dport http drop # handle 2
+        }
+}
+</pre>}}
+It is then possible to delete the rule with:
+{{RootCmd|nft delete rule ip filter input handle 2}}
+
+===atomic rule replacement===
 == External Resources ==
 * https://wiki.archlinux.org/index.php/Nftables
 * http://wiki.nftables.org/wiki-nftables/index.php/Main_Page
+
+[[Category:Server_and_Security]]
