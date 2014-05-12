@@ -1,0 +1,81 @@
+SELinux booleans are configurable settings, like sysctls, which enable or disable additional policy controls. Unlike sysctls though, booleans can only be enabled (on) or disabled (off).
+
+== Introduction ==
+
+As a SELinux policy defines the acceptable behavior of the processes on a system, having a single, static policy would make it almost impossible to have a single policy set that is usable for the majority of systems. Some systems might want to have the web server be able to access a database, while others don't. Considering all possible use cases this would result in a few hundreds of thousands of policies.
+
+=== Toggling code on or off ===
+
+To support a more flexible policy management approach, ''SELinux booleans'' came to live. Administrators can set particular booleans through commands such as <code>setsebool</code> or <code>semanage boolean</code> to enable or disable SELinux policies.
+
+In the SELinux policy code, a boolean is called a ''tunable'' and is managing additional SELinux policy rules like so:
+
+{{File|ssh.te|Using the use_nfs_home_dirs boolean|<pre>
+tunable_policy(`use_nfs_home_dirs',`
+        fs_manage_nfs_dirs(ssh_t)
+        fs_manage_nfs_files(ssh_t)
+')
+</pre>}}
+
+In this example, two policy macros (which are interfaces that group one or more SELinux policy rules) are enabled when the <code>use_nfs_home_dirs</code> boolean is set.
+
+An administrator who enables NFS home directories on his systems will need to set <code>use_nfs_home_dirs</code> to ''on''.
+
+=== Permanently storing boolean values ===
+
+When an administrator enables or disables a SELinux boolean, this can be done just during the session or permanently.
+
+If the policy setting is not persisted, then the policy changes are not persisted and upon the next system boot the previous configuration is used again. This allows administrators to either temporarily enable policy settings (and also disable it later on) or try out policy changes that have the potential of rendering the system unusable - at which a reboot fixes things again.
+
+== Managing booleans ==
+
+=== Listing booleans ===
+
+The list of currently defined booleans can be obtained through <code>getsebool</code>.
+
+{{RootCmd|getsebool -a|output=<pre>
+allow_execheap --> off
+allow_execmem --> off
+allow_execmod --> off
+...
+</pre>}}
+
+The same can be done using <code>semanage boolean</code>, which also displays some additional information about each boolean.
+
+{{RootCmd|semanage boolean -l|output=<pre>
+SELinux boolean                State  Default Description
+  
+xdm_sysadm_login               (off  ,  off)  Allow xdm logins as sysadm
+chromium_read_generic_user_content (on   ,   on)  Allow chromium to read generic user content (i.e. content that is not specific to an application).
+...
+</pre>}}
+
+=== Getting individual boolean information ===
+
+To get information about an individual boolean, use <code>getsebool</code>.
+
+{{RootCmd|getsebool allow_execheap|output=<pre>
+allow_execheap --> off
+</pre>}}
+
+Of course, one can also <code>grep</code> the results from <code>semanage boolean</code>:
+
+{{RootCmd|semanage boolean -l {{!}} grep allow_execheap|output=<pre>
+allow_execheap                 (off  ,  off)  Allow unconfined executables to make their heap memory executable.  Doing this is a really bad idea. Probably indicates a badly coded executable, but could indicate an attack. This executable should be reported in bugzilla
+</pre>}}
+
+=== Toggling booleans ===
+
+To set a boolean, the <code>setsebool</code> command can be used.
+
+{{RootCmd|setsebool user_dmesg on}}
+
+This will however not persist the setting. To persist it, add the <code>-P</code> argument.
+
+{{RootCmd|setsebool -P user_dmesg on}}
+
+Similarly, <code>semanage boolean</code> can be used (which also persist the change):
+
+{{RootCmd|semanage boolean -m --on user_dmesg}}
+
+[[Category:SELinux]]
