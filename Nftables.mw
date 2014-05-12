@@ -11,12 +11,12 @@ As with the iptables framework, nftables is build upon rules which specify the a
 
 ===Tables===
 A table is nothing more than a container for your chains. With nftables there are no predefined tables (filter, raw, mangle...) anymore. You are free to recreate the iptables-like structure, but anything might do.
-Currently there are 4 different kinds of tables:
+Currently there are 4 different families of tables:
 * ip
 * ip6
 * arp 
 * bridge
-There is a so-called inet table scheduled for the 3.14 series kernel that should be a hybrid ipv4 and ipv6 table
+There is a so-called inet table scheduled for the 3.14 series kernel that should be a hybrid ipv4 and ipv6 table. The default table family is ip
 
 ===Chains===
 Chains are used to group together rules. As with the tables, nftables does not have any predefined chains. Chains are grouped in base and non-base types. Base chains are registered in one of the netfilter hooks. A base chain has a hook its registered with, a type and a priority.  non-base chains are not attached to a hook and they don't see any traffic by default. They can be used to arrange a rule-set in a tree of chains.
@@ -30,10 +30,294 @@ The hooks that can be used are:
 * '''forward''': Packets not for the local system, those that need to be forwarded hits this hook
 * '''output''': Packets that originate from the local system pass this hook
 * '''postrouting''': This hook is after the routing decision, all packets leaving the machine hits this chain
+{{Note|The ARP address family only supports the input and output hook}}
+{{Note|The bridge address family only seems to supports the input, forward and output hook}}
 
 ===Rules===
-Rules specify which action has to be taken for which packets. Rules are attached to chains. Each rule can has a conditional to match packets with and one or multiple actions when matching. Main differences with iptables is that it is possible to specify multiple actions and that by default counters are off. It must be specified explicitly in rules if you want packet- and byte-counters for a rule.
+Rules specify which action has to be taken for which packets. Rules are attached to chains. Each rule can has a expression to match packets with and one or multiple actions when matching. Main differences with iptables is that it is possible to specify multiple actions and that by default counters are off. It must be specified explicitly in rules if you want packet- and byte-counters for a rule.
 Each rule has a unique handle number by which it can be distingished.
+The following matches are available:
+* '''ip''': IP protocol
+* '''ip6''': IPv6 protocol
+* '''tcp''': TCP protocol
+* '''udp''': UDP protocol
+* '''udplite''': UDP-lite protocol
+* '''sctp''': SCTP protocol
+* '''dccp''': DCCP protocol
+* '''ah''': Authentication headers
+* '''esp''': Encrypted security payload headers
+* '''ipcomp''': IPcomp headers
+* '''icmp''': icmp protocol
+* '''icmpv6''': icmpv6 protocol
+* '''ct''': Connection tracking
+* '''meta''': meta properties such as interfaces
+
+====Matches====
+{|class=wikitable
+| Match
+| Arguments
+| Description/Example
+|-
+| rowspan="11" | '''ip'''
+| version 
+| Ip Header version
+|-
+| hdrlength 
+| IP header length
+|-
+| tos 
+|Type of Service
+|-
+| length 
+| Total packet length
+|-
+| id 
+| IP ID
+|-
+| frag-off 
+| Fragmentation offset
+|-
+| ttl 
+| Time to live
+|-
+| protocol
+| Upper layer protocol
+|-
+| checksum 
+| IP header checksum
+|-
+| saddr 
+| Source address
+|-
+| daddr 
+| Destination address
+|-
+| rowspan="8" | '''ip6'''
+| version
+| IP header version
+|-
+| priority
+|
+|-
+| flowlabel
+| Flow label
+|-
+| length
+| Payload length
+|-
+| nexthdr
+| Next header type (Upper layer protocol number)
+|-
+| hoplimit
+| Hop limit
+|-
+|saddr
+| Source Address
+|-
+|daddr
+| Destination Address
+|-
+| rowspan="9" | '''tcp'''
+| sport 
+| Source port
+|-
+| dport
+| Destination port
+|-
+| sequence
+| Sequence number
+|-
+| ackseq
+| Acknowledgement number
+|-
+| doff
+| Data offset
+|-
+| flags 
+| TCP flags
+|-
+| window
+| Window
+|-
+| checksum
+| Checksum
+|-
+| urgptr
+| Urgent pointer
+|-
+| rowspan="4" | '''udp'''
+| sport 
+| Source port
+|-
+| dport 
+| destination port
+|-
+| length
+| Total packet length
+|-
+| checksum
+| Checksum
+|-
+| rowspan="4" | '''udplite'''
+| sport 
+| Source port
+|-
+| dport 
+| destination port
+|-
+| cscov
+| Checksum coverage
+|-
+| checksum
+| Checksum
+|-
+| rowspan="4" |'''sctp'''
+| sport 
+| Source port
+|-
+| dport 
+| destination port
+|-
+|vtag
+|Verification tag
+|-
+| checksum
+| Checksum
+|-
+| rowspan="2" |'''dccp'''
+| sport 
+| Source port
+|-
+| dport 
+| destination port
+|-
+| rowspan="4" |'''ah'''
+| nexthdr
+| Next header protocol (Upper layer protocol)
+|-
+| hdrlength
+| AH header length
+|-
+| spi
+| Security Parameter Index
+|-
+| sequence
+| Sequence Number
+|-
+| rowspan="2" | '''esp'''
+| spi
+| Security Parameter Index
+|-
+| sequence
+| Sequence Number
+|-
+| rowspan="3" | '''ipcomp'''
+| nexthdr
+| Next header protocol (Upper layer protocol)
+|-
+| flags
+| Flags
+|-
+| cfi
+| Compression Parameter Index
+|-
+| '''icmp'''
+| type
+| icmp packet type
+|-
+| '''icmpv6'''
+| type
+| icmpv6 packet type
+|-
+|rowspan="12"|'''ct'''
+|state	
+|State of the connection
+|-
+|direction
+|Direction of the packet relative to the connection
+|-
+|status
+|Status of the connection
+|-
+|mark
+|Connection mark
+|-
+|expiration
+|Connection expiration time
+|-
+|helper
+|Helper associated with the connection
+|-
+|l3proto
+|Layer 3 protocol of the connection
+|-
+|saddr
+|Source address of the connection for the given direction
+|-
+|daddr
+|Destination address of the connection for the given direction
+|-
+|protocol
+|Layer 4 protocol of the connection for the given direction
+|-
+|proto-src
+|Layer 4 protocol source for the given direction
+|-
+|proto-dst
+|Layer 4 protocol destination for the given direction
+|-
+| rowspan="13" | '''meta'''
+| length 
+| Length of the packet in bytes: ''meta length > 1000''
+|-
+| protocol 
+| ethertype protocol: ''meta protocol vlan''
+|-
+| priority 
+| TC packet priority
+|-
+| mark 
+| Packet mark 
+|-
+| iif 
+| Input interface index 
+|-
+| iifname 
+| Input interface name 
+|-
+| iiftype 
+| Input interface type
+|-
+| oif 
+| Output inteface index
+|-
+| oifname 
+| Output inteface name
+|-
+| oiftype 
+| Output interface hardware type
+|-
+| skuid 
+| UID associated with originating socket
+|-
+| skgid 
+| GID associated with originating socket
+|-
+| rtclassid 
+| Routing realm
+|-
+|}
+====Statements====
+Statements represent the action to be performed when the rule matches. They exist in two kinds: Terminal statements, unconditionally terminate the evaluation of the current rules and non-terminal statements that either conditionally or never terminate the current rules. There can be an arbitrary amount of non-terminal statements, but there must be only a single terminal statement.
+The terminal statements can be:
+* '''accept''': Accept the packet and stop the ruleset evaluation.
+* '''drop''': Drop the packet and stop the ruleset evaluation.
+* '''reject''': Reject the packet with an icmp message
+* '''queue''': Queue the packet to userspace and stop the ruleset evaluation.
+* '''continue''':
+* '''return''': Return from the current chain and continue at the next rule of the last chain. In a base chain it is equivalent to accept
+* '''jump <chain>''': Continue at the first rule of <chain>. It will continue at the next rule after a return statement is issued
+* '''goto <chain>''': Similar to jump, but after the new chain the evaluation will continue at the last chain instead of the one containing the goto statement
 
 == Install ==
 === Kernel ===
@@ -102,7 +386,7 @@ A non-base chain can be added by not specifying the chain configurations between
 ====Removing chains====
 The following command deletes the chain called input
 {{RootCmd|nft delete chain ip filter input}}
-
+{{Note|Chains can only be deleted if there are no rules in them.}}
 ===rules===
 ====Adding rules====
 The following command adds a rule to the chain called input, on the ip filter table, dropping all traffic to port 80:
@@ -121,7 +405,6 @@ table ip filter {
 It is then possible to delete the rule with:
 {{RootCmd|nft delete rule ip filter input handle 2}}
 
-===atomic rule replacement===
 == External Resources ==
 * https://wiki.archlinux.org/index.php/Nftables
 * http://wiki.nftables.org/wiki-nftables/index.php/Main_Page
