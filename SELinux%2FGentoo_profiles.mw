@@ -1,0 +1,137 @@
+Gentoo profiles enable and tune SELinux-specific aspects for a Gentoo system. By default, Gentoo provides a couple of SELinux-enabled profiles, but it is very well possible to update other profiles to enable SELinux.
+
+== Profile structure ==
+
+In order to simplify the management of SELinux settings in profiles, the {{Path|features/selinux}} profile part is created to be as independent of other profiles as possible. In other words, it does not contain a {{Path|parent}} file to inherit settings from other profiles. As a result, the SELinux specific settings as offered through the profile can be "injected" in other profiles easily.
+
+=== Usage of the selinux part ===
+
+The {{Path|features/selinux}} profile part is enabled currently in the following profiles:
+
+{{Code|List of selinux-enabled profiles as seen from profile root|<pre>
+hardened/linux/x86/selinux
+hardened/linux/amd64/selinux
+hardened/linux/amd64/no-multilib/selinux
+default/linux/x86/13.0/selinux
+default/linux/amd64/13.0/selinux
+</pre>}}
+
+This is done by referencing the {{Path|features/selinux}} profile part in the profiles' {{Path|parent}} file, like so:
+
+{{RootCmd|cat hardened/linux/amd64/selinux/parent|output=<pre>
+..
+../../../../features/selinux
+</pre>}}
+
+This means that the profile is the same as {{Path|hardened/linux/amd64}} but with the {{Path|features/selinux}} part overriding the settings (if any).
+
+== Default make settings ==
+
+The SELinux settings in Gentoo are done through the following set of changes:
+
+=== Default USE settings ===
+
+The following USE flags are enabled by default when a SELinux profile is set.
+
+{{USEflag
+|selinux++Yes+Enable SELinux support in applications or pull in the proper SELinux policy
+|unconfined+++Enable support for [[SELinux/Unconfined_domains|unconfined domains]]
+|open_perms++Yes+Enable support for the 'open' permission in SELinux for handing files
+}}
+
+The <code>unconfined</code> USE flag is not mandatory if the policy store that is going to be used is <code>strict</code> or, depending on the need for unconfined domains, <code>mcs</code> and <code>mls</code>.
+
+=== Default FEATURES ===
+
+The following <code>FEATURES</code> are enabled by default when a SELinux profile is set.
+
+{| class="wikitable"
+|- style="vertical-align: top; white-space: nowrap;"
+! FEATURE
+! Description
+|-
+| selinux
+| Enable SELinux support in Portage
+|-
+| sesandbox
+| Enable SELinux sandbox domain in Portage (not related to ''SELinux sandbox'' application as part of older {{Package|sys-apps/policycoreutils}} package!)
+|-
+| sfperms
+| Enable smart file system permissions (update setuid/setgid files to remove read rights so only execute is left)
+|}
+
+=== Enabling POLICY_TYPES ===
+
+The <code>POLICY_TYPES</code> variable is declared as follows:
+
+{{Code|Default POLICY_TYPES variable declaration|<pre>
+POLICY_TYPES="strict targeted"
+</pre>}}
+
+This variable defines, in Gentoo, for which [[SELinux/Policy_store|policy stores]] policies need to be built and managed.
+
+=== Enabling PORTAGE_T ===
+
+The <code>PORTAGE_T</code> variable is declared as follows:
+
+{{Code|Default PORTAGE_T variable declaration|<pre>
+PORTAGE_T="portage_t"
+</pre>}}
+
+This variable defines the domain in which regular Portage operations are performed, and is used by Portage for dynamic domain transitions and domain validation.
+
+=== Enabling PORTAGE_FETCH_T ===
+
+The <code>PORTAGE_FETCH_T</code> variable is declared as follows:
+
+{{Code|Default PORTAGE_FETCH_T variable declaration|<pre>
+PORTAGE_FETCH_T="portage_fetch_t"
+</pre>}}
+
+This variable defines the domain in which portage tree manipulation operations are performed.
+
+=== Enabling PORTAGE_SANDBOX_T ===
+
+The <code>PORTAGE_SANDBOX_T</code> variable is declared as follows:
+
+{{Code|Default PORTAGE_SANDBOX_T variable declaration|<pre>
+PORTAGE_SANDBOX_T="portage_sandbox_t"
+</pre>}}
+
+This variable defines the domain in which application builds are done by Portage.
+
+== Masked packages ==
+
+No packages are marked as being specifically masked in SELinux enabled profiles.
+
+== Base packages ==
+
+The following packages are made part of the <code>@system</code> set when a SELinux profile is used:
+
+* {{Package|sys-libs/libsepol}}
+* {{Package|sys-libs/libselinux}}
+* {{Package|sys-libs/libsemanage}}
+* {{Package|sys-apps/checkpolicy}}
+* {{Package|sys-apps/policycoreutils}}
+* {{Package|sec-policy/selinux-base-policy}}
+
+== Package-level forced USE flags ==
+
+The following forced USE flags are set:
+
+* {{Package|sys-libs/libselinux}}, {{Package|sys-libs/libsemanage}} and {{Package|app-admin/setools}} now have <code>USE="python"</code> forced, as the management utilities on SELinux systems are based on Python. The build of Python in the libraries is only optional if it is used for embedded systems.
+* {{Package|dev-lang/python}} has <code>USE="xml"</code> set, as {{Package|sys-apps/policycoreutils}} requires it and, as it is part of the base, needs to be forced for the immediate installation of SELinux (including to build stages)
+
+== System-wide forced USE flags ==
+
+Unsurprisingly, <code>USE="selinux"</code> is forced enabled system-wide.
+
+== Environment overrides ==
+
+The following settings are enabled:
+
+=== SANDBOX_WRITE ===
+
+The definition of <code>SANDBOX_WRITE</code> is extended to allow writes to {{Path|/selinux}} and {{Path|/sys/fs/selinux}} as SELinux-aware applications need to be able to write to this file system (in order to perform SELinux queries).
+
+The same <code>SANDBOX_WRITE</code> is also extended to allow writes to {{Path|/proc/self/}} to support the <code>setfscreatecon</code> call.
