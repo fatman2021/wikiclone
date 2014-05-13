@@ -18,6 +18,56 @@ When an application is connecting to a port, the ''name_connect'' permission is 
 
 == Handling TCP and UDP socket support ==
 
+=== Listing labels on TCP and UDP sockets ===
+
+With <code>semanage port</code> and <code>seinfo</code>, labels assigned to TCP and UDP sockets can be (re)viewed.
+
+For instance, to check the label on the TCP port 80 with <code>seinfo</code>:
+
+{{Cmd|seinfo --portcon{{=}}80|output=<pre>
+        portcon tcp 80 system_u:object_r:http_port_t
+        portcon tcp 1-511 system_u:object_r:reserved_port_t
+        portcon udp 1-511 system_u:object_r:reserved_port_t
+</pre>}}
+
+To check the label for port 9001 with <code>semanage</code>:
+
+{{RootCmd|semanage port -l {{!}} grep 9001|output=<pre>
+tor_port_t                     tcp      6969, 9001, 9030, 9050, 9051
+</pre>}}
+
+=== Changing socket labels ===
+
+When the port is labeled with one of the following labels, then it can be modified to have a different label:
+* <code>unreserved_port_t</code> (for 1024+ ports that are not directly assigned yet)
+* <code>hi_reserved_port</code> (for 512-1023 that are not directly assigned yet)
+* <code>reserved_port_t</code> (for 1-511 that are not directly assigned yet)
+
+So assign a specific label, use <code>semanage</code> like so:
+
+{{RootCmd|semanage port -a -t http_port_t -p tcp 9224}}
+
+=== Removing custom port labeling ===
+
+When a label was assigned through <code>semanage</code>, it can be removed with <code>semanage</code> as well:
+
+{{RootCmd|semanage port -d -t http_port_t -p tcp 9224}}
+
+=== Listing domains with access to a particular port ===
+
+To query which domains have access to a particular port, use the <code>sesearch</code> command, like so:
+
+{{RootCmd|sesearch -t http_port_t -c tcp_socket -p name_bind -AC|output=<pre>
+Found 7 semantic av rules:
+   allow corenet_unconfined_type port_type : tcp_socket { recv_msg send_msg name_bind name_connect } ; 
+   allow svirt_t port_type : tcp_socket { recv_msg send_msg name_bind name_connect } ; 
+   allow svirt_lxc_net_t port_type : tcp_socket { recv_msg send_msg name_bind name_connect } ; 
+   allow httpd_t http_port_t : tcp_socket { recv_msg send_msg name_bind } ; 
+   allow sysadm_t http_port_t : tcp_socket name_bind ; 
+   allow stunnel_t port_type : tcp_socket { recv_msg send_msg name_bind name_connect } ; 
+ET allow qemu_t port_type : tcp_socket { name_bind name_connect } ; [ qemu_full_network ]
+</pre>}}
+
 == Managing SECMARK rules ==
 
 == Using Labeled IPSec ==
