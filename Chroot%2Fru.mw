@@ -4,26 +4,47 @@ Chroot (англ.Change Root - "изменение корневого катал
 Одним из основных применений для изменения корневого каталога является создание отдельной системы Linux на основе имеющейся в целях тестирования или проверки совместимости программ. Этот механизм часто рассматривается как легковесная альтернатива виртуализации, потому что может выполняться без накладных расходов гипервизора.
 
 ==Setting up the environment==
-The first thing that you need to do when you create a new installation is create a directory for your chroot to reside, for example in {{Path|/mnt/mychroot}}:
 
-{{Cmd |mkdir /mnt/mychroot |cd /mnt/mychroot }}
+The first thing that you need to do when you create a new installation is create a directory for your chroot to reside in, for example in {{Path|/mnt/mychroot}}:
+
+<!--T:4-->
+{{Cmd
+|mkdir /mnt/mychroot
+|cd /mnt/mychroot
+}}
 
 Если Вы хотите смонтировать существующую установку из раздела, Вы можете выполнить:
 
-{{Cmd |mkdir /mnt/mychroot |mount /dev/DEVICE /mnt/mychroot }}
+<!--T:6-->
+{{Cmd
+|mkdir /mnt/mychroot
+|mount /dev/DEVICE /mnt/mychroot
+}}
 
 Замените DEVICE разделом с существующей установкой.
 
 Если у Вас уже есть установка в одном из подкаталогов корневого каталога с которым Вы работаете, Вам не нужно выполнять вышеприведенные шаги.
 
+
 ==Распаковка системных файлов и дерева портежей для новой установки==
 Если Вы собираете новую установку, следующим шагом будет загрузка файла стадии stage3 и архива Portage и их последующая распаковка внутри chroot каталога. Для получения дополнительной информации по данному вопросу, пожалуйста, посмотрите разделы 5a и 5b в [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=5 Gentoo Handbook].
 
-{{RootCmd |links http://distfiles.gentoo.org/releases/amd64/current-stage3/ |tar xvjpf stage3-*.tar.bz2 -C /mnt/mychroot |links http://distfiles.gentoo.org/snapshots/ |tar xvjf portage-*.tar.bz2 -C /mnt/mychroot/usr }}
+If you're building a new install, the next step is to download the stage3 and portage tarballs and set them up in the chroot location. For more information on this process please see sections 5a and 5b in the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=5 Gentoo Handbook].
+
+<!--T:10-->
+{{RootCmd
+|links http://distfiles.gentoo.org/releases/amd64/current-stage3/
+|tar xvjpf stage3-*.tar.bz2 -C /mnt/mychroot
+|links http://distfiles.gentoo.org/snapshots/
+|tar xvjf portage-*.tar.bz2 -C /mnt/mychroot/usr
+}}
 
 ==Конфигурация==
 Перед тем как изменить корневую директорию нам необходимо смонтировать несколько каталогов.
 
+Before entering the chroot we need to mount a number of directories.
+
+<!--T:12-->
 {{RootCmd
 |mount -o bind /dev /mnt/mychroot/dev
 |mount -t proc none /mnt/mychroot/proc
@@ -31,8 +52,9 @@ The first thing that you need to do when you create a new installation is create
 |mount -o bind /tmp /mnt/mychroot/tmp
 }}
 
-Нам также необходимо скопировать основные файлы конфигурации из основной системы; не копируйте make.conf если вы используете существующую установку.
+And will also need to copy over some basic configuration file from the host, do not copy over {{Path|make.conf}} if you're using an existing installation.
 
+<!--T:14-->
 {{Cmd
 |cp /etc/portage/make.conf /mnt/mychroot/etc/portage # If you use an existing installation, skip this command.
 |cp /etc/resolv.conf /mnt/mychroot/etc
@@ -40,6 +62,7 @@ The first thing that you need to do when you create a new installation is create
 
 Сразу же после завершения, мы можем войти в chroot окружение.
 
+<!--T:16-->
 {{RootCmd
 |chroot /mnt/mychroot /bin/bash
 |env-update
@@ -49,6 +72,7 @@ The first thing that you need to do when you create a new installation is create
 
 При создании новой установки, Вы можете синхронизировать дерево портежей, чтобы убедиться что все обновлено.
 
+<!--T:18-->
 {{RootCmd
 |emerge --sync
 }}
@@ -58,9 +82,29 @@ The system is now ready. You can install software, mess with settings, test expe
 ==Сценарии инициализации==
 Если Вам нужно часто это делать, Вы можете ускорить монтирование каталогов необходимых для chroot-а, используя следующий сценарий инициализации:
 
+If you need to do this often, you can speed up the mounting of the directories needed for a chroot by using an init script:
+
+<!--T:21-->
 {{File|/etc/init.d/mychroot||
  #!/sbin/runscript
 
+ <!--T:22-->
+depend() {
+   need localmount
+   need bootmisc
+ }
+
+ <!--T:23-->
+start() {
+     ebegin "Mounting chroot directories"
+     mount -o bind /dev /mnt/mychroot/dev > /dev/null &
+     mount -t proc none /mnt/mychroot/proc > /dev/null &
+     mount -o bind /sys /mnt/mychroot/sys > /dev/null &
+     mount -o bind /tmp /mnt/mychroot/tmp > /dev/null &
+     eend $? "An error occurred while mounting chroot directories"
+}
+
+ <!--T:24-->
 stop() {
      ebegin "Unmounting chroot directories"
      umount -f /mnt/mychroot/dev > /dev/null &
@@ -71,27 +115,9 @@ stop() {
  }
 }}
 
- depend() {
-   need localmount
-   need bootmisc
- }
+If you use a different directory or partition, add the necessary mounting commands in start() and change {{Path|/mnt/chroot}} if you use a different name.
 
- start() {
-     ebegin "Mounting chroot directories"
-     mount -o bind /dev /mnt/mychroot/dev > /dev/null &
-     mount -t proc none /mnt/mychroot/proc > /dev/null &
-     mount -o bind /sys /mnt/mychroot/sys > /dev/null &
-     mount -o bind /tmp /mnt/mychroot/tmp > /dev/null &
-     eend $? "An error occurred while mounting chroot directories"
-}
-
- &nbsp;
-
-Если Вы используете другой каталог или раздел, добавьте необходимые команды монтирования в start() и измените /mnt/chroot если Вы используете другое название.
-
-==Смотрите также==
+==See also==
 * [http://www.gentoo.org/proj/en/base/x86/chroot.xml Gentoo x86 Chroot Setup Guide]
-* [http://www.gentoo.org/proj/en/base/amd64/howtos/index.xml?part=1&chap=2 32Bit Chroot Guide for Gentoo/AMD64]
-
 
 [[Category:Core system]]
