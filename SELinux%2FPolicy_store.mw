@@ -45,3 +45,42 @@ The variable can be overridden through the {{Path|/etc/portage/make.conf}} file.
 == Managing policy stores ==
 
 === Switching active policy store ===
+
+In order to switch the active policy store (i.e. the <code>SELINUXTYPE</code> in {{Path|/etc/selinux}}) it is necessary to ensure that the base policy and other policy modules are built. In Gentoo, this is handled through the <code>POLICY_TYPES</code> variable which can be defined in {{Path|/etc/portage/make.conf}}.
+
+Assuming the current active policy store is ''strict'' and the target policy store is ''mcs'', then verify that both are set in the variable.
+
+{{Code|Configuring POLICY_TYPES for both strict and mcs|<pre>
+POLICY_TYPES="strict mcs"
+</pre>}}
+
+If this was not the case, update the variable and then rebuild all SELinux policy packages to make sure both policy stores are available and up to date.
+
+{{RootCmd|emerge -1 $(qlist -IC sec-policy)}}
+
+Now switch to ''permissive'' mode. This is needed because in the next steps the new policy is loaded and a full file system relabel operation will be launched. This cannot be done using the existing policy in enforcing mode.
+
+{{RootCmd|setenforce 0}}
+
+Edit {{Path|/etc/selinux/config}} and modify <code>SELINUXTYPE</code> to the new value (''mcs'' in the example). 
+
+{{RootCmd|nano -w /etc/selinux/config}}
+
+Load the policy modules for the new policy store.
+
+{{RootCmd|cd /usr/share/selinux/mcs
+|semodule -b base.pp -i $(ls *.pp {{!}} grep -v base.pp)}}
+
+The ''mcs'' policy store is now active. The next step is to relabel all files. This is done in two steps:
+# relabel all files accessible
+# relabel the files that are hidden beneath existing mount points
+
+{{RootCmd|rlpkg -a -r
+|mount -o bind / /mnt/gentoo
+|setfiles -r /mnt/gentoo /etc/selinux/mcs/contexts/files/file_contexts /mnt/gentoo/dev
+|setfiles -r /mnt/gentoo /etc/selinux/mcs/contexts/files/file_contexts /mnt/gentoo/lib64
+|umount /mnt/gentoo}}
+
+Edit the {{Path|/etc/fstab}} file so that the <code>rootcontext=</code> and other SELinux mount parameters are adjusted accordingly. The main change needed here is when the previous policy store and the new policy store are different with respect to their MLS support. So for a ''strict'' to ''mcs'' switch, a trailing <code>:s0</code> would need to be added to all contexts.
+
+This is all to it. Now reboot the system and the new policy store should be running, in enforcing mode.
