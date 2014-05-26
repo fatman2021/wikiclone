@@ -1,0 +1,444 @@
+<languages />
+
+
+{{Metadata|abstract=This guide explains how to use an IPv6 setup and routing on a Gentoo Linux system.}}
+
+== Preliminaries ==
+
+=== Basic Kernel Configuration ===
+
+Any of the 2.6 kernel trees available in Gentoo will easily support IPv6 connections. The new USAGI IPv6 stack is integrated to the kernel since Linux 2.6.0. 
+
+{{Emerge|gentoo-sources}}
+
+Now we are ready to enter the kernel source directory and begin our actual kernel configuration. 
+
+{{RootCmd|cd /usr/src/linux
+|make menuconfig}}
+
+{{Note|This assumes the symlink {{Path|/usr/src/linux}} points to the sources you will be using.}}
+
+{{Kernel|'make menuconfig' options|<pre>
+Networking support --->
+  Networking options --->
+    <*> The IPv6 protocol --->
+## (The IPv6 options beneath this one can be useful for many other applications,
+## but should not be needed for a basic setup)
+ 
+## (This option is only required if you are using ptrtd for 6to4 conversion)
+Device Drivers --->
+  Network device support --->
+    <*> Universal TUN/TAP device driver support
+</pre>
+}}
+
+=== Testing IPv6 Support ===
+
+After enabling the recommended options, recompile your kernel and reboot into your new IPv6-enabled kernel. 
+
+If you don't already have '''iproute2''' installed, we urge you to do it now. iproute2 is a network configuration suite that contains <code>ip</code>, the famous replacement for <code>ifconfig</code>, <code>route</code>, <code>iptunnel</code> and others... 
+
+{{Emerge|sys-apps/iproute2}}
+
+{{Warning|Use of ifconfig can cause serious headaches if you have multiple tunnel devices. You have to remove the tunnels in backorder, which means that the latest created must be removed first. You have been warned!}}
+
+If IPv6 is working, the loopback device should show an IPv6 address: 
+
+{{RootCmd|ip -6 addr show lo|output=<pre>
+1: lo: <LOOPBACK,UP> mtu 16436
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+    ## (The above lines show things are working)
+</pre>
+}}
+
+Before going any further, make sure that you add ''ipv6'' to your list of USE variables in {{Path|make.conf}}, so that future emerges of packages will include IPv6 support.
+
+== Tunnel Configuration ==
+
+=== Basic Configuration ===
+
+Most ISPs still do not offer any native IPv6 connections. To get around this limitation, there are several "tunnel brokers" around the globe that offer free IPv6 tunnels. This will allow you to tunnel all your IPv6 connections through an IPv4 connection. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Broker
+! Location
+|- 
+|  [http://tunnelbroker.net/ Hurricane Electric] 
+| North America, Europe, Asia
+|- 
+|  [http://gogonet.gogo6.com/ Freenet6] 
+| US
+|- 
+|  [http://www.sixxs.net/ Sixxs] 
+| Europe
+|- 
+|  [http://tunnel-broker.singnet.com.sg/ Singnet] 
+| Singapore
+|- 
+|  [http://broker.aarnet.net.au/ Aarnet] 
+| Australia/South Pacific
+|-
+|}
+
+Below are two examples for setting up a tunnel with two popular North American tunnels, Hurricane Electric (applies for non-heartbeat tunnels from sixxs.net as well) and Freenet6. 
+
+=== Hurricane Electric ===
+
+Hurricane Electric (HE for short) offers free IPv6 tunnels and allocates a /64 block of addresses for you. It also allows configuration of reverse DNS. Getting a tunnel from HE is as easy as going to [https://www.tunnelbroker.net/ https://www.tunnelbroker.net/] and filling out a one page form. 
+
+{{Note|Registration includes listing information like your address and phone number.}}
+
+After you have a tunnel approved and have a /64 block allocated, you can configure your Gentoo box. HE provides sample configurations based on ifconfig and the iproute utilities. The following two examples assume you have the following configuration: 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+| Local IPv4 Address (eth0)
+| 68.36.91.195
+|- 
+| HE IPv4 Address
+| 64.71.128.82
+|- 
+| Local IPv6 tunnel Address
+| 2001:470:1F00:FFFF::189
+|- 
+| IPv6 Block
+| 2001:470:1F00:296::/64
+|-
+|}
+
+Using the iproute2 package and the <code>ip</code> command, you would do the following.
+
+Create a tunnel between the local (eth0) IPv4 and HE's remote IPv4 address:
+
+{{RootCmd|ip tunnel add sixbone mode sit remote 64.71.128.82 local 68.36.91.195 ttl 64 dev eth0}}
+
+Extract the tunneling overhead from the MTU:
+
+{{RootCmd|ip link set sixbone mtu 1280}}
+
+Bring the tunnel up:
+
+{{RootCmd|ip link set sixbone up}}
+
+Assign the IPv6 address to it:
+
+{{RootCmd|ip addr add 2001:470:1F00:FFFF::189 dev sixbone}}
+
+Route all global unicast IPv6 addresses through our 'sixbone' tunnel device:
+
+{{RootCmd|ip route add 2000::/3 dev sixbone}}
+
+=== Freenet6 ===
+
+[http://gogonet.gogo6.com/ Freenet6] is another free tunnel broker. Optional registration only requires a username and a valid email address. They have chosen to turn the tunnel management into a client/server setup and have created the <code>gateway6</code> client. The client is available in Portage. To install it do: 
+
+{{Emerge|gateway6}}
+
+Now if you chose to connect with authentication, you need to configure <code>gateway6</code> by editing {{Path|/etc/gateway6/gw6c.conf}}. You should only have to change the ''userid'' and ''passwd'' fields to match those assigned from Freenet6 and change the gateway server. Below is a sample config file. 
+
+{{Code|gw6c.conf example|<pre>
+auth_method=any
+userid=anonymous
+passwd=foobar
+template=linux
+server=broker.freenet6.net
+</pre>
+}}
+
+=== Testing your connection ===
+
+Now that your tunnel is configured, you can test your connection. The easiest way to do this is to use the <code>ping6</code> utility and try to ping an IPv6 host. 
+
+{{Emerge|iputils}}
+
+{{Cmd|ping6 www.kame.net|output=<pre>
+PING www.kame.net(orange.kame.net) 56 data bytes
+64 bytes from orange.kame.net: icmp_seq=1 ttl=52 time=290 ms
+64 bytes from orange.kame.net: icmp_seq=2 ttl=52 time=277 ms
+64 bytes from orange.kame.net: icmp_seq=3 ttl=52 time=280 ms
+64 bytes from orange.kame.net: icmp_seq=4 ttl=52 time=279 ms
+64 bytes from orange.kame.net: icmp_seq=5 ttl=52 time=277 ms
+ 
+--- www.kame.net ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4038ms
+rtt min/avg/max/mdev = 277.040/281.041/290.046/4.699 ms
+</pre>
+}}
+
+Further work is currently in progress to add better IPv6 support to the network init scripts. If you'd like to know the status of this and/or help out, email {{Mail|latexer@gentoo.org}}.
+
+== IPv6 Support in Applications ==
+
+=== Re-emerging packages ===
+
+Unless you had ''USE="ipv6"'' in your {{Path|/etc/portage/make.conf}} previously, you probably need to re-emerge a bunch of packages to compile in IPv6 support for them. To get a list of all the installed packages which are affected by USE flag changes, use Portage's <code>--newuse</code> (<code>-N</code>) option: 
+
+{{Emerge|@world|params=-uDNav}}
+
+If you have changed a lot of USE flags, the list could be quite long. It's suggested to keep your system up-to-date, so it won't hurt if you recompile all affected packages. 
+
+{{Note|Some packages detect IPv6 support automagically and hence have no ipv6 USE flag. Thus not all packages, which should support IPv6, will support it if you have not compiled it with an IPv6 enabled kernel.}}
+
+=== IPv6 Specific Packages ===
+
+There are a few packages which specifically deal with IPv6 items. Most of these are located in {{Path|/usr/portage/net-misc}}. 
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Package
+! Description
+|- 
+| {{Package|net-misc/ipv6calc}}
+| Converts an IPv6 address to a compressed format
+|- 
+| {{Package|net-misc/netcat6}}
+| netcat version that supports IPv6 and IPv4
+|- 
+| {{Package|dev-perl/Socket6}}
+| IPv6 related part of the C socket.h defines and structure manipulators
+|-
+|}
+
+== DNS setup ==
+
+=== IPv6 and DNS ===
+
+Just as DNS for IPv4 uses A records, DNS for IPv6 uses AAAA records. (This is because IPv4 is an address space of 2^32 while IPv6 is an address space of 2^128). For reverse DNS, the INT standard is deprecated but still widely supported. ARPA is the latest standard. Support for the ARPA format will be described here. 
+
+=== BIND configuration ===
+
+Recent versions of BIND include excellent IPv6 support. This section will assume you have at least minimal knowledge about the configuration and use of BIND. We will assume you are not running bind in a chroot. If you are, simply append the chroot prefix to most of the paths in the following section. 
+
+First you need to add entries for both forward and reverse DNS zone files in {{Path|/etc/bind/named.conf}}. 
+
+{{Code|named.conf entries|<pre>
+## (We allow bind to listen to IPv6 addresses.
+## Using 'any' is the only way to do it prior to bind-9.3)
+options {
+    [...]
+    listen-on-v6 { any; }
+    [...]
+};
+## (This will provide the forward DNS for the domain 'ipv6-rules.com':)
+zone "ipv6-rules.com" IN {
+    type master;
+    file "pri/ipv6-rules.com";
+};
+## (This format for reverse DNS is "bitwise." It's done by taking the IPv6 prefix,
+## reversing the order of the numbers and putting a period between each number)
+zone "6.9.2.0.0.0.f.1.0.7.4.0.1.0.0.2.ip6.arpa" {
+        type master;
+        file "pri/rev-ipv6-rules.com.arpa";
+};
+</pre>
+}}
+
+Now we must create those zone files and add entries for all of our hosts: 
+
+{{Code|pri/ipv6-rules.com|<pre>
+$TTL    2h
+@       IN      SOA     ipv6-rules.com. webmaster.ipv6-rules.com.  (
+                                2003052501 ; Serial
+                                28800      ; Refresh
+                                14400      ; Retry
+                                3600000    ; Expire
+                                86400 )    ; Minimum
+                NS      ns1.ipv6-rules.com
+ 
+IN      AAAA    2001:470:1f00:296::1 ; address for ipv6-rules.com
+host1   IN      AAAA    2001:470:1f00:296::2 ; address for host1.ipv6-rules.com
+host2   IN      AAAA    2001:470:1f00:296::3:3 ; address for host2.ipv6-rules.com
+</pre>
+}}
+
+{{Code|pri/rev-ipv6-rules.com.arpa|<pre>
+$TTL 3d ; Default TTL (bind 8 needs this, bind 9 ignores it)
+@       IN SOA ipv6-rules.com. webmaster.ipv6-rules.com. (
+                        2003052501      ; Serial number (YYYYMMdd)
+                        24h             ; Refresh time
+                        30m             ; Retry time
+                        2d              ; Expire time
+                        3d )            ; Default TTL
+        IN      NS     ns1.ipv6-rules.com.
+; IPv6 PTR entries
+$ORIGIN 6.9.2.0.0.0.f.1.0.7.4.0.1.0.0.2.ip6.arpa.
+ 
+1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0 IN      PTR     ipv6-rules.com.
+2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0 IN      PTR     host1.ipv6-rules.com.
+3.0.0.0.3.0.0.0.0.0.0.0.0.0.0.0 IN      PTR     host2.ipv6-rules.com.
+</pre>
+}}
+
+=== DJBDNS configuration ===
+
+There are currently some third-party patches to DJBDNS available at [http://www.gentoo.org/ http://www.fefe.de/dns/] that allow it to do IPv6 nameserving. DJBDNS can be installed with these patches by emerging it with ''ipv6'' in your USE variables. 
+
+{{Warning|Not all record types are support yet with these patches. In particular, NS and MX records are not supported.}}
+
+{{Emerge|djbdns}}
+
+After djbdns is installed, it can be setup by running <code>tinydns-setup</code> and answering a few questions about which IP addresses to bind to, where to install tinydns, etc. 
+
+{{RootCmd|tinydns-setup}}
+
+Assuming we've installed <code>tinydns</code> into {{Path|/var/tinydns}}, we can now edit {{Path|/var/tinydns/root/data}}. This file will contain all the data needed to get tinydns handling DNS for your IPv6 delegation. 
+
+{{Code|sample data file|<pre>
+## (*.ipv6-rules.com is authoritatively handled by 192.168.0.1)
+.ipv6-rules.com:192.168.0.1:a:259200
+## (Authoritative reverse DNS for 2001:470:1f00:296::/64)
+.6.9.2.0.0.0.f.1.0.7.4.0.1.0.0.2.ip6.arpa:192.168.0.1:a
+## (Specify the IPs for host1 and host2)
+6host1.ipv6-rules.com:200104701f0002960000000000000001:86400
+6host2.ipv6-rules.com:200104701f0002960000000000000002:86400
+## (Point www to host1)
+3www.ipv6-rules.com:200104701f0002960000000000000002:86400
+</pre>
+}}
+
+Lines prefixed with a <code>6</code> will have both an AAAA and a PTR record created. Those prefixed with a <code>3</code> will only have an AAAA record created. Besides manually editing the {{Path|data}} file, you can use the scripts <code>add-host6</code> and <code>add-alias6</code> to add new entries. After changes are made to the {{Path|data}} file, you simply need to run <code>make</code> from {{Path|/var/tinydns/root}}. This will create {{Path|/var/tinydns/root/data.cfb}}, which tinydns will use as its source of information for DNS requests.
+
+== IPv6 Router ==
+
+=== Configure routing ===
+
+Further configuration is required if we want to use our system as a router for other clients wishing to connect to the outside world with IPv6. We need to enable forwarding of IPv6 packets. We can do this in one of two ways. 
+
+Or we set the value 1 in the forwarding pseudo-file:
+{{RootCmd|echo 1 > /proc/sys/net/ipv6/conf/all/forwarding}}
+
+Or we use the <code>sysctl</code> command:
+
+{{RootCmd|sysctl -w net.ipv6.conf.all.forwarding{{=}}1}}
+
+{{Warning|The <code>radvd</code> init script explained in the next chapter enables (and disables) forwarding, making the next step unnecessary.}}
+
+To enable forwarding at boot, you'll need to edit {{Path|/etc/sysctl.conf}} and add the following line. 
+
+{{Code|sysctl.conf addition|<pre>
+## (If you will be using radvd, this step is unnecessary)
+net.ipv6.conf.default.forwarding=1
+</pre>
+}}
+
+Traffic should now be forwarded from this box through the tunnel we've established with our broker. 
+
+To assign IPv6 addresses to clients, the IPv6 specification allows for both stateless and stateful IP assignment. Stateless assignment uses a process called Router Advertisement and allows clients to obtain an IP and a default route by simply bringing an interface up. It is called "stateless" because there is no record of IPs assigned and the host they are assigned to. Stateful assignment is handled by DHCPv6. It is "stateful" because the server keeps a state of the clients who've requested IPs and received them. 
+
+=== Stateless Configuration ===
+
+Stateless configuration is easily accomplished using the Router Advertisement Daemon, or <code>radvd</code>. 
+
+{{Emerge|radvd}}
+
+After having emerged <code>radvd</code>, we need to create {{Path|/etc/radvd/radvd.conf}} that contains information about what IP block to assign IPs from. Here is a sample {{Path|radvd.conf}} file using the prefix we've been assigned from our tunnel broker. 
+
+{{Code|Sample radvd.conf|<pre>
+interface eth1
+{
+        ## (Send advertisement messages to other hosts)
+        AdvSendAdvert on;
+        ## (Fragmentation is bad(tm))
+        AdvLinkMTU 1280;
+        MaxRtrAdvInterval 300;
+        ## (IPv6 subnet prefix we've been assigned by our PoP)
+        prefix 2001:470:1F00:296::/64
+        {
+                AdvOnLink on;
+                AdvAutonomous on;
+        };
+};
+</pre>
+}}
+
+{{Warning|Make sure the interface on the first line is correct so you broadcast router advertisement to your intranet and not to your ISP!}}
+
+Further information is available in <code>man radvd.conf</code>. We can now start <code>radvd</code> and set it to start at boot. 
+
+{{RootCmd|/etc/init.d/radvd start
+|rc-update add radvd default}}
+
+=== Stateful Configuration ===
+
+If you'd like to have stateful configuration, you'll need to install and configure {{Package|net-misc/dibbler}}. 
+
+{{Emerge|dibbler}}
+
+Now we must configure the dibbler client by editing {{Path|/etc/dibbler/client.conf}}. 
+
+{{Code|Sample dibbler client configuration|<pre>
+iface ppp0 {
+	rapid-commit yes
+	pd
+	option dns-server
+}
+</pre>
+}}
+
+We can now start the dibbler client, and configure it to start at boot. 
+
+{{RootCmd|/etc/init.d/dibbler-client start
+|rc-update add dibbler-client default}}
+
+== IPv6 Clients ==
+
+=== Using radvd ===
+
+Clients behind this router should now be able to connect to the rest of the net via IPv6. If using radvd, configuring hosts should be as easy as bringing the interface up. (This is probably already done by your net.ethX init scripts). 
+
+{{RootCmd|ip link set eth0 up
+|ip addr show eth0|output=<pre>
+1: eth0: <BROADCAST,MULTICAST,UP> mtu 1400 qdisc pfifo_fast qlen 1000
+    link/ether 00:01:03:2f:27:89 brd ff:ff:ff:ff:ff:ff
+    inet6 2001:470:1f00:296:209:6bff:fe06:b7b4/128 scope global
+       valid_lft forever preferred_lft forever
+    inet6 fe80::209:6bff:fe06:b7b4/64 scope link
+       valid_lft forever preferred_lft forever
+    inet6 ff02::1/128 scope global
+       valid_lft forever preferred_lft forever
+</pre>
+}}
+
+== Other Resources ==
+There are many excellent resources online pertaining to IPv6. 
+
+
+
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Websites
+! Resources
+|- 
+|  [http://www.ipv6.org/ www.ipv6.org] 
+| General IPv6 Information
+|- 
+|  [http://www.linux-ipv6.org/ www.linux-ipv6.org/] 
+| USAGI Project
+|- 
+|  [http://www.deepspace6.net/ www.deepspace6.net] 
+| Linux/IPv6 site
+|- 
+|  [http://www.kame.net/ www.kame.net] 
+| *BSD implementation
+|-
+|}
+
+On IRC, you can try <code>#ipv6</code> on [http://www.freenode.net/ Freenode]. You can connect to the Freenode servers using an IPv6 enabled client by connecting to '''irc.ipv6.freenode.net'''. 
+
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+
+* Peter Johanson
+* Jorge Paulo
+* Sven Vermeulen
+* Camille Huot
+* Pasi Valminen
+* nightmorph
+* hwoarang
+
+[[Category:Network management]]
