@@ -24,6 +24,79 @@ GRANT SELECT ON domain TO postfix;
 GRANT SELECT ON mailbox TO postfix;
 </pre>}}
 
+== MySQL ==
+If you use MySQL instead of PostgresSQL then follow this instruction.
+You'll need the [http://www.gentoo.org/doc/en/files/genericmailsql.sql genericmailsql.sql] dumpfile for this step. 
+
+{{Code|Installing and configuring MySQL|<pre>
+# emerge -av mysql
+
+# /usr/bin/mysql_install_db
+## (After this command runs follow the onscreen directions
+for adding a root password with mysql, otherwise your db will
+be wide open.)
+
+# /etc/init.d/mysql start
+# mysqladmin -u root -p create mailsql
+# mysql -u root -p mailsql < genericmailsql.sql
+# mysql -u root -p mysql
+mysql> GRANT SELECT,INSERT,UPDATE,DELETE
+  ->     ON mailsql.*
+  ->     TO mailsql@localhost
+  ->     IDENTIFIED BY '$password';
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> FLUSH PRIVILEGES;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> quit
+## (Verify that the new mailsql user can connect to the mysql server.)
+
+# mysql -u mailsql -p mailsql
+</pre>
+}}
+
+Your new database has default values and tables set up for two domains. The following tables are included: 
+
+* alias - local email alias and mailman alias information.
+* relocated - relocated user email address maps
+* transport - default mail transport information for all domains you are hosting
+* users - all user account information
+* virtual - virtual domain email alias maps
+
+{{Code|alias table sample|<pre>
+id   alias      destination
+1    root       foo@bar.com
+2    postmaster foo@bar.com
+</pre>
+}}
+
+{{Code|user table sample|<pre>
+## (Line wrapped for clarity.)
+id email            clear     name     uid     gid     homedir     \
+  maildir                                quota  postfix
+10 foo@virt-domain.com $password realname virtid  virtid  /home/vmail \
+  /home/vmail/virt-domain.com/foo/.maildir/        y
+13 foo@bar.com      $password realname localid localid /home/foo   \
+  /home/foo/.maildir/                           y
+</pre>
+}}
+
+The values of the <code>virtid</code> uid and gid should be those of the <code>vmail</code> user and group. 
+
+{{Code|transport table sample|<pre>
+id   domain          destination
+1    bar.com         local:
+2    virt-domain.com virtual:
+</pre>
+}}
+
+{{Code|virtual table sample|<pre>
+id   email                destination
+3    root@virt-domain.com other@email.address
+</pre>
+}}
+
 === Querying ===
 All these queries are tested on the database to ensure the queries are written properly. This does require however that the database has been filled to be useful. When 'postfixadmin' is used, this can be done easily from the UI. Otherwise, simple ''INSERT'' SQL queries need to be written and executed.
 {{Note|During this entire howto, the user ''testuser'' with the password ''secret'' is used.}}
