@@ -164,6 +164,184 @@ postfix=> SELECT goto FROM alias WHERE address='testuser@example.com' AND active
 </pre>}}
 {{Note|'postfixadmin' creates an alias for each user. This is not required for postfix to function properly, it is something ''needed'' for 'postfixadmin'.}}
 
+==== Configuring MySQL Authentication and vhosts ====
+Next we'll reconfigure our authentication to use the mailsql database in courier-imap and postfix. In all of the following examples, replace <code>$password</code> with the password you set for the mailsql mysql user. 
+
+{{Code|Configuring authentication|<pre>
+# nano -w /etc/courier/authlib/authdaemonrc
+authmodulelist="authmysql authpam"
+
+# nano -w /etc/courier/authlib/authmysqlrc
+MYSQL_SERVER            localhost
+MYSQL_USERNAME       mailsql
+MYSQL_PASSWORD      $password
+MYSQL_DATABASE          mailsql
+MYSQL_USER_TABLE        users
+## (Make sure the following line is commented out since we're storing plaintext.)
+#MYSQL_CRYPT_PWFIELD    crypt
+MYSQL_CLEAR_PWFIELD     clear
+MYSQL_UID_FIELD         uid
+MYSQL_GID_FIELD         gid
+MYSQL_LOGIN_FIELD       email
+MYSQL_HOME_FIELD        homedir
+MYSQL_NAME_FIELD        name
+MYSQL_MAILDIR_FIELD     maildir
+
+# /etc/init.d/courier-authlib restart
+# /etc/init.d/saslauthd restart
+</pre>
+}}
+
+We're almost there, I promise! Next, set up the rest of the necessary configs for postfix to interract with the database for all its other transport needs. Remember to replace each value with the name of your own user, user id, password, alias, email address, and so on. 
+
+{{Code|/etc/postfix/mysql-aliases.cf|<pre>
+# nano -w /etc/postfix/mysql-aliases.cf
+# mysql-aliases.cf
+
+user         = mailsql
+password     = $password
+dbname       = mailsql
+table        = alias
+select_field = destination
+where_field  = alias
+hosts        = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+{{Code|/etc/postfix/mysql-relocated.cf|<pre>
+# nano -w /etc/postfix/mysql-relocated.cf
+# mysql-relocated.cf
+
+user         = mailsql
+password     = $password
+dbname       = mailsql
+table        = relocated
+select_field = destination
+where_field  = email
+hosts        = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+{{Code|/etc/postfix/mysql-transport.cf (optional)|<pre>
+# nano -w /etc/postfix/mysql-transport.cf
+# mysql-transport.cf
+
+user         = mailsql
+password     = $password
+dbname       = mailsql
+table        = transport
+select_field = destination
+where_field  = domain
+hosts        = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+{{Code|/etc/postfix/mysql-virtual-gid.cf (optional)|<pre>
+# nano -w /etc/postfix/mysql-virtual-gid.cf
+# mysql-virtual-gid.cf
+
+user            = mailsql
+password        = $password
+dbname          = mailsql
+table           = users
+select_field    = gid
+where_field     = email
+additional_conditions = and postfix = 'y'
+hosts           = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+{{Code|/etc/postfix/mysql-virtual-maps.cf|<pre>
+# nano -w /etc/postfix/mysql-virtual-maps.cf
+# mysql-virtual-maps.cf
+
+user            = mailsql
+password        = $password
+dbname          = mailsql
+table           = users
+select_field    = maildir
+where_field     = email
+additional_conditions = and postfix = 'y'
+hosts           = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+{{Code|/etc/postfix/mysql-virtual-uid.cf (optional)|<pre>
+# nano -w /etc/postfix/mysql-virtual-uid.cf
+# mysql-virtual-uid.cf
+
+user            = mailsql
+password        = $password
+dbname          = mailsql
+table           = users
+select_field    = uid
+where_field     = email
+additional_conditions = and postfix = 'y'
+hosts           = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+{{Code|/etc/postfix/mysql-virtual.cf|<pre>
+# nano -w /etc/postfix/mysql-virtual.cf
+# mysql-virtual.cf
+
+user         = mailsql
+password     = $password
+dbname       = mailsql
+table        = virtual
+select_field = destination
+where_field  = email
+hosts        = unix:/var/run/mysqld/mysqld.sock
+</pre>
+}}
+
+Lastly, edit {{Path|/etc/postfix/main.cf}} one more time. 
+
+{{Code|/etc/postfix/main.cf|<pre>
+# nano -w /etc/postfix/main.cf
+## (Ensure that there are no other alias_maps definitions)
+alias_maps = mysql:/etc/postfix/mysql-aliases.cf
+relocated_maps = mysql:/etc/postfix/mysql-relocated.cf
+
+local_transport = local
+local_recipient_maps = $alias_maps $virtual_mailbox_maps unix:passwd.byname
+
+virtual_transport = virtual
+## (The domains listed by the mydestination should not be listed in
+ the virtual_mailbox_domains parameter)
+virtual_mailbox_domains = virt-domain.com, $other-virtual-domain.com
+
+virtual_minimum_uid = 1000
+## (Substitute $vmail-gid with the GID of the vmail group)
+virtual_gid_maps = static:$vmail-gid
+virtual_mailbox_maps = mysql:/etc/postfix/mysql-virtual-maps.cf
+virtual_alias_maps = mysql:/etc/postfix/mysql-virtual.cf
+## (Substitute $vmail-uid with the UID of the vmail user)
+virtual_uid_maps = static:$vmail-uid
+virtual_mailbox_base = /
+#virtual_mailbox_limit =
+</pre>
+}}
+
+For security reasons you should change the permissions of the various {{Path|/etc/mail/mysql-*.cf}} : 
+
+{{Code|Changing file permission|<pre>
+# chmod 640 /etc/postfix/mysql-*.cf
+# chgrp postfix /etc/postfix/mysql-*.cf
+</pre>
+}}
+
+As of Postfix 2.0.x, there were a number of significant changes over the 1.1.x release. Notably the transport, virtual-gid, and virtual-uid tables are no longer necessary. The tables are still included if you wish to use them. 
+
+{{Note|It is recommended that you read VIRTUAL_README included with the postfix docs for more information.}}
+
+{{Code|Make postfix reload its tables|<pre>
+# postfix reload
+</pre>
+}}
+
+Now, if all went well, you should have a functioning mailhost. Users should be able to authenticate against the sql database, using their full email address, for pop3, imap, and smtp. I would highly suggest that you verify that everything is working at this point. If you run into problems (with as many things as this setup has going on, it's likely that you will) check the troubleshooting section of this howto.
+
 === Access rights ===
 Only postfix should have access rights to these files, as they contain passwords.
 {{RootCmd|chown root:postfix -R /etc/postfix/|chmod 640 /etc/postfix/*/virtual_*.cf}}
