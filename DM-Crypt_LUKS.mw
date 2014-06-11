@@ -61,6 +61,45 @@ When done, creating logical volume if using LVM or adding the crypted cyphertext
 == Generating an initramfs ==
 After encrypting system or disk(s), one will need an initramfs so that rootfs can be mounted in there and then pass the control to real init. There are a few generic initramfs builder that can be used to accomplish the task such as [[dracut]], [[mkinitcpio]] (there's an ebuild ad thread in the forums) [https://github.com/tokiclover/bar-overlay sys-kernel/mkinitramfs-ll] or even {{Package|sys-kernel/genkernel}}[cryptsetup] which has LUKS support.
 
+=== Genkernel/Genkernel-next ===
+To use {{Package|sys-kernel/genkernel}} or {{Package|sys-kernel/genkernel-next}}, edit {{Path|/etc/portage/package.use}} to enable the cryptsetup USE flag before emerging it.  The static USE flag may also be enabled on the {{Package|sys-fs/crypsetup}} so that genkernel will use the system binaries (otherwise it will build its own private copy).  The following example will build only an initramfs (not an entire kernel) and enable support for luks.
+
+{{RootCmd|genkernel --luks initramfs}}
+
+The genkernel manpage outlines other options depending on system requirements.
+
+The initrd will require parameters to tell it how to decrypt the drive, and they are supplied the same way as other kernel parameters.  For example:
+
+{{File|grub.conf||<pre>
+title Gentoo Linux 3.4.0-gentoo
+root (hd0,0)
+kernel /boot/kernel-3.4.0-gentoo crypt_root=UUID=<encrypted partition uuid> root=/dev/mapper/root
+initrd /boot/initramfs-3.4.0-gentoo
+</pre>}}
+
+{{Note|Note TRIM support may be enabled if the encrypted device is capable (ie. SSD) with root_trim{{=}}yes but please read first about the security
+implications of this outlined in the --allow-discards section of the [http://code.google.com/p/cryptsetup/wiki/Cryptsetup140# cryptsetup wiki].}}
+
+=== Dracut ===
+The {{Package|sys-kernel/dracut}} package was ported from the RedHat project and serves a similar tool for generating an initramfs. Since it is currently in ~arch for testing, users will need to edit {{Path|/etc/portage/package.accept_keywords}} to emerge it.  Before doing so, the variable DRACUT_MODULES="crypt" should be added to {{Path|/etc/portage/make.conf}}.  Other modules may be desired, please refer to [Dracut]. Generally, the following command will generate a usable default initramfs.
+
+{{RootCmd|dracut -a crypt}}
+
+The initrd will require parameters to tell it how to decrypt the drive, and they are supplied the same way as other kernel parameters.  For example:
+
+{{File|grub.conf||<pre>
+title Gentoo Linux 3.4.0-gentoo
+root (hd0,0)
+kernel /boot/kernel-3.4.0-gentoo root=UUID=<root filesystem uuid> rd.luks.uuid=<encrypted partition uuid>
+initrd /boot/initramfs-3.4.0-gentoo.img
+</pre>}}
+{{Note|Dracut will match UUIDs that are not complete as long as they are not ambiguous, so it is possible to only enter the first stanza for brevity/clarity desired}}
+{{Note|Note TRIM support may be enabled if the encrypted device is capable (ie. SSD) with rd.luks.allow-discards but please read first about the security
+implications of this outlined in the --allow-discards section of the [http://code.google.com/p/cryptsetup/wiki/Cryptsetup140# cryptsetup wiki].}}
+
+For a comprehensive list of luks options within dracut please see the section in the [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_crypto_luks Dracut Manual].
+
+=== Custom ===
 Now, with a complicated setup one could have to build his/her own to satisfy specific requirements. This where modular or advanced initramfs package shine such as [https://github.com/tokiclover/mkinitramfs-ll mkinitramfs-ll] dracut or mkinitcpio.
 
 The following is a simple script that will build an initramfs with LUKS support for the running kernel or for the kernel version passed as argument 1. Be careful as this will build the initramfs image and copy it into {{Path|/boot}} so you need to have that mounted (and if you have an existing initramfs for this kernel, it might get overwritten). Also notice that you need a statically linked lvm binary.
