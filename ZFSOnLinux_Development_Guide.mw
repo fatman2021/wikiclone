@@ -4,19 +4,19 @@ This page is a temporary home for documentation intended as a reference for ZFS 
 
 This is easiest with a Linux environment. It is theoretically possible to use non-Linux environments, but no one does it in practice and anyone trying to use a non-Linux environment will be in new territory.
 
-Once you have a Linux environment, you will want to install git and cscope. You will want to setup git. The [http://git-scm.com/book/en/Getting-Started-First-Time-Git-Setup  "Git book"] is a good resource for this, but the simplest setup is:
+Once you have a Linux environment, you will want to install and configure git. The [http://git-scm.com/book/en/Getting-Started-First-Time-Git-Setup  "Git book"] is a good resource for this, but the simplest setup is:
 
 {{Cmd|git config --global user.name "John Doe"
 |git config --global user.email johndoe@example.com}}
 
-Then clone the repositories. For example:
+In addition, you will want to setup a github account and configure it so that you can do clones over SSH. Once that is done, clone the repositories:
 
 {{Cmd|mdkir ~/devel
 |cd ~/devel
 |git clone git@github.com:zfsonlinux/spl.git
 |git clone git@github.com:zfsonlinux/zfs.git}}
 
-You might want to create a bash alias to make using cscope easy.
+Also, you will likely want to install and use cscope. Using cscope is easy with the following bash alias.
 
 {{Cmd|alias cscope-init{{=}}'find . -name '*.c' -o -name '*.h' > cscope.files'}}
 
@@ -139,7 +139,16 @@ DISTDIR{{=}}"\${PORTDIR}-distfiles"
 PKGDIR{{=}}"\${PORTDIR}-packages"
 
 FEATURES{{=}}"buildpkg ccache collision-protect installsources metadata-transfer multilib-strict noinfo parallel-fetch parallel-install sign split-log splitdebug userpriv usersandbox usersync webrsync-gpg"
-END}}
+END
+
+# Adjust these variables to point to a specific branch
+spl_LIVE_BRANCH=master
+spl_LIVE_REPO='/mnt/code/spl'
+zfs_kmod_LIVE_BRANCH=master
+zfs_kmod_LIVE_REPO='/mnt/code/zfs'
+zfs_LIVE_BRANCH=master
+zfs_LIVE_REPO='/mnt/code/zfs'
+}}
 
 We compile quite a bit, so we therefore try to optimize GCC somewhat
 {{Cmd|prompt=(chroot) root #
@@ -186,9 +195,25 @@ Then compile the kernel:
 {{Cmd|prompt=(chroot) root #
 |color=purple|make -C /usr/src/linux bzImage}}
 
+Now install ZFS. It should pull from your local checkout.
+
+{{Cmd|prompt=(chroot) root #
+|color=purple|emerge zfs}}
+
 Now you should be able to start a VM:
 
 {{Cmd|sudo qemu-kvm -smp 12,cores{{=}}6,threads{{=}}1,sockets{{=}}1 -cpu host -m 1024 -kernel /guest/gentoo/usr/src/linux/arch/x86/boot/bzImage -append 'root{{=}}/dev/root rootfstype{{=}}9p rootflags{{=}}trans{{=}}virtio,version{{=}}9p2000.L ro console{{=}}ttyS0' -serial mon:stdio -serial pty -fsdev local,id{{=}}root,path{{=}}/guest/gentoo,security_model{{=}}passthrough -device virtio-9p-pci,fsdev{{=}}root,mount_tag{{=}}/dev/root -vga none -nographic}}
+
+== Development ==
+
+You will commit changes to a branch in your git checkouts in your home directory. Inside the chroot, you will rebuild the ZFS kernel modules and userland tools as needed:
+
+{{Cmd|prompt=(chroot) root #
+|color=purple|emerge --oneshot @module-rebuild sys-fs/zfs}}
+
+Edit the appropriate variables in /etc/portage/make.conf to point to the branch that you want to compile. Sometimes, you will encounter situations where a running virtual machine has old copies of the files from the chroot. You can resolve that by running drop_caches inside the VM:
+
+{{RootCmd|echo 3 > /proc/sys/vm/drop_caches}
 
 == Debugging ==
 
@@ -211,4 +236,6 @@ Since the ZFSOnLinux code is loaded as modules, we will need to tell gdb about t
 |add-symbol-file /lib/modules/2.6.32-431.11.2.el6.x86_64/extra/taskq/ztaskq.ko 0xffffffffa0177000
 |add-symbol-file /lib/modules/2.6.32-431.11.2.el6.x86_64/extra/spl/spl.ko 0xffffffffa00cb000}}
 
-After doing this, you will be able to set breakpoints on the ZFS code in gdb and step through execution. Note that since gdbserver is running at the level of QEMU, you will not be able to see individual threads. Instead, you will see cores, but that in itself can be advantageous in certain scenarios. Getting direct access to threads requires using kgdb.
+After doing this, you will be able to set breakpoints on the ZFS code in gdb and step through execution. These breakpoints will be lost in the event that you reset the virtual machine using `system_reset` from the QEMU monitor.
+
+Since gdbserver is running at the level of QEMU, you will not be able to see individual threads. Instead, you will see cores, but that in itself can be advantageous in certain scenarios. Getting direct access to threads requires using kgdb.
