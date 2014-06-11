@@ -1,8 +1,8 @@
-This page is a temporary home for documentation intended for ZFS developers on how ZFSOnLinux development is done. It is a WIP that is only meant for developers.
+This page is a temporary home for documentation intended as a reference for ZFS developers on how ZFSOnLinux development is done. It is a WIP and it is only meant for developers.
 
 = Setting up a development environment =
 
-You will likely find this to be easiest with a Linux environment. It is theoretically possible to use non-Linux environments, but no one does it in practice and anyone trying to use a non-Linux environment will be in new territory.
+This is easiest with a Linux environment. It is theoretically possible to use non-Linux environments, but no one does it in practice and anyone trying to use a non-Linux environment will be in new territory.
 
 Once you have a Linux environment, you will want to install git and cscope. You will want to setup git. The [http://git-scm.com/book/en/Getting-Started-First-Time-Git-Setup  "Git book"] is a good resource for this, but the simplest setup is:
 
@@ -129,14 +129,14 @@ PKGDIR{{=}}"\${PORTDIR}-packages"
 FEATURES{{=}}"buildpkg ccache collision-protect installsources metadata-transfer multilib-strict noinfo parallel-fetch parallel-install sign split-log splitdebug userpriv usersandbox usersync webrsync-gpg"
 END}}
 
-# We compile quite a bit, so we therefore try to optimize GCC somewhat
+We compile quite a bit, so we therefore try to optimize GCC somewhat
 {{RootCmd|mkdir -p /etc/portage/env/sys-devel
 |echo 'GCC_MAKE_TARGET{{=}}"profiledbootstrap"' >> /etc/portage/env/sys-devel/gcc}}
 
-# Lets rebuild everything and install the tools we need at the same time
+Lets rebuild everything and install the tools we need at the same time
 {{RootCmd|emerge --jobs --keep-going -ave @world qemu tmux wgetpaste gdb dev-vcs/git htop genlop gentoolkit gentoolkit-dev vim layman ccache debugedit perf sys-kernel/vanilla-sources genkernel pax-utils strace iotop}}
 
-# Lets cheat at kernel configuration
+Lets cheat at kernel configuration
 {{RootCmd|zcat /proc/config.gz > /usr/src/linux/.config
 |make -C /usr/src/linux olddefconfig menuconfig}}
 
@@ -173,3 +173,16 @@ Then compile the kernel:
 Now you should be able to start a VM:
 
 {{Cmd|sudo qemu-kvm -smp 12,cores{{=}}6,threads{{=}}1,sockets{{=}}1 -cpu host -m 1024 -kernel /guest/gentoo/usr/src/linux/arch/x86/boot/bzImage -append 'root{{=}}/dev/root rootfstype{{=}}9p rootflags{{=}}trans{{=}}virtio,version{{=}}9p2000.L ro console{{=}}ttyS0' -serial mon:stdio -serial pty -fsdev local,id{{=}}root,path{{=}}/guest/gentoo,security_model{{=}}passthrough -device virtio-9p-pci,fsdev{{=}}root,mount_tag{{=}}/dev/root -vga none -nographic}}
+
+== Debugging ==
+
+QEMU's monitor and first serial console are multiplexed on the terminal by the QEMU command in the previous section. Switching between them can be done by typing Ctrl+A C. QEMU's monitor has several interesting functions. One being that it permits you to start the gdb server by typing `gdbserver`. gdb can then be attached to debug. This has an issue where gdb cannot find the kernel sources, but this can be resolved by using gdb from the chroot to debug the running VM:
+
+{{Cmd|sudo -i chroot /guest/gentoo /usr/bin/gdb /usr/src/linux/vmlinux}}
+
+If on a 64-bit architecture, it is often necessary to specify that to gdb explicitly. Afterward, gdb can be sanely told to attach to the server. The default port is 1234.
+
+{{Cmd|prompt=(gdb)
+|color=blue
+|set architecture i386:x86-64
+|target remote localhost:1234}}
