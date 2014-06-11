@@ -1,0 +1,175 @@
+This page is a temporary home for documentation intended for ZFS developers on how ZFSOnLinux development is done. It is a WIP that is only meant for developers.
+
+= Setting up a development environment =
+
+You will likely find this to be easiest with a Linux environment. It is theoretically possible to use non-Linux environments, but no one does it in practice and anyone trying to use a non-Linux environment will be in new territory.
+
+Once you have a Linux environment, you will want to install git and cscope. You will want to setup git. The [http://git-scm.com/book/en/Getting-Started-First-Time-Git-Setup  "Git book"] is a good resource for this, but the simplest setup is:
+
+{{Cmd|git config --global user.name "John Doe"
+|git config --global user.email johndoe@example.com}}
+
+Then clone the repositories. For example:
+
+{{Cmd|mdkir ~/devel
+|cd ~/devel
+|git clone git@github.com:zfsonlinux/spl.git
+|git clone git@github.com:zfsonlinux/zfs.git}}
+
+You might want to create a bash alias to make using cscope easy.
+
+{{Cmd|alias cscope-init='find . -name '*.c' -o -name '*.h' > cscope.files'}}
+
+After running that in your shell, you can run `cscope-init && cscope -d` inside directories to get a nice curses interface for browsing the code.
+
+= Setting up a VM environment =
+
+Virtual machines can save time when running regression tests reveal problems in new code by allowing inspection of the environment from the hypervisor. It is desireable to test module loading and unloading in the virtual environment, so it is best to use a non-ZFS rootfs in the environment running regression tests. The simplest one to use is 9p-virtio, which is a network filesystem whose server is integrated with QEMU and operates over a virtio transport. It also introduces a few quirks of its own, but those can be worked around by compiling in a chroot.
+
+== Gentoo with a 9p-virtio rootfs ==
+
+We pick /guest as a place to store the virtual machines. /guest/gentoo will store the rootfs and we will make clever use of bind mounts to have a chroot at /guest/gentoo-chroot to alow us to operate on the rootfs even while the VM is running.
+
+{{RootCmd|mkdir -p /guest/gentoo{,-chroot}
+|cd /guest/gentoo}}
+
+Now we install the current stage3:
+
+{{RootCmd|wget 'ftp://gentoo.osuosl.org/pub/gentoo/releases/amd64/autobuilds/current-stage3-amd64/stage3-amd64-[0-9]*.tar.bz2'
+tar -xvjpf stage3-amd64-*.tar.bz2 -C .}}
+
+Setup the bind mounts:
+
+{{RootCmd|mount --bind /guest/gentoo{,-chroot}
+|mount -t proc none /guest/gentoo-chroot/proc
+|mount --rbind /dev /guest/gentoo-chroot/dev
+|mount --rbind /sys /guest/gentoo-chroot/sys}}
+
+Also setup a bind mount to allow the chroot to access code from our development environment:
+
+{{RootCmd|mount --bind /home/richard/devel /guest/gentoo-chroot/mnt/code
+|mount -o remount,ro /guest/gentoo-chroot/mnt/code}}
+
+{{Note|You will need to adjust the paths if you had picked different locations.}}
+{{Warning|A bug in the Linux kernel prevents us from creating a readonly bind mount that points to a rw location. The bind mount must be created and then remounted as readonly.}}
+
+Copy resolv.conf so that DNS resolution inside our chroot works:
+
+{{RootCmd|cp /etc/resolv.conf /guest/gentoo-chroot/etc/}}
+
+Now enter the chroot for additional setup:
+
+{{RootCmd|chroot /guest/gentoo-chroot /bin/bash
+|env-update
+|source /etc/profile
+|export PS1="(chroot) $PS1"
+|cd}}
+
+Setup serial terminals
+
+{{RootCmd|sed -i -e 's\#s0:12345:respawn:/sbin/agetty -L 115200 ttyS0 vt100\s0:12345:respawn:/sbin/agetty -a root -L 115200 ttyS0 vt100\' /etc/inittab
+|sed -i -e 's\#s1:12345:respawn:/sbin/agetty -L 115200 ttyS1 vt100\s1:12345:respawn:/sbin/agetty -a root -L 115200 ttyS1 vt100\' /etc/inittab}}
+
+Disable the fstab entries. We do not need them with a 9p-virtio rootfs:
+
+{{RootCmd|sed -i -e "s/\(.*\)\/\(BOOT\|ROOT\|SWAP\)\(.*\)/\#\1\/\2\3/g" /etc/fstab}}
+
+Now lets setup portage:
+
+{{RootCmd|mkdir -p /usr/portage
+|chown portage:portage /usr/portage}}
+
+Lets also setup distfiles and packages:
+
+{{RootCmd|mkdir -p /usr/portage-{distfiles,packages}
+|chown portage:portage /usr/portage-{distfiles,packages}
+}}
+
+{{Note|If you wish to share the portage tree, distfiles or packages between your main system and the chroot, it is rather trivial to use bind mounts to do it}}
+
+Do some portage configuration.
+
+{{RootCmd|echo 'dev-libs/beecrypt threads' >> /etc/portage/package.use
+|echo 'app-emulation/qemu ~amd64' >> /etc/portage/package.accept_keywords
+|echo 'dev-util/perf ~*' >> /etc/portage/package.accept_keywords
+|echo 'sys-kernel/vanilla-sources ~amd64' >> /etc/portage/package.accept_keywords}}
+
+Keyword the 9999 ebuilds.
+
+{{RootCmd|echo "sys-kernel/spl **" >> /etc/portage/package.accept_keywords
+|echo "sys-fs/zfs-kmod **" >> /etc/portage/package.accept_keywords
+|echo "sys-fs/zfs **" >> /etc/portage/package.accept_keywords}}
+
+Configure ZFS packaging
+{{RootCmd|echo "sys-kernel/spl custom-cflags debug debug-log" >> /etc/portage/package.use
+|echo "sys-fs/zfs-kmod custom-cflags debug -rootfs" >> /etc/portage/package.use
+|echo "sys-fs/zfs custom-cflags debug -rootfs test-suite" >> /etc/portage/package.use}}
+
+If you are not bind mounting a portage tree, install one:
+
+{{RootCmd|emerge-webrsync}}
+
+Install a few tools we will need:
+
+{{RootCmd|emerge ccache debugedit}}
+
+Configure make.conf:
+
+{{RootCmd|cat << END > /etc/portage/make.conf
+USE="mmx sse sse2 multilib dlz -X -gtk -sdl -qt -nptl -xpm -gpm"
+CFLAGS="-march=native -O2 -pipe -ggdb"
+CXXFLAGS="\${CFLAGS}"
+MAKEOPTS="-j7"
+CHOST="x86_64-pc-linux-gnu"
+
+PORTDIR="/usr/portage"
+DISTDIR="\${PORTDIR}-distfiles"
+PKGDIR="\${PORTDIR}-packages"
+
+FEATURES="buildpkg ccache collision-protect installsources metadata-transfer multilib-strict noinfo parallel-fetch parallel-install sign split-log splitdebug userpriv usersandbox usersync webrsync-gpg"
+END}}
+
+# We compile quite a bit, so we therefore try to optimize GCC somewhat
+{{RootCmd|mkdir -p /etc/portage/env/sys-devel
+|echo 'GCC_MAKE_TARGET="profiledbootstrap"' >> /etc/portage/env/sys-devel/gcc}}
+
+# Lets rebuild everything and install the tools we need at the same time
+{{RootCmd|emerge --jobs --keep-going -ave @world qemu tmux wgetpaste gdb dev-vcs/git htop genlop gentoolkit gentoolkit-dev vim layman ccache debugedit perf sys-kernel/vanilla-sources genkernel pax-utils strace iotop}}
+
+# Lets cheat at kernel configuration
+{{RootCmd|zcat /proc/config.gz > /usr/src/linux/.config
+|make -C /usr/src/linux olddefconfig menuconfig}}
+
+In menuconfig, make certain that you enable the following
+
+* CONFIG_MODULES=y
+* CONFIG_MODULE_UNLOAD=y
+* CONFIG_EXPERT=y
+* CONFIG_KALLSYMS=y
+* CONFIG_KPROBES=y
+* CONFIG_FTRACE=y
+* CONFIG_KPROBE_EVENT=y (probably already set)
+* CONFIG_UPROBE_EVENT=y
+* CONFIG_FUNCTION_TRACER=y
+* CONFIG_FUNCTION_GRAPH_TRACER=y (probably already set)
+* CONFIG_DEBUG_INFO=y
+* CONFIG_READABLE_ASM=y
+* CONFIG_LOCKUP_DETECTOR=y
+* CONFIG_DEBUG_LIST=y
+* CONFIG_KGDB=y
+* CONFIG_DEBUG_SET_MODULE_RONX=y
+* CONFIG_CC_STACKPROTECTOR_REGULAR=y (CONFIG_CC_STACKPROTECTOR_STRONG preferred, but we don't have GCC 4.9 yet)
+* CONFIG_VIRTIO_PCI=y
+* CONFIG_NET_9P=y
+* CONFIG_NET_9P_VIRTIO=y
+* CONFIG_9P_FS=y
+* CONFIG_9P_FS_POSIX_ACL=y
+* CONFIG_9P_FS_SECURITY=y
+
+Then compile the kernel:
+
+{{RootCmd|make -C /usr/src/linux bzImage}}
+
+Now you should be able to start a VM:
+
+{{Cmd|sudo qemu-kvm -smp 12,cores=6,threads=1,sockets=1 -cpu host -m 1024 -kernel /guest/gentoo/usr/src/linux/arch/x86/boot/bzImage -append 'root=/dev/root rootfstype=9p rootflags=trans=virtio,version=9p2000.L ro console=ttyS0' -serial mon:stdio -serial pty -fsdev local,id=root,path=/guest/gentoo,security_model=passthrough -device virtio-9p-pci,fsdev=root,mount_tag=/dev/root -vga none -nographic}}
