@@ -1,6 +1,6 @@
 {{Warning|Under construction}}
 
-This page details how to build Firefox OS on Gentoo
+This page details how to build Firefox OS and flash your phone
 
 ==Requirements==
 ===Phone===
@@ -14,8 +14,6 @@ This page details how to build Firefox OS on Gentoo
 ==Packages==
 Firefox OS requires gcc 4.6, it will not build with any other version.
 
-Mozilla says ccache is required, but it's not.<br/>Using ccache AND forcing the gcc version does not fit well with the way Firefox OS builds, so it is best to forget ccache.
-
 Quite a few other packages are required, so we might as well create a set.
 
 {{file|/etc/portage/sets/firefox_os|@firefox_os set|<pre>
@@ -23,7 +21,7 @@ Quite a few other packages are required, so we might as well create a set.
 =sys-devel/autoconf-2.13
 sys-devel/bison
 app-arch/bzip2
-# dev-util/ccache 
+dev-util/ccache 
 net-misc/curl
 sys-devel/flex
 sys-apps/gawk
@@ -47,7 +45,7 @@ sys-libs/zlib abi_x86_32</pre>}}
 ==Udev==
 Unless you want to use adb/fastboot as root, you may need to add a rule to udev (and have your user be part of the plugdev group)
 {{file|/etc/udev/rules.d/firefox_os.rules||<pre>SUBSYSTEM=="usb", ATTR{idVendor}=="19d2", ATTR{idProduct}=="1351", MODE="0666", GROUP="plugdev"</pre>}}
-{{note|replace 19d2 and 1351 (ZTE Open) by the values of your phone, they can be obtained with lsusb}}
+{{note|replace ''19d2'' and ''1351'' (ZTE Open) by the values of your phone, they can be obtained with lsusb}}
 {{RootCmd|/etc/init.d/udev restart}}
 
 
@@ -72,25 +70,40 @@ See [https://developer.mozilla.org/en-US/Firefox_OS/Developer_phone_guide/Phone_
 The list of versions available can be seen [https://github.com/mozilla-b2g/b2g-manifest/branches here].
 As of this writing, ''v1.3'' is the lastest stable version but you can build any version you want.
 
-===Fetching===
-Firefox OS uses a script to fetch the sources, unfortunatly this script requires python2, so we will need to force python2
+===Python===
+Firefox OS uses python to fetch the sources, unfortunatly it only works with python2, if your default python interpreter is python3, you will need this small hack
+{{Cmd
+|mkdir B2G
+|ln -s `which python2` B2G/python
+|export PATH&#x3d;"${PWD}/B2G:${PATH}"
+}}
+{{note|You could also set python2 as your default interpreter with eselect python, but this may cause problems with other python programs)}}
 
+===Fetching===
 {{Cmd
 |git clone git://github.com/mozilla-b2g/B2G.git
 |cd B2G
-|ln -s `which python2` python
-|PATH&#x3d;"${PWD}:${PATH}" BRANCH&#x3d;v1.4 ./config.sh inari
+|BRANCH&#x3d;v1.4 ./config.sh inari
 }}
 
 {{note|Replace ''v1.4'' by the version you want, and ''inari'' by the codename of your phone (inari &#x3d; ZTE Open) }}
 
-The last command will start fetching the sources, this will take a '''very long''' time, possibly hours since it basically downloads 14GB of data.
+The last command will start fetching the sources, this will take a '''very long time''', possibly hours since it basically downloads 14GB of data.
 
 ==Building==
-{{Cmd|PATH&#x3d;"${PWD}:${PATH}" CC&#x3d;gcc-4.6.3 CXX&#x3d;g++-4.6.3 ./build.sh}}
-{{note|Replace 4.6.3 with the 4.6 version you have installed. It won't work with gcc 4.7}}
+===GCC===
+Building requires gcc-4.6, it won't work with gcc 4.7 which is the current version used by Gentoo
+{{Cmd
+|export CC&#x3d;gcc-4.6.3
+[export CXX&#x3d;g++-4.6.3
+}}
+{{note|Replace 4.6.3 with the 4.6 version you have installed}}
+
+===Build===
+{{Cmd| ./build.sh}}
 {{important|You need to have the phone connected via USB while building, the build script needs some non-free files present on the phone}}
 
+Building takes quite some time and displays a ''lot'' of warnings.
 
 ==Flashing==
 TODO
