@@ -198,7 +198,7 @@ Non-executable page ->
  [*] Enforce non-executable pages
  [*]   Paging based non-executable pages
  [*]   Segmentation based non-executable pages                       <--- Not available on amd64.
- [*] Emulate trampolines
+ [*] Emulate trampolines                                             <--- CRITICAL for python
  [*] Restrict mprotect()
  [ ]   Use legacy/compat protection demoting (read help)
  [ ]   Allow ELF text relocations (read help)
@@ -225,7 +225,9 @@ Miscellaneous hardening features  --->
 </pre>
 }}
 
-Preferably, we should opt for XATTR_PAX flags. In that case, all of the above can remain in place, but we would change the PaX Control configuration: 
+Please note that these are recommended settings and you can deviate from them, but be careful when doing so.  On a play box, you can and should try new features to see what they might do or break.  But on a production box, do not turn on or off some feature without knowing what you are doing.  This is particularly true for EMUTRAMP (Emulate trampolines) which is turn on by default, and turning it off can break python and therfore your system!  The reason is that python and libffi write code on the fly, either by RWX mmap-ings which PaX's MPROTECT will kill, or by falling back on trying to write little code snippets to files which other features in Grsecurity will kill, like Trused Path Execution. (See [https://bugs.gentoo.org/show_bug.cgi?id=484472 bug #484472].)  In Gentoo, we've opted to patch python and libffi to use trampolines that can be safely handled by emulation in a PaX kernel. (See [https://bugs.gentoo.org/show_bug.cgi?id=329499 bug #329499].)  We then PaX mark the python executable with 'E' to enable emulation of trampolines.  Without EMUTRAMP on in the kernel, python will fail in trying to generate its RWX mmap-ings and die every time.  (As a ''temporary'' workaround if you get into this situaiton, you can disable MPROTECT on python with `paxctl -m` and then restore the original markings once you have booted back into a PaX kernel with EMUTRAMP.)
+
+Also, we should prefer XATTR_PAX flags over PT_PAX. In that case, all of the above can remain in place, but we would change the PaX Control configuration: 
 
 {{Kernel|Kernel configuration with XATTR_PAX flags|<pre>
 PaX Control ->
@@ -250,7 +252,7 @@ File systems  --->
 </pre>
 }}
 
-Here <code>Ext4 extended attributes</code> was automatically selected by <code>PAX_XATTR_PAX_FLAGS [=y] && GRKERNSEC [=y] && PAX [=y] && EXT4_FS [=y]</code>. Nonetheless, in case you are using some exotic filesystem which doesn't have this this selection dependency, you may want to check and then file a bug report to have your filesystem better supported with respect to PaX. 
+Here <code>Ext4 extended attributes</code> was automatically selected by <code>PAX_XATTR_PAX_FLAGS [=y] && GRKERNSEC [=y] && PAX [=y] && EXT4_FS [=y]</code>. Nonetheless, in case you are using some exotic filesystem which doesn't have this this selection dependency, you may want to check and then file a bug report to have your filesystem better supported with respect to PaX.
 
 == PaX Control ==
 
