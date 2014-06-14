@@ -40,15 +40,43 @@ This creates a 1GB (1953125-sector) zero target:
 === Linear ===
 === Snapshot ===
 === Mirror and RAID1 ===
+{{Note|All examples for these targets assume /dev/loop{0,1} of 1 GB (1953125 sectors) each and 2 4 MiB metadata devices (TODO: Figure out how to compute size) /dev/loop{3,4} for the mirror log (if needed), with a the same defaults as LVM uses}}
+==== Mirror ====
+There is no kernel documentation for the ''mirror'' target. Parameters obtained from Linux sources: drivers/md/dm-log.c and drivers/md/dm-raid1.c
+{{Code||<starting sector> <length> mirror <log type> <#log args> <log arg1>...<log argN> <#devs> <device name 1> <offset 1>...<device name N> <offset N> <#features> <features>}}
+
+For <log type> there are 4 values with different arguments:
+* '''core''' <region_size> [[no]sync] [block_on_error]
+* '''disk''' <logdevice> <region_size> [[no]sync] [block_on_error] 
+
+And the values of each argument:
+* '''<region_size>''' is the region size of the mirror in sectors. It must be power of 2 and at least of a kernel page (for Intel x86/x64 processors, this is 4 KiB (8 sectors)  This is the granularity in which the mirror is kept to update, it is done in blocks of <region_size>. Its a tradeoff between increased metadata and wasted I/O. LVM uses a value of 512 KiB (1024 sectors).
+* '''<logdevice>''' is the device in which to store the metadata, for the disk log types
+* '''[no]sync''' is an optional argument. Default is "sync". '''nosync''' skips the sync steps, but any results reads from are not written to since the mirror was established are undefined. This is appropriate to use then the initial device is empty.  
+
+And there is only 1 feature:
+* '''handle_errors''' causes the mirror to respond to an error. Default is to ignore all errors. LVM enables this feature.
+
+To create a mirror with in-memory log:
+{{RootCmd|dmsetup create test_mirror --table '0 1953125 mirror core 1 1024 2 /dev/loop0 0 /dev/loop1 0 1 handle_errors'}}
+Without a persistent log, the mirror will have to be recreated every time by copying the entire block device to the other "legs". To avoid this, the log may be stored on disk:
+{{RootCmd|dmsetup create test_mirror --table '0 1953125 mirror core 2 /dev/loop3 1024 2 /dev/loop0 0 /dev/loop1 0 1 handle_errors'}}
+Its possible to do LVM "--mirrorlog mirror" by creating 2 mirrors: a '''core''' mirror for the log device, and a '''disk''' mirror the data devices:
+{{RootCmd
+|dmsetup create test_mirror_log --table '0 8192 mirror core 1 1024 2 /dev/loop3 0 /dev/loop4 0 1 handle_errors'
+|dmsetup create test_mirror --table '0 1953125 mirror core 2 /dev/mapper/test_mirror_log 1024 2 /dev/loop0 0 /dev/loop1 0 1 handle_errors'}}
+==== RAID1 ====
 See <tt>Documentation/device-mapper/dm-raid.txt</tt>. Note that <chunk_size> is unused for RAID1, but a value is still required, therefore is value should be set to 0. There 2 other important, though optional, parameters: <region_size> and <[no]sync>. 
 
-<region_size> controls how large the sync regions are. If a region gets out of sync, the entire region must be rewritten. The default is 4 MiB (8192 sectors). LVM, in contrast, uses a region size of 512 KiB (1024 sectors). The mirror metadata device needs 1 bit per region. The smaller the <regions_size>, the more metadata needed (TODO: How does one compute how big?), but the less wasted I/O to bring the mirrors back in sync. <[no]sync> controls whether or not to sync the mirror on creation. If a mirror is created with <nosync>, the result of a read to area that have no been written to yet are undefined. If the initial device device is blank, this is an appropriate option to use. 
+* <region_size> has the same meaning as it does in the ''mirror'' target. Unlike the ''mirror'' target. it has a default of 4 MiB (8192 sectors). LVM uses a region size of 512 KiB (1024 sectors).
+* <[no]sync> has the same meaning as it does in the ''mirror'' target
 
-If /dev/loop1 and /dev/loop2 are each 1GB (1953125 sectors), to create a simple 1 GB raid1 with no metadata devices.
-{{RootCmd|<nowiki>dmsetup create test-raid1 --table '0 1953125 raid raid1 3 0 region_size 1024 2 - /dev/loop0 - /dev/loop1'</nowiki>}}
+To create a simple 1 GB raid1 with no metadata devices.
+{{RootCmd|dmsetup create test-raid1 --table '0 1953125 raid raid1 3 0 region_size 1024 2 - /dev/loop0 - /dev/loop1'}}
 Note that because there's no metadata device, the array must be re-mirrored each time it is created. So normally, a metadata device is desired. Each 
-"leg" needs it own metadata device (TODO: How does one compute how big?). If /dev/loop2 and /dev/loop3 are small metadata devices (4 MiB), then to create a 1G RAID1 would be:
-{{RootCmd|<nowiki>dmsetup create test-raid1 --table '0 1953125 raid raid1 3 0 region_size 1024 2 /dev/loop2 /dev/loop0 /dev/loop3 /dev/loop1'</nowiki>}}
+"leg" needs it own metadata device  If /dev/loop2 and /dev/loop3 are small metadata devices (4 MiB), then to create a 1G RAID1 would be:
+{{RootCmd|dmsetup create test-raid1 --table '0 1953125 raid raid1 3 0 region_size 1024 2 /dev/loop2 /dev/loop0 /dev/loop3 /dev/loop1'}}
+
 === Striped (RAID 0) and RAID 4/5/6/10 ===
 See <tt>Documentation/device-mapper/striped.txt</tt> and <tt>Documentation/device-mapper/dm-raid.txt</tt>. <chunk_size> is required. The <chunk size> must be both a power a two and a least a large as a memory page (for x86/x64 processors, pages are 4 KiB, so <chunk size> must be at least 8.) LVM uses a default value of 64 KiB (128 sectors). Also note the size of the array MUST be a multiple of the <chunk size>. Otherwise the target will give the error "Array size does not match requested target length". The rule for <region_size> is similar as it is for RAID1. <nosync> is usually not appropriate for RAID 4,5 and 6 as even for blank device parity must still be computed. 
 
