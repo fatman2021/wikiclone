@@ -29,9 +29,9 @@ The ''suspend''' command stops any NEW I/O. Existing I/O will still be completed
 === Resume ===
 The '''resume''' command allows I/O to be submitted to a previously suspended device. Syntax is:
 <code>dmsetup message suspend <device name></code>
-== Dmsetup targets ==
+== Device-mapper targets ==
 === Zero ===
-See <tt>Documentation/device-mapper/zero.txt</tt> . This device has no device-specific parameters.  
+See <tt>Documentation/device-mapper/zero.txt</tt> . This target has no target-specific parameters.  
 
 The "zero" target create that functions similarly to /dev/zero: All reads return binary zero, and all writes are discarded> Normaly used in tests, but also useful in recovering linear and raid-type targets, when combined with the 'snapshot' target: a "zero" target of the same size as the missing piece(s) is created, a (writable) snapshot created (usually a loop device backed by a large sparse file, but it can be far smaller than the missing piece since it only has to the hold the changes). Then the snapshot can be mounted, fsck'd, or recover tools run against it. 
 
@@ -40,7 +40,7 @@ This creates a 1GB (1953125-sector) zero target:
 === Linear ===
 === Snapshot ===
 === Mirror and RAID1 ===
-{{Note|All examples for these targets assume /dev/loop{0,1} of 1 GB (1953125 sectors) each and 2 4 MiB metadata devices (TODO: Figure out how to compute size) /dev/loop{3,4} for the mirror log (if needed), with a the same defaults as LVM uses}}
+{{Note|All examples for these targets assume /dev/loop{0,1} of 1 GB (1953125 sectors) each and 2 4 MiB metadata disks (TODO: Figure out how to compute size) /dev/loop{3,4} for the mirror log (if needed), with a the same defaults as LVM uses}}
 ==== Mirror ====
 There is no kernel documentation for the ''mirror'' target. Parameters obtained from Linux sources: drivers/md/dm-log.c and drivers/md/dm-raid1.c
 {{Code||<starting sector> <length> mirror <log type> <#log args> <log arg1>...<log argN> <#devs> <device name 1> <offset 1>...<device name N> <offset N> <#features> <features>}}
@@ -89,14 +89,14 @@ Because the number of sectors (1953125) is not a multiple of 128, it must be rou
 So in this case:
 {{Cmd|echo 'scale{{=}}0; x{{=}}1953125 / 128; x*{{=}}128; x' {{!}} bc|output=1953024}}
 ==== Striped (RAID0) ====
-The striped target parameters is asymmetric to the RAID ones. First, the # device comes first, not the cluster size. Second, one must specify the offset (usually 0) of each device the makes up the stripe set.
+The striped target parameters is asymmetric to the RAID ones. First, the # devices comes first, not the cluster size. Second, one must specify the offset (usually 0) of each device the makes up the stripe set.
 Because there are 4 disks of 1953024 sectors each, the total array size will be 7812096 sectors.
 {{RootCmd|dmsetup create test_raid0 --table '0 7812096 striped 4 128 /dev/loop0 0 /dev/loop1 0 /dev/loop2 0 /dev/loop3 0'}}
 ==== RAID4  ====
 Because RAID4 uses a dedicated parity disk, one disk is "unusable", therefore the total space is 3 disks * 1953024 sectors, or a total of 5859072 sectors.
 To create a RAID4 set with no metadevice devices:
 {{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 3 64 region_size 1024 4 - /dev/loop0 - /dev/loop1 - /dev/loop2 - /dev/loop3'}}
-As RAID1, because there are no metadata device, the parity drive will have to be rebuilt every time it is assembled. To create a RAID4 WITH metadata devices: 
+As RAID1, because there are no metadata device, the parity disk will have to be rebuilt every time it is assembled. To create a RAID4 WITH metadata devices: 
 {{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 3 64 region_size 1024 4 /dev/loop4 /dev/loop0 /dev/loop5 /dev/loop1 /dev/loop6 /dev/loop2 /dev/loop7 /dev/loop3'}}
 It is possible to create a RAID4 in degraded mode initially. It is necessary to not specify any metadata devices, and "nosync" must added
 {{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 4 64 region_size 1024 nosync 4 - /dev/loop0 - /dev/loop1 - /dev/loop2 - -'}}
@@ -104,7 +104,11 @@ The reason for doing this is its faster to create a degraded array, populate it,
 ==== RAID5  ====
 ==== RAID6  ====
 ==== RAID10  ====
-
 === Crypt ===
 === Thin ===
 === Era ===
+=== Multipath ===
+=== Debuggging targets ===
+==== Delay ====
+==== Flakey ====
+==== Error ====
