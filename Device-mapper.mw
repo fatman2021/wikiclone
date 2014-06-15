@@ -99,11 +99,21 @@ Note that because there's no metadata device, the array must be re-mirrored each
 {{RootCmd|dmsetup create test-raid1 --table '0 1953125 raid raid1 3 0 region_size 1024 2 /dev/mapper/test-mirror-log0 /dev/mapper/test-mirror-data0 /dev/mapper/test-mirror-log1 /dev/mapper/test-mirror-data1'}}
 
 === Striped (RAID 0) and RAID 4/5/6/10 ===
-{{Note|All the following examples will use 4 1GB (1953125-sector) disks as /dev/loop{0,1,2,3} and (if needed) 4 4MiB metadata disks as /dev/loop{4,5,6,7}, with a 64KiB (128 sector) cluster_size and a 512 KiB (1024 sector) region_size}}
+{{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1}, split as follows:
+{{RootCmd
+|dmsetup create test-raid-metadata0 --table '0 8192 linear /dev/loop0 0'
+|dmsetup create test-raid-metadata1 --table '0 8192 linear /dev/loop1 0'
+|dmsetup create test-raid-metadata2 --table '0 8192 linear /dev/loop2 0'
+|dmsetup create test-raid-metadata3 --table '0 8192 linear /dev/loop3 0'
+|dmsetup create test-raid-data0 --table '0 1953125 linear /dev/loop0 8192'
+|dmsetup create test-raid-data1 --table '0 1953125 linear /dev/loop1 8192'
+|dmsetup create test-raid-data2 --table '0 1953125 linear /dev/loop2 8192'
+|dmsetup create test-raid-data3 --table '0 1953125 linear /dev/loop3 8192'}}
+}}
 See <tt>Documentation/device-mapper/striped.txt</tt> and <tt>Documentation/device-mapper/dm-raid.txt</tt> for the parameters of this target. Three in particular are important:
-* '''<chunk_size>''' is the size I/O (in sectors) before its "split" across the array  It must be both a power a two and a least a large as a kernel memory page (for x86/x64 processors, pages are 4 KiB, so <chunk size> must be at least 8.) LVM uses a default value of 64 KiB (128 sectors). Using LVM defaults, a 1 MiB (2048 sector) write will be split in 16 chunks, distributed as evenly as possible across the array. The size of the array MUST be a multiple of this value. Otherwise the target will give the error "Array size does not match requested target length". 
-* '''<region size>''' has the same meaning and defaults as it does for the RAID1 target. 
-* '''[no]sync''' has the same meaning as it does for the RAID1  target. It is usually not appropriate for RAID 4,5 and 6 as even for blank device parity must still be computed, unless creating a degraded array. 
+* ''chunk_size'' is the size I/O (in sectors) before its "split" across the array  It must be both a power a two and a least a large as a kernel memory page (for x86/x64 processors, pages are 4 KiB, so <chunk size> must be at least 8.) LVM uses a default value of 64 KiB (128 sectors). Using LVM defaults, a 1 MiB (2048 sector) write will be split in 16 chunks, distributed as evenly as possible across the array. The size of the array MUST be a multiple of this value. Otherwise the target will give the error "Array size does not match requested target length". 
+* ''region size'' has the same meaning and defaults as it does for the RAID1 target. 
+* '''[no]sync''' has the same meaning as it does for the RAID1  target. It is usually not appropriate for RAID 4,5 and 6 as even for blank devices parity must still be computed, unless creating a degraded array. 
 Because the number of sectors (1953125) is not a multiple of 128, it must be rounded down to the nearest multiple of 128 sectors, which can be done using this formula:
 {{Code||echo 'scale{{=}}0; x{{=}}<dev_dize> / <chunk_size>; x*{{=}}<chunk_size>; x' {{!}} bc}}
 So in this case:
@@ -111,19 +121,20 @@ So in this case:
 ==== Striped (RAID0) ====
 The striped target parameters is asymmetric to the RAID ones. First, the # devices comes first, not the cluster size. Second, one must specify the offset (usually 0) of each device the makes up the stripe set.
 Because there are 4 disks of 1953024 sectors each, the total array size will be 7812096 sectors.
-{{RootCmd|dmsetup create test_raid0 --table '0 7812096 striped 4 128 /dev/loop0 0 /dev/loop1 0 /dev/loop2 0 /dev/loop3 0'}}
+{{RootCmd|dmsetup create test-raid0 --table '0 7812096 striped 4 128 /dev/mapper/test-raid-data0 0 /dev/mapper/test-raid-data1 0 /dev/mapper/test-raid-data2 0 /dev/mapper/test-raid-data3 0'}}
 ==== RAID4  ====
 Because RAID4 uses a dedicated parity disk, one disk is "unusable", therefore the total space is 3 disks * 1953024 sectors, or a total of 5859072 sectors.
-To create a RAID4 set with no metadevice devices:
-{{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 3 64 region_size 1024 4 - /dev/loop0 - /dev/loop1 - /dev/loop2 - /dev/loop3'}}
-As RAID1, because there are no metadata device, the parity disk will have to be rebuilt every time it is assembled. To create a RAID4 WITH metadata devices: 
-{{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 3 64 region_size 1024 4 /dev/loop4 /dev/loop0 /dev/loop5 /dev/loop1 /dev/loop6 /dev/loop2 /dev/loop7 /dev/loop3'}}
+To create a RAID4 set with no metadata devices:
+{{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 3 64 region_size 1024 4 - /dev/mapper/test-raid-data0 - /dev/mapper/test-raid-data1 - /dev/mapper/test-raid-data2 - /dev/mapper/test-raid-data3'}}
+As RAID1, because there are no metadata devices, the parity disk will have to be rebuilt every time it is assembled. To create a RAID4 WITH metadata devices: 
+{{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 3 64 region_size 1024 4 /dev/mapper/test-raid-metadata0 /dev/mapper/test-raid-data0 /dev/mapper/test-raid-metadata1 /dev/mapper/test-raid-data1 /dev/mapper/test-raid-metadata2 /dev/mapper/test-raid-data2 /dev/mapper/test-raid-metadata3 /dev/mapper/test-raid-data3'}}
 It is possible to create a RAID4 in degraded mode initially. It is necessary to not specify any metadata devices, and "nosync" must added
-{{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 4 64 region_size 1024 nosync 4 - /dev/loop0 - /dev/loop1 - /dev/loop2 - -'}}
+{{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 4 64 region_size 1024 nosync 4 - /dev/mapper/test-raid-data0 - /dev/mapper/test-raid-data1 - /dev/mapper/test-raid-data2 - -'}}
 The reason for doing this is its faster to create a degraded array, populate it, tear it down, and then reassemble the array with the missing metadata devices and data device, so that the parity is only computed once, not twice.
 ==== RAID5  ====
 ==== RAID6  ====
 ==== RAID10  ====
+
 === Crypt ===
 === Thin ===
 === Cache ===
