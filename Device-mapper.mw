@@ -38,6 +38,20 @@ The "zero" target create that functions similarly to /dev/zero: All reads return
 This creates a 1GB (1953125-sector) zero target:
 {{RootCmd|<nowiki>dmsetup create 1gb-zero --table '0 1953125 zero'</nowiki>}}
 === Linear ===
+{{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1,2,3} }} 
+See <tt>Documentation/device-mapper/linear.txt</tt> for paramters in usage. This target is the basic building block for the device mapper - it is used to both join and split (and often both at once) block device. For a simple identify mapping:
+{{RootCmd|dmsetup create test-linear --table '0 1961317 linear /dev/loop0 0'}}
+The 4 disks can be joined to together as one:
+{{RootCmd|echo -e '0 1961317 linear /dev/loop0 0'\\n'1961317 1961317 linear /dev/loop1 0'\\n'3922634 1961317 linear /dev/loop2 0'\\n'5883951 1961317 linear /dev/loop3 0' {{!}} dmsetup create test-linear}}
+Note the peculiar sync on the join. the --table argument only allows single-tables, so the table must be fed in from stdin. Also notice the <logical_start_sector> is not 0 in all cases, as each device were appending need to start where the previous ends.
+Its possible to split a disk, in this case into a 4 MiB (8192 sector) "small" and 1 GB "large" (1953125 sector) disks:
+{{RootCmd
+|dmsetup create test-linear-small --table '0 8192 linear /dev/loop0 0'
+|dmsetup create test-linear-large --table '0 1953125 linear /dev/loop0 8192'}}
+Note that in the second device, the offset is not 0, since it is desired to start 4 MiB (8192 sectors) in
+Both joining an splitting can be combined:
+{{RootCmd|echo -e '0 1953125 linear /dev/loop0 8192'\\n'1953125 1953125 linear /dev/loop1 8192'\\n'3906250 1953125 linear /dev/loop2 8192'\\n'5859375 1953125 linear /dev/loop3 8192' {{!}} dmsetup create test-linear}}
+This creates a 4GB device using last 1GB of each disk.
 === Snapshot ===
 === Mirror and RAID1 ===
 {{Note|All examples for these targets assume /dev/loop{0,1} of 1 GB (1953125 sectors) each and 2 4 MiB metadata disks (TODO: Figure out how to compute size) /dev/loop{3,4} for the mirror log (if needed), with a the same defaults as LVM uses}}
@@ -106,6 +120,8 @@ The reason for doing this is its faster to create a degraded array, populate it,
 ==== RAID10  ====
 === Crypt ===
 === Thin ===
+=== Cache ===
+See <tt>Documentation/device-mapper/cache.txt</tt> and Documentation/device-mapper/cache-policies.txt for parameters and usage. This target is intended to speed up access to a slow but large rotational disk by using a faster but smaller SSD as a cache
 === Era ===
 === Multipath ===
 === Debuggging targets ===
