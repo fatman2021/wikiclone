@@ -150,25 +150,25 @@ If all the devices are empty, the '''nosync''' may be used to skip the initial s
 === Crypt ===
 === Thin ===
 === Cache ===
-{{Note|All the following exmaples for this target will 2 disks: /dev/loop0 will be 1G+32 MiBs (2018661 sectors), and /dev/loop1 will be 200MB+32Mib (456161 sectors), split as follows:
+{{Note|All the following examples for this target will 2 disks: /dev/loop0 will be 1G+12 MiB (1977701 sectors), and /dev/loop1 will be 200MB+12MiB (415201 sectors), split as follows:
 {{RootCmd
-|for S in `seq 0 1`; do dmsetup create test-cache-meta$S --table "0 57344 linear /dev/loop$S 0"; dmsetup create test-mirror-cache-meta$S --table "0 8192 linear /dev/loop$S 57344"; done
-|dmsetup create test-cache-data0 --table '0 1953125 linear /dev/loop0 65536'
-|dmsetup create test-cache-data1 --table '0 390625 linear /dev/loop1 65536'}}
+|for S in `seq 0 1`; do dmsetup create test-cache-meta$S --table "0 16384 linear /dev/loop$S 0"; dmsetup create test-mirror-cache-meta$S --table "0 8192 linear /dev/loop$S 16384"; done
+|dmsetup create test-cache-data0 --table '0 1953125 linear /dev/loop0 24576'
+|dmsetup create test-cache-data1 --table '0 390625 linear /dev/loop1 24576'}}
 }}
 See <tt>Documentation/device-mapper/cache.txt</tt> and Documentation/device-mapper/cache-policies.txt for parameters and usage. This target is intended to speed up access to a slow but large rotational disk by using a faster but smaller SSD as a cache. 
 There is one important parameter:
 * ''block_size'' is the granularity of the cache. Data is promoted/demoted to/from the cache in blocks. It must be a multiple of 32k (64 sectors). LVM uses 64k (128 sectors) by default. 
 
-The recommended metadata device size is <tt>4 MiB + (16 * nr_blocks)</tt> where ''nr_blocks'' is the number of sectors on the "fast" device divided by the ''block_size''. For this device:
-{{Cmd|echo '( 16 * ( 390625 / 128 ) + 8192 )' {{!}} bc|output=57008}}
-That's almost 28 MiB (57344 sectors).
+The recommended metadata device size is <tt>8192 sectors + (nr_blocks/32) sectors</tt> where ''nr_blocks'' is the number of sectors on the "fast" device divided by the ''block_size''. For this device:
+{{Cmd|echo '390625 / (128 * 32) + 8192  {{!}} bc|output=8287}}
+Will round up to 8 MiB (16384 sectors) for safety, however 4 MiB (8192 sectors) would likely be more than enough anyway.
 
 To create a cache device:
 {{RootCmd|dmsetup create test-cache --table '0 1953024 cache /dev/mapper/test-cache-meta0 /dev/mapper/test-cache-data1 /dev/mapper/test-cache-data0 128 0 default 0'}}
-Its recommded to mirror the metadata device on the origin and cache device. To do so:
+Its recommended to mirror the metadata device on the origin and cache device. To do so:
 {{RootCmd
-|dmsetup create test-mirror-cache-meta --table '0 57344 raid raid1 1 0 2 /dev/mapper/test-mirror-cache-meta0 /dev/mapper/test-cache-meta0 /dev/mapper/test-mirror-cache-meta1 /dev/mapper/test-cache-meta1'
+|dmsetup create test-mirror-cache-meta --table '0 16384 raid raid1 1 0 2 /dev/mapper/test-mirror-cache-meta0 /dev/mapper/test-cache-meta0 /dev/mapper/test-mirror-cache-meta1 /dev/mapper/test-cache-meta1'
 |dmsetup create test-cache --table '0 1953024 cache /dev/mapper/test-mirror-cache-meta /dev/mapper/test-cache-data1 /dev/mapper/test-cache-data0 128 0 default 0'}}
 
 === Era ===
