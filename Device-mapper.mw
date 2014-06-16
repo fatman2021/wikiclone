@@ -150,6 +150,49 @@ If all the devices are empty, the '''nosync''' may be used to skip the initial s
 
 === Crypt ===
 === Thin ===
+{{Note|All the following examples for this target will use 2 disks: a 1G+2 MiB (1957221 sectors) disk as /dev/loop0, and a 200 MB (390625 sectors) '''read-only''' disk as /dev/loop1, with /dev/loop0 split as follows:
+{{RootCmd
+|dmsetup create test-thin-metadata --table '0 4096 linear /dev/loop0 0'
+|dmsetup create test-thin-data --table '0 1953125 linear /dev/loop0 4096'}}
+}}
+
+See <tt>Documentation/device-mapper/thin-provisioning.txt</tt> for the paramters of this target. Thin pools are to block devices what sparse files are to filesystems. It is possible to create large, empty, even larger than the pool itself, or sums of objects greater than the pool size, and space isn't allocated until something is actually written to those areas. Futhermore, blocks can be returned to the thin pool via the trim/discard operation. Thin pool have a cheap snapshotting operation (different from the snapshot target) that remains cheap even upon multiple layers of indirections (snapshots of snapshots of snapshots...).
+
+The '''thin''' target has 3 important parameters:
+* '''metadata_dev'' is where to store the metadata for the thin pool. The recommended size is 3*(''data_dev_size''/(32*''data_block_bize'')) sectors, but at least 2 MiB (4096 sectors). The thin-provisioning-tools package has a program, ''thin_metadata_size'' that will compute an suitable thin pool size given the ''data_block_size'', ''data_dev_size'', and number of volumes in the pool. The maximum supported size of the metadata device is 15.9375 GiB (33423360 sectors)
+* ''data_block_size'' controls the granularity of the thin pool. Data is allocated in blocks of this size. It must at least 64KiB (128 sectors), and be a multiple of 64 KiB (128) sectors. 
+* ''low_water_mark'' is a lower boundary of free space within the pool. If the free space drops below this, a message a sent. Set it to 0 is disable.
+
+Using the ''thin_metadata_size'' utility of thin-provisioning-tools:
+{{Cmd|/sbin/thin_metadata_size -b128s -s1g -m100|output=thin_metadata_size - 1848 sectors estimated metadata area size for "--block-size=128sectors --pool-size=1gigabytes --max-thins=100"}}
+Even anticipating 100 volumes with in a pool, it still less then the minimum recommended 2 MiB (4096 sector). To create the pool:
+{{RootCmd|dmsetup create test-thin-pool --table '0 1953125 thin-pool /dev/mapper/test-thin-metadata /dev/mapper/test-thin-data 128 0'}}
+==== Creating thin volumes ====
+The thin-pool target is unusual among the other targets, as it does not produce a usable disk by itself. Instead, by sending message to the target, it produce more device-mapper device which can be used for storage using the ''thin'' target. Volumes within a pool are referred to by 24-bit ordinal. Note that there's isn't a way to query the pool what ordinals are in use. To create a new thin volume with ordinal 17:
+{{RootCmd|dmsetup message /dev/mapper/test-thin-pool 0 "create_thin 17"}}
+This allocates an ordinal but no storage. However, its possible to use the ordinal with the '''thin''' target to create a 200MB (390625-sector) thin volume:
+{{RootCmd|dmsetup create test-thin --table '0 390625 thin /dev/mapper/test-thin-pool 17'}}
+==== Creating internal thin snapshot ====
+Thin snapshots can be created of thin volume. First, the volume must be quiesced:
+{{RootCmd|dmsetup suspend /dev/mapper/test-thin}}
+Then the snapshot taker. An ordinal needs to be allocated is needed for it, so for this example 6 will be chosen:
+{{RootCmd|dmsetup message /dev/mapper/test-thin-pool 0 "create_snap 6 17"}}
+The volume can be resumed after the snapshot is taken:
+{{RootCmd|dmsetup resume /dev/mapper/test-thin}}
+The snapshot can now be activated like any other thin volume:
+{{RootCmd|dmsetup create test-thin-snap --table '0 390625 thin /dev/mapper/test-thin-pool 6'}}
+==== Creating external thin snaphot ====
+Thin snapshot be taken of '''read-only''' external volumes. First, an ordinal is allocated as in create a thin volume:
+{{RootCmd|dmsetup message /dev/mapper/test-thin-pool 0 "create_thin 438"}}
+Then a new thin volume is create life before, but an extra parameter is added to indicate the origin:
+{{RootCmd|dmsetup create test-thin-extsnap --table '0 390625 thin /dev/mapper/test-thin-pool 438 /dev/loop1'}}
+==== Deleting thin volumes ====
+A snapshot can be deleted by unmapping it and sending the pool a '''delete''' message with the ordinal of the pool to delete:
+{{RootCmd
+|dmsetup remove test-thin
+|dmsetup message /dev/mapper/test-thin-pool 0 "delete 17"
+}}
+
 === Cache ===
 {{Note|All the following examples for this target will 2 disks: /dev/loop0 will be 1G+12 MiB (1977701 sectors), and /dev/loop1 will be 200MB+12MiB (415201 sectors), split as follows:
 {{RootCmd
