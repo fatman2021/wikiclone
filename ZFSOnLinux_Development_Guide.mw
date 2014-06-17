@@ -256,6 +256,13 @@ Since gdbserver is running at the level of QEMU, you will not be able to see ind
 
 == Regression Tests ==
 
+===  Solaris Porting LAyer Tests (splat) ===
+
+The Solaris Porting Layer consists of a module that implements Solaris kernel APIs on top of Linux kernel APIs. SPLAT is a regression test platform for verifying the operation of these tests. Running them is simple:
+
+{{RootCmd|modprobe splat
+|splat -a}}
+
 === ztest ===
 
 ztest is a userland tool. It links to a userland copy of the ZFS kernel code, creates a pool and then stresses the code by randomly selects from many possible operations runs many possible operations in many parallel threads at the same time. It will occasionally kill itself and resume to simulate system failures. It has some issues on 9p-virtio, so it will need to be run inside the chroot. This can be done much like we run gdb:
@@ -267,13 +274,42 @@ The above example will run ztest for 12 hours with the files in /tmp/ztest-0 of 
 
 {{Cmd|sudo -i chroot /guest/gentoo /usr/bin/gdb /sbin/ztest -c /tmp/ztest-0/core}}
 
-=== XFS Tests ===
+=== XFS Test Suite ===
 
-The tests used by LLNL are located at:
+The XFS Test Suite is a POSIX filesystem API conformance test originally developed by SGI for use on IRIX. It was ported to Linux after IRIX around the time SGI was accquired by Rackable Systems. It is the primary test suite used to test the POSIX filesystem API conformance of Linux filesystems. Brian Behlendorf at LLNL maintains a couple of forks of the XFS Test Suite that have been adapted to permit use with ZFS in two separate branches. They are located at:
 
 https://github.com/behlendorf/xfstests
 
-This section is a stub that needs to be expanded upon.
+The zfs branch contains the original fork of the XFS tests from mid-2011. The zfs-upstream branch contains a rebase on upstream that was done in November 2013 with the intention of upstreaming ZFS support. The latter is far easier to use than the former and is presently the master branch, so we shall document use of the latter.
+
+It requires that you install git to fetch it and the xfsprogs to build it. Once these requirements are met, we can fetch and build it:
+
+{{Cmd|git clone git@github.com:behlendorf/xfstests.git
+|cd xfstests
+|make -s}}
+
+Running them requires that `hostname -f` works properly on your system. On a Gentoo workstation, this means editing the 127.0.0.1 line in /etc/hosts to be something like '127.0.0.1 localhost myhostname' where myhostname is the value in /etc/conf.d/hostname. Once that works, we can setup the system to run them:
+
+{{RootCmd|truncate -s 3G /xfs-scratch
+|truncate -s 3G /xfs-test
+|losetup loop0 /xfs-test 
+|losetup loop1 /xfs-scratch
+|export TEST_DEV=/dev/loop0
+|export SCRATCH_DEV=/dev/loop1
+|export TEST_DIR=/test
+|export SCRATCH_MNT=/scratch
+|zpool create -f -m legacy -O acltype=posixacl test /dev/loop0
+|zpool create -f -m legacy -O acltype=posixacl zscratch /dev/loop1
+|cd ~/xfstests
+|./check -zfs generic/[0-9][0-9][0-9]}}
+
+{{Note|If `./configs/$(hostname -f).config exists, ./check will ignore the environment variables and use it. This requires configuring that file instead.}}
+
+Unfortunately, not all of the newer XFS tests currently work. In specific, generic/317 has a bash script that hangs in a subshell. Killing the bash interpreter for that subshell will make it correctly report that generic/317 is not able to run because of a missing user account. This is something that needs to be fixed, but it can be worked around by running a subset of tests that are known to actually test things on ZFS:
+
+{{RootCmd|./check -zfs generic/001 generic/002 generic/005 generic/006 generic/007 generic/010 generic/011 generic/013 generic/014 generic/015 generic/020 generic/053 generic/062 generic/069 generic/070 generic/074 generic/075 generic/076 generic/079 generic/083 generic/088 generic/089 generic/100 generic/105 generic/117 generic/120 generic/124 generic/126 generic/127 generic/129 generic/131 generic/132 generic/141 generic/169 generic/184 generic/192 generic/204 generic/215 generic/221 generic/224 generic/236 generic/237 generic/245 generic/246 generic/247 generic/248 generic/249 generic/257 generic/258 generic/269 generic/273 generic/275 generic/277 generic/285 generic/286 generic/294 generic/306 generic/307 generic/308 generic/309 generic/310 generic/313 generic/315 generic/318 generic/319 generic/320}}
+
+In addition, a few currently fail as of 0.6.3. These failures need to be investigated and fixed.
 
 = Profiling =
 
