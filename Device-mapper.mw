@@ -75,6 +75,18 @@ The origin should be suspended before creating the snapshot device, if it is a d
 {{RootCmd|dmsetup create test-snapshot-cow --table '0 1953125 snapshot /dev/mapper/test-snapshot-base-real /dev/mapper/test-snapshot-snap-cow P 8'}}
 Note how the origin device is the not the same device as the one we just created, but rather the origin's underlying device
 ==== Merging snapshots ====
+To merge a snapshot, the origin must be suspended, the snapshot device unmapped, replace the '''snapshot-origin''' target replaced with the '''snapshot-merge''' target, and the origin resumed:
+{{RootCmd
+|dmsetup suspend test-snapshot-base
+|dmsetup remove test-snapshot-cow
+|dmsetup reload test-snapshot-base --table '0 1953125 snapshot-merge /dev/mapper/test-snapshot-base-real /dev/mapper/test-snapshot-snap-cow P 8'
+|dmsetup resume test-snapshot-base}}
+At that point the <tt>dmsetup status</tt> output will need be polled to find out then the merge is complete. Once the merge is complete, the '''snapshot-merge''' target should be replaced with the '''snapshot-origin''' target again:
+{{RootCmd
+|dmsetup suspend test-snapshot-base
+|dmsetup reload test-snapshot-base --table '0 1953125 snapshot-origin /dev/mapper/test-snapshot-base-real'
+|dmsetup resume test-snapshot-base}}
+A new snapshot can then be created, reusing the now freed-up old snapshot device if desired.
 
 === Mirror and RAID1 ===
 {{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1}, split as follows:
