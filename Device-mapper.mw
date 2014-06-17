@@ -57,6 +57,25 @@ Both joining an splitting can be combined:
 This creates a 4GB device using last 1GB of each disk.
 
 === Snapshot ===
+{{Note|All the following examples for this target will use a 1.2GB (2343750 sectors) disk/dev/loop0 split as follows:
+{{RootCmd
+|dmsetup create test-snapshot-base-real --table '0 1953125 linear /dev/loop0 0'
+|dmsetup create test-snapshot-snap-cow --table '0 390625 linear /dev/loop0 1953125'}}
+}}
+See <tt>Documentation/device-mapper/snapshot.txt</tt> for the parameters. This target is used to create a special copy-on-write device. If a change is made to an origin, the old chunk is copied to the snapshot device. This is useful for backups. It is possible to write to the snapshot device directly as well, and thus test changes before committing them to the origin.
+
+The origin device should already be populated. To mark a device an origin, use the '''snapshot-origin''' target:
+{{RootCmd|dmsetup create test-snapshot-base --table '0 1953125 snapshot-origin /dev/mapper/test-snapshot-base-real'}}
+==== Creating snapshots ====
+A snapshot can then be created though the '''snapshot''' target. This has 2 important arguments:
+* ''persistent'' controls whether or not this snapshot is invalided at restart. Values are '''P''' for persistent (survives reboot) and '''N''' for non-persistent (invalid upon reboot). Non-persistent snapshots have less metadata associated with them
+* ''chucksize'' controls the granularity of copying with the snapshot. Chunks are copied to the snapshot device in intervals of this value (in sectors). LVM uses a default of 16 sectors.
+
+The origin should be suspended before creating the snapshot device, if it is a device mapper device. To create a snapshot device:
+{{RootCmd|dmsetup create test-snapshot-cow --table '0 1953125 snapshot /dev/mapper/test-snapshot-base-real /dev/mapper/test-snapshot-snap-cow P 8'}}
+Note how the origin device is the not the same device as the one we just created, but rather the origin's underlying device
+==== Merging snapshots ====
+
 === Mirror and RAID1 ===
 {{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1}, split as follows:
 {{RootCmd
