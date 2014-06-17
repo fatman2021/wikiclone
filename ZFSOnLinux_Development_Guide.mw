@@ -78,6 +78,15 @@ Disable the fstab entries. We do not need them with a 9p-virtio rootfs:
 |color=purple
 |sed -i -e "s/\(.*\)\/\(BOOT\{{!}}ROOT\{{!}}SWAP\)\(.*\)/\#\1\/\2\3/g" /etc/fstab}}
 
+Put /tmp and /var/tmp/portage (PORTAGE_TMPDIR) on a tmpfs.
+
+{{Cmd|prompt=(chroot) root #
+|color=purple
+|echo -e 'tmpfs\t\t\t/tmp\t\ttmpfs\t\tnosuid\t\t0 0' >> /etc/fstab
+|echo -e 'tmpfs\t\t/var/tmp/portage\ttmpfs\t\tnosuid\t\t0 0' >> /etc/fstab}}
+
+{{Note|Anonymous files are files that have been unlinked, but still have open file handles. QEMU's 9p-virtio server immediately closes all open file handles that it has when a file is unlinked, which breaks software that relies upon them. The main victims are bash scripts because bash uses anonymous files to implement the `<< KEYWORD` idiom. Most of the time, these anonymous files are made in /tmp, so putting /tmp on a tmpfs will avoid this issue. The one known exception is building packages, where anonymous files go into PORTAGE_TMPDIR, which is /var/tmp/portage by default. Placing PORTAGE_TMPDIR on a tmpfs will workaround that limitation.}}
+{{Warning|Failing to use a tmpfs for /tmp will break the XFS test suite, gcc-config and other things. Failing to use a tmpfs for PORTAGE_TMPDIR will require that you build packages outside of the VM.}}
 Now lets setup portage:
 
 {{Cmd|prompt=(chroot) root #
