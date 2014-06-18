@@ -33,8 +33,11 @@ The '''resume''' command allows I/O to be submitted to a previously suspended de
 The '''reload''' command replaces an existing device, possible with new targets and/or parameters. It may be necessary to '''suspend''' the target first. Some targets are immutable and can't be replaced with this command. Syntax is the same as '''create'''.
 
 == Device-mapper targets ==
+{{Note|To quickly create a sparse file:
+{{Cmd|dd if=/dev/null of=name.img seek=#sectors}}
+The number of sectors for a given device will be states to facilitate this. A loopback device can then be setup via <tt>losetup</tt>. Note this won't overwrite old content in the file, so if fresh file is desired the loopback device must be torn down, the file delete and new one created.}} 
 === Zero ===
-See <tt>Documentation/device-mapper/zero.txt</tt> . This target has no target-specific parameters.  
+See <tt>Documentation/device-mapper/zero.txt</tt> for usage. This target has no target-specific parameters.  
 
 The "zero" target create that functions similarly to /dev/zero: All reads return binary zero, and all writes are discarded> Normaly used in tests, but also useful in recovering linear and raid-type targets, when combined with the 'snapshot' target: a "zero" target of the same size as the missing piece(s) is created, a (writable) snapshot created (usually a loop device backed by a large sparse file, but it can be far smaller than the missing piece since it only has to the hold the changes). Then the snapshot can be mounted, fsck'd, or recover tools run against it. 
 
@@ -42,7 +45,7 @@ This creates a 1GB (1953125-sector) zero target:
 {{RootCmd|<nowiki>dmsetup create 1gb-zero --table '0 1953125 zero'</nowiki>}}
 === Linear ===
 {{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1,2,3} }} 
-See <tt>Documentation/device-mapper/linear.txt</tt> for paramters in usage. This target is the basic building block for the device mapper - it is used to both join and split (and often both at once) block device. For a simple identify mapping:
+See <tt>Documentation/device-mapper/linear.txt</tt> for parameters and usage. The '''linear''' target is basic building block for the device mapper - it is used to both join and split (and often both at once) block device. For a simple identify mapping:
 {{RootCmd|dmsetup create test-linear --table '0 1961317 linear /dev/loop0 0'}}
 The 4 disks can be joined to together as one:
 {{RootCmd|echo -e '0 1961317 linear /dev/loop0 0'\\n'1961317 1961317 linear /dev/loop1 0'\\n'3922634 1961317 linear /dev/loop2 0'\\n'5883951 1961317 linear /dev/loop3 0' {{!}} dmsetup create test-linear}}
@@ -55,14 +58,13 @@ Note that in the second device, the offset is not 0, since it is desired to star
 Both joining an splitting can be combined:
 {{RootCmd|echo -e '0 1953125 linear /dev/loop0 8192'\\n'1953125 1953125 linear /dev/loop1 8192'\\n'3906250 1953125 linear /dev/loop2 8192'\\n'5859375 1953125 linear /dev/loop3 8192' {{!}} dmsetup create test-linear}}
 This creates a 4GB device using last 1GB of each disk.
-
 === Snapshot ===
 {{Note|All the following examples for this target will use a 1.2GB (2343750 sectors) disk/dev/loop0 split as follows:
 {{RootCmd
 |dmsetup create test-snapshot-base-real --table '0 1953125 linear /dev/loop0 0'
 |dmsetup create test-snapshot-snap-cow --table '0 390625 linear /dev/loop0 1953125'}}
 }}
-See <tt>Documentation/device-mapper/snapshot.txt</tt> for the parameters. This target is used to create a special copy-on-write device. If a change is made to an origin, the old chunk is copied to the snapshot device. This is useful for backups. It is possible to write to the snapshot device directly as well, and thus test changes before committing them to the origin.
+See <tt>Documentation/device-mapper/snapshot.txt</tt> for parameters and usage. The '''snapshot''' target is used to create a special copy-on-write device to store changes for an origin device. If a change is made to an origin, the old chunk is copied to the snapshot device. This is useful for backups. It is possible to write to the snapshot device directly as well, and thus test changes before committing them to the origin.
 
 The origin device should already be populated. To mark a device an origin, use the '''snapshot-origin''' target:
 {{RootCmd|dmsetup create test-snapshot-base --table '0 1953125 snapshot-origin /dev/mapper/test-snapshot-base-real'}}
@@ -74,7 +76,6 @@ A snapshot can then be created though the '''snapshot''' target. This has 2 impo
 The origin should be suspended before creating the snapshot device, if it is a device mapper device. To create a snapshot device:
 {{RootCmd|dmsetup create test-snapshot-cow --table '0 1953125 snapshot /dev/mapper/test-snapshot-base-real /dev/mapper/test-snapshot-snap-cow P 8'}}
 Note how the origin device is the not the same device as the one we just created, but rather the origin's underlying device
-
 ==== Merging snapshots ====
 To merge a snapshot, the origin must be suspended, the snapshot device unmapped, replace the '''snapshot-origin''' target replaced with the '''snapshot-merge''' target, and the origin resumed:
 {{RootCmd
@@ -88,7 +89,6 @@ At that point the <tt>dmsetup status</tt> output will need be polled to find out
 |dmsetup reload test-snapshot-base --table '0 1953125 snapshot-origin /dev/mapper/test-snapshot-base-real'
 |dmsetup resume test-snapshot-base}}
 A new snapshot can then be created, reusing the now freed-up old snapshot device if desired.
-
 === Mirror and RAID1 ===
 {{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1}, split as follows:
 {{RootCmd
@@ -123,8 +123,9 @@ Its possible to do LVM "--mirrorlog mirror" by creating 2 mirrors: a '''core''' 
 |dmsetup create test-mirror --table '0 1953125 mirror disk 2 /dev/mapper/test-mirror-log 1024 2 /dev/mapper/test-mirror-data0 0 /dev/mapper/test-mirror-data1 0 1 handle_errors'}}
 
 ==== RAID1 ====
-See <tt>Documentation/device-mapper/dm-raid.txt</tt>. Note that <chunk_size> is unused for RAID1, but a value is still required, therefore is value should be set to 0. There 2 other important, though optional, parameters: ''region_size'' and '''[no]sync'''. 
+See <tt>Documentation/device-mapper/dm-raid.txt</tt> for parameters and usage. This target has a few important parameters: 
 
+* ''chunk_size'' is unused, but its value is required. Set it to 0.
 * ''region_size'' has the same meaning as it does in the ''mirror'' target. Unlike the ''mirror'' target. it has a default of 4 MiB (8192 sectors). LVM uses a region size of 512 KiB (1024 sectors).
 * '''[no]sync''' has the same meaning as it does in the ''mirror'' target
 
@@ -133,12 +134,12 @@ To create a simple 1 GB raid1 with no metadata devices.
 Note that because there's no metadata device, the array must be re-mirrored each time it is created. So normally, a metadata device is desired. Each 
 "leg" needs it own metadata device  If /dev/loop2 and /dev/loop3 are small metadata devices (4 MiB), then to create a 1G RAID1 would be:
 {{RootCmd|dmsetup create test-raid1 --table '0 1953125 raid raid1 3 0 region_size 1024 2 /dev/mapper/test-mirror-log0 /dev/mapper/test-mirror-data0 /dev/mapper/test-mirror-log1 /dev/mapper/test-mirror-data1'}}
-
 === Striped (RAID 0) and RAID 4/5/6/10 ===
 {{Note|All the following examples for this target will use 4 1GB+4MiB (1961317-sector) disks as /dev/loop{0,1}, split as follows:
 {{RootCmd|for S in `seq 0 3`; do dmsetup create test-raid-metadata$S --table "0 8192 linear /dev/loop$S 0"; dmsetup create test-raid-data$S --table "0 1953125 linear /dev/loop$S 8192"; done}} }}
-See <tt>Documentation/device-mapper/striped.txt</tt> and <tt>Documentation/device-mapper/dm-raid.txt</tt> for the parameters of this target. Three in particular are important:
-* ''chunk_size'' is the size I/O (in sectors) before its "split" across the array  It must be both a power a two and a least a large as a kernel memory page (for x86/x64 processors, pages are 4 KiB, so <chunk size> must be at least 8.) LVM uses a default value of 64 KiB (128 sectors). Using LVM defaults, a 1 MiB (2048 sector) write will be split in 16 chunks, distributed as evenly as possible across the array. The size of the array MUST be a multiple of this value. Otherwise the target will give the error "Array size does not match requested target length". 
+See <tt>Documentation/device-mapper/striped.txt</tt> and <tt>Documentation/device-mapper/dm-raid.txt</tt> for parameters and usage. The '''striped''' target aggregates several disks and split i/o amongst them for performance. There are a few importnat parameters. For both the '''raid''' and '''striped''' targets:
+* ''chunk_size'' is the size I/O (in sectors) before its "split" across the array  It must be both a power a two and a least a large as a kernel memory page (for x86/x64 processors, pages are 4 KiB, so <chunk size> must be at least 8.) LVM uses a default value of 64 KiB (128 sectors). Using LVM defaults, a 1 MiB (2048 sector) write will be split in 16 chunks, distributed as evenly as possible across the array. The size of the array MUST be a multiple of this value. Otherwise the target will give the error "Array size does not match requested target length".
+These parameters are only applicable to the '''raid''' target: 
 * ''region size'' has the same meaning and defaults as it does for the RAID1 target. 
 * '''[no]sync''' has the same meaning as it does for the RAID1  target. It is usually not appropriate for RAID 4,5 and 6 as even for blank devices parity must still be computed, unless creating a degraded array. 
 Because the number of sectors (1953125) is not a multiple of 128, it must be rounded down to the nearest multiple of 128 sectors, which can be done using this formula:
@@ -158,7 +159,6 @@ As RAID1, because there are no metadata devices, the parity disk will have to be
 It is possible to create a RAID4 in degraded mode initially. It is necessary to not specify any metadata devices, and "nosync" must added
 {{RootCmd|dmsetup create test-raid4 --table '0 5859072 raid raid4 4 64 region_size 1024 nosync 4 - /dev/mapper/test-raid-data0 - /dev/mapper/test-raid-data1 - /dev/mapper/test-raid-data2 - -'}}
 The reason for doing this is its faster to create a degraded array, populate it, then '''reload''' the table with missing metadata devices and data device, so that the parity is only computed once, not twice.
-
 ==== RAID5  ====
 RAID5 is similar to RAID4, except in RAID5 the parity data is distributed across the stripe set. There are 4 "flavors" of RAID5. For LVM, the default is '''raid5_ls'''. The amount of parity used is the same as RAID4, so the total space is 5859072 sectors.
 To create a RAID5 set with no metadata devices:
@@ -183,10 +183,9 @@ To create a RAID10 set with no metadata devices:
 To create a RAID10 set with metadata:
 {{RootCmd|dmsetup create test-raid10 --table '0 3906048 raid raid10 3 64 region_size 1024 4 /dev/mapper/test-raid-metadata0 /dev/mapper/test-raid-data0 /dev/mapper/test-raid-metadata1 /dev/mapper/test-raid-data1 /dev/mapper/test-raid-metadata2 /dev/mapper/test-raid-data2 /dev/mapper/test-raid-metadata3 /dev/mapper/test-raid-data3'}}
 If all the devices are empty, the '''nosync''' may be used to skip the initial sync, with the same caveats as '''mirror''' target.
-
 === Crypt ===
 {{Note|All the following examples for this target will use a 4 1GB (1961317-sector) disk as /dev/loop0 }} 
-See <tt>Documentation/device-mapper/dm-crypt.txt</tt> for paramters and use. This target is used to encrypt an underlying block device. It is the backend to the ''cryptsetup'' tool. It supports several encryption modes, and is compatible with Cryptoloop and loop-aes volumes.
+See <tt>Documentation/device-mapper/dm-crypt.txt</tt> for parameters and usage. The '''crypt''' target is used to encrypt an underlying block device. It is the backend to the ''cryptsetup'' tool. It supports several encryption modes, and is compatible with Cryptoloop and loop-aes volumes.
 
 To create an encrypted volume:
 {{RootCmd|dmsetup create test-crypt --table '0 1953125 crypt aes-xts-plain64 babebabebabebabebabebabebabebabebabebabebabebabebabebabebabebabe 0 /dev/loop0 0 1 allow_discards'}}
@@ -201,7 +200,7 @@ Note that using the '''--table''' option of '''dmsetup''' discloses sensitive da
 |dmsetup create test-verity-metadata --table '0 16384 linear /dev/loop0 0'
 |dmsetup create test-verity-data --table '0 1953125 linear /dev/loop0 16384'}}
 }}
-See  <tt>/Documentation/device-mapper/verity.txt</tt> for the parameters of this target. The '''verity''' target is a '''read-only''' target intended for use in "verified boot" scenarios. Its similar in spirit to IMA/EVM, but doesn't require a TPM, and works at block level rather than the file level.  This target compares the hash of the block of data to that of the matadata, if they do not match, an I/O error is returned. Note this target only does hashing, not signature verification. Whatever uses this target should keep a signed copy of the hash (with the public key in read-only firmware or similar), before using it.
+See  <tt>/Documentation/device-mapper/verity.txt</tt> for the parameters and usage. The '''verity''' target is a '''read-only''' target intended for use in "verified boot" scenarios. Its similar in spirit to IMA/EVM, but doesn't require a TPM, and works at block level rather than the file level.  This target compares the hash of the block of data to that of the matadata, if they do not match, an I/O error is returned. Note this target only does hashing, not signature verification. Whatever uses this target should keep a signed copy of the hash (with the public key in read-only firmware or similar), before using it.
 
 Unlike the other device mapper targets, the '''verity''' target does NOT initialize the metadata device on its first use. Instead, it must be populated using an external tool, <tt>veritysetup</tt> which is part of <tt>cryptsetup</tt>. To create the metadata (using an empty device in this case):
 {{RootCmd
@@ -218,15 +217,13 @@ Root hash:      	29cb87e60ce7b12b443ba6008266f3e41e93e403d7f298f8e3f316b29ff89c5
 The verity target must be multiple of the data block size, do multiply <tt>data_blocks*(data_block_size/512)</tt> to get the length for the verity target, in this case, 1953120. To create the verity device:
 {{RootCmd|dmsetup create test-verity --readonly --table '0 1953120 verity 1 /dev/mapper/test-verity-data /dev/mapper/test-verity-metadata 4096 4096 244140 0 sha256 29cb87e60ce7b12b443ba6008266f3e41e93e403d7f298f8e3f316b29ff89c5e e48da609055204e89ae53b655ca2216dd983cf3cb829f34f63a297d106d53e2d'}}
 The '''--readonly''' option must be specified to this target.
-
 === Thin ===
 {{Note|All the following examples for this target will use 2 disks: a 1G+2 MiB (1957221 sectors) disk as /dev/loop0, and a 200 MB (390625 sectors) '''read-only''' disk as /dev/loop1, with /dev/loop0 split as follows:
 {{RootCmd
 |dmsetup create test-thin-metadata --table '0 4096 linear /dev/loop0 0'
 |dmsetup create test-thin-data --table '0 1953125 linear /dev/loop0 4096'}}
 }}
-
-See <tt>Documentation/device-mapper/thin-provisioning.txt</tt> for the parameters of this target. Thin pools are to block devices what sparse files are to filesystems. It is possible to create large, empty, even larger than the pool itself, or sums of objects greater than the pool size, and space isn't allocated until something is actually written to those areas. Futhermore, blocks can be returned to the thin pool via the trim/discard operation. Thin pool have a cheap snapshotting operation (different from the snapshot target) that remains cheap even upon multiple layers of indirections (snapshots of snapshots of snapshots...).
+See <tt>Documentation/device-mapper/thin-provisioning.txt</tt> for parameters and usage. Thin pools are to block devices what sparse files are to filesystems. It is possible to create large, empty, even larger than the pool itself, or sums of objects greater than the pool size, and space isn't allocated until something is actually written to those areas. Futhermore, blocks can be returned to the thin pool via the trim/discard operation. Thin pool have a cheap snapshotting operation (different from the snapshot target) that remains cheap even upon multiple layers of indirections (snapshots of snapshots of snapshots...).
 
 The '''thin''' target has 3 important parameters:
 * ''metadata_dev'' is where to store the metadata for the thin pool. The recommended size is 3*(''data_dev_size''/(32*''data_block_bize'')) sectors, but at least 2 MiB (4096 sectors). The thin-provisioning-tools package has a program, ''thin_metadata_size'' that will compute an suitable thin pool size given the ''data_block_size'', ''data_dev_size'', and number of volumes in the pool. The maximum supported size of the metadata device is 15.9375 GiB (33423360 sectors)
@@ -257,12 +254,11 @@ Thin snapshot be taken of '''read-only''' external volumes. First, an ordinal is
 Then a new thin volume is create life before, but an extra parameter is added to indicate the origin:
 {{RootCmd|dmsetup create test-thin-extsnap --table '0 390625 thin /dev/mapper/test-thin-pool 438 /dev/loop1'}}
 ==== Deleting thin volumes ====
-A snapshot can be deleted by unmapping it and sending the pool a '''delete''' message with the ordinal of the pool to delete:
+A thin volume can be deleted by unmapping it and sending the pool a '''delete''' message with the ordinal of the pool to delete:
 {{RootCmd
 |dmsetup remove test-thin
 |dmsetup message /dev/mapper/test-thin-pool 0 "delete 17"
 }}
-
 === Cache ===
 {{Note|All the following examples for this target will 2 disks: /dev/loop0 will be 1G+12 MiB (1977701 sectors), and /dev/loop1 will be 200MB+12MiB (415201 sectors), split as follows:
 {{RootCmd
@@ -270,7 +266,7 @@ A snapshot can be deleted by unmapping it and sending the pool a '''delete''' me
 |dmsetup create test-cache-data0 --table '0 1953125 linear /dev/loop0 24576'
 |dmsetup create test-cache-data1 --table '0 390625 linear /dev/loop1 24576'}}
 }}
-See <tt>Documentation/device-mapper/cache.txt</tt> and Documentation/device-mapper/cache-policies.txt for parameters and usage. This target is intended to speed up access to a slow but large rotational disk by using a faster but smaller SSD as a cache. 
+See <tt>Documentation/device-mapper/cache.txt</tt> and <tt>Documentation/device-mapper/cache-policies.txt</tt> for parameters and usage. This target is intended to speed up access to a slow but large rotational disk by using a faster but smaller SSD as a cache. 
 There is one important parameter:
 * ''block_size'' is the granularity of the cache. Data is promoted/demoted to/from the cache in blocks. It must be a multiple of 32k (64 sectors). LVM uses 64k (128 sectors) by default. 
 
@@ -284,7 +280,6 @@ Its recommended to mirror the metadata device on the origin and cache device. To
 {{RootCmd
 |dmsetup create test-mirror-cache-meta --table '0 16384 raid raid1 1 0 2 /dev/mapper/test-mirror-cache-meta0 /dev/mapper/test-cache-meta0 /dev/mapper/test-mirror-cache-meta1 /dev/mapper/test-cache-meta1'
 |dmsetup create test-cache --table '0 1953024 cache /dev/mapper/test-mirror-cache-meta /dev/mapper/test-cache-data1 /dev/mapper/test-cache-data0 128 0 default 0'}}
-
 === Era ===
 {{Note|All the following examples for this target will 2 disks: /dev/loop0 will be 1G+12 MiB (1977701 sectors), and /dev/loop1 will be 200MB+12MiB (415201 sectors), split as follows: 
 {{RootCmd
@@ -313,6 +308,6 @@ This target needs other tools to make use of the metadata it records. The <tt>th
 ==== Error ====
 === Other targets ===
 ==== Multipath ====
-There is no kernel documentation for the '''multipath''' target. This target is unusual among the device-mapper target in that instead of aggregating disks, it aggregates ''paths'' to the disks. The typical use of this target is on machines with multiple Fibre Channel adapters connecting via one for more SAN's for redundancy. Because the same disks can be accessed though any of the host adapter, the '''multipath''' are arbitrate how the paths are used - round-robin, failover, and so forth.
+There is no kernel documentation for the '''multipath''' target. This target is unusual among the device-mapper target in that instead of aggregating disks, it aggregates ''paths'' to the disks. This target is the backend to the <tt>multipath-tools</tt> application   The typical use of this target is on machines with multiple Fibre Channel adapters connecting via one for more SAN's for redundancy. Because the same disks can be accessed though any of the host adapter, the '''multipath''' are arbitrate how the paths are used - round-robin, failover, and so forth.
 ==== Switch ====
-See <tt>Documentation/device-mapper/switch.txt</tt>. The '''switch''' target is used with the '''multipath''' target. Some (for now, just one - Dell EqualLogic) Fibre Channel arrays, make the "nodes" semi-transparent: if a request is sent to the wrong node that doesn't have the disk of interest, it transparently forwards it to the one that does, furthermore, it can migrate the data between nodes if needed. Because of all this moving around in the background, the multipath target would needed a table possibly millions of entries long, dm-switch acts as an indirection layer, similarly to the way page tables work for memory - dm-switch maintains the dynamic data and picks the correct multipath device with far fewer entries.
+See <tt>Documentation/device-mapper/switch.txt</tt> for parameters and usage. The '''switch''' target is used with the '''multipath''' target. Some (for now, just one - Dell EqualLogic) Fibre Channel arrays, make the "nodes" semi-transparent: if a request is sent to the wrong node that doesn't have the disk of interest, it transparently forwards it to the one that does, furthermore, it can migrate the data between nodes if needed. Because of all this moving around in the background, the multipath target would needed a table possibly millions of entries long, dm-switch acts as an indirection layer, similarly to the way page tables work for memory - dm-switch maintains the dynamic data and picks the correct multipath device with far fewer entries.
