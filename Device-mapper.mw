@@ -286,6 +286,28 @@ Its recommended to mirror the metadata device on the origin and cache device. To
 |dmsetup create test-cache --table '0 1953024 cache /dev/mapper/test-mirror-cache-meta /dev/mapper/test-cache-data1 /dev/mapper/test-cache-data0 128 0 default 0'}}
 
 === Era ===
+{{Note|All the following examples for this target will 2 disks: /dev/loop0 will be 1G+12 MiB (1977701 sectors), and /dev/loop1 will be 200MB+12MiB (415201 sectors), split as follows: 
+{{RootCmd
+|for S in `seq 0 1`; do dmsetup create test-era-meta$S --table "0 16384 linear /dev/loop$S 0"; dmsetup create test-era-mirror-meta$S --table "0 8192 linear /dev/loop$S 16384"; done
+|dmsetup create test-era-data0 --table '0 1953125 linear /dev/loop0 24576'
+|dmsetup create test-era-data1 --table '0 390625 linear /dev/loop1 24576'}}
+}}
+See <tt>Documentation/device-mapper/era.txt</tt> for the parameters this target takes. The '''era''' target is intended to be use with the '''cache''' target. The purpose of this target is to track change block since the last checkpoint, called an <tt>era</tt>. This target does so efficiently at the expense of possible false positives, but never false negative. Backup software or snapshot would typically use this target. For snapshots, a checkpoint can be created an snapshot time. If it becomes necessary to revert to the snapshot, its possible to invalidate all blocks since the snapshot in the cache, bypass the cache to rollback the snapshot, then reenable the cache - all without trashing the whole cache and lose valuable metadata on which blocks are still "hot". Backup software can use this to see what blocks have changed since the last backujp, and this do an incremental or differential backup of only the changed blocks. 
+
+First, create cache device. Since there will now be 2 metadata devices (one for cache, and one for era), to avoid 2 mirror metadata devices, a single mirror will be created with 1 metadata device and the mirror split up using the '''linear''' target:
+{{RootCmd
+|dmsetup create test-era-mirror-meta --table '0 16384 raid raid1 3 0 region_size 1024 2 /dev/mapper/test-era-mirror-meta0 /dev/mapper/test-era-meta0 /dev/mapper/test-era-mirror-meta1 /dev/mapper/test-era-meta1'
+|dmsetup create test-era-mirror-meta-cache --table '0 8192 linear /dev/mapper/test-era-mirror-meta 0'
+|dmsetup create test-era-mirror-meta-era --table '0 8192 linear /dev/mapper/test-era-mirror-meta 8192'
+|dmsetup create test-era-cache --table '0 1953024 cache /dev/mapper/test-era-mirror-meta-cache /dev/mapper/test-era-data1 /dev/mapper/test-era-data0 128 0 default 0'}}
+Unlike the '''cache''' example, where 8 MiB was used, only 4 MiB is being used here, in order to make room for the '''era''' metadata.
+
+To create the '''era''' device:
+{{RootCmd|dmsetup create test-era --table '0 1953024 era /dev/mapper/test-era-mirror-meta-era /dev/mapper/test-era-cache 128'}}
+In this case, we have a mirror of the era metadata, but its not required, in that case the metadata device should be on the "fast" device. Also note the ''block_size'' argument has the same value as the ''block_size'' of the cache.
+
+This target needs other tools to make use of the metadata it records. The <tt>thin-provisoing-tools</tt> package can fetch this an act upon it, by invaliding all blocks changed in the current era.
+
 === Multipath ===
 === Debuggging targets ===
 ==== Delay ====
