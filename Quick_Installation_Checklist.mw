@@ -10,7 +10,7 @@ In this example we create 3 partitions. 128MB /boot, 1024MB swap and rest for /.
 In this example we create 4 partitions. 128MB /boot, 32MB UEFI, 1024MB swap and rest for /.
 {{RootCmd|gdisk /dev/sda}}
 
-<pre>Create GPT partition table.
+<pre>Create GPT partition table:
 Command: o ↵
 This option deletes all partitions and creates a new protective MBR.
 Proceed? (Y/N): y ↵
@@ -61,11 +61,14 @@ Format partitions.
 == Install stage3 ==
 Find nearest mirror from: http://www.gentoo.org/main/en/mirrors2.xml
 {{RootCmd|cd /mnt/gentoo}}
+Download stage. Replace amd64 with your arch.
 {{RootCmd|wget http://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64/stage3-amd64-20140410.tar.bz2}}
-Replace amd64 with your arch.
+Unpack stage.
 {{RootCmd|tar xjpf stage3*}}
 
 == Chroot ==
+Chroot into gentoo stage.
+{{RootCmd|cd /mnt/gentoo}}
 {{RootCmd|mount -t proc none proc}}
 {{RootCmd|mount --rbind /sys sys}}
 {{RootCmd|mount --rbind /dev dev}}
@@ -75,11 +78,12 @@ Replace amd64 with your arch.
 == Create user accounts ==
 Change root password.
 {{RootCmd|passwd}}
-Create user. Note, there are no spaces allowed between the various groups.
+Create user. Note, there are no spaces allowed between the groups.
 {{RootCmd|useradd -g users -G wheel,portage,audio,video,usb,cdrom -m username}}
 {{RootCmd|passwd username}}
 
 == Configure system ==
+Configure fstab to match your partitioning.
 {{File|/etc/fstab||<pre>
 /dev/sda1		/boot		ext4		noauto,noatime	1 2
 /dev/sda3		/		ext4		noatime		0 1
@@ -87,12 +91,14 @@ Create user. Note, there are no spaces allowed between the various groups.
 /dev/cdrom		/mnt/cdrom	auto		noauto,ro	0 0
 </pre>}}
 
+Set portage options.
 {{File|/etc/portage/make.conf||<pre>
 CFLAGS="-march=native -O2 -pipe"
 CXXFLAGS="${CFLAGS}"
 CHOST="x86_64-pc-linux-gnu"
 
-USE="mmx mmxext sse sse2 sse3 ssse3 sse4_1 avr avx avx2 threads alsa dri opengl vaapi usb"
+# choose USE flags you need
+USE="alsa usb"
 
 PORTDIR="/usr/portage"
 DISTDIR="${PORTDIR}/distfiles"
@@ -101,15 +107,20 @@ PKGDIR="${PORTDIR}/packages"
 ACCEPT_KEYWORDS="~amd64"
 ACCEPT_LICENSE="*"
 
+# set to number of CPU cores
 MAKEOPTS="-j4"
+
+# compile two packages simultaneously if load is lower than 4
 EMERGE_DEFAULT_OPTS="--jobs 2 --load-average 4"
 
+# drivers
 INPUT_DEVICES="evdev synaptics"
 VIDEO_CARDS="intel i965"
 
 GENTOO_MIRRORS="http://distfiles.gentoo.org/"
 </pre>}}
 
+Set locale settings.
 {{File|/etc/env.d/02locale||<pre>
 LANG="en_US.UTF-8"
 LC_COLLATE="C"
@@ -125,13 +136,28 @@ Set timezone.
 {{RootCmd|emerge-webrsync}}
 
 == Install kernel ==
+=== Emerge ===
 Gentoo-sources is vanilla kernel with gentoo patchset. You could also use vanilla-sources. Linux-firmware contains binary blobs needed for some hardware like wlan cards.
 {{RootCmd|emerge -av gentoo-sources linux-firmware}}
 {{RootCmd|cd /usr/src/linux}}
-Find out needed modules for your hardware. You should enable these modules in menuconfig. You can search module names by pressing "/" in menuconfig.
+
+=== Configure ===
+==== Manual ====
+Find out needed modules for your hardware. You should enable these modules in menuconfig. 
 {{RootCmd|lspci -nnk}}
+Configure kernel. You can search module names by pressing "/" in menuconfig and enable module by pressing the corresponding number.
 {{RootCmd|make menuconfig}}
+Build kernel and modules.
 {{RootCmd|make -j2}}
+
+==== Automatic ====
+It is possible to use localyesconfig to select all modules currently loaded by the livecd.
+{{RootCmd|make localyesconfig}}
+Build kernel and modules.
+{{RootCmd|make -j2}}
+
+=== Install ===
+Now you can install kernel and modules.
 {{RootCmd|make modules_install}}
 {{RootCmd|make install}}
 
