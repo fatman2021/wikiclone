@@ -242,15 +242,22 @@ If on a 64-bit architecture, it is often necessary to specify that to gdb explic
 |set architecture i386:x86-64
 |target remote localhost:1234}}
 
-Since the ZFSOnLinux code is loaded as modules, we will need to tell gdb about them. At present, the only known way of doing this is getting the module address from /proc/modules inside the VM environment and then telling gdb to load the symbol files. For example:
+Since the ZFSOnLinux code is loaded as modules, we will need to tell gdb about them. At present, the only known way of doing this is getting the module address from /proc/modules inside the VM environment and then telling gdb to load the symbol files. The zfs module must be loaded when you access /proc/modules or it will not appear. Loading the module symbol tables into gdb is relatively straightforward:
 
 {{Cmd|prompt=(gdb)
 |color=blue
+|set check off
 |add-symbol-file /lib/modules/2.6.32-431.11.2.el6.x86_64/extra/zfs/zfs.ko 0xffffffffa0181000
 |add-symbol-file /lib/modules/2.6.32-431.11.2.el6.x86_64/extra/taskq/ztaskq.ko 0xffffffffa0177000
-|add-symbol-file /lib/modules/2.6.32-431.11.2.el6.x86_64/extra/spl/spl.ko 0xffffffffa00cb000}}
+|add-symbol-file /lib/modules/2.6.32-431.11.2.el6.x86_64/extra/spl/spl.ko 0xffffffffa00cb000
+|set check on}}
+{{Note|By default, gdb will ask us if we are sure whenever we want to add a symbol file. We can use the check variable to temporarily disable this behavior.}}
 
-After doing this, you will be able to set breakpoints on the ZFS code in gdb and step through execution. These breakpoints will be lost in the event that you reset the virtual machine using `system_reset` from the QEMU monitor.
+Generating such commands is time consuming, so we can tell the guest to generate them for us and print them to stdout for us to copy and paste to the host:
+
+{{Cmd|while read h; do echo -n 'add-symbol-file '; modinfo -0 --filename $(echo -n $h {{!}} awk '{print $1}'); echo $h {{!}} awk '{print " "$6}'; done </proc/modules}}
+
+Loading the module symbol files into gdb will enable you to use gdb break points on the ZFS code in gdb and step through execution. These breakpoints will be lost in the event that you reset the virtual machine using `system_reset` from the QEMU monitor.
 
 Since gdbserver is running at the level of QEMU, you will not be able to see individual threads. Instead, you will see cores, but that in itself can be advantageous in certain scenarios. Getting direct access to threads requires using kgdb.
 
