@@ -91,6 +91,66 @@ sudo -u $XUSER /usr/bin/slimlock&
 {{RootCmd|chmod +x /etc/acpi/actions/FnF2-screenlock.sh}}
 
 
+===Battery button===
+{{File|/etc/acpi/events/FnF3-battery||<pre>
+#Fn+F3 button/battery BAT 00000080 00000000 K
+event=button/battery
+action=/etc/acpi/actions/FnF3-battery.sh
+</pre>}}
+
+{{File|/etc/acpi/actions/FnF3-battery.sh||<pre>
+#!/bin/sh
+# Tried on Gentoo
+# cpu throttling is in here it is the cpufreq-set lines
+# turning swap off is only for those that feel comfortable
+# doing something this nasty.
+# comment out the laptop_mode line if you don't have it installed
+# pcfe, 2008-10-28
+
+# spindown time for HD (man hdparm for valid values)
+# I prefer 2 hours for acad and 2 min for batt
+ACAD_HD=244
+BATT_HD=24
+                                                                                                                                   
+# Power management level
+# 255 (off) on AC
+# 128 (medium) on batt
+# lowered to 32, pcfe, 2004-06-23
+# upped to 64, pcfe, 2004-07-14
+# upped to 96, pcfe, 2004-10-20
+ACAD_PM=255
+BATT_PM=96
+
+logger "[ACPI] Fn+F3 pressed to toggle battery state"
+# ac/battery event handler 
+status=`awk '/^state: / { print $2 }' /proc/acpi/ac_adapter/AC/state` 
+if [ "$status" = "off-line" ]
+then
+	logger "Running /sbin/laptop_mode start"
+	/sbin/laptop_mode start
+	logger "Setting HD spindown for BATT mode with hdparm -S $BATT_HD /dev/hda."
+	/sbin/hdparm -S $BATT_HD /dev/hda > /dev/null 2>&1
+	logger "Setting HD powersaving for BATT mode with hdparm -B $BATT_PM /dev/hda."
+	/sbin/hdparm -B $BATT_PM /dev/hda > /dev/null 2>&1
+	logger "Turning off swap."
+	/sbin/swapoff -a
+	/usr/bin/cpufreq-set -g conservative         
+else   
+	logger "Turning on swap."
+	/sbin/swapon -a
+	logger "Running /sbin/laptop_mode start"
+	/sbin/laptop_mode stop
+	logger "Setting HD spindown for AC mode with hdparm -S $ACAD_HD /dev/hda."
+	/sbin/hdparm -S $ACAD_HD /dev/hda > /dev/null 2>&1
+	logger "Setting HD powersaving for AC mode with hdparm -B $ACAD_PM /dev/hda."
+	/sbin/hdparm -B $ACAD_PM /dev/hda > /dev/null 2>&1
+	/usr/bin/cpufreq-set -g ondemand
+fi
+</pre>}}
+{{RootCmd|chmod +x /etc/acpi/actions/FnF3-battery.sh}}
+Source: [http://www.thinkwiki.org/wiki/ACPI_action_script_for_battery_events| ThinkWiki.org]
+
+
 ===Sleep button===
 {{File|/etc/acpi/events/FnF4-sleep||<pre>
 #Fn+F4 button/sleep SBTN 00000080 00000000 K
