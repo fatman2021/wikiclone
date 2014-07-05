@@ -188,7 +188,86 @@ esac
 </pre>}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnF5-wifi.sh}}
 
-...to be continued
+
+===Backlight control===
+
+=====Brightness Up=====
+{{File|/etc/acpi/events/FnHome-brightnessup||<pre>
+#FnHome video/brightnessup BRTUP 00000086 00000000
+event=video/brightnessup
+action=/etc/acpi/actions/FnHome-brightnessup.sh
+</pre>}}
+
+{{File|/etc/acpi/actions/FnHome-brightnessup||<pre>
+#!/bin/bash 
+
+# Set the static increment value.  Keep in mind that this will 
+# be done twice. 
+IncVal=20 
+
+# Get the Maximum value for use. 
+#MaxVal=$(cat /sys/class/backlight/intel_backlight/max_brightness); 
+read -r MaxVal < "/sys/class/backlight/intel_backlight/max_brightness"
+
+# Get the current brightness value. 
+#CurrVal=$(cat /sys/class/backlight/intel_backlight/brightness); 
+read -r CurrVal < "/sys/class/backlight/intel_backlight/brightness"
+
+# Set the new value minus the decrement value. 
+NewVal=$(($CurrVal + $IncVal)); 
+echo $NewVal 
+
+# Set it to the threshold of the max value. 
+ThresholdVal=$(($NewVal<$MaxVal?$NewVal:$MaxVal)) 
+echo $ThresholdVal 
+
+# Set the new value directly. 
+echo -n $ThresholdVal > /sys/class/backlight/intel_backlight/brightness 
+
+logger "[ACPI] brightnessup |$CurrVal| |$NewVal| |$ThresholdVal|"
+</pre>}}
+
+{{RootCmd|chmod +x /etc/acpi/actions/FnHome-brightnessup.sh}}
+
+
+=====Brightness Down=====
+{{File|/etc/acpi/events/FnEnd-brightnessdown||<pre>
+#FnEnd video/brightnessdown BRTDN 00000087 00000000
+event=video/brightnessdown
+action=/etc/acpi/actions/FnEnd-brightnessdown.sh
+</pre>}}
+
+{{File|/etc/acpi/actions/FnEnd-brightnessdown||<pre>
+#!/bin/bash 
+
+# Set the static decrement value.  Keep in mind that this will 
+# be done twice. 
+DecVal=20 
+
+# Set the Minimum we will accept. 
+MinVal=0 
+
+# Get the current brightness value. 
+#CurrVal=$(cat /sys/class/backlight/intel_backlight/brightness); 
+read -r CurrVal < "/sys/class/backlight/intel_backlight/brightness"
+
+# Set the new value minus the decrement value. 
+NewVal=$(($CurrVal - $DecVal)); 
+echo $NewVal 
+
+# Set it to the threshold of the min value. 
+ThresholdVal=$(($NewVal>$MinVal?$NewVal:$MinVal)) 
+echo $ThresholdVal 
+
+# Set the new value directly. 
+echo -n $ThresholdVal > /sys/class/backlight/intel_backlight/brightness 
+
+logger "[ACPI] brightnessdown |$CurrVal| |$NewVal| |$ThresholdVal|"
+</pre>}}
+
+{{RootCmd|chmod +x /etc/acpi/actions/FnEnd-brightnessdown.sh}}
+
+Source: [http://forums.gentoo.org/viewtopic-p-7578948.html| forums.gentoo.org]
 
 ===CD control===
 Instead of CD I would like to control {{Package|media-sound/moc}}. 
