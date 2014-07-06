@@ -1,0 +1,51 @@
+This guide details running X server under user account.
+
+It was only tested under nouveau, but all kms driver should work.
+
+== Additional prerequisities ==
+Some of this support is pretty fresh so one definitely needs to install unstable packages
+
+{{File|/etc/portage/package.keywords||<pre>
+x11-base/xorg-server **
+x11-base/xorg-drivers **
+x11-drivers/xf86-input-keyboard **
+x11-drivers/xf86-input-mouse **
+x11-drivers/xf86-input-evdev **
+x11-drivers/xf86-video-nouveau **
+</pre>}}
+
+Also depending on driver support there may be need to install development packages from x11 overlay.
+For example xf86-video-nouveau doesn't have any version with necessary changes so -9999 package is needed.
+
+== Rebuilding Xorg ==
+
+Disable suid USE flag:
+{{File|/etc/portage/package.use||<pre>
+x11-base/xorg-server -suid
+</pre>}}
+
+Rebuild Xorg
+{{RootCmd|emerge -uDNav xorg-server}}
+
+== Making necessary changes to system ==
+
+Now you can run X as user, however because none of login managers are capable yet of doing necessary permision handling it needs some workarounds.
+In particular, X run by user needs to be able to access /dev/input files and it needs to be started manually.
+
+To access /dev/input files it's easiest to add them to group and allow user to access them.
+
+{{RootCmd|groupadd input}}
+{{RootCmd|usermod -a -G input user}}
+
+Create udev rule to change /dev/input group on boot:
+{{File|/etc/udev/rules.d/99-dev-input-group.rules||<pre>
+SUBSYSTEM=="input", ACTION=="add", GROUP="input"
+</pre>}}
+
+Reboot so file have correct permissions.
+
+If logged on tty1 use vt1, on tty2 use vt2, and so on
+
+{{Cmd|startx -- vt1}}
+
+X should now run as user.
