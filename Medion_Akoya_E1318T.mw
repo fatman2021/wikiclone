@@ -243,6 +243,21 @@ Device Drivers  --->
   <*> AES cipher algorithms (AES-NI)
 </pre>}}
 == Required packages ==
-* {{Package|sys-kernel/linux-firmware}} for the Wi-Fi firmware and the GPU microcode (the latter is also in {{Package|x11-drivers/radeon-ucode}}
+* {{Package|sys-kernel/linux-firmware}} for the Wi-Fi firmware and the GPU microcode (the latter is also in {{Package|x11-drivers/radeon-ucode}})
 
+= Enabling AMD-V (SVM) hardware virtualization =
+{{Warning|The commands described below are potentially dangerous and can render your system unbootable if something goes wrong. Only do this if you are prepared to recover from bad UEFI configuration.}}
+{{Note|It is highly advisable to make all changes on a copy of the UEFI configuration file, and keep a backup copy around.}}
+This netbook's CPU/Chipset supports AMD-v hardware virtualization. However, the UEFI firmware does not expose a setting for it. Luckily, one user has found a way to enable the setting for the very similar Acer Aspire V5-122p notebook: [http://forums.mydigitallife.info/threads/45118-Acer-Aspire-V5-122p-Enable-SVM-How-To].
+
+First, make sure that efivarfs is mounted to {{Path|/sys/firmware/efi/efivars}}. Then, enter {{Path|/sys/firmware/efi/efivars}} and examine the contents of the file containing the UEFI setup configuration.
+{{RootCmd|hexdump -C Setup-a04a27f4-df00-4d42-b552-39511302113d
+|output=000000f0  01 00 '''00''' 00 00 00 00 00  00 00 00 00 00 01 00 00  {{!}}................{{!}}}}
+The interesting line is shown above, with the setting for AMD-v marked in bold at offset 0xf2. Now, change this setting to 1 and verify that the change was applied:
+{{RootCmd|printf "\x1" {{!}} dd bs{{=}}1 seek{{=}}242 conv{{=}}notrunc of{{=}}Setup-a04a27f4-df00-4d42-b552-39511302113d
+|hexdump -C Setup-a04a27f4-df00-4d42-b552-39511302113d
+|output=000000f0  01 00 '''01''' 00 00 00 00 00  00 00 00 00 00 01 00 00  {{!}}................{{!}}}}
+Now power off(!) your system and verify that KVM is now enabled on next boot in dmesg:
+{{Code|dmesg|<pre>kvm: Nested virtualization enabled
+kvm: Nested paging enabled</pre>}}
 [[Category:Netbooks]]
