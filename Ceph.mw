@@ -11,15 +11,19 @@ Ceph consists of three major components:
 
 ==== Distributed Object Store ====
 This component is always implemented in a Ceph rollout.  It sits on top of an existing filesystem such as [[Ext4|ext4]]
-, [http://en.wikipedia.org/wiki/XFS xfs], [[ZFS|zfs]] or [[Btrfs|btrfs]] and is created and maintained by an Object Store Daemon (OSD).  It is up to the underlying filesystem and volume management scheme to provide the redundancy and reliability for the object storage and also the recovery that may be necessary when a drive fails and gets replaced.  
+, [http://en.wikipedia.org/wiki/XFS xfs], [[ZFS|zfs]] or [[Btrfs|btrfs]] and is created and maintained by an Object Store Device Daemon (OSD).  It is up to the underlying filesystem and volume management scheme to provide the redundancy and reliability for the object storage and also the recovery that may be necessary when a drive fails and gets replaced.  
 
 An OSD will take advantage of advanced features of the underlying filesystem such as Extents, Copy On Write (COW), and snapshotting.  It makes extended use of the xattr feature to store metadata about an object and will often exceed the 4kb limitation of ext4 filesystems such that a workaround will be necessary.  The ceph.com site documentation recommends either ext4 or xfs in production for OSDs, but it is obvious that zfs or btrfs would be better because of their ability to self-repair, snapshot and handle COW.  Ultimately btrfs will probably become the preferred underlying filesystem for a Linux based OSD when the majority is satisfied that it is stable enough.
 
-The task of the OSD is to handle the distribution of objects by CEPH across the cluster.  The user can specify the number of copies of an object to be created and distributed amongst the OSDs.  The default is 2 copies with a minimum of 1, but those values can be increased up to the number of OSDs that are implemented.  Since this redundancy is on top of whatever may be provided the underlying RAID arrays, the cluster enjoys an added layer of protection that guards against catastrophic failure of a disk array.  When a drive array fails, only the OSD or OSDs that make use of it are brought down.
+The task of the OSD is to handle the distribution of objects by Ceph across the cluster.  The user can specify the number of copies of an object to be created and distributed amongst the OSDs.  The default is 2 copies with a minimum of 1, but those values can be increased up to the number of OSDs that are implemented.  Since this redundancy is on top of whatever may be provided the underlying RAID arrays, the cluster enjoys an added layer of protection that guards against catastrophic failure of a disk array.  When a drive array fails, only the OSD or OSDs that make use of it are brought down.
 
 {{Note|Ceph documentation recommends that only one OSD be implemented per drive or logical volume.  This is both for performance reasons and to avoid the possibility that a volume failure doesn't cause a multi-OSD failure that destroys all copies of an object that have been created}}
 
-OSDs are watched over by Monitor Servers (MONs) which act as the coordinators for object traffic.  The initial Ceph Cluster would consist of a MON and two OSD servers, and this is the example used in their documentation for a quick install.  They also talk about an admin server, but this is only a system which is able to painlessly remote into the cluster members using ssh authorized_keys.  The admin server would be the system that the user has set up to run Chef, Puppet or other control systems that oversee the operation of the cluster.
+OSDs are watched over by Monitor Servers (MONs) which act as the coordinators for object traffic. The initial Ceph Cluster would consist of a MON and two OSD servers, and this is the example used in their documentation for a quick install.  They also talk about an admin server, but this is only a system which is able to painlessly remote into the cluster members using ssh authorized_keys.  The admin server would be the system that the user has set up to run Chef, Puppet or other control systems that oversee the operation of the cluster.
+
+A single MON would be a single point of failure for Ceph, so it is recommended that the Ceph Cluster be run with an odd number of MONs with a minimum number of 3 running to establish a quorum.  For performance reasons, MONs should be put on a separate filesystem from OSDs because they tend to do a lot of fsyncs.  Although they are typically shown as running on dedicated hosts, they can share a host with an OSD.  MONs don't need a lot of storage space, so it is probably perfectly fine to have them run on the system drive, while the OSD takes over whatever large disk or array is in the server.  A home user who isn't big on performance but nervous about an ssd based system disk and large numbers of fsyncs will probably just throw both the MON and the OSD into separate subvolumes of a btrfs based array.
+
+MONs coordinate object traffic by implementing the Controlled Replication Under Scalable Hashing (CRUSH) map.  This is an algorithm that computes the locations for storing objects in the OSD pools.  MONS also keep track of the map of daemons running the various flavors of Ceph server in the cluster.  An "Initial Members" setting allows the user the specify the minimum number of MON servers that must be running in order to form a quorum.  There doesn't appear to be any caveats about running an excessive number of MONs, so it is probably okay to stick a MON wherever an OSD gets implemented.
 
 
 ==== RADOS Block Device ====
@@ -35,5 +39,55 @@ A major selling point for the RBD is the fact that it can be used as a virtual m
 
 
 ==== POSIX Filesystem ====
-Ceph provides a MetaData Server (MDS) 
+Ceph provides a MetaData Server (MDS) which provides a more traditional style of filesystem based on POSIX standards that translates into objects stored in the OSD pool.  This would then be shared via CIFS and NFS to non-Ceph and non-Linux based systems including Windows.  This is also the way to use Ceph as a drop-in replacement for HADOOP.
+
+
+=== Installation ===
+As of this writing the stable version of Ceph in portage is <code>ceph-0.56.3</code> which corresponds to a midway rev of the second major release of Ceph code named "Bobtail".  In gentoo unstable are versions of the follow-on major Ceph updates up to the current major version "Firefly":
+
+* <code>ceph-0.56.3</code> "Bobtail"
+* <code>ceph-0.67.7</code> "Cuttlefish"
+* <code>ceph-0.72.2-r3</code> "Dumpling"
+* <code>ceph-0.80.1</code> "Firefly"
+
+After noting that the ceph site online [http://ceph.com/download/ archive] only shows release downloads back to Cuttlefish, we decided to unmask unstable <code>ceph</code> in our <code>package.keywords</code> file along with its dependencies and ended up building with Firefly before doing our installation.
+
+{{RootCmd|ACCEPT_KEYWORDS{{=}}"~amd64" emerge -pv ceph|output=<pre>
+
+These are the packages that would be merged, in order:
+
+Calculating dependencies... done!
+[ebuild  N     ] sys-apps/hdparm-9.43  127 kB
+[ebuild  N     ] sys-libs/libunwind-1.1:7  USE="libatomic lzma static-libs -debug -debug-frame" 1,073 kB
+[ebuild  N     ] dev-util/google-perftools-2.0-r2:0/4  USE="debug static-libs -largepages -minimal {-test}" 1,232 kB
+[ebuild  N     ] dev-libs/leveldb-1.15.0  USE="snappy static-libs tcmalloc" 201 kB
+[ebuild  N     ] dev-python/chardet-2.2.1  PYTHON_TARGETS="python2_7 python3_3 -pypy (-python2_6) -python3_2 -python3_4" 177 kB
+[ebuild  N     ] dev-python/itsdangerous-0.24  PYTHON_TARGETS="python2_7 python3_3 -pypy (-python2_6) -python3_2 -python3_4" 46 kB
+[ebuild  N     ] dev-python/blinker-1.3  USE="doc {-test}" PYTHON_TARGETS="python2_7 python3_3 -pypy (-python2_6) -python3_2 -python3_4" 90 kB
+[ebuild  N     ] dev-python/requests-2.3.0  PYTHON_TARGETS="python2_7 python3_3 -pypy -python3_4" 420 kB
+[ebuild  N     ] dev-python/werkzeug-0.9.4  PYTHON_TARGETS="python2_7 python3_3 -pypy -python3_4" 1,100 kB
+[ebuild  N     ] dev-python/flask-0.10.1-r1  USE="-examples {-test}" PYTHON_TARGETS="python2_7 python3_3 -pypy -python3_4" 532 kB
+[ebuild  N     ] sys-kernel/spl-0.6.2-r5  USE="-custom-cflags -debug -debug-log" 219 kB
+[ebuild  N     ] sys-fs/zfs-kmod-0.6.2-r5  USE="rootfs -custom-cflags -debug" 1,585 kB
+[ebuild  N     ] sys-fs/zfs-0.6.2-r5  USE="bash-completion rootfs static-libs -custom-cflags -debug (-kernel-builtin) (-selinux) -test-suite" PYTHON_TARGETS="python2_7 python3_3 (-python2_6) -python3_2" 0 kB
+[ebuild     U  ] sys-cluster/ceph-0.80.1 [0.56.3] USE="fuse gtk libaio%* libatomic nss%* radosgw static-libs xfs%* zfs%* -cryptopp% -debug -tcmalloc" 3,996 kB
+
+Total: 14 packages (1 upgrade, 13 new), Size of downloads: 10,793 kB
+</pre>}}
+
+If you want to use the RADOS block device, you will need to put that into your kernel .config as either a module or baked in.  Ceph itself will want to have FUSE support enabled if you want to work with the POSIX filesystem component and you will also want to include the driver for that in Network File Systems.  For your backend object stores, you will want to have xfs support because of the xattr limitations in Ext4 and btrfs because it really is becoming stable now.
+
+{{Kernel||<pre>
+Device Drivers
+  Block devices
+    Rados block device (RBD)
+File systems
+  XFS filesystem support
+    XFS POSIX ACL support
+  Btrfs filesystem support
+    Btrfs POSIX Access Control Lists
+  FUSE (Filesystem in Userspace) support
+Network File Systems
+  Ceph distributed file system
+</pre>}}
 [[Category:Filesystems]]
