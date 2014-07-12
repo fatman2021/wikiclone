@@ -1,12 +1,12 @@
 == Ceph Distributed Filesystem ==
 [http://ceph.com Ceph] is a distributed object store and filesystem designed to provide excellent performance, reliability and scalability.  According to the [http://http://en.wikipedia.org/wiki/Ceph_%28software%29#History Ceph wikipedia] entry, the first stable release (Argonaut) was in 2012.  It arose from a doctoral dissertation by Sage Weil at the University of California, Santa Cruz. Signficant funding came from the US DOE as the software has found early adoption in clusters in use at Lawrence Livermore, Los Alamos and Sandia National Labs.  The main commercial backing for Ceph comes from a company founded by Weil ([http://www.inktank.com/ Inktank]) which was acquired by RedHat in April 2014.
 
-The Floss Weekly podcast interviewd Sage Weil in 2013 for their [http://twit.tv/show/floss-weekly/250 250th show].  The interview was done around the time that the "Dumpling" release was created.  One of the points of discussion was the need for datacenters to handle disaster recovery, and Sage pointed out that starting with Dumpling, Ceph would provide for replication between datacenters.
+The Floss Weekly podcast interviewd Sage Weil in 2013 for their [http://twit.tv/show/floss-weekly/250 250th show].  The interview was done around the time that the "Cuttlefish" release was created.  One of the points of discussion was the need for datacenters to handle disaster recovery, and Sage pointed out that starting with Dumpling, Ceph would provide for replication between datacenters.  Another bit of trivia came out in the podcast: Sage Weil was one of the inventors of the [http://en.wikipedia.org/wiki/Webring WebRing] concept in the early days of the World Wide Web.
 
 === Overview ===
 Ceph consists of three major components:
 * Distributed Object Store
-* RADOS Block Device (RBD)
+* RADOS Block Device (RBD) and RADOS Gateway
 * POSIX compliant Filesystem
 
 
@@ -20,6 +20,7 @@ The task of the OSD is to handle the distribution of objects by Ceph across the 
 
 {{Note|Ceph documentation recommends that only one OSD be implemented per drive or logical volume.  This is both for performance reasons and to avoid the possibility that a volume failure doesn't cause a multi-OSD failure that destroys all copies of an object that have been created}}
 
+
 OSDs are watched over by Monitor Servers (MONs) which act as the coordinators for object traffic. The initial Ceph Cluster would consist of a MON and two OSD servers, and this is the example used in their documentation for a quick install.  They also talk about an admin server, but this is only a system which is able to painlessly remote into the cluster members using ssh authorized_keys.  The admin server would be the system that the user has set up to run Chef, Puppet or other control systems that oversee the operation of the cluster.
 
 A single MON would be a single point of failure for Ceph, so it is recommended that the Ceph Cluster be run with an odd number of MONs with a minimum number of 3 running to establish a quorum.  For performance reasons, MONs should be put on a separate filesystem from OSDs because they tend to do a lot of fsyncs.  Although they are typically shown as running on dedicated hosts, they can share a host with an OSD.  MONs don't need a lot of storage space, so it is probably perfectly fine to have them run on the system drive, while the OSD takes over whatever large disk or array is in the server.  A home user who isn't big on performance but nervous about an ssd based system disk and large numbers of fsyncs will probably just throw both the MON and the OSD into separate subvolumes of a btrfs based array.
@@ -27,7 +28,7 @@ A single MON would be a single point of failure for Ceph, so it is recommended t
 MONs coordinate object traffic by implementing the Controlled Replication Under Scalable Hashing (CRUSH) map.  This is an algorithm that computes the locations for storing objects in the OSD pools.  MONS also keep track of the map of daemons running the various flavors of Ceph server in the cluster.  An "Initial Members" setting allows the user the specify the minimum number of MON servers that must be running in order to form a quorum.  There doesn't appear to be any caveats about running an excessive number of MONs, so it is probably okay to stick a MON wherever an OSD gets implemented.
 
 
-==== RADOS Block Device ====
+==== RADOS Block Device and RADOS Gateway====
 Ceph provides support in the Linux kernel for the RADOS Block Device (RBD).  This is essentially a virtual disk device that distributes its "blocks" across the OSDs in the Ceph cluster.  An RBD provides the following capabilities:
 
 * thin provisioning
@@ -35,14 +36,15 @@ Ceph provides support in the Linux kernel for the RADOS Block Device (RBD).  Thi
 * resizeable
 * snapshot with revert capability
 * directly useable as a KVM guest's disk device
+* Data Replication between datacenters starting with the Dumpling Release
 
 A major selling point for the RBD is the fact that it can be used as a virtual machine's drive store in KVM.  Because it spans the OSD server pool, the guest can be hot migrated between cluster CPUs with little or no down time.  Libvirt and Virt-Manager have provided this support for some time now, and it is probably one of the main reasons why RedHat (a major sponsor of QEMU/KVM, Libvirt and Virt-Manager) has acquired Inktank.
 
-The RBD and the RADOS Gateway provide the same sort of functionality for Cloud Services as [http://en.wikipedia.org/wiki/Amazon_S3 Amazon S3] and [http://en.wikipedia.org/wiki/OpenStack#Object_Storage_.28Swift.29 OpenStack Swift].
+The RBD and the RADOS Gateway provide the same sort of functionality for Cloud Services as [http://en.wikipedia.org/wiki/Amazon_S3 Amazon S3] and [http://en.wikipedia.org/wiki/OpenStack#Object_Storage_.28Swift.29 OpenStack Swift].  The early adopters of Ceph were interested primarily in Cloud Service object stores.  Cloud Services also drove the intial work on replication between datacenters.
 
 
 ==== POSIX Filesystem ====
-Ceph provides a MetaData Server (MDS) which provides a more traditional style of filesystem based on POSIX standards that translates into objects stored in the OSD pool.  This would then be shared via CIFS and NFS to non-Ceph and non-Linux based systems including Windows.  This is also the way to use Ceph as a drop-in replacement for HADOOP.
+Ceph provides a MetaData Server (MDS) which provides a more traditional style of filesystem based on POSIX standards that translates into objects stored in the OSD pool.  This would then be shared via CIFS and NFS to non-Ceph and non-Linux based systems including Windows.  This is also the way to use Ceph as a drop-in replacement for HADOOP.  The filesystem component started to mature around the Dumpling release.
 
 
 === Installation ===
