@@ -89,6 +89,10 @@ Calculating dependencies... done!
 Total: 14 packages (1 upgrade, 13 new), Size of downloads: 10,793 kB
 </pre>}}
 
+{{Note|The USE flags <code>libaio</code> and <code>radosgw</code> are local to the ceph ebuild.  Also even if you do build Ceph with libaio support, an OSD will not use asynchronous i/o by default.}}
+
+
+==== Kernel Config ====
 If you want to use the RADOS block device, you will need to put that into your kernel .config as either a module or baked in.  Ceph itself will want to have FUSE support enabled if you want to work with the POSIX filesystem component and you will also want to include the driver for that in Network File Systems.  For your backend object stores, you will want to have xfs support because of the xattr limitations in Ext4 and btrfs because it really is becoming stable now.
 
 {{Kernel||<pre>
@@ -104,4 +108,54 @@ File systems
 Network File Systems
   Ceph distributed file system
 </pre>}}
+
+
+==== Network Config ====
+Ceph is sensitive to IP address changes, so you should make sure that all of your Ceph servers are assigned static IP addresses.  You also may want to proactively treat the Ceph cluster members as an independent subnet from your existing network by multi-homing your existing network adapters as necessary.  That way if an ISP change or other topology changes are needed, you can keep your cluster setup intact.  It also gives you the luxury of migrating the ceph subnet later on to dedicated nics, switches and faster hardware such as 10Gbit ethernet or Infiniband.  If the cluster subnet is small enough, consider keeping the hostnames in your /etc/hosts files, at least until things grow to the point where a pair of DNS servers  among the cluster members becomes a compelling solution.
+
+We will be using four hosts in our Example implementation.  All four will be MON servers with an initial quorum of 3 so that we can safely avoid a "split-brain" situation and still be able to run the cluster when a single server is rebooted.
+
+
+{{File|/etc/conf.d/net|Example with a multi-homed eth0 for host kroll1|<pre>
+#
+#  An example multi-homed eth0 where 192.168.1 subnet is the entire LAN and access to the outside world
+#  The 192.168.2 subnet is dedicated to the ceph cluster
+#
+config_eth0="192.168.1.10/24 192.168.2.1/24"
+routes_eth0="default via 192.168.1.1"
+dns_domain_eth0="example.com"
+dns_servers_eth0="192.168.1.2 192.168.1.3"
+dns_search-eth0="example.com"
+</pre>}}
+
+
+{{file|/etc/hosts|Example of a 4 node ceph cluster with hosts kroll1-4|<pre>
+# /etc/hosts: Local Host Database
+#
+# This file describes a number of aliases-to-address mappings for the for 
+# local hosts that share this file.
+#
+# In the presence of the domain name service or NIS, this file may not be 
+# consulted at all; see /etc/host.conf for the resolution order.
+#
+
+# IPv4 and IPv6 localhost aliases
+127.0.0.1       localhost
+::1             localhost
+192.168.2.1     kroll1
+192.168.2.2     kroll2
+192.168.2.3     kroll3
+192.168.2.4     kroll4
+</pre>}}
+
+
+==== Our Example Ceph Cluster ====
+We have chosen to roll out Ceph on a portion of our home network.  The four kroll hosts are as follows:
+
+* kroll1 (aka Thufir) - An AMD FX9590 8 core CPU with 32GB of memory, 256GB SSD root drive and a 4x4TB SATA array formatted as a RAID5 btrfs with the default volume mounted on <code>/thufirraid</code>.  kroll1 will act as our admin server since the ssh keys for its root user have been pushed out to the other nodes in their <code>/root/.ssh/authorized_keys</code> files.  Kroll1 will act as a MON and OSD server since only slightly less than half of the btrfs array has been used.
+* kroll2 (aka Figo) - An AMD FX8350 8 core CPU with 16GB of memory, 256GB SSD root drive and a 4x3TB SATA array formatted as btrfs RAID1.  Kroll2 will act as a MON and MDS server.  We will not do an OSD server here since the array is already over 90% capacity.  Also the Ceph developers have suggested that it is not a wise idea to run an MDS and an OSD on the same node.
+* kroll3 (aka Mater) - An AMD FX8350 8 core CPU with 16GB of memory, 256GB SSD and 4x4TB SATA array formatted as a RAID5 btrfs and default volume mounted on <code>/materraid</code>.  /materraid was being kept as a mirror of /thufirraid using <code>rsync -av --delete</code> on a periodic basis.  kroll3 will become a MON and an OSD server.
+* kroll4 (aka Tube) - An AMD A10-7850K APU with 16GB of memory, 256GB SSD and a 2x4TB SATA array formatted as a btrfs RAID1 mirror set with its default volume mounted on <code>/tuberaid</code>.  As its real name suggests, kroll4 was originally set up a MythTV box, but its filesystem is only averaging about 10% of its capacity.  We will thus use kroll4 as a MON and OSD server.
+
+Thufir, Mater and Tube run a gentoo stable desktop profile and are currently on kernel <code>3.12.21-gentoo-r1</code>.  Thufir and Mater are btrfs installs with new drives using the latest btrfs code <code>btrfs-progs-3.12-r1</code>.  Tube has been up and running a bit longer and had its btrfs array built under kernel <code>3.10.25-gentoo</code>.  Figo runs a gentoo unstable desktop profile and is currenly on kernel <code>3.13.7-gentoo</code>.  It is also being used as an rsync mirror for thufir, but its array has been running for about 2 years.  The reason for <code>/figoraid</code> running at 90% capacity is both due to older smaller drives (3TB versus 4TB) and also because the version of btrfs available when it was built did not yet include RAID5 support.
 [[Category:Filesystems]]
