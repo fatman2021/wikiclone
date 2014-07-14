@@ -901,7 +901,7 @@ We now have a <code>/var/log/ceph/ceph-osd.0.log</code> which shows us all of th
 2014-07-14 16:15:52.440379 7f667580dbc0 -1 created object store /var/lib/ceph/osd/ceph-0 journal /var/lib/ceph/osd/ceph-0/journal for osd.0 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
 2014-07-14 16:15:52.440477 7f667580dbc0 -1 auth: error reading file: /var/lib/ceph/osd/ceph-0/keyring: can't open /var/lib/ceph/osd/ceph-0/keyring: (2) No such file or directory
 2014-07-14 16:15:52.440658 7f667580dbc0 -1 created new key in keyring /var/lib/ceph/osd/ceph-0/keyring
-</pre>
+</pre>}}
 
 
 
@@ -1082,8 +1082,9 @@ add item id 1 name 'osd.1' weight 1 at location {host=kroll3} to crush map
 
 {{RootCmd|cd /etc/init.d}}
 {{RootCmd|ln -s ceph ceph.osd-1}}
-{{Rootcmd|rc-update add ceph.osd-1 default|output=<pre>
+{{RootCmd|rc-update add ceph.osd-1 default|output=<pre>
  * service ceph.osd-1 added to runlevel default
+</pre>}}
 {{RootCmd|./ceph.osd-1 start|output=<pre>
  * Caching service dependencies ...                                                                     [ ok ]
  * Starting Ceph osd.1 ...
@@ -1113,7 +1114,121 @@ With two osds running now, the cluster moves from degraded to "warn" state.  Thi
 
 
 
+==== osd.2 on kroll4 ====
+After shoving a couple of data archives from /home to the /raid filesystem on thufir, we got the root drive down to 51% of capacity.  The cluster now shows HEALTH_OK.
+
+{{RootCmd|ceph -s|output=<pre>
+    cluster 1798897a-f0c9-422d-86b3-d4933a12c7ac
+     health HEALTH_OK
+     monmap e3: 4 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0,3=192.168.2.4:6789/0}, election epoch 8, quorum 0,1,2,3 0,1,2,3
+     osdmap e14: 2 osds: 2 up, 2 in
+      pgmap v39: 192 pgs, 3 pools, 0 bytes data, 0 objects
+            12269 GB used, 13407 GB / 29808 GB avail
+                 192 active+clean
+</pre>}}
 
 
+We will now add our final (for the moment) object store as osd.2 on kroll4.  Its btrfs mirror set has its default volume mounted on <code>/tuberaid</code>.  It also has a different subvolume setup from thufir and mater.  Instead of mounting and exporting a single <code>/raid</code> subvolume, it has subvolumes for <code>/home, /mythtv</code> and a dedicated volume for virtual machines as <code>/vm</code>.  Another wrinkle is that this system has been set up to use btrfs on the SSD for its /boot and / drives.  In fact, the root drive is mounted as a subvolume of <code>/systemraid</code>
 
+{{RootCmd|uuidgen|output=<pre>
+9b5550a2-7c92-4875-bea8-e61ee7a1ea15
+</pre>}}
+{{RootCmd|ceph osd create 9b5550a2-7c92-4875-bea8-e61ee7a1ea15|output=<pre>
+2
+</pre>}}
+
+{{RootCmd|cd /tuberaid}}
+{{RootCmd|btrfs subvol create ceph_osd_2|output=<pre>
+Create subvolume './ceph_osd_2'
+</pre>}}
+
+{{File|/etc/fstab|updated with ceph_osd_2 mount|<pre>
+/dev/sda3     	/systemraid	    btrfs   defaults,noatime,ssd	0 0
+/dev/sda2	/boot  	  	    btrfs   defaults,noatime,ssd	0 0
+/dev/sda3	/		    btrfs   defaults,noatime,ssd,compress=lzo,subvol=activeroot	0 0
+#
+#  2x4tb raid1/raid1 btrfs.  /dev/sdb1,c1 has alternative grub2bios and /dev/sdb2,c2 has alternative /boot
+#
+/dev/sdb3      /tuberaid	btrfs   defaults,noatime,compress=lzo,autodefrag		0 0
+/dev/sdb3      /home		btrfs	subvol=home,defaults,noatime,compress=lzo,autodefrag	0 0
+/dev/sdb3      /mythtv		btrfs   subvol=mythtv,autodefrag,defaults,noatime		0 0
+/dev/sdb3      /vm		btrfs	subvol=vm,compress=lzo,autodefrag,default,noatime	0 0
+/dev/sdb3      /var/lib/ceph/osd/ceph-2	 btrfs	subvol=ceph_osd_2,compress=lzo,autodefrag,default,noatime 0 0
+</pre>}}
+
+
+{{RootCmd|mkdir -p /var/lib/ceph/osd/ceph-2}}
+{{RootCmd|mount /var/lib/ceph/osd/ceph-2}}
+{{RootCmd|df|output=<pre>
+Filesystem                        1K-blocks       Used  Available Use% Mounted on
+/dev/sda3                         249542980   26435412  221184188  11% /
+devtmpfs                            7634844          0    7634844   0% /dev
+tmpfs                               1527156        956    1526200   1% /run
+shm                                 7635760        912    7634848   1% /dev/shm
+cgroup_root                           10240          0      10240   0% /sys/fs/cgroup
+/dev/sda3                         249542980   26435412  221184188  11% /systemraid
+/dev/sda2                            512000      47048     460860  10% /boot
+/dev/sdb3                        7813006984  443978232 7367515784   6% /tuberaid
+/dev/sdb3                        7813006984  443978232 7367515784   6% /home
+/dev/sdb3                        7813006984  443978232 7367515784   6% /mythtv
+/dev/sdb3                        7813006984  443978232 7367515784   6% /vm
+/dev/sdb3                        7813006984  443978232 7367515784   6% /var/lib/ceph/osd/ceph-2
+</pre>}}
+
+
+{{RootCmd|ceph-osd -i 2 --mkfs --mkkey --osd-uuid 9b5550a2-7c92-4875-bea8-e61ee7a1ea15|output=<pre>
+2014-07-14 18:52:38.014662 7f88eed18780 -1 journal FileJournal::_open: disabling aio for non-block journal.  Use journal_force_aio to force use of aio anyway
+2014-07-14 18:52:38.789413 7f88eed18780 -1 journal FileJournal::_open: disabling aio for non-block journal.  Use journal_force_aio to force use of aio anyway
+2014-07-14 18:52:38.803037 7f88eed18780 -1 filestore(/var/lib/ceph/osd/ceph-2) could not find 23c2fcde/osd_superblock/0//-1 in index: (2) No such file or directory
+2014-07-14 18:52:39.057377 7f88eed18780 -1 created object store /var/lib/ceph/osd/ceph-2 journal /var/lib/ceph/osd/ceph-2/journal for osd.2 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 18:52:39.057479 7f88eed18780 -1 auth: error reading file: /var/lib/ceph/osd/ceph-2/keyring: can't open /var/lib/ceph/osd/ceph-2/keyring: (2) No such file or directory
+2014-07-14 18:52:39.057665 7f88eed18780 -1 created new key in keyring /var/lib/ceph/osd/ceph-2/keyring
+</pre>}}
+{{RootCmd|ceph auth add osd.2 osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-2/keyring|output=<pre>
+added key for osd.2
+</pre>}}
+
+{{RootCmd|ceph osd crush add-bucket kroll4 host|output=<pre>
+added bucket kroll4 type host to crush map
+</pre>}}
+{{RootCmd|ceph osd crush move kroll4 root{{=}}default|output=<pre>
+moved item id -4 name 'kroll4' to location {root=default} in crush map
+</pre>}}
+{{RootCmd|ceph osd crush add osd.2 1.0 host{{=}}kroll4|output=<pre>
+add item id 2 name 'osd.2' weight 1 at location {host=kroll4} to crush map
+</pre>}}
+
+{{RootCmd|cd /etc/init.d}}
+{{RootCmd|ln -s ceph ceph.osd-2}}
+{{RootCmd|rc-update add ceph.osd-2 default|output=<pre>
+ * service ceph.osd-2 added to runlevel default
+</pre>}}
+{{RootCmd|./ceph.mon-2 start|ouput=<pre>
+ * Caching service dependencies ...                                                                     [ ok ]
+ * Starting Ceph osd.2 ...
+starting osd.2 at :/0 osd_data /var/lib/ceph/osd/ceph-2 /var/lib/ceph/osd/ceph-2/journal                [ ok ]
+</pre>}}
+
+{{RootCmd|ceph osd tree|output=<pre>
+# id    weight  type name       up/down reweight
+-1      3       root default
+-2      1               host kroll1
+0       1                       osd.0   up      1
+-3      1               host kroll3
+1       1                       osd.1   up      1
+-4      1               host kroll4
+2       1                       osd.2   up      1
+</pre>}}
+
+{{RootCmd|ceph -s|output=<pre>
+    cluster 1798897a-f0c9-422d-86b3-d4933a12c7ac
+     health HEALTH_OK
+     monmap e3: 4 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0,3=192.168.2.4:6789/0}, election epoch 8, quorum 0,1,2,3 0,1,2,3
+     osdmap e20: 3 osds: 3 up, 3 in
+      pgmap v57: 192 pgs, 3 pools, 0 bytes data, 0 objects
+            12697 GB used, 20429 GB / 37259 GB avail
+                 192 active+clean
+</pre>}}
+
+It suddenly strikes us that we are the almost assuredly the first kid in our neighborhood to set up a cluster with almost 40tb of distributed object store in the comfort of our own home.  In fact, we are probably outclassing all but one or two NIH funded research labs that are nearby.  The cost of the hardware was probably in the range of $5-7K since it was built from scratch, and it may even been cheaper than a single desktop video editing system sold by a certain fruity computer company.
 [[Category:Filesystems]]
