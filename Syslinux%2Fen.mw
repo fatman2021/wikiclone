@@ -23,6 +23,8 @@ The installation of {{Package|sys-boot/syslinux}} will provide the software on t
 
 {{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
 
+{{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
+
 To use EXTLINUX you need to make sure to both install the proper boot sector, and then to install the actual boot loader into the partition. Make sure not to omit steps.
 
 The boot sector setups are not needed for the SYSLINUX, PXELINUX and ISOLINUX installations.
@@ -148,6 +150,42 @@ Use the <code>syslinux</code> command to install the SYSLINUX bootloader on the 
 |syslinux --install /dev/sda1
 }}
 
+== Setup on EFI systems ==
+
+{{Note|EFI is supported since Syslinux 6.00.}}
+
+=== EFI system partition ===
+
+Create a partition of type EF (MBR) or EF00 (GPT) with a FAT32 file system. You can also use an already existing EFI system partition.
+
+It is advisable to mount this partition as {{Path|/boot/efi/}}.
+
+{{Note|The following assumes that your system is booted in EFI mode, and that your EFI system partition is {{Path|/dev/sda1}}.}}
+
+=== Boot Loader Install ===
+
+In the EFI system partition, create a directory for the syslinux files. This directory will also contain the configuration files that you will create later.
+
+{{RootCmd|mkdir -p /boot/efi/EFI/syslinux}}
+
+Copy the files {{Path|syslinux.efi}}, {{Path|ldlinux.e64}} along with the other desired .c32 files from {{Path|/usr/share/syslinux/efi64/}} to your syslinux directory. Example:
+
+{{RootCmd|cd /usr/share/syslinux/efi64
+|cp syslinux.efi ldlinux.e64 menu.c32 libcom32.c32 libutil.c32 /boot/efi/EFI/syslinux}}
+
+If you are not booted in EFI mode, then the syslinux files need to be copied to {{Path|/boot/efi/EFI/Boot}} instead, and {{Path|syslinux.efi}} needs to be renamed to {{Path|bootx64.efi}}. You can then skip the next section about <code>efibootmgr</code>.
+
+=== Making Syslinux known to EFI ===
+
+Ensure that <code>CONFIG_EFI_VARS</code> is enabled in your kernel. If built as a module, ensure that it is loaded.
+
+Now create a new boot entry using {{Package|sys-boot/efibootmgr}}:
+
+{{RootCmd|modprobe efivars
+|efibootmgr -c -l '\EFI\syslinux\syslinux.efi' -L SYSLINUX -p 1}}
+
+<code>efibootmgr</code> will automatically adjust the EFI boot order to put the most recently created entry to the front. If that is undesired, change the boot order with the <code>-o</code> option.
+
 == Configuration ==
 
 The configuration file is named after the bootloader:
@@ -177,7 +215,13 @@ This is done via the vesamenu module, in some cases where vesa is not compatible
 
 Copy the VESA menu module into the boot filesystem:
 
+On BIOS systems:
+
 {{RootCmd|cp /usr/share/syslinux/vesamenu.c32 /boot/extlinux/}}
+
+On EFI systems:
+
+{{RootCmd|cp /usr/share/syslinux/efi64/vesamenu.c32 /boot/efi/EFI/syslinux/}}
 
 {{File|/boot/extlinux/extlinux.conf||<pre>
 TIMEOUT 30
@@ -197,6 +241,8 @@ LABEL gentoo-old
 
 {{Note|Avoid using 'KERNEL' for selecting the kernel images, use LINUX instead. If you use KERNEL and the image ends with .0 then extlinux will misinterpret it and try to PXE it ending with a screen full of graphical artifacts and nothing else.}}
 
+{{Note|In the configuration file, absolute paths will be relative to the filesystem root, non-absolute paths will be relative to the syslinux installation directory.}}
+
 === Passing Kernel Parameters ===
 
 Unless the kernel parameters are hard-coded in the kernel image, these need to be passed on to the kernel through the boot loader. To do so, use the <code>APPEND</code> parameter, like this:
@@ -209,5 +255,10 @@ LABEL gentoo
       APPEND root=/dev/sda1
 </pre>}}
 
+=== Checking dynamic links ===
+Since syslinux-5.00, the .c32 modules use dynamic linking. To verify whether you have installed the dependencies, enter the directory where syslinux is installed and use the ldd command:
+
+{{RootCmd|LD_LIBRARY_PATH{{=}}. ldd *.c32}}
+If it shows any missing .c32 modules, copy them to the directory, too.
 
 [[Category:Bootloaders]]
