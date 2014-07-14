@@ -465,7 +465,7 @@ total 12
 -rw-r--r-- 1 root root   16 Jul 14 13:13 CURRENT
 -rw-r--r-- 1 root root    0 Jul 14 13:13 LOCK
 -rw-r--r-- 1 root root   50 Jul 14 13:13 MANIFEST-000002
-<pre>}}
+</pre>}}
 {{RootCmd|cat keyring|output=<pre>
 [mon.]
         key = (redacted)
@@ -530,6 +530,281 @@ ceph-mon: created monfs at /var/lib/ceph/mon/ceph-3 for mon.3
 {{RootCmd|rc-update add ceph.mon-3 default|output=<pre>
 * service ceph.mon-3 added to runlevel default
 </pre>}}
+
+
+==== Starting the Mon Servers ====
+With all four kroll hosts configured with mons, we now go back and start the services beginning with <code>mon.0</code> on kroll1.
+
+{{RootCmd|cd /var/log/ceph}}
+{{RootCmd|/etc/init.d/ceph.mon-0 start|output=<pre>
+* Caching service dependencies ...                                                                     [ ok ]
+* Starting Ceph mon.0 ...                                                                              [ ok ]
+</pre>}}
+{{RootCmd|ls -l|output=<pre>
+total 4
+-rw-r--r-- 1 root root 1411 Jul 14 14:55 ceph-mon.0.log
+</pre>}}
+{{RootCmd|cat ceph-mon.0.log|output=<pre>
+2014-07-14 14:55:49.806317 7f7928c81780  0 ceph version 0.80.1 (a38fe1169b6d2ac98b427334c12d7cf81f809b74), process ceph-mon, pid 25102
+2014-07-14 14:55:49.815592 7f7928c81780  0 mon.0 does not exist in monmap, will attempt to join an existing cluster
+2014-07-14 14:55:49.815719 7f7928c81780  0 using public_addr 192.168.2.1:0/0 -> 192.168.2.1:6789/0
+2014-07-14 14:55:49.815751 7f7928c81780  0 starting mon.0 rank -1 at 192.168.2.1:6789/0 mon_data /var/lib/ceph/mon/ceph-0 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 14:55:49.815892 7f7928c81780  1 mon.0@-1(probing) e0 preinit fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 14:55:49.815927 7f7928c81780  1 mon.0@-1(probing) e0  initial_members 0,1,2, filtering seed monmap
+2014-07-14 14:55:49.817013 7f7928c81780  0 mon.0@-1(probing) e0  my rank is now 0 (was -1)
+2014-07-14 14:55:49.817558 7f7928c79700  0 -- 192.168.2.1:6789/0 >> 0.0.0.0:0/1 pipe(0x2182280 sd=18 :0 s=1 pgs=0 cs=0 l=0 c=0x2138dc0).fault
+2014-07-14 14:55:49.817569 7f791fc21700  0 -- 192.168.2.1:6789/0 >> 0.0.0.0:0/2 pipe(0x2182a00 sd=17 :0 s=1 pgs=0 cs=0 l=0 c=0x2139a20).fault
+2014-07-14 14:55:49.817700 7f791fa1f700  0 -- 192.168.2.1:6789/0 >> 192.168.2.3:6789/0 pipe(0x2183180 sd=13 :0 s=1 pgs=0 cs=0 l=0 c=0x21394a0).fault
+2014-07-14 14:55:49.817674 7f791fb20700  0 -- 192.168.2.1:6789/0 >> 192.168.2.2:6789/0 pipe(0x2183680 sd=16 :0 s=1 pgs=0 cs=0 l=0 c=0x2139760).fault
+</pre>}}
+
+Notice the ".fault" entries at the bottom of the log.  We will continue to see them until the quorum is established.  We will also see them as outputwhen attempting to do monitor style commands such as <code>ceph -s</code> until there is a quorum.
+
+===== Starting mon.1 on kroll2 =====
+We start up the mon.1 server on kroll2.  The mon log for this server will show it discovering the kroll1 <code>mon.0</code> peer server, and the 2 start using praxis to hold a quorum election.  Until <code>mon.2</code> gets spun up, we still won't have a quorum.
+
+{{RootCmd|cd /var/log/ceph}}
+{{RootCmd|/etc/init.d/mon.1 start|output=<pre>
+ * Caching service dependencies ...                                                                     [ ok ]
+ * Starting Ceph mon.1 ...                                                                              [ ok ]
+</pre>}}
+{{RootCmd|cat ceph-mon.1.log|output=<pre>
+2014-07-14 15:01:03.087006 7f680d91b7c0  0 ceph version 0.80.1 (a38fe1169b6d2ac98b427334c12d7cf81f809b74), process ceph-mon, pid 18579
+2014-07-14 15:01:03.110960 7f680d91b7c0  0 mon.1 does not exist in monmap, will attempt to join an existing cluster
+2014-07-14 15:01:03.111291 7f680d91b7c0  0 using public_addr 192.168.2.2:0/0 -> 192.168.2.2:6789/0
+2014-07-14 15:01:03.111377 7f680d91b7c0  0 starting mon.1 rank -1 at 192.168.2.2:6789/0 mon_data /var/lib/ceph/mon/ceph-1 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 15:01:03.111717 7f680d91b7c0  1 mon.1@-1(probing) e0 preinit fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 15:01:03.111825 7f680d91b7c0  1 mon.1@-1(probing) e0  initial_members 0,1,2, filtering seed monmap
+2014-07-14 15:01:03.114379 7f680d91b7c0  0 mon.1@-1(probing) e0  my rank is now 0 (was -1)
+2014-07-14 15:01:03.115191 7f6804881700  0 -- 192.168.2.2:6789/0 >> 0.0.0.0:0/2 pipe(0x2d30780 sd=20 :0 s=1 pgs=0 cs=0 l=0 c=0x2d6ba20).fault
+2014-07-14 15:01:03.115208 7f680d8b9700  0 -- 192.168.2.2:6789/0 >> 0.0.0.0:0/1 pipe(0x2d30c80 sd=21 :0 s=1 pgs=0 cs=0 l=0 c=0x2d6adc0).fault
+2014-07-14 15:01:03.115672 7f680467f700  0 -- 192.168.2.2:6789/0 >> 192.168.2.3:6789/0 pipe(0x2d30f00 sd=24 :0 s=1 pgs=0 cs=0 l=0 c=0x2d6b4a0).fault
+2014-07-14 15:01:03.118087 7f6803d7d700  0 -- 192.168.2.2:6789/0 >> 192.168.2.1:6789/0 pipe(0x2d31900 sd=25 :6789 s=0 pgs=0 cs=0 l=0 c=0x2ddc000).accept connect_seq 0 vs existing 0 state wait
+2014-07-14 15:01:03.120547 7f6805883700  1 mon.1@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:01:03.120680 7f6805883700  1 mon.1@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+                      .
+                      .
+                      .
+2014-07-14 15:01:03.133469 7f6805883700  1 mon.1@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:01:03.133516 7f6805883700  1 mon.1@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:01:03.133575 7f6805883700  1 mon.1@0(probing) e0  learned initial mon 0 addr 192.168.2.1:6789/0
+2014-07-14 15:01:03.133584 7f6805883700  0 mon.1@0(probing) e0  my rank is now 1 (was 0)
+2014-07-14 15:01:03.134096 7f6805883700  0 -- 192.168.2.2:6789/0 submit_message mon_probe(reply 1798897a-f0c9-422d-86b3-d4933a12c7ac name 1 paxos( fc 0 lc 0 ) new) v6 remote, 192.168.2.1:6789/0, failed lossy con, dropping message 0x2e4db80
+2014-07-14 15:01:03.134139 7f6805883700  0 -- 192.168.2.2:6789/0 submit_message mon_probe(reply 1798897a-f0c9-422d-86b3-d4933a12c7ac name 1 paxos( fc 0 lc 0 ) new) v6 remote, 192.168.2.1:6789/0, failed lossy con, dropping message 0x2f19400
+2014-07-14 15:01:03.134155 7f6803d7d700  0 -- 192.168.2.2:6789/0 >> 0.0.0.0:0/2 pipe(0x2e4c500 sd=21 :0 s=1 pgs=0 cs=0 l=0 c=0x2ddc580).fault
+2014-07-14 15:01:03.134250 7f680467f700  0 -- 192.168.2.2:6789/0 >> 192.168.2.3:6789/0 pipe(0x2e4cf00 sd=25 :0 s=1 pgs=0 cs=0 l=0 c=0x2ddc420).fault
+2014-07-14 15:01:03.135037 7f6805883700  0 log [INF] : mon.1 calling new monitor election
+2014-07-14 15:01:03.135083 7f6805883700  1 mon.1@1(electing).elector(1) init, last seen epoch 1
+2014-07-14 15:01:03.135161 7f6805883700  1 mon.1@1(electing).paxos(paxos recovering c 0..0) is_readable now=2014-07-14 15:01:03.135162 lease_expire=0.000000 has v0 lc 0
+</pre>}}
+
+
+===== Starting mon.2 on kroll3 =====
+{{RootCmd|cd /var/log/ceph}}
+{{RootCmd|/etc/init.d/mon.2 start|output=<pre>
+ * Caching service dependencies ...                                                                     [ ok ]
+ * Starting Ceph mon.2 ...                                                                              [ ok ]
+</pre>}}
+{{RootCmd|cat ceph-mon.2.log|output=<pre>
+2014-07-14 15:06:31.837248 7f0b3846c780  0 ceph version 0.80.1 (a38fe1169b6d2ac98b427334c12d7cf81f809b74), process ceph-mon, pid 25431
+2014-07-14 15:06:31.875796 7f0b3846c780  0 mon.2 does not exist in monmap, will attempt to join an existing cluster
+2014-07-14 15:06:31.876179 7f0b3846c780  0 using public_addr 192.168.2.3:0/0 -> 192.168.2.3:6789/0
+2014-07-14 15:06:31.876298 7f0b3846c780  0 starting mon.2 rank -1 at 192.168.2.3:6789/0 mon_data /var/lib/ceph/mon/ceph-2 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 15:06:31.876708 7f0b3846c780  1 mon.2@-1(probing) e0 preinit fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 15:06:31.876834 7f0b3846c780  1 mon.2@-1(probing) e0  initial_members 0,1,2, filtering seed monmap
+2014-07-14 15:06:31.878883 7f0b3846c780  0 mon.2@-1(probing) e0  my rank is now 0 (was -1)
+2014-07-14 15:06:31.879515 7f0b2f409700  0 -- 192.168.2.3:6789/0 >> 0.0.0.0:0/2 pipe(0x2b02a00 sd=13 :0 s=1 pgs=0 cs=0 l=0 c=0x2ab7a20).fault
+2014-07-14 15:06:31.879519 7f0b38464700  0 -- 192.168.2.3:6789/0 >> 0.0.0.0:0/1 pipe(0x2b02280 sd=14 :0 s=1 pgs=0 cs=0 l=0 c=0x2ab6dc0).fault
+2014-07-14 15:06:31.882536 7f0b2e804700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b03b80 sd=26 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32160).accept connect_seq 0 vs existing 0 state wait
+2014-07-14 15:06:31.882697 7f0b2e905700  0 -- 192.168.2.3:6789/0 >> 192.168.2.2:6789/0 pipe(0x2b03900 sd=25 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32000).accept connect_seq 0 vs existing 0 state wait
+2014-07-14 15:06:31.884022 7f0b3040b700  1 mon.2@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:06:31.884124 7f0b3040b700  1 mon.2@0(probing) e0  adding peer 192.168.2.2:6789/0 to list of hints
+2014-07-14 15:06:31.884281 7f0b3040b700  1 mon.2@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:06:31.884361 7f0b3040b700  1 mon.2@0(probing) e0  adding peer 192.168.2.2:6789/0 to list of hints
+2014-07-14 15:06:31.884434 7f0b3040b700  1 mon.2@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:06:31.884516 7f0b3040b700  1 mon.2@0(probing) e0  adding peer 192.168.2.1:6789/0 to list of hints
+2014-07-14 15:06:31.884665 7f0b3040b700  0 mon.2@0(probing) e1  my rank is now -1 (was 0)
+2014-07-14 15:06:31.885501 7f0b3040b700  0 -- 192.168.2.3:6789/0 submit_message mon_probe(reply 1798897a-f0c9-422d-86b3-d4933a12c7ac name 2 paxos( fc 0 lc 0 ) new) v6 remote, 192.168.2.1:6789/0, failed lossy con, dropping message 0x2b03400
+2014-07-14 15:06:31.885631 7f0b2f409700  0 -- 192.168.2.3:6789/0 >> 0.0.0.0:0/2 pipe(0x2b02a00 sd=15 :0 s=1 pgs=0 cs=0 l=0 c=0x2b32160).fault
+2014-07-14 15:06:31.886047 7f0b2e804700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b2a000 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32580).accept connect_seq 2 vs existing 0 state connecting
+2014-07-14 15:06:31.886061 7f0b2e804700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b2a000 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32580).accept we reset (peer sent cseq 2, 0x2b03180.cseq = 0), sending RESETSESSION
+2014-07-14 15:06:31.886664 7f0b2e804700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b2a000 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32580).accept connect_seq 0 vs existing 0 state connecting
+2014-07-14 15:06:31.886722 7f0b2e905700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b03180 sd=13 :33205 s=4 pgs=0 cs=0 l=0 c=0x2b32000).connect got RESETSESSION but no longer connecting
+2014-07-14 15:06:33.886683 7f0b3040b700  0 mon.2@-1(probing) e2  my rank is now 2 (was -1)
+2014-07-14 15:06:33.888244 7f0b2f409700  0 -- 192.168.2.3:6789/0 >> 192.168.2.2:6789/0 pipe(0x2b2a500 sd=15 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32420).accept connect_seq 2 vs existing 0 state connecting
+2014-07-14 15:06:33.888268 7f0b2f409700  0 -- 192.168.2.3:6789/0 >> 192.168.2.2:6789/0 pipe(0x2b2a500 sd=15 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32420).accept we reset (peer sent cseq 2, 0x2b03680.cseq = 0), sending RESETSESSION
+2014-07-14 15:06:33.888297 7f0b2e804700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b2a280 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32dc0).accept connect_seq 2 vs existing 0 state connecting
+2014-07-14 15:06:33.888318 7f0b2e804700  0 -- 192.168.2.3:6789/0 >> 192.168.2.1:6789/0 pipe(0x2b2a280 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32dc0).accept we reset (peer sent cseq 2, 0x2b03400.cseq = 0), sending RESETSESSION
+2014-07-14 15:06:33.888859 7f0b2f409700  0 -- 192.168.2.3:6789/0 >> 192.168.2.2:6789/0 pipe(0x2b2a500 sd=15 :6789 s=0 pgs=0 cs=0 l=0 c=0x2b32420).accept connect_seq 0 vs existing 0 state connecting
+2014-07-14 15:06:33.888956 7f0b2f308700  0 -- 192.168.2.3:6789/0 >> 192.168.2.2:6789/0 pipe(0x2b03680 sd=14 :60500 s=4 pgs=0 cs=0 l=0 c=0x2ab6dc0).connect got RESETSESSION but no longer connecting
+2014-07-14 15:06:33.914131 7f0b3040b700  1 mon.2@2(synchronizing).paxosservice(pgmap 1..2) refresh upgraded, format 0 -> 1
+2014-07-14 15:06:33.914186 7f0b3040b700  1 mon.2@2(synchronizing).pg v0 on_upgrade discarding in-core PGMap
+2014-07-14 15:06:33.917087 7f0b3040b700  0 mon.2@2(synchronizing).mds e1 print_map
+epoch   1
+flags   0
+created 2014-07-14 15:01:18.167385
+modified        2014-07-14 15:01:18.167410
+tableserver     0
+root    0
+session_timeout 60
+session_autoclose       300
+max_file_size   1099511627776
+last_failure    0
+last_failure_osd_epoch  0
+compat  compat={},rocompat={},incompat={1=base v0.20,2=client writeable ranges,3=default file layouts on dirs,4=dir inode in separate object,5=mds uses versioned encoding,6=dirfrag is stored in omap}
+max_mds 1
+in
+up      {}
+failed
+stopped
+data_pools      0
+metadata_pool   1
+inline_data     disabled
+
+2014-07-14 15:06:33.917425 7f0b3040b700  1 mon.2@2(synchronizing).osd e1 e1: 0 osds: 0 up, 0 in
+2014-07-14 15:06:33.922385 7f0b3040b700  0 mon.2@2(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:06:33.922412 7f0b3040b700  0 mon.2@2(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:06:33.922417 7f0b3040b700  0 mon.2@2(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:06:33.922421 7f0b3040b700  0 mon.2@2(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:06:33.922868 7f0b3040b700  1 mon.2@2(synchronizing).paxosservice(auth 1..1) refresh upgraded, format 0 -> 1
+2014-07-14 15:06:33.929984 7f0b3040b700  0 log [INF] : mon.2 calling new monitor election
+2014-07-14 15:06:33.930106 7f0b3040b700  1 mon.2@2(electing).elector(1) init, last seen epoch 1
+2014-07-14 15:06:33.930366 7f0b3040b700  1 mon.2@2(electing).paxos(paxos recovering c 1..11) is_readable now=2014-07-14 15:06:33.930368 lease_expire=0.000000 has v0 lc 11
+2014-07-14 15:06:33.930384 7f0b3040b700  1 mon.2@2(electing).paxos(paxos recovering c 1..11) is_readable now=2014-07-14 15:06:33.930386 lease_expire=0.000000 has v0 lc 11
+2014-07-14 15:06:36.931021 7f0b3040b700  1 mon.2@2(peon).paxos(paxos active c 1..11) is_readable now=2014-07-14 15:06:36.931027 lease_expire=2014-07-14 15:06:41.926571 has v0 lc 11
+2014-07-14 15:06:36.931058 7f0b3040b700  1 mon.2@2(peon).paxos(paxos active c 1..11) is_readable now=2014-07-14 15:06:36.931060 lease_expire=2014-07-14 15:06:41.926571 has v0 lc 11
+2014-07-14 15:06:36.999210 7f0b3040b700  1 mon.2@2(peon).paxos(paxos active c 1..12) is_readable now=2014-07-14 15:06:36.999212 lease_expire=2014-07-14 15:06:41.988409 has v0 lc 12
+2014-07-14 15:06:39.988946 7f0b3040b700  1 mon.2@2(peon).paxos(paxos active c 1..12) is_readable now=2014-07-14 15:06:39.988948 lease_expire=2014-07-14 15:06:44.988542 has v0 lc 12
+2014-07-14 15:06:42.989047 7f0b3040b700  1 mon.2@2(peon).paxos(paxos active c 1..12) is_readable now=2014-07-14 15:06:42.989049 lease_expire=2014-07-14 15:06:47.988632 has v0 lc 12
+</pre>
+
+There is now also a <code>ceph.log</code> for the cluster with a briefer summary.  There is a warning that the system drive is over 70% full on kroll1 since we have also been using it for a /home directory there.  We may migrate that to the btrfs array later if it becomes necessary.
+
+{{RootCmd|cat ceph.log|output=<pre>
+2014-07-14 15:01:18.238250 mon.0 192.168.2.1:6789/0 11 : [INF] pgmap v2: 192 pgs: 192 creating; 0 bytes data, 0 kB used, 0 kB / 0 kB avail
+2014-07-14 15:01:49.818434 mon.0 192.168.2.1:6789/0 12 : [WRN] reached concerning levels of available space on local monitor storage (28% free)
+2014-07-14 15:01:03.135041 mon.1 192.168.2.2:6789/0 1 : [INF] mon.1 calling new monitor election
+2014-07-14 15:01:13.152781 mon.1 192.168.2.2:6789/0 2 : [INF] mon.1 calling new monitor election
+2014-07-14 15:06:31.908086 mon.0 192.168.2.1:6789/0 13 : [INF] mon.0 calling new monitor election
+2014-07-14 15:06:33.929996 mon.2 192.168.2.3:6789/0 1 : [INF] mon.2 calling new monitor election
+2014-07-14 15:06:36.916720 mon.0 192.168.2.1:6789/0 14 : [INF] mon.0@0 won leader election with quorum 0,1,2
+2014-07-14 15:06:36.926950 mon.0 192.168.2.1:6789/0 15 : [INF] monmap e2: 3 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0}
+2014-07-14 15:06:36.927070 mon.0 192.168.2.1:6789/0 16 : [INF] pgmap v2: 192 pgs: 192 creating; 0 bytes data, 0 kB used, 0 kB / 0 kB avail
+2014-07-14 15:06:36.927174 mon.0 192.168.2.1:6789/0 17 : [INF] mdsmap e1: 0/0/1 up
+2014-07-14 15:06:36.927293 mon.0 192.168.2.1:6789/0 18 : [INF] osdmap e1: 0 osds: 0 up, 0 in
+2014-07-14 15:06:49.820264 mon.0 192.168.2.1:6789/0 19 : [WRN] reached concerning levels of available space on local monitor storage (28% free)
+</pre>}}
+
+The commands in the manual install page to check cluster sanity: <code>ceph osd lspools</code> and <code>ceph -s</code> will now work, but of course we don't have any OSDs spun up yet.
+{{RootCmd|ceph osd lspools|output=<pre>
+0 data,1 metadata,2 rbd,
+</pre>}}
+{{RootCmd|ceph -s|output=<pre>
+    cluster 1798897a-f0c9-422d-86b3-d4933a12c7ac
+     health HEALTH_ERR 192 pgs stuck inactive; 192 pgs stuck unclean; no osds
+     monmap e2: 3 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0}, election epoch 6, quorum 0,1,2 0,1,2
+     osdmap e1: 0 osds: 0 up, 0 in
+      pgmap v2: 192 pgs, 3 pools, 0 bytes data, 0 objects
+            0 kB used, 0 kB / 0 kB avail
+                 192 creating
+</pre>}}
+
+
+===== Starting mon.3 on kroll4 =====
+{{RootCmd|cd /var/log/ceph}}
+{{RootCmd|/etc/init.d/ceph.mon.3 start|output=<pre>
+ * Caching service dependencies ...                                                                     [ ok ]
+ * Starting Ceph mon.3 ...                                                                              [ ok ]
+</pre>}}
+{{RootCmd|cat ceph-mon.3.log|output=<pre>
+2014-07-14 15:22:30.350302 7fdf4e653780  0 ceph version 0.80.1 (a38fe1169b6d2ac98b427334c12d7cf81f809b74), process ceph-mon, pid 7963
+2014-07-14 15:22:30.374728 7fdf4e653780  0 mon.3 does not exist in monmap, will attempt to join an existing cluster
+2014-07-14 15:22:30.375095 7fdf4e653780  0 using public_addr 192.168.2.4:0/0 -> 192.168.2.4:6789/0
+2014-07-14 15:22:30.375191 7fdf4e653780  0 starting mon.3 rank -1 at 192.168.2.4:6789/0 mon_data /var/lib/ceph/mon/ceph-3 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 15:22:30.375544 7fdf4e653780  1 mon.3@-1(probing) e0 preinit fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 15:22:30.375679 7fdf4e653780  1 mon.3@-1(probing) e0  initial_members 0,1,2, filtering seed monmap
+2014-07-14 15:22:30.377442 7fdf4e64b700  0 -- 192.168.2.4:6789/0 >> 0.0.0.0:0/1 pipe(0x1fe4c80 sd=13 :0 s=1 pgs=0 cs=0 l=0 c=0x201cdc0).fault
+2014-07-14 15:22:30.377505 7fdf455d9700  0 -- 192.168.2.4:6789/0 >> 0.0.0.0:0/2 pipe(0x1fe4780 sd=14 :0 s=1 pgs=0 cs=0 l=0 c=0x201da20).fault
+2014-07-14 15:22:30.377866 7fdf454d8700  0 -- 192.168.2.4:6789/0 >> 0.0.0.0:0/3 pipe(0x1fe5400 sd=15 :0 s=1 pgs=0 cs=0 l=0 c=0x201d760).fault
+2014-07-14 15:22:30.410274 7fdf465db700  1 mon.3@-1(synchronizing).paxosservice(pgmap 1..2) refresh upgraded, format 0 -> 1
+2014-07-14 15:22:30.410318 7fdf465db700  1 mon.3@-1(synchronizing).pg v0 on_upgrade discarding in-core PGMap
+2014-07-14 15:22:30.412460 7fdf465db700  0 mon.3@-1(synchronizing).mds e1 print_map
+epoch   1
+flags   0
+created 2014-07-14 15:01:18.167385
+modified        2014-07-14 15:01:18.167410
+tableserver     0
+root    0
+session_timeout 60
+session_autoclose       300
+max_file_size   1099511627776
+last_failure    0
+last_failure_osd_epoch  0
+compat  compat={},rocompat={},incompat={1=base v0.20,2=client writeable ranges,3=default file layouts on dirs,4=dir inode in separate object,5=mds uses versioned encoding,6=dirfrag is stored in omap}
+max_mds 1
+in
+up      {}
+failed
+stopped
+data_pools      0
+metadata_pool   1
+inline_data     disabled
+
+2014-07-14 15:22:30.412779 7fdf465db700  1 mon.3@-1(synchronizing).osd e1 e1: 0 osds: 0 up, 0 in
+2014-07-14 15:22:30.417334 7fdf465db700  0 mon.3@-1(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:22:30.417364 7fdf465db700  0 mon.3@-1(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:22:30.417369 7fdf465db700  0 mon.3@-1(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:22:30.417373 7fdf465db700  0 mon.3@-1(synchronizing).osd e1 crush map has features 1107558400, adjusting msgr requires
+2014-07-14 15:22:30.418155 7fdf465db700  1 mon.3@-1(synchronizing).paxosservice(auth 1..2) refresh upgraded, format 0 -> 1
+2014-07-14 15:22:32.420179 7fdf465db700  0 mon.3@-1(probing) e3  my rank is now 3 (was -1)
+2014-07-14 15:22:32.421409 7fdf465db700  0 log [INF] : mon.3 calling new monitor election
+2014-07-14 15:22:32.421511 7fdf465db700  1 mon.3@3(electing).elector(1) init, last seen epoch 1
+2014-07-14 15:22:32.421625 7fdf465db700  1 mon.3@3(electing).paxos(paxos recovering c 1..14) is_readable now=2014-07-14 15:22:32.421626 lease_expire=0.000000 has v0 lc 14
+2014-07-14 15:22:32.421642 7fdf465db700  1 mon.3@3(electing).paxos(paxos recovering c 1..14) is_readable now=2014-07-14 15:22:32.421643 lease_expire=0.000000 has v0 lc 14
+2014-07-14 15:22:32.421820 7fdf448d3700  0 -- 192.168.2.4:6789/0 >> 192.168.2.2:6789/0 pipe(0x1fe4c80 sd=14 :6789 s=0 pgs=0 cs=0 l=0 c=0x2079340).accept connect_seq 2 vs existing 0 state connecting
+2014-07-14 15:22:32.421854 7fdf448d3700  0 -- 192.168.2.4:6789/0 >> 192.168.2.2:6789/0 pipe(0x1fe4c80 sd=14 :6789 s=0 pgs=0 cs=0 l=0 c=0x2079340).accept we reset (peer sent cseq 2, 0x1fe5680.cseq = 0), sending RESETSESSION
+2014-07-14 15:22:32.422235 7fdf446d1700  0 -- 192.168.2.4:6789/0 >> 192.168.2.1:6789/0 pipe(0x1fe5900 sd=13 :6789 s=0 pgs=0 cs=0 l=0 c=0x2079080).accept connect_seq 2 vs existing 0 state connecting
+2014-07-14 15:22:32.422263 7fdf446d1700  0 -- 192.168.2.4:6789/0 >> 192.168.2.1:6789/0 pipe(0x1fe5900 sd=13 :6789 s=0 pgs=0 cs=0 l=0 c=0x2079080).accept we reset (peer sent cseq 2, 0x207b680.cseq = 0), sending RESETSESSION
+2014-07-14 15:22:32.422283 7fdf453d7700  0 -- 192.168.2.4:6789/0 >> 192.168.2.3:6789/0 pipe(0x1fe4f00 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x20791e0).accept connect_seq 2 vs existing 0 state connecting
+2014-07-14 15:22:32.422303 7fdf453d7700  0 -- 192.168.2.4:6789/0 >> 192.168.2.3:6789/0 pipe(0x1fe4f00 sd=16 :6789 s=0 pgs=0 cs=0 l=0 c=0x20791e0).accept we reset (peer sent cseq 2, 0x1fe4a00.cseq = 0), sending RESETSESSION
+2014-07-14 15:22:32.422464 7fdf448d3700  0 -- 192.168.2.4:6789/0 >> 192.168.2.2:6789/0 pipe(0x1fe4c80 sd=14 :6789 s=0 pgs=0 cs=0 l=0 c=0x2079340).accept connect_seq 0 vs existing 0 state connecting
+2014-07-14 15:22:32.423192 7fdf4e64b700  0 -- 192.168.2.4:6789/0 >> 192.168.2.2:6789/0 pipe(0x1fe5680 sd=17 :51313 s=4 pgs=0 cs=0 l=0 c=0x2079600).connect got RESETSESSION but no longer connecting
+2014-07-14 15:22:35.478165 7fdf465db700  1 mon.3@3(peon).paxos(paxos active c 1..15) is_readable now=2014-07-14 15:22:35.478176 lease_expire=2014-07-14 15:22:40.466348 has v0 lc 15
+2014-07-14 15:22:35.478209 7fdf465db700  1 mon.3@3(peon).paxos(paxos active c 1..15) is_readable now=2014-07-14 15:22:35.478210 lease_expire=2014-07-14 15:22:40.466348 has v0 lc 15
+2014-07-14 15:22:35.540828 7fdf465db700  1 mon.3@3(peon).paxos(paxos active c 1..16) is_readable now=2014-07-14 15:22:35.540829 lease_expire=2014-07-14 15:22:40.533829 has v0 lc 16
+2014-07-14 15:22:38.536309 7fdf465db700  1 mon.3@3(peon).paxos(paxos active c 1..16) is_readable now=2014-07-14 15:22:38.536311 lease_expire=2014-07-14 15:22:43.533964 has v0 lc 16
+</pre>}}
+
+
+The appearance of <code>mon.3</code> causes a new monitor election as noted in the ceph.log on kroll4
+{{RootCmd|cat ceph.log|output=<pre>
+2014-07-14 15:06:36.927293 mon.0 192.168.2.1:6789/0 18 : [INF] osdmap e1: 0 osds: 0 up, 0 in
+2014-07-14 15:06:49.820264 mon.0 192.168.2.1:6789/0 19 : [WRN] reached concerning levels of available space on local monitor storage (28% free)
+2014-07-14 15:06:31.911339 mon.1 192.168.2.2:6789/0 3 : [INF] mon.1 calling new monitor election
+2014-07-14 15:22:30.433866 mon.0 192.168.2.1:6789/0 20 : [INF] mon.0 calling new monitor election
+2014-07-14 15:22:30.434038 mon.1 192.168.2.2:6789/0 4 : [INF] mon.1 calling new monitor election
+2014-07-14 15:22:30.438257 mon.2 192.168.2.3:6789/0 2 : [INF] mon.2 calling new monitor election
+2014-07-14 15:22:32.421411 mon.3 192.168.2.4:6789/0 1 : [INF] mon.3 calling new monitor election
+2014-07-14 15:22:35.444315 mon.0 192.168.2.1:6789/0 21 : [INF] mon.0@0 won leader election with quorum 0,1,2,3
+2014-07-14 15:22:35.466723 mon.0 192.168.2.1:6789/0 22 : [INF] monmap e3: 4 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0,3=192.168.2.4:6789/0}
+2014-07-14 15:22:35.466825 mon.0 192.168.2.1:6789/0 23 : [INF] pgmap v2: 192 pgs: 192 creating; 0 bytes data, 0 kB used, 0 kB / 0 kB avail
+2014-07-14 15:22:35.466931 mon.0 192.168.2.1:6789/0 24 : [INF] mdsmap e1: 0/0/1 up
+2014-07-14 15:22:35.467028 mon.0 192.168.2.1:6789/0 25 : [INF] osdmap e1: 0 osds: 0 up, 0 in
+2014-07-14 15:22:49.826214 mon.0 192.168.2.1:6789/0 26 : [WRN] reached concerning levels of available space on local monitor storage (28% free)
+</pre>}}
+
+
+And now we are four.  The health will stay at HEALTH_ERR or degraded until we get at least two OSDs spun up.
+{{RootCmd|ceph -s|output=<pre>
+    cluster 1798897a-f0c9-422d-86b3-d4933a12c7ac
+     health HEALTH_ERR 192 pgs stuck inactive; 192 pgs stuck unclean; no osds
+     monmap e3: 4 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0,3=192.168.2.4:6789/0}, election epoch 8, quorum 0,1,2,3 0,1,2,3
+     osdmap e1: 0 osds: 0 up, 0 in
+      pgmap v2: 192 pgs, 3 pools, 0 bytes data, 0 objects
+            0 kB used, 0 kB / 0 kB avail
+                 192 creating
+</pre>}}
+
 
 
 [[Category:Filesystems]]
