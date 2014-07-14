@@ -1,0 +1,800 @@
+{{InfoBox stack
+|{{InfoBox homepage|http://www.gnu.org/software/grub/|header=true}}
+|{{InfoBox wikipedia}}
+}}
+'''GRUB2''' 是一个支持诸多现代计算机系统的启动引导器，用于取代老的启动引导器 [[GRUB]] (现在已被上游开发人员更名为 "GRUB Legacy")。GRUB2已从GRUB Legacy完全独立的出一个代码库，拥有如shell类似的语法，高级脚本功能等特性。建议GRUB Legacy用户转移到GRUB2。
+Upgrading to GRUB 2 might be necessary, as it allows:
+*booting from UEFI platforms;
+*booting from GPT partitioned drives without even needing an awkward hybrid MBR, even though one can use one for compatibility/portability reasons;
+*booting from a btrfs formatted {{Path|/boot}}
+*booting directly from a btrfs mirror or raid set without needing an initramfs and early mount setup
+*booting from directly logical volume management such as LVM2 support;
+*booting from raid DM-RAID support for RAID [0?] 1, 4, 5, 6, 9 and 10 [or 1x?];
+*and booting from encrypted devices, probably LUKS, because of the inexistent documentation despite the cypher/hash modules being there: so no guidance on a howto for the moment.
+
+For a shotgun approach, see instead [[GRUB2 Quick Start]].
+
+== Installation ==
+The {{Package|sys-boot/grub}} package is slotted; both grub-0.97 and grub-2.00 may be installed at the same time.
+
+'''If you want to install grub-0.97 or keep it installed after an upgrade''', call emerge with the "0" slot on the end of the package atom. This will add sys-boot/grub:0 to your world file. For example:
+{{emerge|params=--noreplace|sys-boot/grub:0}}
+
+Only one version may be installed in your MBR at one time.
+
+By default, GRUB2 will guess a default platform to target at build time. This may be overridden by setting the GRUB_PLATFORMS variable in {{Path|make.conf}}.
+{{File|/etc/portage/make.conf||<pre>
+GRUB_PLATFORMS="emu efi-32 efi-64 pc"
+</pre>}}
+
+The following platforms are supported depending on the target CPU.
+{| class="wikitable"
+!
+! colspan="7" | Target
+|-
+! Platform
+! i386
+! ia64
+! mips
+! mipsel
+! powerpc
+! spac64
+! x86_64
+|-
+! arc
+| {{No}}
+| {{No}}
+| {{No}}
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+|-
+! coreboot
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| style="background: PaleTurquoise;" | 32-bit
+|-
+! efi
+| {{Yes}}
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{Yes}}
+|-
+! emu
+| {{Yes}}
+| {{Yes}}
+| {{Yes}}
+| {{Yes}}
+| {{Yes}}
+| {{Yes}}
+| {{Yes}}
+|-
+! ieee1275
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{Yes}}
+| {{Yes}}
+| style="background: PaleTurquoise;" | 32-bit
+|-
+! loongson
+| {{No}}
+| {{No}}
+| {{No}}
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+|-
+! multiboot
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| style="background: PaleTurquoise;" | 32-bit
+|-
+! qemu
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| style="background: PaleTurquoise;" | 32-bit
+|-
+! qemu-mips
+| {{No}}
+| {{No}}
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+|-
+! pc
+| {{Yes}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| {{No}}
+| style="background: PaleTurquoise;" | 32-bit
+|-
+|}
+
+To prevent mounting {{Path|/boot}} during installation, export the DONT_MOUNT_BOOT variable.
+Install the package using the normal emerge syntax.
+{{Emerge|sys-boot/grub:2}}
+
+Optionally, install {{Package|sys-boot/os-prober}} to have GRUB2 probe for other operating systems when running grub2-mkconfig.
+{{Emerge|sys-boot/os-prober}}
+
+== Configuration ==
+GRUB2 does not require you to manually maintain your boot options configuration, instead it can optionally generate the file ({{Path|/boot/grub/grub.cfg}}) using the command '''grub2-mkconfig'''. This utility will parse the scripts in {{Path|/etc/grub.d}} and the settings file {{Path|/etc/default/grub}}.
+*'''GRUB_FONT'''
+:Path to the PF2 font you want GRUB2 to use. To create a PF2 font, use the '''''grub2-mkfont''''' utility, example:
+:{{RootCmd|grub2-mkfont /usr/share/fonts/droid/DroidSansMonoSlashed.ttf --size{{=}}20 --output /boot/grub/fonts/DroidSansMonoSlashed20.pcf}}
+: and set GRUB_FONT=/boot/grub/fonts/DroidSansMonoSlashed20.pcf
+*'''GRUB_DEFAULT'''
+:Default menu entry selected on boot. May be a numeric index, a menu title, or "saved". Defaults to first detected entry.
+*'''GRUB_TIMEOUT'''
+:Delay before booting default menu entry. Set to 0 to wait indefinitely. Default is 5 seconds.
+*'''GRUB_DISABLE_RECOVERY'''
+:If true, recovery menu entries will not be generated. On Linux, recovery entries pass "single" on the kernel command line.
+
+*'''GRUB_CMDLINE_LINUX'''
+:Parameters to be passed on the kernel command line for all Linux menu entries.
+*'''GRUB_CMDLINE_LINUX_DEFAULT'''
+:Parameters to be passed on the kernel command line for non-recovery Linux menu entries.
+*'''GRUB_DISABLE_LINUX_UUID'''
+:If true, ${GRUB_DEVICE} is passed in the root parameter on the kernel command line.
+:If false, ${GRUB_DEVICE_UUID} is passed in the root parameter on the kernel command line when an initramfs is available.
+*'''GRUB_GFXPAYLOAD_LINUX'''
+:Controls the video mode in which the Linux kernel starts. May be set to "text", "keep", or a display resolution.
+*'''GRUB_DEVICE'''
+:The initial root device, i.e. the kernel's <code>root=</code> parameter. Set this if you want to override '''grub2-mkconfig''''s root device auto-detection; for example, <code>GRUB_DEVICE=/dev/ram0</code> will force <code>root=/dev/ram0</code> to be used in your kernel command line.
+
+The directory {{Path|/etc/grub.d}} holds the scripts '''grub2-mkconfig''' uses to generate {{Path|grub.cfg}}. By default the contents of this directory should be similar to the following:
+{{Cmd|ls /etc/grub.d/|output=
+<span style="color:LimeGreen">'''00_header  10_linux  20_linux_xen  30_os-prober  40_custom  41_custom'''</span> README}}
+By default GRUB2 will use all scripts when first installed. If you want to disable any of them you only need to remove the executable bit. In the following example we disable everything but ''00_header'' and ''10_linux'':
+{{RootCmd|chmod -x /etc/grub.d/<nowiki>{</nowiki>20_linux_xen,30_os-prober,40_custom,41_custom<nowiki>}</nowiki>}}
+
+When configured you run '''grub2-mkconfig''' with the ''-o'' argument pointing to the output file, which should usually be {{Path|/boot/grub/grub.cfg}}:
+{{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg|output=
+Generating grub.cfg ...<br>
+Found linux image: /boot/vmlinuz-3.3.0-gentoo<br>
+done
+}}
+This will (re)generate GRUB2 configuration. Note that if '''grub2-mkconfig''' doesn't report anything as found then nothing was, and GRUB2 will offer no boot selections.
+
+== BIOS/MBR or BIOS/GPT ==
+Installing in this mode is straight forward as it's just like the legacy GRUB with new GRUB2 additions. If you have a GPT partition table, you will need a small BIOS boot partition. 1 MiB may be enough but 2-4 MiB will definitely work. It will hold stage 2 of the bootloader and you don't need to format the partition with a filesystem - '''grub2-install''' will overwrite it anyway. You can mark a partition with the command line tool "parted" by typing (change 1 to the number of the partition you want to mark as a BIOS Boot partition!):
+{{RootCmd|set 1 bios_grub on|prompt=(parted) }} 
+
+More specifically the following type of layout will work for BIOS/GPT, and it is easier to use the curses based cgdisk utility from the gptfdisk ebuild.  Create your first partition at sector 2048 (leaving the first 1 MiB as free space for MBR's etc).  Give it 4096 to 8192 sectors (2-4 MiB) for size.  Set the type code to 0xEF02 and give it a label like "gptbios" (effectively what the bios_grub command does in parted.  Then add partitions for boot and root and everything else as you need.  Boot is usually anywhere from 200-500mb.
+
+If needed, start with mounting the {{Path|/boot}} parition:
+{{RootCmd|mount /boot}}
+Run the '''grub2-install''' utility to copy the relevant files to {{Path|/boot/grub}}. On the PC platform, this also installs a boot image to the master boot record (MBR) or a partition's boot sector. '''grub2-install''' accepts a ''--target'' option to specify which CPU/Platform to install. If unspecified, '''grub2-install''' will make a guess; on amd64/x86 it will use "i386-pc" by default:
+{{RootCmd|grub2-install /dev/sda|output=
+Installation finished. No error reported.}}
+<!--
+=== Partitioning and preparing boot disk ===
+Before installing GRUB2 to the boot media a little care should be taken when preparing and partitioning the boot device, be it an internal disk or a removable device. This depends on the boot type involved: BIOS or UEFI.
+BIOS booting can be easily achieved either by booting from disk partitioned with the aging MBR, or booting with GPT with a protective MBR or a hybrid MBR if dual booting is involved with GPT unaware OS like MSDOS/Windows. It is another story for UEFI as GPT is part of UEFI specification and it is mandatory to use GPT partitioned disk in this case.
+
+When dual booting with Windows, be aware that Windows cannot boot from anything but BIOS/MBR or or a GPT partitioned disk on an EFI platform. In the latter case, dual booting Windows is not difficult. In the former case, it can be difficult to dual boot on a GPT partitioned disk with a hybrid MBR. More on this subject will come later.
+
+Before going further, one could back up the boot device MBR with something like:
+{{RootCmd|dd if{{=}}/dev/sda of{{=}}/root/sda.mbr bs{{=}}512 count{{=}}1}}
+or simply its boot loader with something like (here one can go as far as 446 bytes):
+{{RootCmd|dd if{{=}}/dev/sda of{{=}}/root/sda.mbr bs{{=}}440 count{{=}}1}}
+{{Note|If the bootloader in question is GRUB Legacy or GRUB2 in a traditional BIOS/MBR setup, then one should back up the whole first track (63 sectors) to be safe. GRUB Legacy stage1_5 is roughly 10KB and GRUB2 core.img is roughly 25KB (without additional modules); these are embedded in the gap (free space) before the first partition on the device specified in the installation procedure.}}
+
+Booting in [U]EFI mode requires an [0x]EF00 (EFI System Partition) partition, whilst booting from BIOS/GPT mode requires an [0x]EF02 (bios_boot) partition. GRUB (either GRUB2 or a patched GRUB Legacy) require ''also'' an [0x]EE00 protective partition in the protective MBR (if present) to recognize a GPT partitioned disk. This protective partition should be listed first in the MBR in the case of a hybrid MBR. Booting in BIOS/MBR does not require any additional partition, however, a gap (free space, a couple of sectors) should be left to embed core.img before the first partition if installing on a traditional `/dev/sd<char>' manner or before the specified partition if installing on a `/dev/sd<char><int>' manner.
+
+Here is an example of a GPT partitioned disk with BIOS boot [0xEF02] partition and an EFI [0xEF00] partition. the following is the output of the `p' command in gdisk main menu.
+{{RootCmd|gdisk /dev/sdc|output=<pre>
+GPT fdisk (gdisk) version 0.8.1
+
+Partition table scan:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.
+
+Command (? for help): p
+Disk /dev/sdc: 976773168 sectors, 465.8 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): AA369F4D-37A4-4C0D-A357-DC24B99A6337
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 976773134
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048       828377087   395.0 GiB   8E00  Linux LVM
+   2       828377088       891291647   30.0 GiB    0700  Microsoft basic data
+   3       891291648       975177727   40.0 GiB    0700  Microsoft basic data
+   4       975177728       976754687   770.0 MiB   8300  Linux filesystem
+   5       976754688       976756735   1024.0 KiB  EF02  BIOS boot partition
+   6       976756736       976773134   8.0 MiB     EF00  EFI System
+
+Command (? for help): 
+</pre>}}
+{{Note|Note that, you do not have to enter the `0x' hexadecimal prefix in GPT fdisk.}}
+parted gives a somewhat different output with a slightly different semantics for the same device, here is the output.
+{{RootCmd|parted /dev/sdc|output=<pre>
+GNU Parted 3.0
+Using /dev/sdc
+(parted) print
+...
+Sector size (logical/physical): 512B/512B
+Partition Table: gpt
+
+Number  Start   End    Size    File system  Name                  Flags
+ 1      1049kB  424GB  424GB                Linux LVM             lvm
+ 2      424GB   456GB  32.2GB               Microsoft basic data
+ 3      456GB   499GB  42.9GB               Microsoft basic data
+ 4      499GB   500GB  807MB   ext2         Linux filesystem
+ 5      500GB   500GB  1049kB               BIOS boot partition   bios_grub
+ 6      500GB   500GB  8396kB               EFI System            boot
+
+(parted)
+</pre>}}
+Creating partions in gdisk is pretty straight forward for somebody who used fdisk. Just type `n' in the main menu, then provide a beginning and end sector if need be and then type the partition type EF00 for an EFI system partition for example. That's all.
+-->
+
+== UEFI/GPT ==
+
+=== EFI system partition ===
+For UEFI boot, your disk must have a dedicated "EFI system partition" containing a FAT filesystem. 200 MB should be large enough.
+
+If you need to create an EFI system partition, first create it in gdisk or parted with the proper type. In gdisk, this is type ef00.
+
+Create a FAT filesystem using mkdosfs and add it to fstab.
+
+{{RootCmd|mkdosfs -F 32 -n efi-boot /dev/sda1
+|mkdir /boot/efi
+|echo 'LABEL{{=}}efi-boot /boot/efi vfat defaults 0 2' >> /etc/fstab
+|mount /boot/efi}}
+
+=== Install GRUB ===
+
+{{RootCmd|grub2-install --target{{=}}x86_64-efi}}
+This will install grub in /boot/grub, copy the core image to /boot/efi/EFI/gentoo/grubx64.efi, and call efibootmgr to add a boot entry.
+
+efibootmgr may fail if the system is not already booted in EFI mode. If so, you will need to boot your system in EFI mode using an EFI shell or a suitable EFI boot media.
+
+==== Creating EFI boot media ====
+* USB EFI bootable flashdrive can be created with (assuming FAT formatted drive, mounted under {{Path|/media/flashdrive}}) {{RootCmd|grub2-install --target{{=}}x86_64-efi --efi-directory{{=}}/media/flashdrive --removable --modules{{=}}part_gpt}}
+* Kernel support: (re)compile kernel with CONFIG_EFI_VARS{{=}}y OR modprobe efivars. Copy kernel on {{Path|/media/flashdrive/vmlinuz}} for convenience.
+* Reboot machine from the flashdrive in UEFI mode - motherboard/notebook manual should contain instructions on how to do this.
+* GRUB2 command line should appear. linux /vmlinuz root{{=}}/dev/sdaX [...add necessary parameters] [press ENTER] boot [press ENTER]
+* Look at {{Path|/sys/firmware/efi/vars}} to see whether the EFI variables are accessible.
+* run grub2-install
+
+== Hybrid GPT/MBR ==
+Dual booting with operating systems that are blind to a GPT-partitioned disk requires this tricky workaround. Playing with a hybrid MBR can be tricky and you should make no assumptions about the reliability of the instructions in this sub-section. Consider them rather as guidances for experimentation. 
+
+Some operating systems lacking ability to boot from anything but BIOS/MBR include all versions of Microsoft Windows prior to Vista. Though it should be noted that support for 32-bit (as opposed to 64-bit) UEFI is less than perfect for certain machines and / or versions of Windows 7 (conduct your own research on this point).
+
+GRUB2 supports booting from GPT and MBR partition tables with the part_gpt and part_msdos modules. However, a successful setup and GRUBs ability to boot correctly depends both on loaded partition modules and on correctly installing GRUB2. A determining factor in how GRUB is installed (BIOS/MBR vs BIOS/GPT) is the presence of a EE00 (GPT protective) partition as the first partition in the MBR.  
+
+With a hybrid MBR, GRUB2 will install just fine if and only if the first partition in the MBR table is an EE00 partition.  An EF02 partition should be present anywhere in the disk and not necessarily in the MBR list to leave a few room to embed core.img in the disk. {{Note|In this case one do ''not'' have to add/list an EE00 partition in the hybrid MBR list manually, gdisk will prompt you to list one first if booting with GRUB2 before listing the provided list (up to 3 partition) by the user.}}
+
+Creating a hybrid MBR is easy with gdisk: just hit `r' (recovery and transformation) in the main, then hit `h' (CHS recompute) in that menu, and then enter a series of partition (less or equal to 3) in the order you want it to be listed in the MBR, and then enter the hexadecimal partition type without the `0x' prefix or accept the default with hitting repeatedly with `Y', and enable only a single boot flag as the following example.
+
+{{RootCmd|gdisk /dev/sdg|output=<pre>
+GPT fdisk (gdisk) version 0.8.1
+
+Partition table scan:
+  MBR: MBR only
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid MBR and GPT. Which do you want to use?
+ 1 - MBR
+ 2 - GPT
+ 3 - Create blank GPT
+
+Your answer: 2</pre>}}
+
+{{RootCmd|gdisk /dev/sdg|output=<pre>
+...
+Using GPT and creating fresh protective MBR.
+
+Command (? for help): r
+Recovery/transformation command (? for help): p
+Disk /dev/sdg: 625142448 sectors, 298.1 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 744E8BF3-39A4-4908-8646-AC2E5661C8CF
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 625142414
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048       566233087   270.0 GiB   8300  Linux filesystem
+   2       566233088       625142414   28.1 GiB    0700  Microsoft basic data
+Recovery/transformation command (? for help): h
+
+WARNING! Hybrid MBRs are flaky and dangerous! If you decide not to use one,
+just hit the Enter key at the below prompt and your MBR partition table will
+be untouched.
+
+Type from one to three GPT partition numbers, separated by spaces, to be
+added to the hybrid MBR, in sequence: 2 1
+Place EFI GPT (0xEE) partition first in MBR (good for GRUB)? (Y/N): N
+
+
+Creating entry for GPT partition #2 (MBR partition #1)
+Enter an MBR hex code (default 07): 
+Set the bootable flag? (Y/N): Y
+
+Creating entry for GPT partition #1 (MBR partition #2)
+Enter an MBR hex code (default 83): 
+...
+Unused partition space(s) found. Use one to protect more partitions? (Y/N): N
+
+Recovery/transformation command (? for help): o
+
+Disk size is 625142448 sectors (298.1 GiB)
+MBR disk identifier: 0x00000000
+MBR partitions:
+
+Number  Boot  Start Sector   End Sector   Status      Code
+   1      *      566233088    625142414   primary     0x07
+   2                  2048    566233087   primary     0x83
+   4                     1         2047   primary     0xEE
+
+
+Recovery/transformation command (? for help): w</pre>}}
+
+And then check out if the operation was successful or not by listing the devices.
+
+{{Note|I answered most safe questions to `N' because without that `/fdisk -l /dev/sdg' will list the MBR partion list just fine but listing the block devices with a `ls /dev' wouldn't list the partions and more annoying: the partions wouldn't be listed in DOS/BIOS.}}
+
+{{Note|I had to manually remove the EE00 (GPT protective) partition in the MBR list for that drive with fdisk, because fdisk listed that partition as being the third one. And I couldn't get the BIOS/DOS recognize the partition table with its presence. This is quite weird (as the previous output shows) because the MBR partition table was correctly recognized when the hybrid MBR was freshly created. I had to reload GPT partition table from a file and re-hybridize the MBR a second time after a few experiments.}}
+
+And finally install GRUB as usual. Everything should be fine at this point. See troubleshooting section for possible issues not listed on the previous Notes and comments.
+
+== Chainloading ==
+There's a truly improved chainload mode compared to GRUB Legacy: the new iso (or loop) chainload mechanism. Actually, one could still chainload ISO images with GRUB Legacy, and I did, but there were no way to pass kernel cmdline arguments. In either case, the ISO image in question should have been built with that in mind like SysRescueCd or on a lesser extend Gentoo liveCD, otherwise booting will just fail badly in the physical media check/test. Gentoo liveCD is handy because it has a minimal shell which let mount the squashed image to the right place and then hit {{Key|Esc}} to continue the boot process. That's a handy way to install an OS with everything in RAM, especially for such ''light'' liveCD, without listening to a whining drive on each command.
+
+=== ISO images ===
+To chainload an ISO with custom or defaults kernel cmdline arguments, something like the following can be easily added:
+{{Code||<pre>
+menuentry "SYSRESCUECD" {
+	set iso=/systemrescuecd-x86-3.8.1.iso
+	loopback loop ${iso}
+	linux  (loop)/isolinux/rescue64 nomodeset vga=791 docache setkmap=fr isoloop=${iso}
+	initrd (loop)/isolinux/initram.igz
+}</pre>}}
+
+For a permanent and automatic entry to {{Path|grub.cfg}}, a custom file could be added to {{Path|/etc/grub.d}}.
+{{File|/etc/grub.d/50_isofile||<pre>
+#!/bin/sh
+exec tail -n +3 $0
+
+menuentry "GRUB4DOS" {
+	linux /grub4dos-0.4.4/grub.exe --config-file=/menu.lst
+}
+
+menuentry "SYSRESCUECD" {
+	set iso=/systemrescuecd-x86-3.8.1.iso
+	loopback loop ${iso}
+	linux  (loop)/isolinux/rescue64 nomodeset vga=791 docache setkmap=fr isoloop=${iso}
+	initrd (loop)/isolinux/initram.igz
+}
+
+menuentry "STG3-AMD64" {
+	set cmdline="dokeymap looptype=squashfs loop=/image.squashfs cdroot"
+	loopback loop /stg3-amd64-<DATE>.iso
+	linux  (loop)/isolinux/gentoo $cmdline root=/dev/ram0 init=/linuxrc initrd=gentoo.igz
+	initrd (loop)/isolinux/gentoo.igz
+}
+</pre>}}
+Make the script executable:
+{{RootCmd|chmod +x /etc/grub.d/50_isofile}}
+And lastly regenerate your {{Path|grub.cfg}} with '''''grub2-mkconfig'''''.
+
+=== Another Bootloader ===
+Chainloading other bootloader is fairly easy if there's support in GRUB2 for that specific bootloader. Otherwise, one could use a ''man in the middle'' or another bootloader in other words to do the task if necessary.  In the latter case, one could use GRUB4DOS as it has functionalities similar to GRUB Legacy. This is required when loading another bootloader like TrueCrypt become problematic in a single multiboot disk, otherwise something as simple as the following is enough to boot another disk with whatever bootloader.
+
+{{Code||<pre>
+menuentry "WHATEVER" {
+     insmod part_msdos
+     insmod chain
+     chainloader (hd1,1)+1
+}
+</pre>}}
+
+=== TrueCrypt ===
+Well, let's make a long story short: GRUB2 cannot neither chainload a disk with TrueCrypt in the MBR neither the rescue CD image. This is perfectly possible, feasible and works just fine with GRUB Legacy. It even works with [https://sites.google.com/site/grubdos/ GRUB4DOS]! This could be used as workaround. See {{Bug|385619}} for more info and the above GRUB4DOS menu entry as a starting point. The infamous `invalid signature' await the more adventurous ones. 
+
+Simply put, one should stick to GRUB Legacy or to another bootloader or else... use GRUB4DOS as workaround for this. GRUB4DOS has a very similar GRUB Legacy interface and menu.lst entry which can be used to chainload TrueCrypt bootloader or rescue CD to boot from an encrypted partition. An executable with grldr in the `/' root of the booting device is required, plus a menu.lst. See below for a menu entry example. Chainloading TrueCrypt bootloader in another disk is straightforward like any other bootloader.
+
+{{Code||<pre>
+title Windows7-TrueCrypt-BIOS/MBR
+find --set-root /truecrypt_rescue_image.iso
+map --mem /truecrypt_rescue_image.iso (hd32)
+map (hd0) (hd1)
+map (hd1) (hd0)
+map --hook
+root (hd32)
+chainloader (hd32)
+</pre>}}
+{{Note|The remapping may not be necessary for you if you have a single boot disk system. The mapping are necessary before chainlading TrueCrypt bootloader in that case because the boot disk (here hd1) should appear as the primary boot device (hd0) otherwise TrueCrypt would just fail to boot because... it did not find the right disk.}}
+
+Another workaround cited on the bug is to boot from TrueCrypt as the main boot loader and then hit ESC[ape] to chainload the following partition if any or the following disk.
+
+=== MSDOS/Windows ===
+If MSDOS/Windows is on another disk partitioned with MSDOS partition layout with its bootloader within the MBR, then one can boot with a simple menu entry as the previous example in Chainloading other bootloader section.  This later section describes how to probe and manually specify a Windows partition for booting.  This later case is usually encountered with multiple Windows operating systems are installed on a single hard drive.
+
+Microsoft Windows 8 versions is no longer installed using MSDOS partitions and the install CDROM needs to be booted using BIOS and not the UEFI boot method in order for Windows 8 to install into MSDOS partitions.  I find it's usually best, do both, first manually create the MSDOS partitions and then manually boot the Windows 8 CDROM using a BIOS provided option, which provides a BIOS or UEFI boot option.
+
+If you're trying to decide whether to use MSDOS or GPT/UEFI, might be best to stick with the simple MSDOS option until you absolutely need the extra disk space, as MSDOS is limited to two to three Terabyte hard drives, as well as three partitions.  (NOTE: When installing Windows 8 into GPT partitions, unlike Linux and other operating systems and according to Microsoft documentation as of this date, Windows 8 requires a UEFI partition in order to use GPT partition layouts!)
+
+==== MSDOS Partions ====
+{{Note|Complications will arise if MSDOS/Windows is in another partition of the disk and the partition is encrypted with TrueCrypt for example, or simply if a hybrid MBR is involved.}}
+
+The simplest way to dual boot MSDOS/Windows is using BIOS/MBR combination. Simply backup the whole MBR to be safe or simply the bootloader before installing MSDOS/Windows as that thing will overwrite the bootloader for sure. 
+And then simple menu entry could added to {{Path|grub.cfg}}.
+
+{{Code||<pre>
+menuentry "Windows 7 BIOS/MBR" {
+     insmod part_msdos
+     insmod ntldr
+     insmod ntfs
+     ntldr (hd0,msdos1)/bootmgr
+}
+</pre>}}
+
+Or the following for MSDOS/Windows XP
+
+{{Code||<pre>
+menuentry "Windows XP BIOS/MBR" {
+     insmod part_msdos
+     insmod ntldr
+     insmod ntfs
+     ntldr (hd0,msdos1)/ntldr
+}
+</pre>}}
+
+An entry with GPT/hybrid MBR doesn't not to the list to the previous usual BIOS/MBR examples. Booting multiple MSDOS/Windows could be achieved with remapping and/hiding partion with partool.
+
+{{Code||<pre>
+menuentry "Windows 7 BIOS/MBR" {
+     insmod part_msdos
+     insmod chain
+     parttool hd1,msdos1 hidden+ boot-
+     parttool hd1,msdos2 hidden- boot+
+     chainloader (hd1,msdos2)+1
+}
+</pre>}}
+
+{{Note|Remapping the disk with parttoll in that manner is only required if multiple MSDOS/Windows systems are installed on the same boot device. Otherwise, remapping the devices to set the primary boot disk to another disk could be achieved with something as the following example.}}
+
+{{Code||<pre>
+menuentry "Windows 7 BIOS/MBR" {
+     insmod part_msdos
+     insmod chain
+     drivemap hd0 hd1
+     chainloader (hd1,msdos2)+1
+}
+</pre>}}
+
+===== Probing =====
+To have GRUB2 automatically find the Windows partitions and assign as the root partition, using the following commands.  The Windows partition must be first mounted under Linux.  See notes at the end of this section concerning missing C:\bootmgr and C:\Boot files and folders, and make sure they exist before trying to boot Windows.
+
+Probing feature requires an additional package not initially pulled in when installing GRUB2.
+{{RootCmd|emerge sys-boot/os-prober}}
+
+{{Code||<pre>
+# grub2-probe --target=hints_string /mnt/windows7/bootmgr
+--hint-bios=hd1,msdos1 --hint-efi=hd1,msdos1 --hint-baremetal=ahci1,msdos1
+</pre>}}
+
+{{Code||<pre>
+# grub2-probe --target=fs_uuid /mnt/windows7/bootmgr
+2ABF87DC395CFC02
+</pre>}}
+
+From the output provided by the above two commands, the 'search' line within the below {{Path|grub2.cfg}} configuration file can be then be constructed.  Remaping the drive and partition as the first hard drive and first partition will make Windows XP or Windows 8 freer of silent errors while loading.  Also note from previous ntldr command usage, specifying the $root prefix is no longer needed and if used will generate boot errors.
+
+{{Code||<pre>
+menuentry 'Microsoft Windows 7 or Windows 8 (on sdb1)' --class windows {
+        insmod part_msdos
+        insmod ntfs
+        insmod search_fs_uuid
+        insmod ntldr
+        search --fs-uuid --set=root --hint-bios=hd1,msdos1 --hint-efi=hd1,msdos1 --hint-baremetal=ahci1,msdos1 2ABF87DC395CFC02
+        drivemap (hd1,msdos1) (hd0,msdos1)
+        #Or, "drivemap (hd1,msdos2) (hd0,msdos1)" for those with Windows installed on sdb2)
+        ntldr /bootmgr
+}</pre>}}
+
+{{Important|If you do not have the C:/bootmgr and the C:/Boot folders for which the bootmgr file is linked to, you will likely need to install these files using an Administrator escalated cmd.exe shell (or command prompt) with something similar to the following: {{Code||<pre>bcdboot c:\Windows /s c:</pre>}}}}
+
+An indication you do not have this Boot folder (and is common with Windows 8 as the Boot folder doesn't seem to be generated by default except for the single c:\bootmgr file), is a boot error message concerning a missing bootmgr file immediately following attempting to boot one of the previously mentioned {{Path|grub.cfg}} entries.
+
+==== GPT Partitions ====
+A UEFI dual boot could be achieved with the following, if, for example, the default bootloader was overwritten with GRUB2 or simply that bootmgr doesn't do the trick for different reasons.
+
+{{Code||<pre>
+menuentry "Windows 7 UEFI/GPT" {
+    insmod part_gpt
+    insmod search_fs_uuid
+    insmod chain
+    search --fs-uuid --no-floppy --set{{=}}root 28cf-35de
+    chainloader ($root)/EFI/MICROSOFT/BOOT/bootmgfw.efi
+}
+</pre>}}
+
+== Extended features ==
+
+=== Enabling resume swap for suspend ===
+Open up {{Path|/etc/default/grub}} with root privileges and add 
+
+{{Code||<pre>GRUB_CMDLINE_LINUX="resume=/dev/sdXY"</pre>}} 
+
+Where ''XY'' is the swap partition location, which can be found by  
+
+{{RootCmd|fdisk -l}} 
+
+It looks like you are using UUID instead and that's fine. {{Path|/etc/default/grub}} only affects the current operating system so don't worry about every Linux OS using GRUB to start using that swap. After finishing your edits, run 
+
+{{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg}}
+
+(substitute {{Path|grub.cfg}} with whatever file grub reads at boot, e.g. it may be named {{Path|/boot/grub/grub.efi}}) to update your grub startup information with what you changed in {{Path|/etc/default/grub}}.
+
+=== Chroot ===
+If you have a separate {{Path|/boot}} partition and plan to install GRUB2, be sure to mount only the target root partition before chrooting, but not the {{Path|/boot}} partition as well. Mount {{Path|/boot}} once inside the chroot environment. This is required because grub2-mkconfig will not detect {{Path|/boot}} as a separate partition and will assume {{Path|/boot}} and root are on the same partition if {{Path|/boot}} was mounted before chrooting.
+
+=== Booting from LVM, RAID and/or Encrypted Volumes ===
+
+{{Note|GRUB2 booting to volumes that are using these technologies requires that, when partitioning, the size allotted for the MBR/post-MBR gap be greater than the conventional 32 kilobytes (63 sectors of 512 bytes). This is needed do to the enlarged size of the ''core.img'' file which GRUB embeds in the post-MBR gap region. It is recommended that the size before the first physical partition be 1 megabyte (or 2048 sectors of 512 bytes).
+
+For the following two code blocks, observe that the first (only 63 sectors of 512 bytes) will not allow GRUB2 to work with these technologies... though the latter (2048 sectors of 512 blocks) is adequate.
+}}
+
+{{Code||<pre>
+
+Disk /dev/sda: 160.0 GB, 160000000000 bytes, 312500000 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x000cfe45
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *          63    48821534    24410736   8e  Linux LVM
+
+</pre>}}
+
+{{Code||<pre>
+
+Disk /dev/sda: 320.1 GB, 320072933376 bytes, 625142448 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x0009d633
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048      499711      248832   8e  Linux LVM
+
+</pre>}}
+
+==== Booting from LVM Logical Volumes ====
+GRUB2 supports booting from an [[LVM]] partition. However, one must set the '''device-mapper''' USE flag in order to activate this feature:
+{{File|/etc/portage/package.use||<pre>
+sys-boot/grub:2 device-mapper
+</pre>}}
+Reemerge if needed. Next tell GRUB2 to preload its "lvm" module,
+{{RootCmd|echo "GRUB_PRELOAD_MODULES{{=}}lvm" >> /etc/default/grub}}
+And (re)generate {{Path|grub.cfg}} with '''''grub2-mkconfig'''''.
+
+==== Booting from RAID Array ====
+The documentation on this subject, along with booting from encrypted physical volumes, is close to null. As I do not boot from a RAID array, anyone who managed to boot from a complex RAID array is welcomed to complete this section.
+
+{{Note|Booting from RAID is only relevant for BIOS [boot]. EFI users shall roll out their custom initramfs or use an initramfs package available out there. Depending on your setup, you may use a BIOS/MBR or BIOS/GPT combination. Here is an example to a BIOS/GPT setup with `/boot' and `root' [`/'] on RAID-1 [http://sinodun.com/2010/07/installing-grub2-on-gnulinux-software-raid/] and Xen on RAID-5.}}
+
+{{Note|A note here about grub2-mkdevicemap and UUID re-setting has been removed.  grub2-mkdevicemap is no longer distributed. The UUID problem doesn't appear to exist. 
+Installing to the two devices making a RAID1 array seemed to work with no problem; i.e grub2-install /dev/sda && grub2-install /dev/sdb (after creating the expected ef02/bios boot partition).}}
+
+{{Important|If this is a new installation of Gentoo, make sure that you emerge mdadm in the chroot environment before you attempt to install GRUB as described in the note above, otherwise it will fail with '''"Path `/boot/grub' is not readable by GRUB on boot. Installation is impossible. Aborting."'''  After installing mdadm, GRUB can now correctly read the RAID devices and grub2-install /dev/sda and grub2-install /dev/sdb should work as expected on a RAID 1 array comprised of /dev/sda2 /dev/sdb2 for boot.}}
+
+Booting from a RAID array is very similar to booting from a LVM Logical Volume aside from RAID specific terminology and syntax of RAID partitioned volume.
+
+{{Code||<pre>
+...
+     insmod raid
+#    and load the related `mdraid' module `mdraid09' for RAID arrays with version 0.9 metadata, and `mdraid1x' for arrays with version 1.x metadata.
+     insmod mdraid09
+     set root=(md0p1)
+#    or the following for an unpartitioned RAID array
+     set root=(md0)
+...
+</pre>}}
+
+{{Note|RAID user might merge the live ebuild to get the latest bit of fixes and updates.}}
+
+{{Note|There's a nVidia (dm_nv) specific module for RAID 3/5, so something like `insmod dm_nv' is necessary for related hardware.}}
+
+I can guess that this should work with a simple software RAID setup. However, I have no idea or what command, if any exit at the moment of writing, to use to assemble an array such as `mdadm --assemble --scan /dev/md0' that an initramfs could take care of.
+
+==== Booting from LUKS Physical Volume ====
+
+Tell GRUB2 to look for cryptodisks
+{{RootCmd|echo "GRUB_CRYPTODISK_ENABLE{{=}}y" >> /etc/default/grub}}
+and (re)generate {{Path|grub.cfg}} with '''''grub2-mkconfig'''''.
+
+=== Booting from network (PXE) ===
+* [https://www.gnu.org/software/grub/manual/grub.html#Network Booting from network (PXE)]
+
+=== Using framebuffer display ===
+To have GRUB use a [[framebuffer]] graphical display, emerge GRUB with the <code>truetype</code> USE flag enabled. This will install a default font as well as a font conversion utility.
+
+Then, you can configure {{Path|/etc/default/grub.conf}}. For example:
+
+{{File|/etc/default/grub.conf|Framebuffer related settings|lang=bash|3=
+…
+# Set resolution and color depth
+GRUB_GFXMODE=1366x768x32
+
+# Keep resolution when loading the kernel
+GRUB_GFXPAYLOAD_LINUX=keep
+
+# Set a background image
+GRUB_BACKGROUND="/boot/grub/bg.png"
+
+# Use a custom font, converted using grub2-mkfont(1)
+GRUB_FONT="/boot/grub/fonts/roboto.pf2"
+…
+}}
+
+To find out what modes your graphics card supports, use the following commands on the GRUB shell:
+
+{{Cmd|prompt=(grub)|color=black|insmod all_video|videoinfo
+}}
+
+== Troubleshooting ==
+First off, checkout if you have an EFI02 (GPT disk) or bios_grub ([G]parted) for BIOS/GPT installation or enough gap before the first partion of the disk or the boot partition for BIOS/MBR installation before firing up `grub2-install' command. This will spare you some time.
+
+Secondly, checkout if {{Path|/boot/grub/grub.cfg}} was correctly generated with `grub2-mkconfig' or generate one yourself with at least a `menuentry'. Refers to previous section for more information. And avoid writing `Boots up to prompt' section in the wiki because of failing to do that simple check before rebooting!
+
+=== GPT hybrid MBR workaround ===
+GRUB2 require an EE00 partition type first in the MBR partition list entry, but that may pose a problem to boot other operating systems in the same disk especially MSDOS/Windows, to recognize a GPT partitioned disk with or without hybrid MBR. A workaround would be simply removing any protective EE00 partition, with fdisk for example but not gdisk! (it won't work with gdisk as the ''fake'' partition is just there to protect GPT main table), and boot in BIOS/MBR mode. Just remember to not use other disk tools but gdisk (it should work with [g]parted) to resize after that, else, use gdisk to add protective EE00 partitions to protect at least GPT main and backup partition before using any non GPT aware tools if necessary.
+
+There's another issue, MSDOS/Windows may not find any suitable partition to boot from if there's a EE00 partition protecting GPT main partition table (sector 1-2047). This is happened to me and I had to remove the protective EE00 protective partition before getting a valid MBR partition list in [MS]DOS tools (to format a partition for example, the tools recognized a GPT partitioned disk at least). And then use gdisk to recompute the CHS value for hybrid MBR (in the ''recovery and transformation'' menu, or in the ''expert'' main menu).
+
+=== Repopulating EFI Boot Manager entries ===
+
+In case the Boot Manager entries need to be restored, you can readd them without invoking grub-install. Load the efivars module and install efibootmgr:
+	 
+{{RootCmd|modprobe efivars}}
+{{Emerge|sys-boot/efibootmgr}}
+
+Then add an boot menu entry:
+
+{{RootCmd|efibootmgr --create --gpt --disk /dev/sda --part 1 --write-signature --label "gentoo" --loader "\\EFI\\gentoo\\grubx86.efi"}}
+
+=== Installation errors ===
+
+==== Attempting to install GRUB to a disk or a partition ====
+* If you're getting this error:
+{{Code||<pre>
+Attempting to install GRUB to a partition disk or to a partition.  This is a BAD idea.
+Embedding is not possible.  GRUB can only be installed in this setup by using blocklists. 
+However, blocklists are UNRELIABLE and their use is discouraged.
+</pre>}}
+this could mean that:
+:* 1st: A {{Path|/boot}} partition is not mounted, simply run as root `mount /boot'.
+:* 2nd: If you're trying to install GRUB2 in traditional BIOS/GPT setup, this could mean more likely that there isn't any EF02 or bios_boot to embed core.img. A little partition of a few hundreds kilobytes may be enough, although it's : good to align it's partition to something like 2048 sectors to avoid performance penalty, so a 1 MiB partition should do.
+
+* If you're trying to install GRUB2 in a partition e.g. {{Path|/dev/sda5}} in BIOS/MBR setup (who did try it to BIOS/GPT?), simply add `--force' cmdline switch to get going. You should be fine with either enough gap before the first sector of the first partition or else use chattr command (as described in BIOS/MBR installation) to get going or else... destroy your partition boundary and possibly your LUKS or LVM2 header if any.
+
+* If grub2-install does not print any errors message or if the message is about scanning disk files and you have several platforms enabled in {{Path|/etc/portage/make.conf}} <i>and</i> nothing is installed in the disk. Then, you should edit `/sbin/grub2-install' `platform=qemu' to `platform=pc', for example, or the appropriate platform in that case. This happened to me, and I had to look arround to found out, at last, that the platform shall be rightly set when installing grub:2.
+
+{{Note|This is true for sys-boot/grub-1.99x only... for sys-boot/grub-2.x one should edit {{Path|/etc/grub.d/00_header}}, transform{{=}}"s,grub,grub2-qemu," to transform{{=}}"s,grub,grub2," for example, to install rightly with grub2-$platform-install.}}
+
+==== No post-MBR gap ====
+{{RootCmd|grub2-bios-setup ..|output=<pre>
+grub-setup: warn: This msdos-style partition label has no post-MBR gap; embedding won't be possible!
+grub2-bios-setup: warn: Embedding is not possible. GRUB can only be installed in this setup by using blocklists.
+            However, blocklists are UNRELIABLE and its use is discouraged.
+grub2-bios-setup: error: If you really want blocklists, use --force.
+</pre>}}
+
+This error means, that grub could not find the usual gap between the MBR and first partition of a disk. It is possible that the disk does not have this gap. Some tools format disks (e.g. LiveUSB disk installer) so that the first partition starts at sector 1 instead of 2048. Repartitioning the disk can fix this.
+Some visualization-based blockdevices can also cause problems. See [http://bbs.archlinux.org/viewtopic.php?pid=581760#p581760 this post] from the Arch Linux forum for more informations.
+
+==== Embedding area is unusually small ====
+
+If you receive this error, it means that there is not enough room at the beginning of your disk before the first partition:
+
+{{RootCmd|grub2-install /dev/sda
+|output=<pre>
+grub2-install: warn: Your embedding area is unusually
+small. core.img won't fit in it.
+grub2-install: warn: Embedding is not possible. GRUB can
+only be installed in this setup by using blocklists. However,
+blocklists are UNRELIABLE and their use is discouraged.
+grub2-install: error: will not proceed with blocklists.
+</pre>}}
+
+In general this is going to be a bit of trouble to fix. You will need to resize one or more partitions to leave some free space at the beginning of your drive. The [http://gparted.sourceforge.net/livecd.php gParted liveCD] is recommended.
+
+If you are lucky however, your swap partition is the first one on the disk, e.g. {{Path|/dev/sda1}}. In that case, you can simply wipe out your swap space and repartition it on the fly.
+
+Begin by disabling the swap partition and launching ''fdisk'':
+
+{{RootCmd|swapoff /dev/sda1
+|fdisk /dev/sda}}
+
+This should bring you to the ''fdisk'' prompt, where the following commands can be used to shrink the first partition on /dev/sda:
+
+* 'x' - extra functionality
+* 'b' - move beginning of data in a partition
+* '1' - Choose the first partition
+* '4096' - New beginning of data (1-8000369, default 63)
+* 'w' - write table to disk and exit
+A number smaller than 4096 may work, but 4096 worked for the author.
+
+Next, reformat the swap partition, and re-enable it:
+
+{{RootCmd|mkswap /dev/sda1
+|swapon /dev/sda1}}
+
+You should now be able to install grub onto {{Path|/dev/sda}}.
+
+== DualBoot Gentoo and FreeBSD [MBR] ==
+For doing so you have to:   
+make or change your <code>/etc/grub.d/40_custom</code> to:  
+
+{{File|/etc/grub.d/40_custom|Adding DualBoot|<pre>
+menuentry "FreeBSD" --class freebsd --class bsd --class os {
+ insmod ufs2
+ insmod bsd
+ set root=(hd0,1)
+ kfreebsd /boot/kernel/kernel
+ kfreebsd_loadenv /boot/device.hints
+ set kFreeBSD.vfs.root.mountfrom=ufs:/dev/ada0s1a
+ set kFreeBSD.vfs.root.mountfrom.options=rw
+ set kFreeBSD.hw.psm.synaptics_support=1
+}
+</pre>}}
+
+<code>/dev/sda1</code> or <code>(hd0,1)</code> is the partition in which FreeBSD resides. If you went with the normal <code>UFS</code> install for FreeBSD partition the <code>/dev/sda1</code> is a container (something like a logical partition). it consists of the swap and a root partition.  
+make sure <code>40_custom</code> is exacutable. if not <code>chmod u+x 40_custom</code>.  
+Now:  
+{{RootCmd|grub2-install /dev/sda
+|grub2-mkconfig -o /boot/grub/grub.cfg}}  
+  
+Files in <code>/etc/grub.d</code> are executable and will be read by grub to create <code>grub.cfg</code>.
+
+== External resources ==
+* [https://www.gnu.org/software/grub/manual/grub.html GNU GRUB 2 manual page]
+* [http://www.rodsbooks.com/gdisk/bios.html Legacy BIOS issues with GPT article]
+* [http://www.rodsbooks.com/gdisk/hybrid.html GPT and Hybrid MBR article]
+* [http://www.rodsbooks.com/gdisk/ GPT fdisk utility page]
+* [https://wiki.archlinux.org/index.php/GRUB2 Arch Linux GRUB2 wiki article]
+* [https://fedoraproject.org/wiki/GRUB_2?rd=Grub2#Encountering_the_dreaded_GRUB_2_boot_prompt Fedora GRUB2 wiki article : Encountering the dreaded GRUB2 boot prompt]
+* [https://help.ubuntu.com/community/UEFIBooting ubuntu UEFI booting help]
+* [http://unix.stackexchange.com/questions/109272/dualboot-freebsd-gentoo-with-grub2-mbr]
+[[Category:Bootloaders]]
