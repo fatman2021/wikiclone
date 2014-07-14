@@ -1005,5 +1005,115 @@ With one osd spun up, our cluster is now operating in a degraded state.
 </pre>}}
 
 
+==== osd.1 on kroll3 ====
+<code>osd.1</code> will use our other big btrfs array on host kroll2 (mater).
+
+{{RootCmd|uuidgen|output=<pre>
+0b4c1e77-cc5c-49aa-b322-42d331621113
+</pre>}}
+{{RootCmd|ceph osd create 0b4c1e77-cc5c-49aa-b322-42d331621113|output=<pre>
+1
+</pre>}}
+
+
+Since we are visiting hosts in the right order, we get to set up osd.1 on kroll3 just as we had anticipated in our <code>/etc/ceph/ceph.conf</code> file.  Mater's btrfs array has its default volume mounted on <code>/materraid</code>
+{{RootCmd|cd /materraid}}
+{{RootCmd|btrfs subvol create ceph_osd_1|output=<pre>
+Create subvolume './ceph_osd_1'
+</pre>}}
+
+
+{{File|/etc/fstab|Edited to add ceph_osd_1 subvolume|<pre>
+LABEL=SAMBOOT	/boot		ext4		defaults,noatime,discard	1 2
+LABEL=SAMROOT	/		ext4		defaults,noatime,discard		0 1
+/dev/sdb	/materraid	btrfs		defaults,noatime,compress=lzo,autodefrag		0 0
+/dev/sdb	/raid		btrfs		defaults,noatime,compress=lzo,autodefrag,subvol=raid	0 0
+/dev/sdb	/var/lib/ceph/osd/ceph-1 btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=ceph_osd_1	0 0
+</pre>}}
+
+
+{{RootCmd|mkdir -p /var/lib/ceph/osd/ceph-1}}
+{{RootCmd|mount /var/lib/ceph/osd/ceph-1}}
+{{RootCmd|df|output=<pre>
+Filesystem                        1K-blocks       Used  Available Use% Mounted on
+/dev/sda3                         239716036  150083632   77432412  66% /
+devtmpfs                            8160292          0    8160292   0% /dev
+tmpfs                               1632264        928    1631336   1% /run
+shm                                 8161308         76    8161232   1% /dev/shm
+cgroup_root                           10240          0      10240   0% /sys/fs/cgroup
+/dev/sda2                            499656      20764     442196   5% /boot
+/dev/sdb                        15628074336 6398440760 7076273736  48% /materraid
+/dev/sdb                        15628074336 6398440760 7076273736  48% /raid
+/dev/sdb                        15628074336 6398440760 7076273736  48% /var/lib/ceph/osd/ceph-1
+</pre>}}
+
+
+{{RootCmd|ceph-osd -i 1 --mkfs --mkkey --osd-uuid 0b4c1e77-cc5c-49aa-b322-42d331621113|output=<pre>
+2014-07-14 17:41:03.717559 7fcc47c22bc0 -1 journal FileJournal::_open: disabling aio for non-block journal.  Use journal_force_aio to force use of aio anyway
+2014-07-14 17:41:12.369793 7fcc47c22bc0 -1 journal FileJournal::_open: disabling aio for non-block journal.  Use journal_force_aio to force use of aio anyway
+2014-07-14 17:41:12.371069 7fcc47c22bc0 -1 filestore(/var/lib/ceph/osd/ceph-1) could not find 23c2fcde/osd_superblock/0//-1 in index: (2) No such file or directory
+2014-07-14 17:41:14.455595 7fcc47c22bc0 -1 created object store /var/lib/ceph/osd/ceph-1 journal /var/lib/ceph/osd/ceph-1/journal for osd.1 fsid 1798897a-f0c9-422d-86b3-d4933a12c7ac
+2014-07-14 17:41:14.455697 7fcc47c22bc0 -1 auth: error reading file: /var/lib/ceph/osd/ceph-1/keyring: can't open /var/lib/ceph/osd/ceph-1/keyring: (2) No such file or directory
+2014-07-14 17:41:14.455883 7fcc47c22bc0 -1 created new key in keyring /var/lib/ceph/osd/ceph-1/keyring
+</pre>}}
+
+{{RootCmd|ceph auth add osd.1 osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-1/keyring|output=<pre>
+added key for osd.1
+</pre>}}
+
+{{RootCmd|ceph osd crush add-bucket kroll3 host|output=<pre>
+added bucket kroll3 type host to crush map
+</pre>}}
+{{RootCmd|ceph osd crush move kroll3 root{{=}}default|output=<pre>
+moved item id -3 name 'kroll3' to location {root=default} in crush map
+</pre>}}
+{{RootCmd|ceph osd crush add osd.1 1.0 host{{=}}kroll3|output=<pre>
+add item id 1 name 'osd.1' weight 1 at location {host=kroll3} to crush map
+</pre>}}
+{{RootCmd|ceph osd tree|output=<pre>
+# id    weight  type name       up/down reweight
+-1      2       root default
+-2      1               host kroll1
+0       1                       osd.0   up      1
+-3      1               host kroll3
+1       1                       osd.1   down    0
+</pre>}}
+
+
+{{RootCmd|cd /etc/init.d}}
+{{RootCmd|ln -s ceph ceph.osd-1}}
+{{Rootcmd|rc-update add ceph.osd-1 default|output=<pre>
+ * service ceph.osd-1 added to runlevel default
+{{RootCmd|./ceph.osd-1 start|output=<pre>
+ * Caching service dependencies ...                                                                     [ ok ]
+ * Starting Ceph osd.1 ...
+starting osd.1 at :/0 osd_data /var/lib/ceph/osd/ceph-1 /var/lib/ceph/osd/ceph-1/journal                [ ok ]
+</pre>}}
+
+
+With two osds running now, the cluster moves from degraded to "warn" state.  This may be leftover from our warning about the root filesystem on kroll1.
+{{RootCmd|ceph osd tree|output=<pre>
+
+# id    weight  type name       up/down reweight
+-1      2       root default
+-2      1               host kroll1
+0       1                       osd.0   up      1
+-3      1               host kroll3
+1       1                       osd.1   up      1
+</pre>}}
+{{RootCmd|ceph -s|output=<pre>
+    cluster 1798897a-f0c9-422d-86b3-d4933a12c7ac
+     health HEALTH_WARN
+     monmap e3: 4 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0,3=192.168.2.4:6789/0}, election epoch 8, quorum 0,1,2,3 0,1,2,3
+     osdmap e13: 2 osds: 2 up, 2 in
+      pgmap v24: 192 pgs, 3 pools, 0 bytes data, 0 objects
+            12235 GB used, 13452 GB / 29808 GB avail
+                 192 active+clean
+</pre>}}
+
+
+
+
+
 
 [[Category:Filesystems]]
