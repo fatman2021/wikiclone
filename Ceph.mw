@@ -158,4 +158,182 @@ We have chosen to roll out Ceph on a portion of our home network.  The four krol
 * kroll4 (aka Tube) - An AMD A10-7850K APU with 16GB of memory, 256GB SSD and a 2x4TB SATA array formatted as a btrfs RAID1 mirror set with its default volume mounted on <code>/tuberaid</code>.  As its real name suggests, kroll4 was originally set up a MythTV box, but its filesystem is only averaging about 10% of its capacity.  We will thus use kroll4 as a MON and OSD server.
 
 Thufir, Mater and Tube run a gentoo stable desktop profile and are currently on kernel <code>3.12.21-gentoo-r1</code>.  Thufir and Mater are btrfs installs with new drives using the latest btrfs code <code>btrfs-progs-3.12-r1</code>.  Tube has been up and running a bit longer and had its btrfs array built under kernel <code>3.10.25-gentoo</code>.  Figo runs a gentoo unstable desktop profile and is currenly on kernel <code>3.13.7-gentoo</code>.  It is also being used as an rsync mirror for thufir, but its array has been running for about 2 years.  The reason for <code>/figoraid</code> running at 90% capacity is both due to older smaller drives (3TB versus 4TB) and also because the version of btrfs available when it was built did not yet include RAID5 support.
+
+
+==== Editing the ceph config file ====
+We will be following the [http://ceph.com/docs/master/install/manual-deployment/ manual guide] for ceph installation on their site.  There is also a python based script call ceph-deploy which is packaged for a number of distros but not directly available for gentoo.  If you can manage to get it working, it would automate a good bit of the process of rolling out a server from your admin node.
+
+{{File|/etc/ceph/ceph.conf|Initial ceph config file|<pre>
+[global]
+        # For version 0.54 and earlier, you may enable
+        # authentication with the following setting.
+        # Specifying `cephx` enables authentication;
+        # and specifying `none` disables authentication.
+
+        #auth supported = cephx
+
+        # For version 0.55 and beyond, you must explicitly enable 
+        # or disable authentication with "auth" entries in [global].
+        cluster = ceph
+        auth cluster required = cephx
+        auth service required = cephx
+        auth client required = cephx
+
+
+[osd]
+        osd journal size = 1000
+        # uncomment the following line if you are mounting with ext4
+        # filestore xattr use omap = true
+
+
+        # For Bobtail (v 0.56) and subsequent versions, you may 
+        # add settings for mkcephfs so that it will create and mount
+        # the file system for you. Remove the comment `#` character for 
+        # the following settings and replace the values in parenthesis 
+        # with appropriate values, or leave the following settings commented 
+        # out to accept the default values. You must specify the --mkfs 
+        # option with mkcephfs in order for the deployment script to 
+        # utilize the following settings, and you must define the 'devs'
+        # option for each osd instance; see below.
+
+        #osd mkfs type = {fs-type}
+        #osd mkfs options {fs-type} = {mkfs options}   # default for xfs is "-f"
+        #osd mount options {fs-type} = {mount options} # default mount option is "rw, noatime"
+</pre>}}
+
+
+We use <code>uuidgen</code> to generate a new random uuid for the entire cluster.  We will rename the cluster name from the default <code>ceph</code> to <code>kroll</code> to match our host naming scheme.  We specify the 192.168.2 network to be the "public" network for the cluster.  Other default settings come from the manual install url mentioned earlier, including a default to replicate two copies of each object with a minimum of 1 copy allowed when the cluster is in "degraded" state.
+
+We set a journal size in the <code>osd</code> global section but leave the filestore stanza commented out since we will be using btrfs for object stores instead of ext4.  We also added a little extra language to this to clarify exactly what it means.
+
+We add a <code>mon</code> global section where we specify the list of hostnames that will act as mons along with their corresponding ip addresses.  The port number <code>6789</code> is the IANA registered well known port assigned to Ceph.  The initial members stanza specifies the three hosts which will be necessary to form an initial quorum.  The list of numbers corresponds to the list of mon sections that will follow for <code>mon.0</code>, <code>mon.1</code> etc.  These will also be used by the /etc/init.d/ceph startup script when figuring out which services are to be started for a host.
+
+{{Note|The numeric mon convention is new in the Firefly release.  Earlier releases used alphbetical letters instead (eg <code>mon.a</code>, etc) for the <code>mon</code> sections.}}
+
+
+The rest of the <code>ceph.conf</code> file consists of subsections for the various mon, osd and mds servers that we will be implementing.
+
+{{RootCmd|uuidgen|output=<pre>
+1798897a-f0c9-422d-86b3-d4933a12c7ac
+</pre>}}
+
+
+{{File|/etc/ceph/ceph.conf|Customized ceph config file|<pre>
+[global]
+        # For version 0.54 and earlier, you may enable
+        # authentication with the following setting.
+        # Specifying `cephx` enables authentication;
+        # and specifying `none` disables authentication.
+
+        #auth supported = cephx
+
+        # For version 0.55 and beyond, you must explicitly enable 
+        # or disable authentication with "auth" entries in [global].
+        fsid = 1798897a-f0c9-422d-86b3-d4933a12c7ac
+        cluster = kroll
+        public network = 192.168.2.0/24
+        auth cluster required = cephx
+        auth service required = cephx
+        auth client required = cephx
+        osd journal size = 1024
+
+        #
+        # default to replicating two copies of each object.  Allow a minimum
+        # of one copy to be made when number of object stores is degraded
+        #
+        osd pool default size = 2
+        osd pool default min size = 1
+        #
+        # defaults from  http://ceph.com/docs/master/install/manual-deployment/
+        #
+        osd pool default pg num = 333
+        osd pool default pgp num = 333
+        osd crush chooseleaf type = 1
+
+
+
+[osd]
+        osd journal size = 1024
+
+        #
+        #  This is a crutch for ext4 filesystems with limit of 4kb xattr data
+        #  btrfs has no bounds for xattr store
+        #
+        # uncomment the following line if you are mounting with ext4
+        #filestore xattr use omap = true
+
+
+        # For Bobtail (v 0.56) and subsequent versions, you may 
+        # add settings for mkcephfs so that it will create and mount
+        # the file system for you. Remove the comment `#` character for 
+        # the following settings and replace the values in parenthesis 
+        # with appropriate values, or leave the following settings commented 
+        # out to accept the default values. You must specify the --mkfs 
+        # option with mkcephfs in order for the deployment script to 
+        # utilize the following settings, and you must define the 'devs'
+        # option for each osd instance; see below.
+
+        #osd mkfs type = {fs-type}
+        #osd mkfs options {fs-type} = {mkfs options}   # default for xfs is "-f"
+        #osd mount options {fs-type} = {mount options} # default mount option is "rw, noatime"
+
+[mon]
+        mon host = kroll1, kroll2, kroll3, kroll4
+        mon addr = 192.168.2.1:6789, 192.168.2.2:6789, 192.168.2.3:6789, 192.168.2.4:6789
+        mon initial members = 0,1,2
+
+[mon.0]
+        host = kroll1
+        mon addr = 192.168.2.1:6789
+
+[mon.1]
+        host = kroll2
+        mon addr = 192.168.2.2:6789
+
+[mon.2]
+        host = kroll3
+        mon addr = 192.168.2.3:6789
+
+[mon.3]
+        host = kroll4
+        mon addr = 192.168.2.4:6789
+
+[osd.0]
+        host = kroll1
+
+[osd.1]
+        host = kroll3
+
+[osd.2]
+        host = kroll4
+
+[mds.0]
+        host = kroll2
+</pre>}}
+
+
+After editing the file, we copy it around to the other cluster members from our admin node kroll1 using <code>scp</code>
+{{RootCmd|scp ceph.conf root@kroll2:/etc/ceph|output=<pre>
+ceph.conf                                                         100% 2408     2.4KB/s   2.4KB/s   00:00    
+</pre>}}
+{{RootCmd|scp ceph.conf root@kroll3:/etc/ceph|output=<pre>
+ceph.conf                                                         100% 2408     2.4KB/s   2.4KB/s   00:00    
+</pre>}}
+{{RootCmd|scp ceph.conf root@kroll4:/etc/ceph|output=<pre>
+ceph.conf                                                         100% 2408     2.4KB/s   2.4KB/s   00:00    
+</pre>}}
+
+
+==== /etc/conf.d/ceph file ====
+There is also a conf file for the ceph service, but as of the Firefly release, there is only the location of the conf file to specify.  This is because in previous releases, there was only an /etc/init.d/ceph script that needed to be worked with.  The single script would start up or shut down all of the services enabled for the site at once.  The ebuild maintainer changed this for Firefly to use renamed softlinks of <code>/etc/init.d/ceph</code> in order to specify the running of individual Ceph services.  It is somewhat similar to what gentoo does with <code>net.lo</code> when enabling network devices.
+
+{{File|/etc/conf.d/ceph|Barebones ceph file for Firefly release|<pre>
+# Example
+
+# default ceph conf file
+ceph_conf="/etc/ceph/ceph.conf"
+</pre>}}
+
+
+
 [[Category:Filesystems]]
