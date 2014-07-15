@@ -2,28 +2,28 @@
 |{{InfoBox homepage|http://www.freedesktop.org/wiki/Software/Plymouth/}}
 |{{InfoBox wikipedia|Plymouth_(software)}}
 }}
-'''Plymouth''' is used to show splash screens during boot and shut-down. It is a more modern alternative to [[fbsplash]] and provides flicker-free animated boot splashes  with a progress bar. It also has full [[systemd]] support. However, it does not provide eye-candy for the ttys in the way fbsplash does (meaning it shows no decoration on your consoles while the system is running).
+'''Plymouth''' is used to show splash screens during system boot and shutdown. It is a more modern alternative to [[fbsplash]] and provides flicker-free animated boot splashes with a progress bar. It also has full [[systemd]] support. However, it does not provide eye-candy for the ttys in the way fbsplash does (meaning it shows no decoration on your consoles while the system is running).
 
 == Installation ==
 
 {{Package|sys-boot/plymouth}} can be installed using 
 {{Emerge|sys-boot/plymouth}}
 
-It will install a number of themes automatically.
+When emerging Plymouth number of themes will be pulled in automatically.
 
-However, [[genkernel]] cannot create an [[initramfs]] with a plymouth theme included. Therefore either [[dracut]] or {{Package|sys-kernel/genkernel-next}} is needed. We will here continue with genkernel-next as it is marked stable. The plymouth use flag needs to be enabled.
+However, [[genkernel]] cannot create an [[initramfs]] with a plymouth theme included. Therefore either [[dracut]] or {{Package|sys-kernel/genkernel-next}} will be needed. From this point onward this configuration guide will continue with genkernel-next as it is marked stable and is essentially a drop in replacement for genkernel. The plymouth use flag needs to be enabled in <code>/etc/portage/package.use</code>.
 {{RootCmd|echo "sys-kernel/genkernel-next plymouth" >> /etc/portage/package.use}}
 {{Emerge|sys-kernel/genkernel-next}}
 
-== Configuration ==
+== OpenRC Configuration ==
 
 The first step is to select a Plymouth theme. A list of all themes can be found using
 {{RootCmd|plymouth-set-default-theme --list}}
 
-Assuming we want to select the solar theme
+Assuming you want to select the solar theme as the default theme:
 {{RootCmd|plymouth-set-default-theme solar}}
 
-Additionally we need to enable this theme in the initramfs generation:
+Additionally, you need to enable this theme in the initramfs generation:
 {{File|/etc/genkernel.conf||<pre>
 # Enable splashutils in early space (initrd). Default is "no".
 # SPLASH="no"
@@ -36,17 +36,23 @@ PLYMOUTH="yes"
 PLYMOUTH_THEME="solar"
 </pre>}}
 
-Note that SPLASH should stay no because this parameter refers to fbsplash.
+Note that the SPLASH variable inside <code>/etc/genkernel.conf</code> should be set to NO. This variable is to set an option for the fbsplash bootsplash loader (splashutils) and not Plymouth.
 
-Next the grub2 config file needs to be changed to enable the splash during early boot.
+Next, you will need to regenerate the initramfs using the <code>genkernel</code> command:
+{{RootCmd|genkernel all}}
+
+Next, make an update to grub2's configuration to enable the splash during early boot. Append the options "quiet splash" on the end of the GRUB_CMDLINE_LINUX_DEFAULT variable, adjust the resolution in the GRUB_GFXMODE variable to match your desired resolution for your primary screen, and set GRUB_GFXPAYLOAD_LINUX to "keep" in order to preserve the graphics mode during boot.
 {{File|/etc/default/grub||<pre>
 GRUB_CMDLINE_LINUX_DEFAULT='quiet splash'
 GRUB_GFXMODE=1366x768x24
 GRUB_GFXPAYLOAD_LINUX=keep
 </pre>}}
-Adjust the resolution to match your primary screen.
 
-As a last step you need to recreate the initramfs and then the splash screen should work on the next system boot:
-{{RootCmd|genkernel all}}
+Finally, run the <code>grub2-mkconfig</code> command to update grub2's boot configuration to include the changes you made when you updated <code>/etc/default/grub</code> above.
+{{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg}}
+
+You are done!
+
+== Systemd Configuration ==
 
 Plymouth automatically registers itself with systemd to show a splash screen during shutdown/restart.
