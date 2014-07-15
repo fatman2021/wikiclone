@@ -1413,5 +1413,57 @@ Looking at the ceph-mds-0.log and the <code>ceph -s</code> command shows us that
 </pre>}}
 
 
+==== Creating and exporting the Posix Filesystem ====
+Once again, the Ceph web site offered scant details about how to go about mounting the object store as a Posix Filesystem with cephx authentication.  After a lot of googling around after mount errors 5, etc, we hit upon the magic sauce that is necessary.  If you have compiled the ceph network filesystem and ceph lib as modules, you do not need to worry about a manual modprobe to have them loaded.  The <code>mount.ceph</code> command will take care of that for you.  You can confirm that the following two modules are loaded after trying your first mount:
+
+{{RootCmd|lsmod | grep ceph|output=<pre>
+ceph                  125992  1 
+libceph               114568  1 ceph
+</pre>}}
+
+If you remember, the ceph.client.admin.keyring you created back in the beginning of the install included allow for mds operations.  However the format of that keyring file will not work with mount.ceph.  We need to copy only the key value itself as the contents of an <code>/etc/ceph/admin.secret</code> file.
+
+{{File|/etc/ceph.client.admin.keyring|existing generated file|<pre>
+[client.admin]
+        key = (redacted key text)
+        auid = 0
+        caps mds = "allow"
+        caps mon = "allow *"
+        caps osd = "allow *"
+</pre>}}
+
+{{File|/etc/admin.secret|hacked up copy of ceph.client.admin with just the key|<pre>
+(redacted key text)
+</pre>}}
+
+Because we are using nfs4, we will create an <code>/export/kroll</code> and then use mount.ceph to mount to that.  The user specified is just "admin", not "client.admin".  Since we have four mons up, we will go ahead and specify all of them to mount the root ceph object namespace.
+{{RootCmd|mkdir /export/kroll}}
+{{RootCmd|mount -t ceph kroll1,kroll2,kroll3,kroll4:/ /export/kroll -o name{{=}}admin,secretfile{{=}}/etc/ceph/admin.secret}}
+{{RootCmd|df|output=<pre>
+/dev/sda2                                           245506816    36207828   196804556  16% /
+devtmpfs                                              8195144           0     8195144   0% /dev
+tmpfs                                                 1639140        3212     1635928   1% /run
+shm                                                   8195696          80     8195616   1% /dev/shm
+cgroup_root                                             10240           0       10240   0% /sys/fs/cgroup
+/dev/sda1                                              466248       70287      371464  16% /boot
+192.168.2.1,192.168.2.2,192.168.2.3,192.168.2.4:/ 39069155328 17653448704 21415706624  46% /export/kroll
+</pre>}}
+
+And now we have a gi-normous empty filesystem hanging off of /export/kroll.  The 46% capacity filled there are from the non-ceph btrfs subvolumes that are currently in the three arrays that are providing our object stores.  We will modify our /etc/exports and then update the sharing to put out /export/kroll.
+
+{{File|/etc/exports|modified nfs exports map|<pre>
+# /etc/exports: NFS file systems being exported.  See exports(5).
+/export         *(rw,sync,fsid=0,no_subtree_check,no_root_squash,crossmnt)
+/export/home    *(rw,sync,no_subtree_check,no_root_squash)
+/export/raid    *(rw,sync,no_subtree_check,no_root_squash)
+/export/kroll   *(rw,sync,no_subtree_check,no_root_squash)
+</pre>}}
+{{RootCmd|exportfs -a -v|output=<pre>
+exporting *:/export/kroll
+exporting *:/export/raid
+exporting *:/export/home
+exporting *:/export
+</pre>}}
+
 
 [[Category:Filesystems]]
