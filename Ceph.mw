@@ -1231,4 +1231,187 @@ starting osd.2 at :/0 osd_data /var/lib/ceph/osd/ceph-2 /var/lib/ceph/osd/ceph-2
 </pre>}}
 
 It suddenly strikes us that we are the almost assuredly the first kid in our neighborhood to set up a cluster with almost 40tb of distributed object store in the comfort of our own home.  In fact, we are probably outclassing all but one or two NIH funded research labs that are nearby.  The cost of the hardware was probably in the range of $5-7K since it was built from scratch, and it may even been cheaper than a single desktop video editing system sold by a certain fruity computer company.
+
+
+==== Setting up mds.0 on kroll2 ====
+The Ceph site wants us to use ceph-deploy to set up the mds servers, but that script has yet to be ported and packaged for Gentoo.  We found enough information from a [http://www.sebastien-han.fr/blog/2013/05/13/deploy-a-ceph-mds-server/ bloggers site] to do a manual install for Gentoo.  The <code>/etc/ceph/ceph.conf</code> needs an edit to introduce a global <code>[mds]</code> section for the default location of the mds server and the keyring that it needs.
+
+{{File|/etc/ceph/ceph.conf|edited for new [mds] global section|<pre>
+[global]
+        # For version 0.54 and earlier, you may enable
+        # authentication with the following setting.
+        # Specifying `cephx` enables authentication;
+        # and specifying `none` disables authentication.
+
+        #auth supported = cephx
+
+        # For version 0.55 and beyond, you must explicitly enable 
+        # or disable authentication with "auth" entries in [global].
+        fsid = 1798897a-f0c9-422d-86b3-d4933a12c7ac
+        cluster = kroll
+        public network = 192.168.2.0/24
+        auth cluster required = cephx
+        auth service required = cephx
+        auth client required = cephx
+        osd journal size = 1024
+
+        #
+        # default to replicating two copies of each object.  Allow a minimum
+        # of one copy to be made when number of object stores is degraded
+        #
+        osd pool default size = 2
+        osd pool default min size = 1
+        #
+        # defaults from  http://ceph.com/docs/master/install/manual-deployment/
+        #
+        osd pool default pg num = 333
+        osd pool default pgp num = 333
+        osd crush chooseleaf type = 1
+
+
+
+[osd]
+        osd journal size = 1024
+
+        #
+        #  This is a crutch for ext4 filesystems with limit of 4kb xattr data
+        #  btrfs has no bounds for xattr store
+        #
+        # uncomment the following line if you are mounting with ext4
+        #filestore xattr use omap = true
+
+
+        # For Bobtail (v 0.56) and subsequent versions, you may 
+        # add settings for mkcephfs so that it will create and mount
+        # the file system for you. Remove the comment `#` character for 
+        # the following settings and replace the values in parenthesis 
+        # with appropriate values, or leave the following settings commented 
+        # out to accept the default values. You must specify the --mkfs 
+        # option with mkcephfs in order for the deployment script to 
+        # utilize the following settings, and you must define the 'devs'
+        # option for each osd instance; see below.
+
+        #osd mkfs type = {fs-type}
+        #osd mkfs options {fs-type} = {mkfs options}   # default for xfs is "-f"
+        #osd mount options {fs-type} = {mount options} # default mount option is "rw, noatime"
+
+[mon]
+        mon host = kroll1, kroll2, kroll3, kroll4
+        mon addr = 192.168.2.1:6789, 192.168.2.2:6789, 192.168.2.3:6789, 192.168.2.4:6789
+        mon initial members = 0,1,2
+
+[mds]
+        mds data = /var/lib/ceph/mds/mds-$id
+        keyring = /var/lib/ceph/mds/mds-$id/keyring
+
+[mon.0]
+        host = kroll1
+        mon addr = 192.168.2.1:6789
+
+[mon.1]
+        host = kroll2
+        mon addr = 192.168.2.2:6789
+
+[mon.2]
+        host = kroll3
+        mon addr = 192.168.2.3:6789
+
+[mon.3]
+        host = kroll4
+        mon addr = 192.168.2.4:6789
+
+[osd.0]
+        host = kroll1
+
+[osd.1]
+        host = kroll3
+
+[osd.2]
+        host = kroll4
+
+[mds.0]
+        host = kroll2
+</pre>}}
+
+
+The rest of the file stays untouched including the [mds.0] section that we had put in much earlier.  We pass around the updated conf file to the other hosts.
+
+{{RootCmd|cd /etc/ceph}}
+{{RootCmd|scp ceph.conf kroll2:/etc/ceph|output=<pre>
+ceph.conf                                                         100% 2498     2.4KB/s   2.4KB/s   00:00    
+</pre>}}
+{{RootCmd|scp ceph.conf kroll3:/etc/ceph|output=<pre>
+ceph.conf                                                         100% 2498     2.4KB/s   2.4KB/s   00:00    
+</pre>}}
+{{RootCmd|scp ceph.conf kroll4:/etc/ceph|output=<pre>
+ceph.conf                                                         100% 2498     2.4KB/s   2.4KB/s   00:00    
+</pre>}}
+
+
+On kroll2 we create the mds-0 directory and then use <code>ceph auth</code> to create its keyring.  The result is only a single file with a simple key value stanza.
+{{RootCmd|mkdir -p /var/lib/ceph/mds/mds-0}}
+{{RootCmd|ceph auth get-or-create mds.0 mds 'allow ' osd 'allow *' mon 'allow rwx' > /var/lib/ceph/mds/mds-0/keyring}}
+{{RootCmd|cd /var/lib/ceph/mds/mds-0}}
+{{RootCmd|ls -l|output=<pre>
+total 4
+-rw-r--r-- 1 root root 56 Jul 14 23:10 keyring
+</pre>}}
+{{RootCmd|cat keyring|output=<pre>
+[mds.0]
+        key = (redacted key text)
+</pre>}}
+
+
+We then create a softlink of the ceph openrc script to enable and start mds-0.
+{{RootCmd|cd /etc/init.d}}
+{{RootCmd|ln -s ceph ceph.mds-0}}
+{{RootCmd|rc-update add ceph.mds-0 default|output=<pre>
+ * service ceph.mds-0 added to runlevel default
+</pre>}}
+{{RootCmd|./ceph.mds-0 start|output=<pre>
+ * Caching service dependencies ...                                                                     [ ok ]
+ * Starting Ceph mds.0 ...
+starting mds.0 at :/0                                                                                   [ ok ]
+</pre>}}
+
+
+Looking at the ceph-mds-0.log and the <code>ceph -s</code> command shows us that everything is fine and we now have an mds server running.  We should now be able to use mount.ceph and export out the ceph namespace over nfs and cifs.
+{{RootCmd|cd /var/log/ceph}}
+{{RootCmd|cat ceph-mds.0.log|output=<pre>
+2014-07-14 23:11:25.537494 7f90bdf7a7c0  0 ceph version 0.80.1 (a38fe1169b6d2ac98b427334c12d7cf81f809b74), process ceph-mds, pid 23081
+2014-07-14 23:11:25.574128 7f90b6b44700  1 mds.-1.0 handle_mds_map standby
+2014-07-14 23:11:25.598605 7f90b6b44700  1 mds.0.1 handle_mds_map i am now mds.0.1
+2014-07-14 23:11:25.598649 7f90b6b44700  1 mds.0.1 handle_mds_map state change up:standby --> up:creating
+2014-07-14 23:11:25.598924 7f90b6b44700  0 mds.0.cache creating system inode with ino:1
+2014-07-14 23:11:25.601827 7f90b6b44700  0 mds.0.cache creating system inode with ino:100
+2014-07-14 23:11:25.601852 7f90b6b44700  0 mds.0.cache creating system inode with ino:600
+2014-07-14 23:11:25.601991 7f90b6b44700  0 mds.0.cache creating system inode with ino:601
+2014-07-14 23:11:25.602110 7f90b6b44700  0 mds.0.cache creating system inode with ino:602
+2014-07-14 23:11:25.602188 7f90b6b44700  0 mds.0.cache creating system inode with ino:603
+2014-07-14 23:11:25.602261 7f90b6b44700  0 mds.0.cache creating system inode with ino:604
+2014-07-14 23:11:25.602356 7f90b6b44700  0 mds.0.cache creating system inode with ino:605
+2014-07-14 23:11:25.602427 7f90b6b44700  0 mds.0.cache creating system inode with ino:606
+2014-07-14 23:11:25.602536 7f90b6b44700  0 mds.0.cache creating system inode with ino:607
+2014-07-14 23:11:25.602626 7f90b6b44700  0 mds.0.cache creating system inode with ino:608
+2014-07-14 23:11:25.602762 7f90b6b44700  0 mds.0.cache creating system inode with ino:609
+2014-07-14 23:11:25.602840 7f90b6b44700  0 mds.0.cache creating system inode with ino:200
+2014-07-14 23:11:27.320245 7f90b6b44700  1 mds.0.1 creating_done
+2014-07-14 23:11:27.597400 7f90b6b44700  1 mds.0.1 handle_mds_map i am now mds.0.1
+2014-07-14 23:11:27.597410 7f90b6b44700  1 mds.0.1 handle_mds_map state change up:creating --> up:active
+2014-07-14 23:11:27.597413 7f90b6b44700  1 mds.0.1 recovery_done -- successful recovery!
+2014-07-14 23:11:27.597466 7f90b6b44700  1 mds.0.1 active_start
+</pre>}}
+{{RootCmd|ceph -s|output=<pre>
+    cluster 1798897a-f0c9-422d-86b3-d4933a12c7ac
+     health HEALTH_OK
+     monmap e3: 4 mons at {0=192.168.2.1:6789/0,1=192.168.2.2:6789/0,2=192.168.2.3:6789/0,3=192.168.2.4:6789/0}, election epoch 8, quorum 0,1,2,3 0,1,2,3
+     mdsmap e4: 1/1/1 up {0=0=up:active}
+     osdmap e20: 3 osds: 3 up, 3 in
+      pgmap v86: 192 pgs, 3 pools, 1884 bytes data, 20 objects
+            12703 GB used, 20423 GB / 37259 GB avail
+                 192 active+clean
+</pre>}}
+
+
+
 [[Category:Filesystems]]
