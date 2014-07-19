@@ -1,0 +1,860 @@
+<languages />
+
+{{Metadata|abstract=LVM allows administrators to create meta devices that provide an abstraction layer between a file system and the physical storage that is used underneath.}}
+
+{{InfoBox stack
+|{{InfoBox wikipedia|Logical Volume Manager (Linux)|header=true}}
+}}
+
+'''LVM''' ('''L'''ogical '''V'''olume '''M'''anager) allows administrators to create meta devices that provide an abstraction layer between a file system and the physical storage that is used underneath. The meta devices (on which file systems are placed) are ''logical volumes'', which use storage from storage pools called ''volume groups''. A volume group is provisioned with one or more ''physical volumes'' which are the true devices on which the data is stored.
+
+Physical volumes can be partitions, whole SATA hard drives grouped as JBOD ('''J'''ust a '''B'''unch '''O'''f '''D'''isks), RAID systems, iSCSI, Fibre Channel, eSATA etc.
+
+== Installation ==
+
+LVM is handled by both kernel-level drivers and user space applications to manage the LVM configuration.
+
+=== Kernel ===
+
+Activate the following kernel options:
+
+{{Kernel||<pre>
+Device Drivers  --->
+   Multiple devices driver support (RAID and LVM)  --->
+       <*> Device mapper support
+           <*> Crypt target support
+           <*> Snapshot target
+           <*> Mirror target
+       <*> Multipath target
+           <*> I/O Path Selector based on the number of in-flight I/Os
+           <*> I/O Path Selector based on the service time
+</pre>}}
+
+{{Note|Not everything needs to be enabled; some of the options are only needed for [[#LVM2_Snapshots_and_LVM2_Thin_Snapshots|LVM2 Snapshots and LVM2 Thin Snapshots]], [[#LVM2_Mirrors|LVM2 Mirrors]], [[#LVM2_RAID_0.2FStripeset|LVM2 RAID 0/Stripeset]] and encryption.}}
+
+=== Software ===
+
+Install {{Package|sys-fs/lvm2}}:
+
+{{USEflag|package=sys-fs/lvm2
+|clvm
+|cman
+|lvm1+yes
+|readline+yes
+|selinux++no
+|static
+|static-libs
+|thin+yes
+|udev+yes
+}}
+
+{{Emerge|lvm2}}
+
+== Configuration ==
+
+Configuring LVM is done on several levels:
+# LV, PV and VG management through the management utilities
+# LVM subsystem fine-tuning through the configuration file
+# service management at the distribution level
+# setup through an initial ram file system
+
+Management of the logical and physical volumes as well as the volume groups is handled through the [[#Usage|Usage]] chapter.
+
+=== LVM configuration file ===
+
+LVM has an extensive configuration file at {{Path|/etc/lvm/lvm.conf}}. Most users will not need to modify settings in this file in order to start using LVM.
+
+=== Service management ===
+
+Gentoo provides the LVM service to automatically detect and activate the volume groups and logical volumes.
+
+The service can be managed through the init system.
+
+==== openrc ====
+
+To start LVM manually:
+
+{{RootCmd|/etc/init.d/lvm start}}
+
+To start LVM at boot time:
+
+{{RootCmd|rc-update add lvm boot}}
+
+==== systemd ====
+
+To start lvm manually:
+
+{{RootCmd|systemctl start lvm2-monitor.service}}
+
+To start LVM at boot time:
+
+{{RootCmd|systemctl enable lvm2-monitor.service}}
+
+=== Using LVM in an initramfs ===
+
+Most bootloaders cannot boot from LVM directly - neither GRUB legacy nor LILO can. Grub 2 CAN boot from an LVM linear logical volume, mirrored logical volume and possibly some kinds of RAID logical volumes. No bootloader currently support thin logical volumes. 
+
+For that reason, it is recommended to use a non-LVM /boot partition and mount the LVM root from an initramfs. Such an initramfs can be generated automatically through [[Genkernel|genkernel]], genkernel-next and [[dracut]]:
+
+* '''genkernel''' can boot from all types except thin volumes (as it neither builds nor copies the thin-provisioning-tools binaries from the build host) and maybe RAID10 (RAID10 support requires LVM2 2.02.98, but genkernel builds 2.02.89, however if static binaries are available it can copy those) 
+* '''genkernel-next''' can boot from all types volumes. but needs a new enough app-misc/pax-utils or the resulting thin binaries will be broken (See {{Bug|482504}}) 
+* '''dracut''' should boot all types, but only includes thin support in the initramfs if the host being run on has a thin root.
+
+==== Genkernel/Genkernel-next ====
+
+Emerge either {{Package|sys-kernel/genkernel}} or {{Package|sys-kernel/genkernel-next}}. The static USE flag may also be enabled on the package {{Package|sys-fs/lvm2}} so that genkernel will use the system binaries (otherwise it will build its own private copy). The following example will build only an initramfs (not an entire kernel) and enable support for lvm.
+
+{{RootCmd|genkernel --lvm initramfs}}
+
+The genkernel manpage outlines other options depending on system requirements.
+
+The initrd will require parameters to tell it how to start lvm, and they are supplied the same way as other kernel parameters.  For example:
+
+{{File|/etc/default/grub|Adding dolvm as a kernel boot parameter|<pre>
+GRUB_CMDLINE_LINUX="dolvm"
+</pre>}}
+
+==== Dracut ====
+
+The {{Package|sys-kernel/dracut}} package was ported from the RedHat project and serves a similar tool for generating an initramfs. Since it is currently in ~arch for testing, users will need to [[Knowledge_Base:Accepting_a_keyword_for_a_single_package|accept it]] (through {{Path|/etc/portage/package.accept_keywords}}) to emerge it.  Before doing so, the variable <code>DRACUT_MODULES="lvm"</code> should be added to {{Path|/etc/portage/make.conf}}.  Other modules may be desired, please refer to [[Dracut]]. Generally, the following command will generate a usable default initramfs.
+
+{{RootCmd|dracut -a lvm}}
+
+The initrd will require parameters to tell it how to start lvm, and they are supplied the same way as other kernel parameters.  For example:
+
+{{File|/etc/default/grub|Adding LVM support to the kernel boot parameters|<pre>
+GRUB_CMDLINE_LINUX="rd.lvm.vg=vol00"
+</pre>}}
+
+For a comprehensive list of lvm options within dracut please see the section in the [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm Dracut Manual].
+
+== Usage ==
+
+LVM organizes storage in three different levels as follows:
+* hard drives, partitions, RAID systems or other means of storage are initialized as physical volumes (PVs)
+* Physical Volumes (PV) are grouped together in Volume Groups (VG)
+* Logical Volumes (LV) are managed in Volume Groups (VG)
+
+=== PV (Physical Volume) ===
+Physical Volumes are the actual hardware or storage system LVM builds up upon.
+
+==== Partitioning ====
+
+{{Note|Using separate partitions for provisioning storage to volume groups is only needed if it is not desired to use the entire disk for a single LVM volume group. If the entire disk can be used, then skip this and initialize the entire hard drive as a physical volume.}}
+
+The partition type for ''LVM'' is ''8e'' (Linux LVM).
+
+For instance, to set the type through <code>fdisk</code> for a partition on {{Path|/dev/sda}}:
+
+{{RootCmd|fdisk /dev/sda}}
+
+In <code>fdisk</code>, create partitions using the '''n''' key and then change the partition type with the '''t''' key to ''8e''.
+
+==== Create PV ====
+
+Physical volumes can be created / initialized with the <code>pvcreate</code> command.
+
+For instance, the following command creates a physical volume on the first primary partition of {{Path|/dev/sda}} and {{Path|/dev/sdb}}:
+
+{{RootCmd|pvcreate /dev/sd[ab]1}}
+
+==== List PV ====
+
+With the <code>pvdisplay</code> command, an overview of all active physical volumes on the system can be obtained.
+
+{{RootCmd|pvdisplay|output=<pre>
+ --- Physical volume ---
+  PV Name               /dev/sda1
+  VG Name               volgrp
+  PV Size               160.01 GiB / not usable 2.31 MiB
+  Allocatable           yes 
+  PE Size               4.00 MiB
+  Total PE              40962
+  Free PE               4098
+  Allocated PE          36864
+  PV UUID               3WHAz3-dh4r-RJ0E-5o6T-9Dbs-4xLe-inVwcV
+  
+ --- Physical volume ---
+  PV Name               /dev/sdb1
+  VG Name               volgrp
+  PV Size               160.01 GiB / not usable 2.31 MiB
+  Allocatable           yes 
+  PE Size               4.00 MiB
+  Total PE              40962
+  Free PE               40962
+  Allocated PE          0
+  PV UUID               b031x0-6rej-BcBu-bE2C-eCXG-jObu-0Boo0x
+</pre>}}
+
+If more physical volumes should be displayed, then <code>pvscan</code> can detect inactive physical volumes and activate those.
+
+{{RootCmd|pvscan|output=<pre>
+  PV /dev/sda1  VG volgrp        lvm2 [160.01 GiB / 16.01 GiB free]
+  PV /dev/sdb1  VG volgrp        lvm2 [160.01 GiB / 160.01 GiB free]
+  Total: 2 [320.02 GB] / in use: 2 [320.02 GiB] / in no VG: 0 [0]
+</pre>}}
+
+==== Remove PV ====
+
+LVM automatically distributes the data onto all available physical volumes (unless told otherwise) but in a linear approach. If a requested logical volume (within a volume group) is smaller than the amount of free space on a single physical volume, then all space for the logical volume is claimed on that (single) physical volume in a contiguous manner. This is done for performance reasons.
+
+If a physical volume needs to be removed from a volume group, the data first needs to be moved away from the physical volume. With the <code>pvmove</code> command, all data on a physical volume is moved to other physical volumes within the same volume group.
+
+{{RootCmd|pvmove -v /dev/sda1}}
+
+Such an operation can take a while depending on the amount of data that needs to be moved. Once finished, there should be no data left on the device. Verify with <code>pvdisplay</code> that the physical volume is no longer used by any logical volume.
+
+The next step is to remove the physical volume from the volume group using <code>vgreduce</code> after which the device can be "deselected" as a physical volume using <code>pvremove</code>:
+
+{{RootCmd|vgreduce vg0 /dev/sda1 && pvremove /dev/sda1}}
+
+=== VG (Volume Group) ===
+
+A volume group (VG) groups a number of physical volumes and show up as {{Path|/dev/VG_NAME}} in the device file system. The name of a volume group is chosen by the administrator.
+
+==== Create VG ====
+
+The following command creates a volume group called ''vg0'' with two physical volumes assigned to it: {{Path|/dev/sda1}} and {{Path|/dev/sdb1}}.
+
+{{RootCmd|vgcreate vg0 /dev/sd[ab]1}}
+
+==== List VG ====
+
+To list all active volume groups, use the <code>vgdisplay</code> command:
+
+{{RootCmd|vgdisplay|output=<pre>
+  --- Volume group ---
+  VG Name               vg0
+  System ID             
+  Format                lvm2
+  Metadata Areas        1
+  Metadata Sequence No  8
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                6
+  Open LV               6
+  Max PV                0
+  Cur PV                1
+  Act PV                1
+  VG Size               320.02 GiB
+  PE Size               4.00 MiB
+  Total PE              81924
+  Alloc PE / Size       36864 / 144.00 GiB
+  Free  PE / Size       45056 /176.01 GiB
+  VG UUID               mFPXj3-DdPi-7YJ5-9WKy-KA5Y-Vd4S-Lycxq3
+</pre>}}
+
+If volume groups are missing, use the <code>vgscan</code> command to locate volume groups:
+
+{{RootCmd|vgscan|output=<pre>
+  Reading all physical volumes.  This may take a while...
+  Found volume group "vg0" using metadata type lvm2
+</pre>}}
+
+==== Extend VG ====
+
+Volume groups group physical volumes, allowing administrators to use a pool of storage resources to allocate to file systems. When a volume group does not hold enough storage resources, it is necessary to extend the volume group with additional physical volumes.
+
+The next example extends the volume group ''vg0'' with a physical volume at {{Path|/dev/sdc1}}:
+
+{{RootCmd|vgextend vg0 /dev/sdc1}}
+
+Remember that the physical volume first needs to be initialized as such!
+
+==== Reduce VG ====
+
+If physical volumes need to be removed from the volume group, all data still in use on the physical volume needs to be moved to other physical volumes in the volume group. As seen before, this is handled through the <code>pvmove</code> command, after which the physical volume can be removed from the volume group using <code>vgreduce</code>:
+
+{{RootCmd|pvmove -v /dev/sdc1
+|vgreduce vg0 /dev/sdc1}}
+
+==== Remove VG ====
+
+If a volume group is no longer necessary (or, in other words, the storage pool that it represents is no longer used and the physical volumes in it need to be freed for other purposes) then the volume group can be removed with <code>vgremove</code>. This only works if no logical volume is defined for the volume group, and all but one physical volume have already been removed from the pool.
+
+{{RootCmd|vgremove vg0}}
+
+=== LV (Logical Volume) ===
+
+Logical volumes are the final meta devices which are made available to the system, usually to create file systems on. They are created and managed in volume groups and show up as {{Path|/dev/VG_NAME/LV_NAME}}. Like with volume groups, the name used for a logical volume is decided by the administrator.
+
+==== Create LV ====
+
+To create a logical volume, the <code>lvcreate</code> command is used. The parameters to the command consist out of the requested size for the logical volume (which cannot be larger than the amount of free space in the volume group), the volume group from which the space is to be claimed and the name of the logical volume to be created.
+
+In the next example, a logical volume named ''lvol1'' is created from the volume group named ''vg0'' and with a size of 150MB:
+
+{{RootCmd|lvcreate -L 150M -n lvol1 vg0}}
+
+It is possible to tell <code>lvcreate</code> to use all free space inside a volume group. This is done through the ''-l'' parameter which selects the amount of ''extents'' rather than a (human readable) size. Logical volumes are split into ''logical extents'' which are data chunks inside a volume group. All extents in a volume group have the same size. With the ''-l'' parameter <code>lvcreate</code> can be asked to allocate all free extents:
+
+{{RootCmd|lvcreate -l 100%FREE -n lvol1 vg0}}
+
+Next to ''FREE'' the ''VG'' key can be used to denote the entire size of a volume group.
+
+==== List LV ====
+
+To list all logical volumes, use the <code>lvdisplay</code> command:
+
+{{RootCmd|lvdisplay}}
+
+If logical volumes are missing, then the <code>lvscan</code> command can be used to scan for logical volumes on all available volume groups.
+
+{{RootCmd|lvscan}}
+
+==== Extend LV ====
+
+When a logical volume needs to be expanded, then the <code>lvextend</code> command can be used to grow the allocated space for the logical volume.
+
+For instance, to extend the logical volume ''lvol1'' to a total of 500 MB:
+
+{{RootCmd|lvextend -L500M /dev/vg0/lvol1}}
+
+It is also possible to use the size to be added rather than the total size:
+
+{{RootCmd|lvextend -L+350MB /dev/vg0/lvol1}}
+
+An extended volume group does not immediately provide the additional storage to the end users. For that, the file system on top of the volume group needs to be increased in size as well. Not all file systems allow online resizing, so check the documentation for the file system in question for more information.
+
+For instance, to resize an ext4 file system to become 500MB in size:
+
+{{RootCmd|resize2fs /mnt/data 500M}}
+
+==== Reduce LV ====
+
+If a logical volume needs to be reduced in size, first shrink the file system itself. Not all file systems support online shrinking.
+
+For instance, ext4 does not support online shrinking so the file system needs to be unmounted first. It is also recommended to do a file system check to make sure there are no inconsistencies:
+
+{{RootCmd|umount /mnt/data
+|e2fsck -f /dev/vg0/lvol1
+|resize2fs /dev/vg0/lvol1 150M}}
+
+With a reduced file system, it is now possible to reduce the logical volume as well:
+
+{{RootCmd|lvreduce -L150M /dev/vg0/lvol1}}
+
+==== LV Permissions ====
+
+LVM supports permission states on the logical volumes.
+
+For instance, a logical volume can be set to ''read only'' using the <code>lvchange</code> command:
+
+{{RootCmd|lvchange -p r /dev/vg0/lvol1
+|mount -o remount /dev/vg0/lvol1}}
+
+The remount is needed as the change is not enforced immediately.
+
+To mark the logical volume as writable again, use the ''rw'' permission bit:
+
+{{RootCmd|lvchange -p rw /dev/vg0/lvol1 && mount -o remount /dev/vg0/lvol1}}
+
+==== Remove LV ====
+
+Before removing a logical volume, make sure it is no longer mounted:
+
+{{RootCmd|umount /dev/vg0/lvol1}}
+
+Deactivate the logical volume so that no further write activity can take place:
+
+{{RootCmd|lvchange -a n /dev/vg0/lvol1}}
+
+With the volume unmounted and deactivated, it can now be removed, freeing the extents allocated to it for use by other logical volumes in the volume group:
+
+{{RootCmd|lvremove /dev/vg0/lvol1}}
+
+== Features ==
+
+LVM provides quite a few interesting features for storage administrators, including (but not limited to)
+* thin provisioning (over-committing storage)
+* snapshot support
+* volume types with different storage allocation methods
+
+=== Thin provisioning ===
+
+Recent versions of LVM2 (2.02.89) support "thin" volumes. Thin volumes are to block devices what sparse files are to file systems. Thus, a thin logical volume within a pool can be "over-committed": its presented size can be larger than the allocated size - it can even be larger than the pool itself. Just like a sparse file, the extents are allocated as the block device gets populated. If the file system has ''discard'' support extents are freed again as files are removed, reducing space utilization of the pool.
+
+Within LVM, such a thin pool is a special type of logical volume, which itself can host logical volumes.
+
+==== Creating a thin pool ====
+
+{{Warning|If an overflow occurs within the thin pool metadata, then the pool will be corrupted. '''LVM cannot recover from this'''.}} 
+
+{{Note|If the thin pool gets exhausted, any process that would cause the thin pool to allocate more (unavailable) extents will be stuck in "killable sleep" state until either the thin pool is extended or the process recieves SIGKILL.}}
+
+Each thin pool has metadata associated with it, which is added to the thin pool size. LVM will compute the size of the metadata based on the size of the thin pool as the minimum of <tt>pool_chunks * 64 bytes</tt> or 2MiB, whichever is larger. The administrator can select a different metadata size as well.
+
+To create a thin pool, add the ''--type thin-pool --thinpool thin_pool'' parameters to <code>lvcreate</code>:
+
+{{RootCmd|lvcreate -L 150M --type thin-pool --thinpool thin_pool vg0}}
+
+The above example creates a thin pool called ''thin_pool'' with a total size of 150 MB. This is the real allocated size for the thin pool (and thus the total amount of actual storage that can be used).
+
+To explicitly ask for a certain metadata size, use the ''--metadatasize'' parameter:
+
+{{RootCmd|lvcreate -L 150M --metadatasize 2M --type thin-pool --thinpool thin_pool vg0}}
+
+Due to the metadata that is added to the thin pool, the intuitive way of using all available size in a volume group for a logical volume does not work (see LVM bug [https://bugzilla.redhat.com/show_bug.cgi?id=812726|812726]):
+
+{{RootCmd|lvcreate -l 100%FREE --type thin-pool --thinpool thin_pool vg0|output=<pre>
+Insufficient suitable allocatable extents for logical volume thin_pool: 549 more required
+</pre>}}
+
+Note the thin pool does not have an associated device node like other LV's.
+
+==== Creating a thin logical volume ====
+
+A ''thin logical volume'' is a logical volume inside the thin pool (which itself is a logical volume). As thin logical volumes are ''sparse'', a virtual size instead of a physical size is specified using the ''-V'' parameter:
+
+{{RootCmd|lvcreate -T vg0/thin_pool -V 300M -n lvol1}}
+
+In this example, the (thin) logical volume ''lvol1'' is exposed as a 300MB-sized device, even though the underlying pool only holds 150MB of real allocated storage.
+
+It is also possible to create both the thin pool as well as the logical volume inside the thin pool in one command:
+
+{{RootCmd|lvcreate -T vg0/thin_pool -V 300M -L150M -n lvol1}}
+
+==== Listing thin pools and thin logical volumes ====
+
+Thin pools and thin logical volumes are special types of logical volumes, and as such as displayed through the <code>lvdisplay</code> command. The <code>lvscan</code> command will also detect these logical volumes.
+
+==== Extending a thin pool ====
+
+{{Warning|As of LVM2 2.02.89, the metadata size of the thin pool cannot be expanded, it is fixed at creation}}
+
+The thin pool is expanded like a non-thin logical volume using <code>lvextend</code>. For instance:
+
+{{RootCmd|lvextend -L500M vg0/thin_pool}}
+
+==== Extending a thin logical volume ====
+
+A thin logical volume is expanded just like a regular one:
+
+{{RootCmd|lvextend -L1G vg0/lvol1}}
+
+Note that the <code>lvextend</code> command uses the ''-L'' option (or ''-l'' if extent counts are used) and not a "virtual size" option as was used during the creation. 
+
+==== Reducing a thin pool ====
+
+Currently, LVM cannot reduce the size of the thin pool. See LVM bug [https://bugzilla.redhat.com/show_bug.cgi?id=812731|812731].
+
+==== Reducing a thin logical volume ====
+
+Thin logical volumes are reduced just like regular logical volumes.
+
+For instance:
+{{RootCmd|lvreduce -L300M vg0/lvol1l}}
+
+Note that the <code>lvreduce</code> command uses the ''-L'' option (or ''-l'' if extent counts are used) and not a "virtual size" option as was used during the creation.
+
+==== Removing thin pools ====
+
+Thin pools cannot be removed until all the thin logical volumes inside it are removed.
+
+When a thin pool no longer services any thin logical volume, it can be removed through the <code>lvremove</code> command:
+
+{{RootCmd|lvremove vg0/thin_pool}}
+
+=== LVM2 snapshots and thin snapshots ===
+
+A snapshot is a logical volume that acts as copy of another logical volume. It displays the state of the original logical volume at the time of snapshot creation.
+
+==== Creating a snapshot logical volume ====
+
+A snapshot logical volume is created using the ''-s'' option to <code>lvcreate</code>. Snapshot logical volumes are still given allocated storage as LVM "registers" all changes made to the original logical volume and stores these changes in the allocated storage for the snapshot. When querying the snapshot state, LVM will start from the original logical volume and then check all changes registered, "undoing" the changes before showing the result to the user.
+
+A snapshot logical volume henceforth "growths" at the rate that changes are made on the original logical volume. When the allocated storage for the snapshot is completely used, then the snapshot will be removed automatically from the system.
+
+{{RootCmd|lvcreate -l 10%VG -s -n 20140412_lvol1 /dev/vg0/lvol1}}
+
+The above example creates a snapshot logical volume called ''20140412_lvol1'', based on the logical volume ''lvol1'' in volume group ''vg0''. It uses 10% of the space (extents actually) allocated to the volume group.
+
+==== Accessing a snapshot logical volume ====
+
+Snapshot logical volumes can be mounted like regular logical volumes. They are even not restricted to read-only operations - it is possible to modify snapshots and thus use it for things such as testing changes before doing these on a "production" file system.
+
+As long as snapshot logical volumes exist, the regular/original logical volume cannot be reduced in size or removed.
+
+==== LVM thin snapshots ====
+
+{{Note|A thin snapshot can only be taken on a thin pool for a thin logical volume. The thin device mapper target supports thin snapshots of read-only non-thin logical volumes, but the LVM2 tooling does not support this. However, it is possible to create a regular (non-thin) snapshot logical volume of a thin logical volume.}}
+
+To create a thin snapshot, the <code>lvcreate</code> command is used with the <code>-s</code> option. No size declaration needs to be passed on:
+
+{{RootCmd|lvcreate -s -n 20140413_lvol1 /dev/vg0/lvol1}}
+
+Thin logical volume snapshots have the same size as their original thin logical volume, and use a physical allocation of 0 just like all other thin logical volumes. 
+
+{{Important|If ''-l'' or ''-L'' is specified, a snapshot will still be created, but the resulting snapshot will be a regular snapshot, not a thin snapshot.}}
+
+It is also possible to take snapshots of snapshots:
+
+{{RootCmd|lvcreate -s -n 1_20140413_lvol1 /dev/vg0/20140413_lvol1}}
+
+Thin snapshots have several advantages over regular snapshots. First, thin snapshots are independent of their original logical volume once created. The original logical volume can be shrunk or deleted without affecting the snapshot. Second, thin snapshots can be efficiently created recursively (snapshots of snapshots) without the "chaining" overhead of regular recursive LVM snapshots.
+
+==== Rolling back to snapshot state ====
+
+To rollback the logical volume to the version of the snapshot, use the following command:
+
+{{RootCmd|lvconvert --merge /dev/vg0/20140413_lvol1}}
+
+This might take a couple of minutes, depending on the size of the volume.
+
+{{Important|The snapshot will disappear and this change is not revertible}}
+
+==== Rolling back thin snapshots ====
+
+For thin volumes, <code>lvconvert --merge</code> does not work. Instead, delete the original logical volume and rename the snapshot:
+
+{{RootCmd|umount /dev/vg0/lvol1
+|lvremove /dev/vg0/lvol1
+|lvrename vg0/20140413_lvol1 lvol1}}
+
+=== Different storage allocation methods ===
+
+LVM supports different allocation methods for storage:
+* linear volumes (which is the default)
+* mirrored volumes (in a more-or-less active/standby setup)
+* striping (RAID0)
+* mirrored volumes (RAID1 - which is more an active/active setup)
+* striping with parity (RAID4 and RAID5)
+* striping with double parity (RAID6)
+* striping and mirroring (RAID10)
+
+==== Linear volumes ====
+
+Linear volumes are the most common kind of LVM volumes. LVM will attempt to allocate the logical volume to be as physically contiguous as possible. If there is a physical volume large enough to hold the entire logical volume, then LVM will allocate it there, otherwise it will split it up into as few pieces as possible.
+
+The commands introduced earlier on to create volume groups and logical volumes create linear volumes.
+
+Because linear volumes have no special requirements, they are the easiest to manipulate and can be resized and relocated at will. If a logical volume is allocated across multiple physical volumes, and any of the physical volumes become unavailable, then that logical volume cannot be started anymore and will be unusable.
+
+==== Mirrored volumes ====
+
+LVM supports ''mirrored'' volumes, which provide fault tolerance in the event of drive failure. Unlike RAID1, there is no performance benefit - all reads and writes are delivered to a single side of the mirror.
+
+To keep track of the mirror state, LVM requires a ''log'' to be kept. It is recommended (and often even mandatory) to position this log on a physical volume that does not contain any of the mirrored logical volumes. There are three kind of logs that can be used for mirrors:
+
+# '''Disk''' is the default log type. All changes made are logged into extra metadata extents, which LVM manages. If a device fails, then the changes are kept in the log until the mirror can be restored again.
+# '''Mirror''' logs are '''disk''' logs that are themselves mirrored. 
+# '''Core''' mirror logs record the state of the mirror in memory only. LVM will have to rebuild the mirror every time it is activated. This type is useful for temporary mirrors.
+
+To create a logical volume with a single mirror, pass the ''-m 1'' argument (to select standard mirroring) with optionally ''--mirrorlog'' to select a particular log type:
+
+{{RootCmd|lvcreate -m 1 --mirrorlog mirror -l 40%VG --nosync -n lvol1 vg0}}
+
+The <tt>-m 1</tt> tells LVM to create one (additional) mirror, so requiring 2 physical volumes. The <tt>--nosync</tt> option is an optimization - without it LVM will try synchronize the mirror by copying empty sectors from one logical volume to another.
+
+It is possible to create a mirror of an existing logical volume:
+
+{{RootCmd|lvconvert -m 1 -b vg0/lvol1}}
+
+The ''-b'' option does the conversion in the background as this can take quite a while.
+
+To remove a mirror, set the number of mirrors (back) to 0:
+
+{{RootCmd|lvconvert -m0 vg0/lvol1}}
+
+If part of the mirror is unavailable (usually because the disk containing the physical volume has failed), the volume group will need to be brought up in degraded mode:
+
+{{RootCmd|vgchange -ay --partial vg0}}
+
+On the first write, LVM will notice the mirror is broken. The default policy ("remove") is to automatically reduce/break the mirror according to the number of pieces available. A 3-way mirror with a missing physical volume will be reduced to 2-way mirror; a 2-way mirror will be reduced to a regular linear volume. If the failure is only transient, and the missing physical volume returns after LVM has broken the mirror, the mirrored logical volume will need to be recreated on it. 
+
+To recover the mirror, the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on that one). Then the mirror can be recreated with <tt>lvconvert</tt> at which point the old physical volume can be removed from the volume group:
+
+{{RootCmd|vgextend vg0 /dev/sdc1
+|lvconvert -b -m 1 --mirrorlog disk vg0/lvol1
+|vgreduce --removemissing vg0}}
+
+It is possible to have LVM recreate the mirror with free extents on a different physical volume if one side fails. To accomplish that, set <code>mirror_image_fault_policy</code> to ''allocate'' in {{Path|lvm.conf}}.
+
+==== Thin mirrors ====
+
+It is not (yet) possible to create a mirrored thin pool or thin volume. It is possible to create a mirrored thin pool my creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the volume group. Also, conversion of a mirror into a thin pool '''destroys''' all existing data in the mirror!}}
+
+{{RootCmd|lvcreate -m 1 --mirrorlog mirrored -l40%VG -n thin_pool vg0
+|lvcreate -m 1 --mirrorlog mirrored -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
+
+==== Striping (RAID0) ====
+
+Instead of a linear volume, where multiple contiguous physical volumes are appended, it possible to create a ''striped'' or ''RAID 0'' volume for better performance. This will alternate storage allocations across the available physical volumes.
+
+To create a striped volume over three physical volumes:
+
+{{RootCmd|lvcreate -i 3 -l 20%VG -n lvol1_stripe vg0|output=<pre>
+Using default stripesize 64.00 KiB
+</pre>}}
+
+The -i option indicates over how many physical volumes the striping should be done.
+
+It is possible to mirror a stripe set. The -i and -m options can be combined to create a striped mirror:
+
+{{RootCmd|lvcreate -i 2 -m 1 -l 10%VG vg0}}
+
+This creates a 2 physical volume stripe set and mirrors it on 2 different physical volumes, for a total of 4 physical volumes. An existing stripe set can be mirrored with <tt>lvconvert</tt>.
+
+A thin pool can be striped like any other logical volume. All the thin volumes created from the pool inherit that settings - do not specify it manually when creating a thin volume.
+
+It is not possible to stripe an existing volume, nor reshape the stripes across more/less physical volumes, nor to convert to a different RAID level/linear volume. A stripe set can be mirrored. It is possible to extend a stripe set across additional physical volumes, but they must be added in multiples of the original stripe set (which will effectively linearly append a new stripe set).
+
+==== Mirroring (RAID1) ====
+
+Unlike RAID 0, which is striping, RAID 1 is mirroring, but implemented differently than the original LVM mirror. Under RAID1, reads are spread out across physical volumes, improving performance. RAID1 mirror failures do not cause I/O to block because LVM does not need to break it on write.
+
+Any place where an LVM mirror could be used, a RAID 1 mirror can be used in its place. It is possible to have LVM create RAID1 mirrors instead of regular mirrors implicitly by setting <tt>mirror_segtype_default</tt> to ''raid1'' in {{Path|lvm.conf}}.
+
+To create a logical volume with a single mirror:
+
+{{RootCmd|lvcreate -m 1 --type raid1 -l 40%VG --nosync -n lvm_raid1 vg0}}
+
+Note the difference for creating a mirror: There is no ''mirrorlog'' specified, because RAID1 logical volumes do not have an explicit mirror log - it built-in to the logical volume.
+
+It is possible to convert an existing logical volume to RAID 1:
+
+{{RootCmd|lvconvert -m 1 --type raid1 -b vg0/lvol1}}
+
+To remove a RAID 1 mirror, set the number of mirrors to 0:
+
+{{RootCmd|lvconvert -m0 vg0/lvm_raid1}}
+
+If part of the RAID1 is unavailable (usually because the disk containing the physical volume has failed), the volume group will need to be brought up in degraded mode:
+
+{{RootCmd|vgchange -ay --partial vg0}}
+
+Unlike an LVM mirror, writing does NOT breaking the mirroring. If the failure is only transient, and the missing physical volume returns, LVM will resync the mirror by copying cover the out-of-date segments instead of the entire logical volume. If the failure is permanent, then the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on a different PV). The mirror can then be repaired with ''lvconvert'', and the old physical volume can be removed from the volume group:
+
+{{RootCmd|vgextend vg0 /dev/sdc1
+|lvconvert --repair -b vg0/lvm_raid1
+|vgreduce --removemissing vg0}}
+
+==== Thin RAID1 ====
+
+It is not (yet) possible to create a RAID 1 thin pool or thin volume. It is possible to create a RAID 1 thin pool by creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will then merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID 1 into a thin pool '''destroys''' all existing data in the mirror!}}
+
+{{RootCmd|lvcreate -m 1 --type raid1 -l40%VG -n thin_pool vg0
+|lvcreate -m 1 --type raid1 -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg00/thin_meta}}
+
+==== Striping with parity (RAID4 and RAID5) ====
+
+{{Note|Striping with parity requires at least 3 physical volumes.}}
+
+RAID 0 is not fault-tolerant - if any of the physical volumes fail then the logical volume is unusable. By adding a parity stripe to RAID 0 the logical volume can still function if a physical volume is missing. A new physical volume can then be added to restore fault tolerance.
+
+Stripsets with parity come in 2 flavors: RAID 4 and RAID 5. Under RAID 4, all the parity stripes are stored on the same physical volume. This can become a bottleneck because all writes hit that physical volume, and it gets worse the more physical volumes are in the array. With RAID 5, the parity data is distributed evenly across the physical volumes so none of them become a bottleneck. For that reason, RAID 4 is rare and is considered obsolete/historical. In practice, all stripesets with parity are RAID 5.
+
+{{RootCmd|lvcreate --type raid5 -l 20%VG -i 2 -n lvm_raid5 vg0}}
+
+Only the data physical volumes are specified with -i, LVM adds one to it automatically for the parity. So for a 3 physical volume RAID5, ''-i 2'' is passed on and not ''-i 3''.
+
+When a physical volume fails, then the volume group will need to be brought up in degraded mode:
+
+{{RootCmd|vgchange -ay --partial vg0}}
+
+The volume will work normally at this point, however this degrades the array to RAID 0 until a replacement physical volume is added. Performance is unlikely to be affected while the array is degraded - although it does need to recompute its missing data via parity, it only requires simple XOR for the parity block with the remaining data. The overhead is negligible compared to the disk I/O.
+
+To repair the RAID5:
+
+{{RootCmd|lvconvert --repair vg0/lvm_raid5
+|vgreduce --removemissing vg0}}
+
+It is possible to replace a still working physical volume in RAID5 as well:
+
+{{RootCmd|lvconvert --replace /dev/sdb1 vg0/lvm_raid5
+|vgreduce vg0 /dev/sdb1}}
+
+The same restrictions of stripe sets apply to stripe sets with parity as well: it is not possible to enable striping with parity on an existing volume, nor reshape the stripes with parity across more/less physical volumes, nor to convert to a different RAID level/linear volume. A stripe set with parity can be mirrored. It is possible to extend a stripe set with parity across additional physical volumes, but they must be added in multiples of the original stripe set with parity (which will effectively linearly append a new stripe set with parity).
+
+==== Thin RAID5 logical volumes ====
+
+It is not (yet) possible to create stripe set with parity (RAID5) thin pools or thin logical volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 logical volume and then converting the logical volume into a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
+
+{{RootCmd|lvcreate --type raid5 -i 2  -l20%VG -n thin_pool vg0
+|lvcreate --type raid5 -i 2 -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg00/thin_meta}}
+
+==== Striping with double parity (RAID6) ====
+
+{{Note|RAID6 requires at least 5 physical volumes.}}
+
+RAID 6 is similar to RAID 5, however RAID 6 can survive up to '''two''' physical volume failures, thus offering more fault tolerance than RAID5 at the expense of extra physical volumes. 
+
+{{RootCmd|lvcreate --type raid6 -l 20%VG -i 3 -n lvm_raid6 vg00}}
+
+Like raid5, the -i option is used to specify the number of physical volumes to stripe, excluding the 2 physical volumes for parity. So for a 5 physical volume RAID6, pass on ''-i 3'' and not ''-i 5''.
+
+Recovery for RAID6 is the same as RAID5.
+
+{{Note|Unlike RAID5 where parity block is cheap to recompute vs disk I/O, this is only half true in RAID6. RAID6 uses 2 parity stripes: One stripe is computed the same way as RAID5 (simple XOR). The second parity stripe is much harder to compute - see [https://www.kernel.org/pub/linux/kernel/people/hpa/raid6.pdf|raid6 (pdf)] for more information.}}
+
+==== Thin RAID6 logical volumes ====
+
+It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 logical volume and then converting the logical volume into a thin pool with <tt>lvconvert</tt>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
+
+{{RootCmd|lvcreate --type raid6 -i 2  -l20%VG -n thin_pool vg0
+|lvcreate --type raid6 -i 2 -L4MB -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
+
+==== LVM RAID10 ====
+
+{{Note|RAID10 requires at least 4 physical volumes. Also LVM syntax requires the number of physical volumes be multiple of the numbers stripes and mirror, even though RAID10 format does not}}
+
+RAID10 is a combination of RAID0 and RAID1. It is more powerful than RAID0+RAID1 as the mirroring is done at the stripe level instead of the logical volume level, and therefore the layout doesn't need to be symmetric. A RAID10 volume can tolerate at least a single missing physical volume, and possibly more.
+
+{{Note|LVM currently limits RAID10 to a single mirror.}}
+
+{{RootCmd|lvcreate --type raid10 -l 1020 -i 2 -m 1 --nosync -n lvm_raid10 vg0}}
+
+Both the ''-i and -m'' options are specified: ''-i'' is the number of stripes and ''-m'' is the number of mirrors. Two stripes and 1 mirror requires 4 physical volumes.
+
+==== Thin RAID10 ====
+
+It is not (yet) possible to create a RAID10 thin pool or thin volumes. It is possible to create a RAID10 thin pool by creating a normal RAID10 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
+ 
+{{Warning|Conversion of a RAID10 logical volume into a thin pool '''destroys''' all existing data in the logical volume!}}
+
+{{RootCmd|lvcreate -i 2 -m 1 --type raid10 -l 1012 -n thin_pool vg0
+|lvcreate -i 2 -m 1 --type raid10 -l 6 -n thin_meta vg0
+|lvconvert --thinpool vg0/thin_pool --poolmetadata vg0/thin_meta}}
+
+== Experimenting with LVM ==
+
+It is possible to experiment with LVM without using real storage devices. To accomplish this, loopback devices are created.
+
+First make sure to have the loopback module loaded. 
+
+{{RootCmd|modprobe -r loop && modprobe loop max_part{{=}}63}}
+
+{{Note|If loopback support is built into the kernel, then use <code>loop.max_part{{=}}63</code> as boot option.}}
+
+Next configure LVM to not use [[udev]] to scan for devices:
+
+{{File|/etc/lvm/lvm.conf|Disabling udev in LVM config|<pre>
+obtain_device_list_from_udev = 0
+</pre>}}
+
+{{Important|This is for testing only, make sure to change the setting back when dealing with real devices since it is much faster to use udev!}}
+
+Create some image files which will become the storage devices. The next example uses five files for a total of about ~10GB of real hard drive space:
+
+{{RootCmd|mkdir /var/lib/lvm_img
+|dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm0.img bs{{=}}1024 seek{{=}}2097152
+|dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm1.img bs{{=}}1024 seek{{=}}2097152
+|dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm2.img bs{{=}}1024 seek{{=}}2097152
+|dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm3.img bs{{=}}1024 seek{{=}}2097152
+|dd if{{=}}/dev/null of{{=}}/var/lib/lvm_img/lvm4.img bs{{=}}1024 seek{{=}}2097152}}
+
+Check which loopback devices are available:
+
+{{RootCmd|losetup -a}}
+
+Assuming all loopback devices are available, next create the devices:
+
+{{RootCmd|losetup /dev/loop0 /var/lib/lvm_img/lvm0.img
+|losetup /dev/loop1 /var/lib/lvm_img/lvm1.img
+|losetup /dev/loop2 /var/lib/lvm_img/lvm2.img
+|losetup /dev/loop3 /var/lib/lvm_img/lvm3.img
+|losetup /dev/loop4 /var/lib/lvm_img/lvm4.img}}
+
+The {{Path|/dev/loop[0-4]}} devices are now available to use as any other hard drive in the system (and thus be perfect for physical volumes).
+
+{{Note|On the next reboot, all the loopback devices will be released and the folder {{Path|/var/lib/lvm_img}} can be deleted.}}
+
+== Troubleshooting ==
+
+LVM has a few features that already provide some level of redundancy. However, there are situations where it is possible to restore lost physical volumes or logical volumes.
+
+=== vgcfgrestore utility ===
+
+By default, on any change to a LVM physical volume, volume group, or logical volume, LVM2 create a backup file of the metadata in {{Path|/etc/lvm/archive}}. These files can be used to recover from an accidental change (like deleting the wrong logical volume). LVM also keeps a backup copy of the most recent metadata in {{Path|/etc/lvm/backup}}. These can be used to restore metadata to a replacement disk, or repair corrupted metadata.
+
+To see what states of the volume group are available to be restored (partial output to improve readability):
+
+{{RootCmd|vgcfgrestore --list vg00|output=<pre>
+  File:		/etc/lvm/archive/vg0_00042-302371184.vg
+  VG name:    	vg0
+  Description:	Created *before* executing 'lvremove vg0/lvm_raid1'
+  Backup Time:	Sat Jul 13 01:41:32 201
+</pre>}}
+
+==== Recovering an accidentally deleted logical volume ====
+
+Assuming the logical volume ''lvm_raid1'' was accidentally removed from volume group ''vg0'', it is possible to recover it as follows:
+
+{{RootCmd|vgcfgrestore -f /etc/lvm/archive/vg0_00042-302371184.vg vg0}}
+
+{{Important|<tt>vgcfgrestore</tt> only restores LVM metadata, ''not'' the data inside the logical volume. However <code>pvremove</code>, <code>vgremove</code>, and <code>lvremove</code> only wipe metadata, leaving any data intact. If <code>issue_discards</code> is set in {{Path|/etc/lvm/lvm.conf}} though, then these command ''are'' destructive to data.}}
+
+==== Replacing a failed physical volume ====
+
+It possible to do a true "replace" and recreate the metadata on the new physical volume to be the same as the old physical volume:
+
+{{RootCmd|vgdisplay --partial --verbose|output=<pre>
+  --- Physical volumes ---
+  PV Name               /dev/loop0     
+  PV UUID               iLdp2U-GX3X-W2PY-aSlX-AVE9-7zVC-Cjr5VU
+  PV Status             allocatable
+  Total PE / Free PE    511 / 102
+  
+  PV Name               unknown device     
+  PV UUID               T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY
+  PV Status             allocatable
+  Total PE / Free PE    511 / 102
+</pre>}}
+
+The important line here is the UUID "unknown device". 
+
+{{RootCmd|pvcreate --uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY --restorefile /etc/lvm/backup/vg0 /dev/loop1|output=<pre>
+  Couldn't find device with uuid T7bUjc-PYoO-bMqI-53vh-uxOV-xHYv-0VejBY.
+  Physical volume "/dev/loop1" successfully created</pre>}}
+
+This recreates the physical volume metadata, but not the missing logical volume or volume group data on the physical volume.
+
+{{RootCmd|vgcfgrestore -f /etc/lvm/backup/vg0 vg0|output=<pre>
+  Restored volume group vg0
+</pre>}}
+
+This now reconstructs all the missing metadata on the physical volume, including the logical volume and volume group data. However it doesn't restore the data, so the mirror is out of sync.
+
+{{RootCmd|vgchange -ay vg0|output=<pre>
+  device-mapper: reload ioctl on  failed: Invalid argument
+  1 logical volume(s) in volume group "vg0" now active
+</pre>}}
+
+{{RootCmd|lvchange --resync vg0/lvm_raid1|output=<pre>
+Do you really want to deactivate logical volume lvm_raid1 to resync it? [y/n]: y
+</pre>}}
+
+This will resync the mirror. This works with RAID 4,5 and 6 as well. 
+
+=== Deactivating a logical volume ===
+
+It is possible to deactivate a logical volume with the following command:
+
+{{RootCmd|umount /dev/vg0/lvol1
+|lvchange -a n /dev/vg0/lvol1}}
+
+It is not possible to mount the logical volume anywhere before it gets reactivated:
+
+{{RootCmd|lvchange -a y /dev/vg0/lvol1}}
+
+== External resources ==
+
+* [http://sourceware.org/lvm2/ LVM2 sourceware.org]
+* [http://tldp.org/HOWTO/LVM-HOWTO/ LVM tldp.org]
+* [http://sources.redhat.com/lvm2/wiki/ LVM2 Wiki redhat.com]
+
+
+[[Category:Core system]]
