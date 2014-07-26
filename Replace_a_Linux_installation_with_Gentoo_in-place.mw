@@ -1,0 +1,95 @@
+This document gives an idea of the steps that need to be taken to replace a running linux system with Gentoo. Based on [http://www.darkridge.com/~jpr5/doc/rh-gentoo.html Jordan Ritter's article on replacing RHEL9 with Gentoo].
+
+{{Warning|There is no guarantee that this will work. It has only been tested once. A long time ago. Backup all your data and make sure you have other means of returning the system back to a functioning state.}}
+{{Warning|These instructions were only tested on an amd64 debian box with a 3.2.46-1+deb7u1 kernel of unknown configuration, so you might have to change some steps. Please think twice before replacing the kernel.}}
+
+=== Prepare the system === 
+We're going to need bzip2 for the stage3.
+{{RootCmd
+|apt-get install bzip2
+}}
+
+We're also about to overwrite fstab, so save it to /tmp.
+{{RootCmd
+|cp /etc/fstab /tmp/fstab
+}}
+
+Mark all present files as if they were modified at the beginning of time (which was in 1970) so that we can remove them later on.
+Modprobe is temporarily removed as it might potentially slow down this proccess.
+{{RootCmd
+|mv /sbin/modprobe /sbin/.modprobe
+|find / -print0 {{!}} xargs -0 touch -d "1970-01-01 00:00 +0000" -m
+|mv /sbin/.modprobe /sbin/modprobe
+}}
+
+=== Overwrite root with Gentoo === 
+Extract the latest stage3 tarball over the current system.
+{{RootCmd
+|wget -P /tmp ftp://files.gentoo.gr/releases/amd64/current-iso/stage3-amd64-\*.tar.bz2
+|tar xjpf /tmp/stage3* -C /
+}}
+
+Gentoo's /lib and /usr/lib are symlinks and tar if tar warned you about this, you need to fix them.
+{{RootCmd
+|mv /lib     /lib_     && ln -s /lib64     /lib
+|mv /usr/lib /usr/lib_ && ln -s /usr/lib64 /usr/lib
+}}
+
+Recover fstab from /tmp as it has been overwritten by tar.
+You can also copy it from /etc/mtab.
+{{RootCmd
+|cp /tmp/fstab /etc/fstab
+}}
+
+=== Bring the Gentoo system to a bootable state === 
+You will want to be able to log in to your new system even if network/sshd fails, so set a root password.
+{{RootCmd
+|passwd
+}}
+
+Enable your network interfaces.
+{{RootCmd
+|cd /etc/init.d
+|ln -s net.lo net.eth0
+|vim /etc/conf.d/net
+|rc-update add net.eth0
+}}
+
+Prevent any network device renaming surprises.
+{{RootCmd
+|ln -s /dev/null /etc/udev/rules.d/80-net-name-slot.rules
+}}
+
+Fetch dhcpcd if you're going to be using DHCP. Otherwise, set up your interfaces manually.
+{{RootCmd
+|emerge-webrsync
+|emerge dhcpcd
+}}
+
+Set the timezone.
+{{RootCmd
+|TIMEZONE{{=}}Continent/City
+|cp /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+|echo $TIMEZONE > /etc/timezone
+}}
+
+Enable sshd for remote access
+{{RootCmd
+|rc-update add sshd
+}}
+
+Feel free to test the system and finally reboot. You might have to use -f.
+{{RootCmd
+|reboot
+}}
+
+=== Remove anything that was left behind by the previous OS === 
+If everything is now working as expected, go ahead and delete all the old files. /home and /root are spared.
+{{RootCmd
+|rm -rf /lib_ /usr/lib_
+|find /bin /sbin /etc /lib /usr /var -newermt "1970-01-01" ! -newermt "1970-01-02" -print0 {{!}} xargs -0 rm -rf
+}}
+{{Warning
+|`find -newerXY` needs a reasonably new `find` (>=4.3.3)
+|If you do not have it, refer to the link above for alternate predicates
+}}
