@@ -1,0 +1,901 @@
+<!-- Page: Configuring_systemd_and_Installing_Necessary_Tools -->
+
+<span id="config_systemd">In this section</span>, we'll be following along with [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=9 Chapter 9] of the Gentoo handbook, although of course you are at this point already booted into your new system (in contrast to the handbook flow).
+
+The steps we'll be undertaking are:
+# Re-establishing networking, and setting up an <tt>ssh</tt> session from the helper PC;
+# Setting up <tt>systemd</tt> configuration options, such as locale;
+# Emerging additional system tools, such a logger, <tt>cron</tt> daemon etc.;
+# Ensuring the system is fully up-to-date (using <tt>genup</tt> from <tt>sakaki-tools</tt>);
+# Performing a precautionary reboot ''without'' the <tt>plymouth</tt> graphical boot manager;
+# Enabling the graphical boot manager (<tt>plymouth</tt>), and restarting.
+
+Once this is complete, we'll be in a position to configure secure boot, and bring up GNOME 3.
+
+So, let's get going with the configuration!
+
+{{Note|In what follows, you may also find it useful to refer to Saikat Basak's "systemd on Gentoo" tutorial and of course the Gentoo wiki page on <tt>systemd</tt>.<ref>Basak, Satkat. [http://www.unixmen.com/systemd-on-gentoo/ "systemd on Gentoo"]</ref><ref>Gentoo Wiki: [[Systemd{{!}}"systemd"]]</ref>}}
+
+== <span id="bring_back_ssh">Re-establishing Networking and <tt>ssh</tt></span> ==
+
+Our first order of business is to get back our network connection, then <tt>sshd</tt>, so we can log in remotely, and use the facilities of the helper machine to complete the install.
+
+To <span id="bring_up_if">bring up your network interface</span>, issue (directly at the keyboard of the target PC):
+{{RootCmd
+|ifconfig enp0s25 up
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute the interface name you [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#note_if_name|wrote down before rebooting]] for <tt>enp0s25</tt> in the above (this will start with <tt>wl</tt>, not <tt>en</tt>, if using WiFi for the install).}}
+
+Next, <span id="start_wpa_supplicant">if you are performing</span> this install over '''WiFi''', we need to ensure that <tt>wpa_supplicant</tt> can be started by <tt>dhcpcd</tt><ref>ArchLinux Wiki: [https://wiki.archlinux.org/index.php/Dhcpcd#10-wpa_supplicant "dhcpcd: Hooks: 10-wpa_supplicant"]</ref> (NB: if using '''wired Ethernet''' for the install, you should [[#start_dhcpcd|'''skip''']] the following command). Issue:
+{{RootCmd
+|mv -v /etc/wpa.conf /etc/wpa_supplicant/wpa_supplicant.conf
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|The {{Path|/etc/wpa.conf}} file was created [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#copy_wpa_conf{{!}}earlier]].}}
+{{Note|We will delete this file later, once {{Package|net-misc/networkmanager}} takes over (with GNOME).}}
+
+Now we <span id="start_dhcpcd">need to ensure</span> that the [[:Wikipedia:Dynamic_Host_Configuration_Protocol|DHCP]] service is started (by <tt>systemd</tt>), both immediately, and also automatically whenever the system starts up. We use the [[Systemd#Services|<tt>systemctl</tt>]] command to achieve this. Issue:
+{{RootCmd
+|systemctl enable dhcpcd
+|systemctl start dhcpcd
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|You no longer need to add a <tt>.service</tt> tag on when using <tt>systemctl</tt> (so a simple <tt>dhcpcd</tt> will suffice, rather than <tt>dhcpcd.service</tt>).}}
+{{Note|We will disable this service later, when {{Package|net-misc/networkmanager}} takes over (with GNOME). However, we leave it enabled-on-boot for now for convenience.}}
+
+<span id="post_reboot_ip">Wait for a minute or so</span>, and then check to see that you have been allocated an IP address:
+
+{{RootCmd
+|ifconfig
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+|output=
+<pre>
+enp0s25: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.1.106  netmask 255.255.255.0  broadcast 192.168.1.255
+        ... etc ...
+</pre>
+}}
+
+Hopefully, it will have autoconfigured an interface, as above. You should of course look for the name corresponding to the interface brought up [[#bring_up_if|above]], as opposed to <tt>enp0s25</tt> (which is simply an example). If using WiFi for the install, the name will start with <tt>wl</tt>, not <tt>en</tt>. You are looking for the 'inet' (assuming IPv4) entry; in this case {{Highlight|192.168.1.106}} (yours will almost certainly differ). Make a note of this address, you will need it shortly.
+{{Note|If you need to bring up a network interface with a static IP, please see the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part{{=}}1&chap{{=}}3#doc_chap3 "Manual Network Configuration"] section of chapter 3 of the Gentoo handbook.}}
+
+Right, we can now <span id="start_sshd">start</span> the <tt>ssh</tt> daemon (and ensure it auto-starts on boot). Issue:
+{{RootCmd
+|systemctl enable sshd
+|systemctl start sshd
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Warning|By default, <tt>sshd</tt> allows some rather insecure things, such as remote log-in as root. While this is useful at the moment (and relatively benign given the machine is on a subnet, presumably behind a firewall), do consider editing the {{Path|/etc/ssh/sshd_config}} file once all configuration is complete, to disallow this. You should also consider [http://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id/ moving to public key authentication] for <tt>ssh</tt> login, once everything else is in place.}} 
+
+Now take <span id="note_new_fingerprints">note of the RSA, ED25519 and ECDSA fingerprints</span> (which one is used when you try to connect, will depend upon the settings and recency of the system in your helper PC). These will have been generated automatically when you started <tt>sshd</tt> for the first time, [[#start_sshd|above]] (and of course will be different from those created by the <tt>sshd</tt> instance we started in the outer, 'host' system [[EFI_Gentoo_End_to_End_Install/Setting_Up_Networking_and_Connecting_via_ssh#setup_ssh_server|earlier]]):
+{{RootCmd
+|ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub
+|ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub
+|ssh-keygen -l -f /etc/ssh/ssh_host_ecdsa_key.pub
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Now switch back to your helper PC. Note that, if the target PC's IP address is the same as it was originally, then the helper will already have a note of its previous fingerprint (from the [[EFI_Gentoo_End_to_End_Install/Setting_Up_Networking_and_Connecting_via_ssh#setup_ssh_server|previous <tt>sshd</tt> run]]), and will refuse to connect via <tt>ssh</tt> (since a mismatched fingerprint might suggest a [[:Wikipedia:Man-in-the-middle_attack|man-in-the-middle attack]]). Therefore, we need to remove the old fingerprint record for the IP from {{Path|~/.ssh/known_hosts}}. Issue:
+{{Cmd
+|sed -i '/^[^[:digit:]]*192.168.1.106[^[:digit:]]/d' ~/.ssh/known_hosts
+|prompt=user@pc2 $}}
+{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[#post_reboot_ip{{!}}above]] for 192.168.1.106 in the above command.}}
+
+Now we can connect via <tt>ssh</tt>. From the helper, issue:
+{{Cmd
+|ssh root@192.168.1.106
+|prompt=user@pc2 $
+|output=<pre>
+Password: <enter root password>
+... additional output suppressed ...
+</pre>}}
+{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[#post_reboot_ip{{!}}above]] for 192.168.1.106 in the above command.}}
+
+Check the (relevant) key fingerprint and then, if it matches, continue as below:
+{{GenericCmd|<pre>
+... additional output suppressed ...
+Are you sure you want to continue connecting (yes/no)? <type 'yes', then Enter>
+... additional output suppressed ...
+Password: <enter the password for root>
+... additional output suppressed ...
+</pre>
+}}
+{{Note|The root password required here is the one you set ''within'' the <tt>chroot</tt> [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password{{!}}earlier]] in the tutorial (the same one you used to log in directly at the keyboard [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#login_directly_to_new_system{{!}}a short time ago]].)}}
+
+== <span id="set_systemd_config_opts">Setting Up <tt>systemd</tt> Configuration Options</span> ==
+
+Next, and ''before'' we invoke <tt>screen</tt> again, we'll want to set up our locale (and a number of other <tt>systemd</tt> options). Note that all subsequent commands should be issued via the <tt>ssh</tt> connection on the helper PC, unless otherwise specified.
+
+=== <span id="set_hostname_systemd">Hostname</span> ===
+
+We'll begin by <span id="set_hostname">setting our hostname</span>. Choose whatever name you like; I'm going to use [http://www.urbandictionary.com/define.php?term=koneko <tt>koneko</tt>]. Issue:
+
+{{RootCmd
+|hostnamectl set-hostname koneko
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute your own choice of machine name for <tt>koneko</tt> in the above.}}
+{{Note|By default, this sets all three of your static, transient and pretty hostnames. You can find out more about what this means via the [http://www.freedesktop.org/software/systemd/man/hostnamectl.html <tt>hostnamectl</tt> manpage].}}
+
+Check that it worked:
+{{RootCmd
+|hostnamectl status
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+
+The name change will not immediately reflect in your <tt>bash</tt> prompt until you [http://superuser.com/questions/200057/how-to-make-bash-update-its-idea-of-hostname enter another login shell]. So let's do that now:
+{{RootCmd
+|exec bash --login
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+
+=== <span id="set_locale_systemd">Locale</span> ===
+
+We set up some locale data [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#modify_locale_gen|earlier]] in the tutorial, but elected to use the default [http://unix.stackexchange.com/questions/87745/what-does-lc-all-c-do 'C' locale] then, for simplicity. Now, we'll switch to use the 'real' locale. 
+
+Begin by listing the available locales. Issue:
+{{RootCmd
+|eselect locale list
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+Available targets for the LANG variable:
+  [1]   C *
+  [2]   POSIX
+  [3]   en_GB
+  [4]   en_GB.iso88591
+  [5]   en_GB.utf8
+  [ ]   (free form)
+</pre>
+}}
+{{Note|Your list of targets will also most likely differ from the one shown above, depending on the choices your made when running <tt>locale-gen</tt> [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#modify_locale_gen{{!}}earlier]]. (Also, your prompt will of course be different, and reflect your personal choice of hostname.)}}
+The current LANG target is shown with a <tt>*</tt>. Now choose a [[:Wikipedia:UTF-8|UTF-8]] variant from the list (per the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=6#doc_chap5|Gentoo handbook]). For my particular case, that's option 5 in the list, <tt>en_GB.utf8</tt>, but yours will most likely vary. Issue:
+
+{{RootCmd
+|eselect locale set 5
+|source /etc/profile
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute for the number <tt>5</tt> in the above, with the correct value to select your UTF-8 profile from the list provided by <tt>eselect locale list</tt>.}}
+
+Now we need to inform <tt>systemd</tt> of our choice. Issue:
+{{RootCmd
+|localectl set-locale LANG{{=}}"${LANG}" LC_COLLATE{{=}}"C"
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|We leave the collation order as <tt>"C"</tt> here, per the [[Localization/HOWTO#Environment_variables_for_locales{{!}}Gentoo wiki recommendation]]. If you like, you can set other specific variables here also to partially override the <tt>LANG</tt> variable; see the [http://www.freedesktop.org/software/systemd/man/localectl.html <tt>localectl</tt> manpage] for more details.}}
+
+We also need to setup a <tt>systemd</tt> keymap, both for the virtual consoles and for use with the [[:Wikipedia:X_Window_System|X11 windowing system]] (which we haven't brought up yet, but will be using shortly).
+
+Note that the virtual console keymap here is the one that will be used ''after'' <tt>systemd</tt> has started - it does ''not'' replace that used in the [[initramfs]] (which is necessary to allow correct entry of the LUKS password); see this [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#keymap_issue|earlier comment]].
+
+We begin by displaying a list of keymaps, and filtering out those of interest. The Panasonic CF-AX3 has a Japanese layout, but obviously your machine may differ. Issue:
+{{RootCmd
+|localectl list-keymaps {{!}} grep -i jp
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Replace <tt>jp</tt> in the above command with a string appropriate to your keyboard, such as <tt>us</tt>, <tt>uk</tt> etc.}}
+In my case, this shows one result, <tt>jp106</tt> (yours will obviously vary, depending on your choice of <tt>grep</tt> string). Now we can set the (<tt>systemd</tt> virtual console) keymap. Issue:
+{{RootCmd
+|localectl set-keymap jp106
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute for <tt>jp106</tt> in the above with a value appropriate for your own keyboard, taken from the list returned by the <tt>localectl list-keymaps</tt> command. For example, a standard US layout would use <tt>us</tt> here; a standard UK layout, <tt>uk</tt>.}}
+
+It's important that you double-check your layout will operate correctly, so issue:
+{{RootCmd
+|loadkeys jp106
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute the value you used in <tt>localectl set-keymap</tt> for <tt>jp106</tt> in the above.}}
+Assuming that worked (<tt>loadkeys</tt> did not report an error), we now need to make sure our X11 setup is also correct. Confusingly, X Windows uses a different naming system for keyboard layouts from the virtual console. <tt>localectl set-keymap</tt> will try to infer the correct X11 layout for you, but you should check that it hasn't chosen anything bizarre. Issue:
+{{RootCmd
+|localectl status
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and verify that all is well. For example, in the case above, the X11 Layout will have been guessed as <tt>jp</tt>, based on the <tt>jp106</tt> keymap passed to <tt>localectl</tt>. That happens to be fine, but in my case, I'd also like to add a second X11 keymap, for use with a plug-in keyboard (which happens to have a UK keymapping), so I issue:
+{{RootCmd
+|localectl --no-convert set-x11-keymap jp,gb
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|The <tt>--no-convert</tt> option prevents <tt>localectl</tt> from from attempting to loop back and infer a console keymap from the X11 ones specified.}}
+{{Note|This particular setting is specific to my system and is included here for interest only; you will most likely not need to explicitly augment the X11 keymap in this manner, and so can safely ignore this command.}}
+
+We are nearly done - the last step is to ensure that the <span id="set_vconsole_font">virtual console font</span> and font mapper are set up appropriately.
+
+This involves setting the <tt>FONT</tt> and <tt>FONT_MAP</tt> variables in the {{Path|/etc/vconsole.conf}} file (which is read by the <tt>systemd</tt> <tt>vconsole-setup</tt> service). See the <tt>setfont</tt> manpage, and the discussions "Into the Mist: How Linux Console Fonts Work" and the "UTF-8 and Unicode FAQ for Unix/Linux" for more background on this.<ref>[http://linux.die.net/man/8/setfont <tt>setfont</tt> manpage]</ref><ref>Linux Gazette: [http://tldp.org/LDP/LG/issue91/loozzr.html "Into the Mist: How Linux Console Fonts Work"]</ref><ref>Kuhn, Marcus. [http://www.cl.cam.ac.uk/~mgk25/unicode.html "UTF-8 and Unicode FAQ for Unix/Linux"]</ref> Issue:
+{{RootCmd
+|nano -w /etc/vconsole.conf
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+And ''append'' the following lines to the file:
+{{File|/etc/vconsole.conf|Append the following lines the file (example only, adjust as needed)|<pre>
+FONT=lat1-16
+FONT_MAP=8859-1_to_uni
+</pre>
+}}
+{{Note|You should set an appropriate font and mapper for your system. You may find the information in the Gentoo wiki [[Localization/HOWTO{{!}}"Localization Howto"]] document useful. The above <tt>FONT</tt> and <tt>FONT_MAP</tt> settings should work for a US machine also.}}
+{{Note|You can also specify <tt>FONT_UNIMAP</tt> in the {{Path|/etc/vconsole.conf}} file, but that's generally unnecessary, since most fonts include a Unicode mapping table anyway.}}
+Save and exit the <tt>nano</tt> editor.
+
+Finally, re-generate your environment, and check all looks good with the locale settings:
+{{RootCmd
+|env-update && source /etc/profile
+|localectl status
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+=== <span id="set_rc_local_systemd">Post-Boot Script</span> ===
+
+At this point, it's useful to setup an {{Path|/etc/postboot}} script (and invoking <tt>systemd</tt> service) that will be run each time the main boot process has concluded.<ref>Raymii.org blog: [https://raymii.org/s/tutorials/rc.local_support_on_Arch_Linux_and_systemd.html "rc.local support on Arch Linux with systemd"]</ref> We will use this to address two minor glitches:
+# Often, the <tt>systemd-vconsole-setup</tt> service (which reads the {{Path|/etc/vconsole.conf}} file that we set up [[#set_vconsole_font|above]]) can end up being run too early, meaning that these settings get applied, but are then overridden.<ref>Unix & Linux Stack Exchange Forum: [http://unix.stackexchange.com/questions/57085/setting-console-font-in-vconsole-conf-does-not-work-systemd#118345 "Setting console font in vconsole.conf does not work (systemd)"]</ref>
+# The virtual console does not always fully clear the [[:Wikipedia:Framebuffer|frame buffer]] properly (particularly, when taking over from <tt>plymouth</tt>), meaning that you sometimes get grey lines at the top or bottom of the console screen.
+
+Whereas the first of these problems ''could'' be solved by changing the scheduling dependencies of the <tt>systemd-vconsole-setup</tt> service, that's risky, since other services depend on it and we might cause a scheduling loop.
+
+Instead, we'll create a new <tt>systemd</tt> service, which we'll instruct to run as part of the <tt>multi-user.target</tt> (boot synchronization point, [https://wiki.archlinux.org/index.php/systemd#Targets_table similar to runlevel 3]), and only when <tt>plymouth</tt> is no longer running (or was never started in the first place)). Per the [[Systemd#Installing_custom_service_files|Gentoo wiki]], we'll place the [http://www.freedesktop.org/software/systemd/man/systemd.service.html <tt>systemd</tt> service file] in {{Path|/etc/systemd/system}}.
+
+Issue:
+{{RootCmd
+|nano -w /etc/systemd/system/postboot-script.service
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+Then place the following text in the file:
+{{File|/etc/systemd/system/postboot-script.service|Creating a service to run a script after boot completed|<pre>
+[Unit]
+Description=Execute /etc/postboot Script
+After=plymouth-quit-wait.service
+
+[Service]
+Type=oneshot
+ExecStart=/etc/postboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+}}
+Save and exit <tt>nano</tt>. Next, we need to set up the script itself. Issue:
+
+{{RootCmd
+|nano -w /etc/postboot
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and place the following text in the file:
+{{File|/etc/postboot|A script to run when boot completed|<pre>
+#!/bin/bash
+# commands in this script will be run once the main boot process is complete
+
+# ensure the framebuffer is properly cleared...
+cat /dev/zero > /dev/fb0 2>/dev/null
+# ...and then re-run the vconsole setup (it may have run too early)
+systemctl restart systemd-vconsole-setup
+</pre>
+}}
+{{Note|The <tt>cat</tt> of zeros will stop automatically when the end of the framebuffer ({{Path|/dev/fb0}}) is reached; this will be after 1920*1080*4 (rgba) {{=}} 8294400 bytes on the CF-AX3, but of course your system may vary.}}
+
+Save and exit <tt>nano</tt>. Now make sure the script is executable, and writeable by root only:
+{{RootCmd
+|chmod -v 755 /etc/postboot
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Finally, we need to enable the service (so <tt>systemd</tt> will invoke it). Issue:
+{{RootCmd
+|systemctl enable postboot-script
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+You can of course add your own commands to the {{Path|/etc/postboot}} script, if you like.
+
+=== <span id="set_time_date_systemd">Time and Date</span> ===
+
+Next, check that the date, time and timezone are OK (they ''should'' have been carried across successfully from when you set them earlier for [[OpenRC]] ([[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#set_date_and_time|here]] and [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#set_timezone|here]]), but it is best to check). Issue:
+{{RootCmd
+|timedatectl status {{!}} grep -i time
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+If the time is not correct, issue:
+{{RootCmd
+|timedatectl set-time "YYYY-MM-DD hh:mm:ss"
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+to set it.
+{{Note|Obviously, substitute for <tt>YYYY-MM-DD hh:mm:ss</tt> with the actual, numerical date and time. For example, to set the date/time to 5:12pm on February 9th 2014 (''local time''), you would issue:
+{{RootCmd
+|timedatectl set-time "2014-02-09 17:12:00"
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+}}
+{{Note|To reiterate, <tt>systemd</tt> ''should'' have automatically picked up this setting, so you should not need to execute this command.}}
+
+If the timezone reported in the output of <tt>timedatectl status</tt> is incorrect (or shows as "<tt>n/a</tt>"), you can correct it now; to do so, issue:
+{{RootCmd
+|timedatectl set-timezone "Europe/London"
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute your own timezone for <tt>Europe/London</tt> in the above command. This should be the same value as that you chose when setting the timezone [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#set_europe_london|earlier]]. You can see a full list of available timezones by issuing:
+{{RootCmd
+|timedatectl list-timezones
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+}}
+
+We also <span id="systemd_utc">need to tell</span> <tt>systemd</tt> to save the time in [[:Wikipedia:Coordinated_Universal_Time|UTC]] format to the system's real-time-clock (RTC). Issue:
+{{RootCmd
+|timedatectl set-local-rtc 0
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|This is ''different'' from the default behaviour in Windows (which will use local time for the RTC), so we will modify the setting in Windows, [[EFI_Gentoo_End_to_End_Install/Configuring_Secure_Boot#verify_win8_secure_boot{{!}}later]] in the tutorial.}}
+
+This command should have forced the hardware RTC into sync. To check that this is the case, issue:
+{{RootCmd
+|timedatectl status {{!}} grep -i time
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and check that the reported <tt>Universal time</tt> and <tt>RTC time</tt> are in close agreement.
+
+=== <span id="misc_networking_systemd">Networking</span> ===
+
+As this tutorial covers the setup of a non-server-configuration machine, most users will not need to set an explicit domain name or NIS domain (if you do, see [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=8#doc_chap2 this section] of the Gentoo handbook). 
+
+However, their absence results in the appearance of an annoying "<tt>This is koneko.(none)</tt>"-style message at console login. To fix this, enter:
+{{RootCmd
+|nano -w /etc/issue
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and remove the <tt>.\0</tt> string from that file, so it reads:
+{{File|/etc/issue|Modify the string to read as follows|<pre>
+This is \n (\s \m \r) \t
+</pre>
+}}
+Save and exit <tt>nano</tt>.
+
+Lastly, although networking will automatically start up on boot, we do need to setup some local hostname information. Issue:
+{{RootCmd
+|nano -w /etc/hosts
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+And modify the <tt>127.0.0.1</tt> and <tt>::1</tt> lines in the 'localhost aliases' section, so they read:
+{{File|/etc/hosts|Ensure you have aliases for your chosen machine name|<pre>
+# IPv4 and IPv6 localhost aliases
+127.0.0.1       koneko localhost
+::1             koneko localhost
+</pre>
+}}
+Save and exit <tt>nano</tt>.
+{{Note|Substitute your own choice of machine name (which you set [[#set_hostname|just recently]]) for <tt>koneko</tt> in the above command.}}
+
+== <span id="emerge_misc_system_tools">Emerging Additional System Tools</span> ==
+
+Next, we will <tt>emerge</tt> some additional system tools that are not yet installed, but which are generally useful (many of these are covered in [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=9 Chapter 9] of the Gentoo handbook).
+
+However, before we start any heavy compilation, let's get our <tt>screen</tt> environment back. Issue:
+{{RootCmd
+|screen
+|export PS1{{=}}"(1) $PS1"
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+As [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#second_virtual_console|before]], setup a second virtual console inside <tt>screen</tt>, which will be useful to e.g., monitor the status of long <tt>emerge</tt>s. Press {{Key|Ctrl}}{{Key|a}} then {{Key|c}} to start a new console. Then in that new console enter:
+{{RootCmd
+|export PS1{{=}}"(2) $PS1"
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+Now hit {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to get back to the original console.
+{{Note|Of course, there is no <tt>chroot</tt> to worry about any more, as we are booted natively into our new system.}}
+
+We'll begin by installing {{Package|app-admin/syslog-ng}} as the logger, so that we can view and parse regular textual log files as well as <tt>systemd</tt>'s somewhat controversial (and not entirely crash-resistant) binary log format.<ref>reddit.com (Linux): [http://www.reddit.com/r/linux/comments/1y6q0l/systemds_binary_logs_and_corruption/ "systemd's binary logs and corruption"]</ref><ref>ArchLinux Forums: [https://bbs.archlinux.org/viewtopic.php?id=169966 "Systemd journal - a design problem apparent at system crash"]</ref> Issue:
+
+{{RootCmd
+|emerge --ask --verbose app-admin/syslog-ng
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+{{Note|As [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#use_showem|before]], you can switch to the second console to watch the progress with <tt>showem</tt>, if you like.}}
+As long as the <tt>systemd</tt> use flag is set (which it will be, given your choice of profile [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#set_profile|earlier]]), <tt>syslog-ng</tt> will automatically hook up to the correct socket.
+
+Per {{Bug|406623}}, we need to make a [http://forums.gentoo.org/viewtopic-t-917418-start-0.html minor configuration change] to avoid binary zero characters getting written to the {{Path|/var/log/messages}} file (making it look like a binary file to tools like <tt>grep</tt>). Issue:
+{{RootCmd
+|sed -i 's/threaded(yes)/threaded(no)/g' /etc/syslog-ng/syslog-ng.conf
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Now start it up (and enable at boot):
+{{RootCmd
+|systemctl enable syslog-ng
+|systemctl start syslog-ng
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|You can omit the installation of <tt>syslog-ng</tt> if you are comfortable with the binary <tt>journald</tt> logs. Or, choose a different logger - the choice is yours.}}
+
+Next, we need a [[Cron|<tt>cron</tt> daemon]] for scheduled commands. We'll choose {{Package|sys-process/cronie}}, a fork of <tt>vixie-cron</tt>. Issue:
+{{RootCmd
+|emerge --ask --verbose sys-process/cronie
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+Enable and start it:
+{{RootCmd
+|systemctl enable cronie
+|systemctl start cronie
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Per the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part{{=}}1&chap{{=}}9#doc_chap2 Gentoo Handbook], installing a <tt>cron</tt> daemon is optional, but highly recommended, as many other system tools rely on it.<ref>[http://linux.die.net/man/8/cron <tt>cron</tt> daemon manpage]</ref> The rest of this tutorial assumes you have chosen to install it.}}
+
+Next, we add file indexing, so that you can quickly search for files with the <tt>locate</tt> tool. Issue:
+{{RootCmd
+|emerge --ask --verbose sys-apps/mlocate
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+There is no service to explicitly enable for <tt>mlocate</tt>. It automatically adds an entry (for <tt>updatedb</tt><ref>[http://linux.die.net/man/8/updatedb <tt>updatedb</tt> manpage]</ref>) to {{Path|/etc/cron.daily}} on installation.
+{{Note|Per the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part{{=}}1&chap{{=}}9#doc_chap3 Gentoo Handbook], installation of <tt>mlocate</tt> is optional.}}
+
+Next, we add a program to manage log rotation (important to stop files like {{Path|/var/log/messages}} from growing to an unwieldy size). Issue:
+{{RootCmd
+|emerge --ask --verbose app-admin/logrotate
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+Again, there is no need to activate any service here, as this creates a daily job (via {{Path|/etc/cron.daily}}) upon installation.
+{{Note|Use of a log rotation service is optional, but recommended. You can set the preferences for log rotation with <tt>logrotate</tt> in the file {{Path|/etc/logrotate.conf}}, and with application-specific files under {{Path|/etc/logrotate.d}}. See the <tt>logrotate</tt> manual page for more details.<ref>[http://linux.die.net/man/8/logrotate <tt>logrotate</tt> manpage]</ref>}}
+
+We have [[#start_sshd|already]] activated <tt>sshd</tt>, and as I will assume you have no need for serial console access (as this tutorial is not aimed at configuring server machines); if you do, however, please see [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=9#doc_chap4 this section] of the Gentoo handbook.
+
+Next, as the handbook notes, we already have necessary file system utilities (for checking integrity, formatting etc.) installed to deal with [[:Wikipedia:Ext2|ext2]], [[:Wikipedia:Ext3|ext3]] and [[:Wikipedia:Ext4|ext4]] filesystems. If you need to support other file systems (e.g., XFS), you should, [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=9#doc_chap5 per the handbook], emerge the necessary package(s) now.
+
+One set of filesystem tools we will definitely need, since we're forced to deal with fat32-formatted partitions for [[:Wikipedia:Unified_Extensible_Firmware_Interface|UEFI]], is {{Package|sys-fs/dosfstools}}. Issue:
+{{RootCmd
+|emerge --ask --verbose sys-fs/dosfstools
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+{{Note|This package is required when working with UEFI volumes (in particular, for the <tt>mkfs.vfat</tt> command<ref>[http://linux.die.net/man/8/mkfs.vfat <tt>mkfs.vfat</tt> manpage]</ref>), so it is strongly recommended that you install it (and the rest of this tutorial assumes you have indeed done so).}}
+
+We have [[#start_dhcpcd|already]] installed and activated <tt>dhcpcd</tt>, and I will assume you do not require any additional networking tools installed at this point (if you do, please see the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=9#doc_chap6 relevant section] of the Gentoo handbook for more details).
+
+Next, we'll add some useful utilities that let you discover information about the hardware in your system (this will come in handy when e.g., pruning kernel drivers). Issue:
+{{RootCmd
+|emerge --ask --verbose sys-apps/{usbutils,hwinfo}
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+As it's name suggests, <tt>usbutils</tt> provides similar facilities to the <tt>pciutils</tt> package (present in the [[System|@system]] set), but for USB devices. In particular, the <tt>lsusb</tt> command it includes is very useful.<ref>[http://linux.die.net/man/8/lsusb <tt>lsusb</tt> manpage]</ref> The <tt>hwinfo</tt> package provides (inter alia) the eponymous <tt>hwinfo</tt> tool, which can be used to generate a system overview log.<ref>[http://manpages.ubuntu.com/manpages/precise/en/man8/hwinfo.8.html <tt>hwinfo</tt> manpage]</ref>
+
+Check that these work. Issue:
+{{RootCmd
+|lsusb
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and review the output, then:
+{{RootCmd
+|hwinfo {{!}} less
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and do the same (you can press {{Key|Page Up}} and {{Key|Page Down}} to page through the output here, and {{Key|q}} to quit).
+{{Note|Installation of both of these packages is optional, but recommended.}}
+
+Now we'll <tt>emerge</tt> some useful Portage tools. Issue:
+{{RootCmd
+|emerge --ask --verbose app-portage/{mirrorselect,eix,gentoolkit,euses}
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+Here's what these packages provide:
+* '''<tt>[[mirrorselect]]</tt>''' we've [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#use_mirrorselect|already used]] (in the minimal install image system) - it is a tool to simplify the selection of Gentoo mirror servers;
+* '''<tt>[[eix]]</tt>''' is a set of utilities for searching, diffing and updating a binary cache of your local Portage tree (and overlays, if you have them); it is fast and convenient to use;
+* '''<tt>[[gentoolkit]]</tt>''' is a set of miscellaneous administration scripts for Gentoo; these allow you to show package dependency graphs, find out which package installed a particular file, view package changelogs, show package use flags, and many other useful things;
+* '''<tt>euses</tt>''' is a simple tool that allows you to query for use flag descriptions quickly.
+
+{{Note|Installation of all of the above packages is optional, but highly recommended (and the rest of this tutorial will assume that you have indeed done so).}}
+
+== <span id="ensure_system_up_to_date">Ensuring the System is Fully Up-to-Date</span> ==
+
+If you have been following these instructions, then it is very likely that you have a completely current system at this point. Nevertheless, let's make double-sure this is so. To do this, we'll make use of the <tt>genup</tt> utility script, from the <tt>sakaki-tools</tt> overlay. To install it, issue:
+{{RootCmd
+|emerge --ask --verbose app-portage/genup
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+... additional output suppressed ...
+Would you like to merge these packages? [Yes/No] <press y, then press Enter>
+... additional output suppressed ...
+</pre>
+}}
+{{Note|When <tt>genup</tt> is emerged, it will setup the configuration files {{Path|/etc/eix-sync.conf}} and {{Path|/etc/eixrc/01-cache}}, per the instructions in [[Overlay#eix_integration{{!}}this wiki article]]. This ensures that <tt>eix-sync</tt> will also sync all active overlays, and that it will regenerate cached metadata on a sync (and use the metadata on an <tt>eix-update</tt> for a speed-up and better accuracy).}}
+
+Next, execute the script to bring your system up to date (we'll avoid checking for kernel updates at this point). Issue:
+{{RootCmd
+|genup --no-kernel-upgrade
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+You can read more about <tt>genup</tt> via its manpage. However, in summary, when invoked in non-interactive ('batch') mode (as here), and with the <tt>--no-kernel-upgrade</tt> flag, it will:
+* update your Portage tree (including any active overlays, such as <tt>sakaki-tools</tt>) and the <tt>eix</tt> cache (using <tt>eix-sync</tt>);
+* remove any prior <tt>emerge</tt> resume history (using <tt>emaint --fix cleanresume</tt>)
+* ensure Portage itself is up-to-date (using <tt>emerge --oneshot --update portage</tt>);
+* emerge any packages which have been updated, or whose use flags have changed (using <tt>emerge --deep --with-bdeps=y --newuse --update --backtrack=50 @world</tt>);
+* rebuild any packages depending on stale libraries (using <tt>emerge @preserved-rebuild</tt>);
+* update old Perl and Python modules not caught by <tt>emerge</tt> (using <tt>perl-cleaner</tt> and <tt>python-updater</tt>);
+* ''not'' attempt to rebuild the kernel, even if a new version of {{Package|sys-kernel/gentoo-sources}} has become available (because we specified <tt>--no-kernel-upgrade</tt>);
+* remove any unreferenced packages (using <tt>emerge --depclean</tt>);
+* re-emerge any packages depending on libraries removed by the previous step (using <tt>revdep-rebuild</tt>); and
+* update environment settings as a precautionary measure (using <tt>env-update</tt>).
+
+{{Note|If you should have any issues when running <tt>genup</tt>, particularly the deep <tt>emerge</tt> stage, then you may find it useful to refer to [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#troubleshooting_failed_build|these earlier notes]].}}
+
+Assuming that completed successfully (you receive the message "<tt>All done - your system is now up-to-date!</tt>"), look at the preceding few lines of output from <tt>genup</tt>. If you see:
+{{GenericCmd|<pre>
+* There are no configuration file changes pending review.
+</pre>
+}}
+then there's nothing more to do; however, if instead you see:
+{{GenericCmd|<pre>
+* genup: Warning: There are configuration file changes pending review!
+* genup: Warning: Please run dispatch-conf to interactively resolve them.
+</pre>
+}}
+then (as instructed) you need to run <tt>dispatch-conf</tt> (this is an inherently interactive process, and so is not called by <tt>genup</tt> when running in batch mode, as here). To do so, issue:
+{{RootCmd
+|dispatch-conf
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+and follow the prompts to accept, zap (ignore) or merge each proposed change.
+{{Note|The [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part{{=}}3&chap{{=}}4#doc_chap1 <tt>dispatch-conf</tt>] tool is discussed in more detail in the bootstrapping section [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#using_dispatch_conf|earlier]].}}
+{{Note|If you prefer, you can add the <tt>--ask</tt> flag to <tt>genup</tt>, in which case it ''will'' run <tt>dispatch-conf</tt> for you at the appropriate point in the update. Alternatively, you can also force <tt>genup</tt> to invoke <tt>dispatch-conf</tt> even in non-interactive (batch) mode, by appending the <tt>--dispatch-conf</tt> option.}}
+{{Note|If you should have any issues when running <tt>genup</tt>, particularly the deep <tt>emerge</tt> stage, then you may find it useful to refer to [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#troubleshooting_failed_build{{!}}these earlier notes]].}}
+{{Note|For avoidance of doubt, the [[World|@world]] set ''includes'' the [[System|@system]] set.}}
+
+== <span id="reboot_sans_plymouth">Performing a Precautionary Reboot without <tt>plymouth</tt></span> ==
+
+To be cautious, we will now reboot the system to check that our changes to the <tt>systemd</tt> configuration have not caused any issues. This will then also ensure that we have a 'known good' version to fall back to, should any problems arise when we enable the <tt>plymouth</tt> boot splash manager in the next step.
+
+Ensure that the boot USB key is still inserted in the target machine, then close out the two <tt>screen</tt> virtual terminals, and then the <tt>ssh</tt> connection itself. Issue:
+
+{{RootCmd
+|exit
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+which will close the first <tt>screen</tt> terminal, then:
+
+{{RootCmd
+|exit
+|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+to close the second one. Then exit the enclosing <tt>ssh</tt> session itself:
+{{RootCmd
+|exit
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Now, ensure your boot USB key is inserted, and then, ''directly'' on the target machine (i.e., at it's keyboard), issue:
+{{RootCmd
+|systemctl reboot
+|prompt=localhost <span style{{=}}"color:blue;">~ #</span>
+}}
+
+{{Note|This is the preferred way to reboot a <tt>systemd</tt> machine from the command line.}}
+
+If all is OK, your target system should restart, and boot the UEFI stub kernel off the USB boot key as before. After some initialization, you should be prompted for a passphrase to unlock the <tt>gpg</tt> keyfile for your LUKS partition (this is the passphrase you set up [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]). Type this in (directly at the target machine keyboard), and press {{Key|Enter}}. Shortly after, assuming that your passphrase is correct, you'll be presented with a login prompt. Enter 'root' as the user (again, directly at the keyboard, without quotes), and then type the root password you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]].
+
+Next, check that everything <tt>systemd</tt>-related started up OK (do this directly at the target machine's keyboard, there's no need to re-establish <tt>ssh</tt>/<tt>screen</tt> for this short interlude):
+
+{{RootCmd
+|systemctl --failed
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+If this reports "<tt>0 loaded units listed</tt>" (or simply returns, printing nothing) then all is well.
+
+== <span id="reboot_with_plymouth">Enabling <tt>plymouth</tt>, Rebuilding the Kernel, and Restarting (Optional Step)</span> ==
+
+If you do ''not'' want to use a graphical boot splash manager, then you can safely [[EFI_Gentoo_End_to_End_Install/Configuring_Secure_Boot#config_secure_boot|skip this step]], and stay with a textual boot. Otherwise, let's continue, and set up <tt>plymouth</tt>. We'll also <span id="change_bootfile_path">take this chance to migrate our bootfile</span> from {{Path|/EFI/Boot/bootx64.efi}} to the less generic {{Path|/EFI/Boot/gentoo.efi}}.
+
+Still directly at the target machine, use the <tt>buildkernel --easy-setup</tt> tool to turn on Plymouth (the following is an example only; the values shown will vary for your machine). Issue:
+
+{{RootCmd
+|buildkernel --easy-setup
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|output=
+... significant amounts of output suppressed in what follows ...
+
+ <span style{{=}}"color:green;">*</span> Current configuration (from /etc/buildkernel.conf):
+
+   EFI system partition UUID:  2498f874-ad8f-484e-8aba-81ac1c9665b6
+   LUKS root partition UUID:   8111286a-d24e-4ba2-b6af-d0650fab4130
+   GPG keyfile partition UUID: DEFAULT (=EFI system partition UUID)
+   GPG keyfile (for LUKS):     luks-key.gpg                        
+   EFI boot directory:         /EFI/Boot                           
+   EFI boot file:              bootx64.efi                         
+   Plymouth theme              NONE (textual boot)                 
+   Boot-time keymap            jp                                  
+
+ <span style{{=}}"color:green;">*</span> Please choose an option:
+ 1) Set EFI system partition  5) Set boot splash options
+ 2) Set LUKS root partition   6) Set boot-time keymap
+ 3) Set LUKS key options      7) Exit without saving
+ 4) Set EFI boot file path    8) Save and exit
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|5}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ <span style{{=}}"color:green;">*</span> Current boot splash settings:
+ <span style{{=}}"color:green;">*</span> Using textual boot (no Plymouth)
+ <span style{{=}}"color:green;">*</span> Please choose your desired boot splash setting (or GO BACK):
+ 1) Use textual boot (no Plymouth)
+ 2) Use Plymouth graphical boot splash ('fade-in')
+ 3) GO BACK
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|2}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ <span style{{=}}"color:green;">*</span> New boot splash settings:
+ <span style{{=}}"color:green;">*</span> Using Plymouth on boot, with theme 'fade-in'
+ <span style{{=}}"color:green;">*</span> Current configuration (from /etc/buildkernel.conf - MODIFIED):
+
+   EFI system partition UUID:  2498f874-ad8f-484e-8aba-81ac1c9665b6
+   LUKS root partition UUID:   8111286a-d24e-4ba2-b6af-d0650fab4130
+   GPG keyfile partition UUID: DEFAULT (=EFI system partition UUID)
+   GPG keyfile (for LUKS):     luks-key.gpg                        
+   EFI boot directory:         /EFI/Boot                           
+   EFI boot file:              bootx64.efi                         
+   Plymouth theme              fade-in                 
+   Boot-time keymap            jp                                  
+
+ <span style{{=}}"color:green;">*</span> Please choose an option:
+ 1) Set EFI system partition  5) Set boot splash options
+ 2) Set LUKS root partition   6) Set boot-time keymap
+ 3) Set LUKS key options      7) Exit without saving
+ 4) Set EFI boot file path    8) Save and exit
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|4}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ <span style{{=}}"color:green;">*</span> Current EFI boot file setting:
+ <span style{{=}}"color:green;">*</span> EFI boot file path: /EFI/Boot/bootx64.efi
+ <span style{{=}}"color:green;">*</span>  (under EFI system partition mountpoint)
+ <span style{{=}}"color:green;">*</span> Please choose your desired EFI boot file setting (or GO BACK):
+ 1) Use /EFI/Boot/bootx64.efi (recommended for initial USB install)
+ 2) Use /EFI/Microsoft/Boot/bootmgfw.efi (fallback for certain systems)
+ 3) Use /EFI/Boot/gentoo.efi (recommended for post-install use)
+ 4) GO BACK
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|3}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ <span style{{=}}"color:green;">*</span> New EFI boot file setting:
+ <span style{{=}}"color:green;">*</span> EFI boot file path: /EFI/Boot/gentoo.efi
+ <span style{{=}}"color:green;">*</span>  (under EFI system partition mountpoint)
+
+ <span style{{=}}"color:green;">*</span> Current configuration (from /etc/buildkernel.conf - MODIFIED):
+
+   EFI system partition UUID:  2498f874-ad8f-484e-8aba-81ac1c9665b6
+   LUKS root partition UUID:   8111286a-d24e-4ba2-b6af-d0650fab4130
+   GPG keyfile partition UUID: DEFAULT (=EFI system partition UUID)
+   GPG keyfile (for LUKS):     luks-key.gpg                        
+   EFI boot directory:         /EFI/Boot                           
+   EFI boot file:              gentoo.efi                         
+   Plymouth theme              fade-in                 
+   Boot-time keymap            jp                                  
+
+ <span style{{=}}"color:green;">*</span> Please choose an option:
+ 1) Set EFI system partition  5) Set boot splash options
+ 2) Set LUKS root partition   6) Set boot-time keymap
+ 3) Set LUKS key options      7) Exit without saving
+ 4) Set EFI boot file path    8) Save and exit
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|8}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ 
+ <span style{{=}}"color:green;">*</span> Configuration saved to /etc/buildkernel.conf.
+ <span style{{=}}"color:green;">*</span> Be sure to run buildkernel, to rebuild the kernel with the new
+ <span style{{=}}"color:green;">*</span> settings, before rebooting.
+
+... significant amounts of output suppressed in the above ...
+}}
+
+{{Note|Once you have things working, you can directly edit {{Path|/etc/buildkernel.conf}} and set the variable <tt>PLYMOUTHTHEME</tt> to be <tt>plymouth</tt> theme that you like. You can get a list of available themes by issuing:
+{{RootCmd
+|plymouth-set-default-theme --list
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+However, stay with the <tt>fade-in</tt> theme for the moment.
+}}
+
+Specifying a <tt>plymouth</tt> theme will have <tt>buildkernel</tt> automatically turn on the [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#quiet_kernel_parameter|<tt>quiet</tt>]] and [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#splash_kernel_parameter|<tt>splash</tt>]]
+kernel command line options, disable the 'penguin logo' display on boot (via [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#logo|<tt>CONFIG_LOGO</tt>]]) and instruct [[Genkernel|<tt>genkernel</tt>]] to ensure that the necessary <tt>plymouth</tt> modules are installed into the initramfs. Of course, we need to run <tt>buildkernel</tt> to make these changes take effect, so let's do that now. Ensure that the boot USB key is still inserted in your target machine, and then (directly at the keyboard) issue:
+
+{{RootCmd
+|buildkernel
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Wait for the process to complete (it will ''not'' do a <tt>make clean</tt> by default, so it shouldn't take long).
+{{Note|Since you now ''are'' booted under EFI, this will also add an EFI boot entry for your new kernel and set it at the top of the EFI boot list.}}
+
+When you get the message "<tt>All done!</tt>",  reboot. Issue:
+
+{{RootCmd
+|systemctl reboot
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+When <span id="entering_plymouth_LUKS_password">the target system restarts</span>, you should now see a graphical password entry screen, as shown below. Enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard, and you should then get a brief animation before the textual login console appears:
+
+{|style="background:transparent; color:black" 
+|[[File:Plymouth_password.jpg|thumb|none|400px|Graphical (plymouth) Prompt for GPG/LUKS Passphrase...]]
+|[[File:Plymouth_fade.jpg|thumb|none|400px|...And Subsequent Boot-Time Animation]]
+|}
+
+{{Note|Due to [[Genkernel|<tt>genkernel</tt>]] not including certain <tt>plymouth</tt> modules into the initramfs, you won't get any textual prompts or progress indicators during boot. I haven't fixed this here as I quite like the resulting minimalist look.}}
+
+Once you receive the login prompt, enter 'root' as the user (again, directly at the keyboard, without quotes), and then type the root password you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]].
+
+{{Note|Obviously, there's not much point having a graphical boot splash followed by a textual console, but this is only a staging point, we are shortly going to install GNOME3!}}
+
+=== <span id="if_plymouth_fails">If <tt>plymouth</tt> Doesn't Work Properly</span> ===
+
+{{Note|If you managed to successfully boot using <tt>plymouth</tt>, then you should [[EFI_Gentoo_End_to_End_Install/Configuring_Secure_Boot{{!}}skip to the next section]] now - the following is only for troubleshooting a failed boot.}}
+
+If you encounter problems when using <tt>plymouth</tt> (for example, it failing to accept your <tt>gpg</tt>-encrypted LUKS keyfile passphrase), you'll need to fall back to the textual boot manager (as debugging <tt>plymouth</tt> is beyond the scope of this tutorial). Fortunately, because <tt>buildkernel</tt> automatically preserves the prior kernel on the USB boot key, you should be able to do this easily, ''without'' having to remount the system using the minimal install image USB key / <tt>chroot</tt>.
+
+<span id="revert_to_previous_kernel">Simply remove</span> the boot USB key, insert it into the helper PC, and then issue (I am assuming that you need to be the superuser to <tt>mount</tt> on your helper PC):
+
+{{Cmd
+|su --login root
+|prompt=user@pc2 $}}
+Enter the <tt>root</tt> password (for the helper PC, that is), and then as <tt>root</tt>, on the helper, mount the USB boot key's EFI system partition at {{Path|/mnt/tmpefi}}:
+
+{{RootCmd
+|mkdir -v -p /mnt/tmpefi
+|mount -v -t vfat /dev/sdU1 /mnt/tmpefi
+|prompt=root@pc2 #}}
+{{Note|Replace {{Path|/dev/sdU1}} in the above with the appropriate device path for the USB key's first partition on your helper PC, such as {{Path|/dev/sdc1}}, {{Path|/dev/sdd1}} etc. You can find the path using the <tt>lsblk</tt> command.}}
+
+Next, delete the old (failed) kernel and config (the one that tries to use <tt>plymouth</tt> during <tt>init</tt>) and replace it with the previous version. If you just [[#change_bootfile_path|changed the path of the bootfile]] (from {{Path|/EFI/Boot/bootx64.efi}} to {{Path|/EFI/Boot/gentoo.efi}}) in the last step, then issue:
+{{RootCmd
+|rm -v /mnt/tmpefi/EFI/Boot/gentoo.efi /mnt/tmpefi/EFI/Boot/config
+|cp -v /mnt/tmpefi/EFI/Boot/bootx64.efi /mnt/tmpefi/EFI/Boot/gentoo.efi
+|cp -v /mnt/tmpefi/EFI/Boot/config.old /mnt/tmpefi/EFI/Boot/config
+|prompt=root@pc2 #}}
+otherwise, if you have run <tt>buildkernel</tt> more than once since changing the path, issue:
+{{RootCmd
+|rm -v /mnt/tmpefi/EFI/Boot/gentoo.efi /mnt/tmpefi/EFI/Boot/config
+|cp -v /mnt/tmpefi/EFI/Boot/gentoo.efi.old /mnt/tmpefi/EFI/Boot/gentoo.efi
+|cp -v /mnt/tmpefi/EFI/Boot/config.old /mnt/tmpefi/EFI/Boot/config
+|prompt=root@pc2 #}}
+
+{{Note|If you happen to have used <tt>buildkernel</tt>'s <tt>--snapshot-backup</tt> option in the past (to ensure a 'known good' kernel was preserved), you'll also see (kernel and config) files in {{Path|/mnt/tmpefi/EFI/Boot}} with prefixed timestamps. For example, if you had previously issued <tt>buildkernel --snapshot-backup</tt> on 4 May 2014 at 12:23:07 say, you would see the files <tt>2014-05-04-12-23-07-gentoo.efi.old</tt> and <tt>2014-05-04-12-23-07-config.old</tt> in the {{Path|/mnt/tmpefi/EFI/Boot}} directory. You can use such files instead of <tt>gentoo.efi.old</tt> and <tt>config.old</tt>, if you like.}}
+
+Finally, ensure the data has been written, unmount the USB key, and remove the temporary mountpoint you created, then exit back to the normal user. Issue
+{{RootCmd
+|sync
+|umount -v /mnt/tmpefi
+|rmdir -v /mnt/tmpefi
+|exit
+|prompt=root@pc2 #}}
+
+{{Note|I have assumed in the above that your helper machine does ''not'' automount the USB key. However, if it does, that's no problem, you can simply do the delete-and-replace operation graphically. Similarly, since the boot key is formatted with <tt>fat32</tt>, you should be able to insert it into any Windows machine and make the necessary changes. Just remember that in either of these two cases, your mountpoint will ''not'' be {{Path|/mnt/tmpefi}}.}}
+
+Remove the boot USB key from the helper, and re-insert it into the target machine. Power cycle the target machine, and you should now be able to boot up successfully.
+
+{{Important|If you '''still''' can't get the machine to boot, you'll need to follow the instructions [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#if_things_go_wrong|given earlier]] to boot with the minimal install USB key, unlock the LUKS partition, mount the LVM volumes, then <tt>chroot</tt> and make any necessary changes.}}
+
+Once you have got your target machine environment back online, you will need to ensure that any subsequent kernels (created by <tt>buildkernel</tt>) will not attempt to use <tt>plymouth</tt> during <tt>init</tt>. Issue (the details in the below will obviously differ on your machine):
+
+{{RootCmd
+|buildkernel --easy-setup
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|output=
+... significant amounts of output suppressed in what follows ...
+
+ <span style{{=}}"color:green;">*</span> Current configuration (from /etc/buildkernel.conf):
+
+   EFI system partition UUID:  2498f874-ad8f-484e-8aba-81ac1c9665b6
+   LUKS root partition UUID:   8111286a-d24e-4ba2-b6af-d0650fab4130
+   GPG keyfile partition UUID: DEFAULT (=EFI system partition UUID)
+   GPG keyfile (for LUKS):     luks-key.gpg                        
+   EFI boot directory:         /EFI/Boot                           
+   EFI boot file:              gentoo.efi                         
+   Plymouth theme              fade-in                 
+   Boot-time keymap            jp                                  
+
+ <span style{{=}}"color:green;">*</span> Please choose an option:
+ 1) Set EFI system partition  5) Set boot splash options
+ 2) Set LUKS root partition   6) Set boot-time keymap
+ 3) Set LUKS key options      7) Exit without saving
+ 4) Set EFI boot file path    8) Save and exit
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|5}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ <span style{{=}}"color:green;">*</span> Current boot splash settings:
+ <span style{{=}}"color:green;">*</span> Using Plymouth on boot, with theme 'fade-in'
+ <span style{{=}}"color:green;">*</span> Please choose your desired boot splash setting (or GO BACK):
+ 1) Use textual boot (no Plymouth)
+ 2) Use Plymouth graphical boot splash ('fade-in')
+ 3) GO BACK
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|1}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ <span style{{=}}"color:green;">*</span> New boot splash settings:
+ <span style{{=}}"color:green;">*</span> Using textual boot (no Plymouth)
+ 
+ <span style{{=}}"color:green;">*</span> Current configuration (from /etc/buildkernel.conf - MODIFIED):
+
+   EFI system partition UUID:  2498f874-ad8f-484e-8aba-81ac1c9665b6
+   LUKS root partition UUID:   8111286a-d24e-4ba2-b6af-d0650fab4130
+   GPG keyfile partition UUID: DEFAULT (=EFI system partition UUID)
+   GPG keyfile (for LUKS):     luks-key.gpg                        
+   EFI boot directory:         /EFI/Boot                           
+   EFI boot file:              gentoo.efi                         
+   Plymouth theme              NONE (textual boot)                 
+   Boot-time keymap            jp                                  
+
+ <span style{{=}}"color:green;">*</span> Please choose an option:
+ 1) Set EFI system partition  5) Set boot splash options
+ 2) Set LUKS root partition   6) Set boot-time keymap
+ 3) Set LUKS key options      7) Exit without saving
+ 4) Set EFI boot file path    8) Save and exit
+ Your choice: <span style{{=}}"color:blue;">press</span> {{Key|8}}<span style{{=}}"color:blue;"> then</span> {{Key|Enter}}
+ 
+ <span style{{=}}"color:green;">*</span> Configuration saved to /etc/buildkernel.conf.
+ <span style{{=}}"color:green;">*</span> Be sure to run buildkernel, to rebuild the kernel with the new
+ <span style{{=}}"color:green;">*</span> settings, before rebooting.
+
+... significant amounts of output suppressed in the above ...
+}}
+
+Ensure that the boot USB key is still inserted in your target machine, and then issue:
+
+{{RootCmd
+|buildkernel
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Once the build completes, reboot:
+
+{{RootCmd
+|systemctl reboot
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+and you should be back to a textual boot (where you of course need to enter the LUKS keyfile <tt>gpg</tt> passphrase, then login as root, as before). You can then continue with the remainder of the tutorial (having a graphical boot splash is nice, but not necessary for what follows).
+
+== <span id="next_steps">Next Steps</span> ==
+
+Now that we have standard EFI boot operational, we will next set up {{Highlight|secure boot}}, to ensure (as a safeguard) that the integrity of our bootable kernel will be checked by the system at startup. [[EFI_Gentoo_End_to_End_Install/Configuring_Secure_Boot|Click here]] to go to the next chapter, "Configuring Secure Boot".
+
+== <span id="notes">Notes</span> ==
+{{reflist}}
+
+== <span id="acknowledgements">Acknowledgements</span> ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* {{Mail|sakaki@deciban.com|sakaki}}
+
+{| style="margin: 1em auto 1em auto;"
+|-
+| [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI|<]]
+| [[EFI_Gentoo_End_to_End_Install|Home]]
+| [[EFI_Gentoo_End_to_End_Install/Configuring_Secure_Boot|>]]
+|}
+
+[[Category:Installation]]
+[[Category:Bootloaders]]
+[[Category:Core system]]
+[[Category:Laptops]]
+[[Category:Kernel]]
+[[Category:Localization]]
+[[Category:SSH]]
+[[Category:Security]]
