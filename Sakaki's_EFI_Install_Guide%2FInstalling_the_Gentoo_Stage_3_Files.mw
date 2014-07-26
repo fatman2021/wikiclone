@@ -1,0 +1,483 @@
+<!-- Page: Installing_the_Gentoo_Stage_3_Files -->
+
+<span id="install_stage_3">Our main goals</span> in this section, which shadows [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=5 Chapter 5] of the Gentoo handbook, will be to download and unpack the Gentoo 'stage 3' tarball, and to set up Portage's main configuration file ({{Path|/etc/portage/make.conf}}).
+
+We'll also present a brief backgrounder covering some key Portage topics, which may be skipped if desired.
+
+== <span id="set_date_time">Setting the Date and Time</span> ==
+
+Before downloading anything, ensure that you have the correct time and date on the target machine. Check it with:
+{{RootCmd
+|date
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Per <span id="set_date_and_time">the handbook</span>, you should stick with [[:Wikipedia:UTC|UTC]] for now (the real timezone specification will come later in the install). If necessary, set the date and time, in {{Highlight|MMDDhhmmYYYY}} format ('''M'''onth, '''D'''ay, '''h'''our, '''m'''inute, '''y'''ear):
+{{RootCmd
+|date MMDDhhmmYYYY
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|Substitute MMDDhhmmYYYY in the above with the correct date/time string. For example, to set the UTC date/time to 5:12pm on February 9th 2014, you would issue
+{{RootCmd
+|date 020917122014
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+}}
+
+== <span id="download_stage_3_tarball">Downloading, Verifying and Unpacking the Gentoo Stage 3 Tarball</span> ==
+
+The {{Highlight|'Stage 3'}} file is a [[:Wikipedia:Tarball|tarball]] containing a populated directory structure from a basic Gentoo system. Unlike the minimal installation image however, the stage 3 system contains no kernel, only binaries and libraries essential to [[:Wikipedia:Bootstrap|bootstrapping]]. As such, we will have to host it within a [[:Wikipedia:Chroot|chroot]] from our existing (minimal install image) system, until we have recompiled all system files and libraries, built a fresh kernel, and the new system becomes [[:Wikipedia:Self-hosting|self-hosting]]. 
+
+{{Note|You ''can'' use the system binaries and libraries shipped in the stage 3 as is, without rebuilding them, if you like - only the kernel build is mandatory. However, we give instructions here to rebuild everything, from the toolchain upwards, to achieve the same effect as an old 'stage 1' bootstrap. The parts that are optional will be flagged.}}
+
+The stage 3 tarball is generally released on the same date as the minimal install image, and may be found (together with the usual contents and digest files) in the same [http://distfiles.gentoo.org/releases/amd64/autobuilds/current-iso/ autobuilds directory]. As the amount of data involved here is small, ''pace'' the handbook we'll skip using the slightly awkward <tt>links</tt> browser / mirror selection process at this stage, and just grab the files directly with <tt>wget</tt>.
+
+Change to the Gentoo filesystem root mountpoint:
+{{RootCmd
+|cd /mnt/gentoo
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Now <span id="download_stage_3">download the files</span>. As before, substitute for YYYYMMDD in the below with the current release file date, which you can find from looking in the [http://distfiles.gentoo.org/releases/amd64/autobuilds/current-iso/ autobuilds directory] (for example, at the time of writing, the first file was stage3-amd64-20140206.tar.bz2).
+{{RootCmd
+|wget -c http://distfiles.gentoo.org/releases/amd64/autobuilds/current-iso/stage3-amd64-YYYYMMDD.tar.bz2
+|wget -c http://distfiles.gentoo.org/releases/amd64/autobuilds/current-iso/stage3-amd64-YYYYMMDD.tar.bz2.CONTENTS
+|wget -c http://distfiles.gentoo.org/releases/amd64/autobuilds/current-iso/stage3-amd64-YYYYMMDD.tar.bz2.DIGESTS.asc
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+{{Note|Substitute the current release date for YYYYMMDD in the above commands.}}
+{{Note|The autobuilds directory also contains a set of 'nomultilib' variants; these are not recommended for general use.}}
+
+As before (when we [[EFI_Gentoo_End_to_End_Install/Creating_and_Booting_the_Minimal-Install_Image_on_USB#download_verify_image|downloaded the minimal install image]]), we have to go through a two-stage verification: first check the signature in the <tt>DIGESTS.asc</tt> file, and then check the digests in that file themselves. As this is the target machine (not the helper), we don't yet have the necessary Gentoo automated weekly release {{Highlight|public key}}, whose fingerprint may be found on the [http://www.gentoo.org/proj/en/releng/index.xml Gentoo release engineering] page. So let's fetch it now. Issue:
+
+{{RootCmd
+|gpg --keyserver pool.sks-keyservers.net --recv-key 2D182910
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+{{Note|As before, for this to work you must ensure you have enabled outbound access on your firewall for port 11371/tcp to allow [[:Wikipedia:Key_server_(cryptographic)|HKP]] communication, along with the usual state-tracking input rule.}}
+{{Note|If the above keyserver is unavailable for some reason, you should be able to use any other one, such as <tt>pgp.mit.edu</tt> for example.}}
+{{Note|If the fingerprint has changed, substitute the correct value for <tt>2D182910</tt> in the above.}}
+
+Once you have the public key, verify the digest file:
+{{RootCmd
+|gpg --verify stage3-amd64-*.tar.bz2.DIGESTS.asc
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+{{Note|As before, you can ignore <tt>gpg</tt> output such as:{{GenericCmd|<pre>
+gpg: WARNING: This key is not certified with a trusted signature!
+gpg:          There is no indication that the signature belongs to the owner.
+</pre>}}
+This is normal since you have just imported the public key, and not yet 'trusted' it.<ref>Information Security Stack Exchange: [http://security.stackexchange.com/questions/6841/ways-to-sign-gpg-public-key-so-it-is-trusted "Ways to sign gpg public key so it is trusted?"]</ref>
+}}
+
+And assuming that worked (output reports 'Good signature'), next check the digests themselves; we'll use the SHA512 variants here:
+{{RootCmd
+|awk '/SHA512 HASH/{getline;print}' stage3-amd64-*.tar.bz2.DIGESTS.asc {{!}} sha512sum --check
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+
+If this outputs:
+{{GenericCmd|<pre>
+stage3-amd64-YYYYMMDD.tar.bz2: OK
+stage3-amd64-YYYYMMDD.tar.bz2.CONTENTS: OK
+</pre>}}
+then continue.
+
+The last step in this stage is to unpack the tarball. Double check you are in the {{Path|/mnt/gentoo}} directory, then issue:
+{{RootCmd
+|tar xvjpf stage3-amd64-*.tar.bz2
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+
+As per the handbook, the options to <tt>tar</tt> are to e'''x'''tract, provide '''v'''erbose output, decompress with bzip2 ('''j'''), '''p'''reserve permissions and extract from a '''f'''ile, not standard input.
+
+Check that the base system has unpacked OK:
+{{RootCmd
+|ls
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+|output=<pre>
+bin   home   lost+found  proc  stage3-amd64-YYYYMMDD.tar.bz2              tmp
+boot  lib    media       root  stage3-amd64-YYYYMMDD.tar.bz2.CONTENTS     usr
+dev   lib32  mnt         run   stage3-amd64-YYYYMMDD.tar.bz2.DIGESTS.asc  var
+etc   lib64  opt         sbin  sys
+</pre>
+}}
+
+If you see a file structure similar to the above, then you can proceed. As we no longer need the stage files, they can be deleted now to save space:
+{{RootCmd
+|rm -v -f stage3-amd64-*
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+
+This structure looks, as it should, a lot like a normal Linux root directory, but it is positioned at {{Path|/mnt/gentoo}}. Later, we'll <tt>bind</tt> in a few additional special directories from our running (minimal) system, and then <tt>chroot</tt> into this new base to continue with the installation.
+
+Lastly, return back to root's home:
+{{RootCmd
+|cd ~
+|prompt=livecd <span style{{=}}"color:blue;">gentoo #</span>
+}}
+
+Before we continue, we'll take a brief detour to discuss some essential Gentoo / Portage background information and terminology. If you are an old hand with this, feel free to [[#configure_compile_opts|skip this material]].
+
+== <span id="gentoo_overview">Gentoo, Portage, Ebuilds and <tt>emerge</tt> (Background Reading)</span> ==
+
+Gentoo is a source-based distribution, the heart of which is a powerful package manager called [[Portage]]. Portage itself has two main components:
+* the [[ebuild]] system, which performs the work of fetching, configuring, building and installing packages, and
+* the [[Emerge#Command-line_interface:_emerge|<tt>emerge</tt>]] tool, which provides a command line interface to control ebuilds, and also allows you to update the {{Highlight|Portage tree}} (discussed [[#portage_tree|below]]).
+
+{{Note|If you're new to all of this, a useful introduction to Portage may be found in Chapter 1 of Part 2 of the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part{{=}}2&chap{{=}}1 Gentoo handbook], and in [[:Wikipedia:Portage_(software){{!}}this Wikipedia article]]. However, don't worry - you don't need to be an adept programmer to use Gentoo on a day-to-day basis! (In fact, if you'd like to skip over this background material now and continue with the next section of the install, just [[#configure_compile_opts{{!}}click here]]).}}
+
+Package ebuilds are [[:Wikipedia:Bash_(Unix_shell)|Bash]] shell scripts, or more accurately shell script ''fragments'', that are sourced into a larger build system 'host' script. This host script provides a package management control flow that invokes a set of default 'hook' functions, which a particular package's ebuild may override if it needs to (these are covered in detail in the [http://devmanual.gentoo.org/ebuild-writing/index.html Gentoo Development Guide]). The ebuild also must [http://devmanual.gentoo.org/ebuild-writing/variables/ define a minimum set of variables] to allow the whole process to operate successfully (for example, the URI from where a package's source tarball may be downloaded must be assigned to the <tt>SRC_URI</tt> variable).
+
+Now, when you invoke an ebuild to install a particular (as yet uninstalled) package on your system (via <tt>emerge</tt>, for example, as described [[#use_emerge|below]]), it will typically carry out the following tasks (''inter alia''):
+* '''check''' that the specified package can be installed (that is, that it isn't masked, or has an incompatible license requirement);
+* '''download''' the package's tarball (or other format source archive) from an upstream repository (or Gentoo mirror);
+* '''unpack''' the tarball in a temporary working area;
+* '''patch''' (and otherwise modify) the unpacked source if need be;
+* '''configure''' the source to prepare it for compilation on your machine;
+* '''compile / build''' the source, as a non-privileged user in the temporary work area;
+* '''run tests''' (if provided and required);
+* '''install''' the built package to a '''dummy filesystem root'''; and
+* '''copy''' ('merge') the package installation files from the '''dummy filesystem root''' to the '''real filesystem root''' (keeping a record of what gets done).
+
+Up until the final file copy-over step (the 'merge' in <tt>emerge</tt>), all operations (even where the package's <tt>make install</tt> is invoked, for example) take place in a temporary staging area. This enables Portage to keep track of all the files installed by a particular package, limit the damage caused by failed compiles or installs, and facilitate simple removal of installed packages. Furthermore, for most of these tasks, Portage operates in a 'sandbox' mode, where attempts to write directly to the ''real'' root filesystem (rather than the temporary work area) are detected, and cause an error to be thrown (NB this is not intended as a security system ''per se'', but it does help prevent accidental filesystem corruption).
+
+{{Note|Portage will attempt to deal with build and runtime dependencies when emerging packages, and will automatically install such dependencies for you, by invoking ''their'' ebuilds.}}
+{{Note|At this stage in the install, you won't be able to see the files referred to in the text below on your target PC, since the minimal install image has an empty {{Path|/usr/portage}} directory, and the system we in the process of creating from the stage 3 tarball (whose root is currently at {{Path|/mnt/gentoo}}) has no {{Path|/usr/portage}} directory yet. This will be rectified [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#update_portage_tree{{!}}in the next chapter]].}}
+
+<span id="portage_tree">Portage</span> stores ebuilds in a hierarchical folder structure - the '''Portage tree''' (or repository), which by default is located under {{Path|/usr/portage}}. The first tree level is the package '''category''', which is used to organize packages into groups which have broadly similar functionality. So, for example, non-core development utilities are typically placed in the <tt>dev-util</tt> category (in folder{{Path|/usr/portage/dev-util}}). The next tree level is the '''package name''' itself. To take a concrete example, the small utility <tt>diffstat</tt>, which (as its name suggests, displays a histogram of changes implied by a patch file, or other <tt>diff</tt> output), is located in the folder {{Path|/usr/portage/dev-util/diffstat}}. Within that subdirectory we have the actual per-package content, specifically:
+* The '''<tt>ebuild</tt>''' files. Each supported version has a file of format <tt><name>-<version>.ebuild</tt>. At the time of writing, there is only one supported version (1.58) of <tt>diffstat</tt> in the Portage tree, so its (single) ebuild is located at {{Path|/usr/portage/dev-util/diffstat/diffstat-1.58.ebuild}}. Portage supports a complex version numbering taxonomy which, for the most part, reflects upstream versioning (discussed further [[#versioning|below]]), and most packages, unlike <tt>diffstat</tt>, will have multiple ebuild versions available at any given time.
+* Package '''metadata'''. This is stored in an xml-format text file (one per package), named <tt>metadata.xml</tt>. Its contents are described [http://devmanual.gentoo.org/ebuild-writing/misc-files/metadata/index.html here], and can contain detailed package descriptions, email addresses for upstream maintainers, documentation about [[#use_flags|USE flags]] etc. <tt>diffstat</tt>'s metadata file is at {{Path|/usr/portage/dev-util/diffstat/metadata.xml}}.
+* A '''change log''' for the package's ebuild(s). This is a text file documenting what changes have been checked in to source control over time. The filename is <tt>ChangeLog</tt>, so <tt>diffstat</tt>'s may be found at {{Path|/usr/portage/dev-util/diffstat/ChangeLog}}.
+* A '''manifest''' file, which contains digests (SHA256, SHA512 and Whirlpool) and file sizes for the contents of the package directory and any referenced tarballs (and patches, if present). It is used to detect corruption and possible tampering during package download / installation. This manifest, which may optionally be digitally signed, is stored in the <tt>Manifest</tt> file; <tt>diffstat</tt>'s therefore resides at {{Path|/usr/portage/dev-util/diffstat/Manifest}}.
+* An optional '''files''' directory. This is used to hold patches and other small files that are supplementary to the main source tarball but referenced by one or more of the package's ebuilds. The directory may be absent if unused. As (at the time of writing) <tt>diffstat</tt> does not require patches, it has no <tt>files</tt> subdirectory either.
+
+{{Note|Since the Portage tree, or repository, is nothing other than a set of files, it can easily be kept up to date with Gentoo's mirrored 'master copy' (and indeed by default this is done using <tt>rsync</tt>, whenever you issue an <tt>emerge --sync</tt>, for example). }}
+
+=== <span id="diffstat_ebuild">A Simple <tt>ebuild</tt> (<tt>diffstat</tt>)</span> ===
+
+So what does an <tt>ebuild</tt> file actually look like, then? <tt>diffstat</tt> happens to be a good minimal example; here (at the time of writing) is what {{Path|/usr/portage/dev-util/diffstat/diffstat-1.58.ebuild}} contains:
+
+{{File|/usr/portage/dev-util/diffstat/diffstat-1.58.ebuild|A fairly minimal ebuild, relying on the default 'hook' functions and control flow|<pre>
+# Copyright 1999-2014 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: /var/cvsroot/gentoo-x86/dev-util/diffstat/diffstat-1.58.ebuild,v 1.12 2014/01/26 12:13:30 ago Exp $
+
+EAPI="5"
+
+DESCRIPTION="Display a histogram of diff changes"
+HOMEPAGE="http://invisible-island.net/diffstat/diffstat.html"
+SRC_URI="ftp://invisible-island.net/diffstat/${P}.tgz"
+
+LICENSE="HPND"
+SLOT="0"
+KEYWORDS="alpha amd64 arm arm64 hppa ia64 ~mips ppc ppc64 s390 sh sparc x86 ~x86-fbsd ~amd64-linux ~x86-linux ~ppc-macos ~x86-macos ~sparc-solaris ~x86-solaris"
+</pre>
+}}
+
+Not a lot to see, is there? That's because <tt>diffstat</tt> uses a standard [[:Wikipedia:GNU_build_system|'Autotools']]-style build, without patches, so the default <tt>ebuild</tt> control flow (and invoked 'hook' functions) can do almost everything for us. Therefore, all that has to be done is:
+* to specify (via the <tt>EAPI</tt> variable) that the <tt>ebuild</tt> makes use of the most modern [http://devmanual.gentoo.org/ebuild-writing/eapi/index.html package manager functionality], including built-in default behaviours (version <tt>5</tt>, at the time of writing).
+* to specify a brief <tt>DESCRIPTION</tt>, <tt>HOMEPAGE</tt> (both self-explanatory) and most importantly, <tt>SRC_URI</tt>; this last variable tells Portage the location from whence to download the package tarball, if it cannot find it in the Portage mirrors (the <tt>${P}</tt> expands out to be the package name and version);
+* to specify the <tt>LICENSE</tt> (the relevant text may be found at {{Path|/usr/src/portage/licenses/${LICENSE}}});
+* to specify that SLOTTING is not used by this ebuild (this is an advanced feature; see [[#slot_intro|below]] for a brief overview); and
+* finally to list the architectures (<tt>KEYWORDS</tt>) for which this <tt>ebuild</tt> applies. Here, we can see for example that it is stable (no tilde) for <tt>amd64</tt>, but only in 'testing' (has a tilde) for <tt>mips</tt>.
+
+That's all that is needed in this case, because the default <tt>ebuild</tt> functions will automatically pull down the tarball, unpack it, issue a <tt>./configure</tt>, issue a <tt>make</tt>, followed by a <tt>make install</tt> (to a dummy root), after which, the program file (plus manpage etc.) will be copied over ('merged') to the real filesystem (and any prior version's files safely unmerged immediately thereafter).
+
+{{Note|In fact, the default <tt>ebuild</tt> flow will handle not just [[:Wikipedia:GNU_build_system{{!}}'Autotools']] packages, but also any package provided with a Makefile that can accept <tt>make</tt> and <tt>make install</tt> invocations, and respects the <tt>DESTDIR</tt> variable. By default, the <tt>./configure</tt> step will be omitted if no <tt>configure</tt> file is found in the top-level source directory of the tarball after unpacking.}}
+
+There are then two main ways to invoke the <tt>diffstat</tt> ebuild. The <span id="use_emerge">first</span> (and more common way) is via <tt>emerge</tt>: typically, you would issue:
+
+{{RootCmd
+|emerge --ask --verbose dev-util/diffstat
+}}
+{{Note|This is just an example, this command is '''not''' part of the installation tutorial and you should not actually issue it at this point.}}
+{{Note|It is also possible to tell <tt>emerge</tt> which specific version you want, for example, you could issue instead:
+{{RootCmd
+|emerge --ask --verbose {{=}}dev-util/diffstat-1.58
+}}
+This is an example of a qualified version atom, discussed [[#qualified_version_atom{{!}}below]].
+
+On the other side of the coin, it is possible to leave off the category qualifier when using <tt>emerge</tt>, but that's not recommended due to occasional ambiguities, where the same name occurs in multiple categories.
+}}
+
+The second (lower level) way is invoke the <tt>ebuild</tt> directly; for example, you could issue:
+{{RootCmd
+|cd /usr/portage/dev-util/diffstat/
+|ebuild diffstat-1.58.ebuild clean merge
+}}
+{{Note|This is also just an example, these commands are '''not''' part of the installation tutorial and you should not actually issue them at this point.}}
+which will clean Portage's temporary build directories, and then perform all the steps of the ebuild workflow, providing detailed output as it does so (you can also use the <tt>ebuild</tt> command to perform only certain steps, if you wish, and it can also create <tt>Manifest</tt> files; see the [http://dev.gentoo.org/~zmedico/portage/doc/man/ebuild.1.html <tt>ebuild</tt> manpage] for details).
+{{Note|Unlike the <tt>emerge</tt> invocation, this will ''not'' add {{Package|dev-util/diffstat}} to the [[World{{!}}@world]] set (see [[#about_sets{{!}}below]] for an explanation of what this means).}}
+
+=== <span id="nwipe_ebuild">A More Complex <tt>ebuild</tt> (<tt>nwipe</tt>)</span> ===
+
+The <tt>diffstat</tt> example above is about as simple as a real-world ebuild gets!
+
+However, one common additional requirement is the need to apply [[:Wikipedia:Patch_(computing)#In_software_development|patches]]. To do this, an ebuild will typically override the [http://devmanual.gentoo.org/ebuild-writing/functions/src_prepare/index.html <tt>src_prepare</tt>] ebuild 'hook' function (invoked by the standard <tt>ebuild</tt> flow after the source tarball has been successfully unpacked), and then use the [http://devmanual.gentoo.org/ebuild-writing/functions/src_prepare/epatch/index.html epatch] utility function to apply patches held in the <tt>files</tt> directory.
+
+For example, consider the <tt>nwipe</tt> package, which provides tools to securely wipe disks. It lives in the <tt>app-crypt</tt> category. Looking in its corresponding directory ({{Path|/usr/portage/app-crypt/nwipe}}) we notice a number of interesting differences from <tt>diffstat</tt>:
+* there are multiple ebuilds (at the time of writing, <tt>nwipe-0.12.ebuild</tt>, <tt>nwipe-0.12-r1.ebuild</tt>, <tt>nwipe-0.13.ebuild</tt> and <tt>nwipe-0.14.ebuild</tt>);
+* there is a <tt>files</tt> subdirectory, containing a single patch (<tt>nwipe-0.12-ncurses.patch</tt>).
+
+Now let's look at the version 0.12-r1 of the <tt>ebuild</tt>:
+{{File|/usr/portage/app-crypt/nwipe/nwipe-0.12-r1.ebuild|A slightly more complex ebuild, illustrating patching and dependencies|<pre>
+# Copyright 1999-2013 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: /var/cvsroot/gentoo-x86/app-crypt/nwipe/nwipe-0.12-r1.ebuild,v 1.1 2013/02/02 22:59:24 alonbl Exp $
+
+EAPI=5
+
+inherit eutils autotools
+
+DESCRIPTION="Securely erase disks using a variety of recognized methods"
+HOMEPAGE="http://sourceforge.net/projects/nwipe/"
+SRC_URI="mirror://sourceforge/${PN}/${P}.tar.gz"
+
+LICENSE="GPL-2"
+SLOT="0"
+KEYWORDS="~amd64 ~x86"
+IUSE=""
+
+RDEPEND=">=sys-block/parted-2.3
+	>=sys-libs/ncurses-5.7-r7"
+DEPEND="${RDEPEND}
+	virtual/pkgconfig"
+
+DOCS="README"
+
+src_prepare() {
+	epatch "${FILESDIR}/${P}-ncurses.patch"
+	eautoreconf
+}
+</pre>
+}}
+
+Most of this should be familiar enough from the <tt>diffstat</tt> example, but there are some new elements too. Specifically:
+* the <tt>inherit</tt> command is used to pull in two useful 'eclasses': [http://devmanual.gentoo.org/eclass-reference/eutils.eclass/ eutils] (which supplies the <tt>epatch</tt> function discussed shortly) and [http://devmanual.gentoo.org/eclass-reference/autotools.eclass/index.html autotools] (which supplies <tt>eautoreconf</tt>);
+* the <tt>SRC_URI</tt> makes use of the <tt>${PN}</tt> variable, which expands out to the package name, ''without'' version (a full list of these convenience variables may be found [http://devmanual.gentoo.org/ebuild-writing/variables/index.html here]);
+* the blank <tt>IUSE</tt> definition specifies that there are no ebuild-specific USE flags (see [[#use_flags|below]] for a brief introduction to USE flags);
+* the <tt>RDEPEND</tt> variable specifies a set of runtime dependencies, and the <tt>DEPEND</tt> a set of build/install time dependencies, for the package. This is used by Portage to ensure that all prerequisites are also installed, when you ask to <tt>emerge app-crypt/nwipe</tt>;
+* the <tt>DOCS</tt> variable is used to notify the default [http://devmanual.gentoo.org/ebuild-writing/functions/src_install/index.html <tt>src_install</tt>] 'hook' function of additional documentation files (in addition to those the <tt>make</tt> itself may copy over, such as manpages) which it should install;
+* the [http://devmanual.gentoo.org/ebuild-writing/functions/src_prepare/index.html <tt>src_prepare</tt>] 'hook' function (which by default is a no-op) is overridden to perform two custom tasks:
+** to patch the source using the <tt>epatch</tt> utility, using a patch file in {{Path|/usr/portage/app-crypt/nwipe/files/nwipe-0.12-ncurses.patch}} (the <tt>${P}</tt> expansion excludes revision tags). As described [http://devmanual.gentoo.org/ebuild-writing/functions/src_prepare/epatch/index.html here], <tt>epatch</tt> intelligently attempts to apply patches using different <tt>-p</tt> levels etc.
+** to invoke [https://www.gnu.org/savannah-checkouts/gnu/autoconf/manual/autoconf-2.69/html_node/autoreconf-Invocation.html <tt>autoreconf</tt>], which updates the [[:Wikipedia:GNU_build_system|'Autotools']] <tt>configure</tt> scripts after the patch has been applied.
+
+{{Note|Of course, ebuilds can be much more complex than either of the above two examples, but they should give you a basic idea of how the system works. For more details, I'd refer you to the Gentoo Development Guide [http://devmanual.gentoo.org/ebuild-writing/index.html "Ebuild Writing"] section.}}
+
+=== <span id="overlays">Overlays</span> ===
+
+What if you want to modify an <tt>ebuild</tt> yourself, or add a new one? You could of course [[Submitting_ebuilds|submit the <tt>ebuild</tt> to Gentoo]] using Bugzilla, but that only really applies to completed work you want to share. For work in progress, or private ebuilds, a different approach is required. You can't simply insert new entries into the {{Path|/usr/portage}} tree, as they'll get overwritten next time you synchronize the Gentoo repository.
+
+Portage supports the concept of [[Overlay|overlays]] to address just this issue. An '''overlay''' is an additional repository, similar in layout to the main Portage tree, which Portage (by default, and as the name suggests) 'overlays' on the {{Path|/usr/portage}} file structure. To illustrate, suppose you created an directory at, say, {{Path|/tmp/myoverlay}}, created the subfolders {{Path|/tmp/myoverlay/dev-util}} and {{Path|/tmp/myoverlay/dev-util/diffstat}}, then created an ebuild {{Path|/tmp/myoverlay/dev-util/diffstat/diffstat-1.58.ebuild}} (and manifest, {{Path|/tmp/myoverlay/dev-util/diffstat/Manifest}}), and then set PORTDIR_OVERLAY="/tmp/myoverlay" (in {{Path|/etc/portage/make.conf}}). Then, when referring to (or installing) <tt>diffstat</tt>, Portage would use ''your'' version, rather than the 'official' <tt>ebuild</tt> (however, if you had created an ebuild with a lower version number, say 1.57, then by default Portage would still use the higher numbered version, from the official {{Path|/usr/portage}} 'underlay').
+
+{{Note|There are actually a few more files you'd need to create in your overlay to make it functional (and you probably wouldn't want to place it in {{Path|/tmp}} in any event!). See [[Overlay/Local_overlay{{!}}these instructions]].}}
+
+Now, while overlays ''can'' be created and managed manually in this manner, it is generally easier to use the [[Overlay#Using_layman|<tt>layman</tt>]] tool for this purpose. <tt>layman</tt> knows about popular user and developer created overlays, and is able to install and synchronize them as desired. We can also instruct <tt>layman</tt> to use custom overlay repositories, and we'll exploit this ability shortly, when we add the '''<tt>sakaki-tools</tt>''' overlay (which will contain a number of useful tools used in this installation walk-through).
+
+=== <span id="portage_config_files">Portage's Configuration Files</span> ===
+
+Portage provides you, the user, with a great deal of flexibility. As such, it has many configuration options, specified via a set of files held in the {{Path|/etc/portage}} directory (and subdirectories thereof). As our installation process is going to involve using Portage (via the command-line tool <tt>emerge</tt>) to download, then build and install up-to-date versions of all core system software, we first need to set up these configuration files appropriately.
+
+The most important Portage configuration files you'll need to know about now are as follows (this is not complete - see [[:/etc/portage|this list]] for more information, and also the Portage manpage<ref>[http://dev.gentoo.org/~zmedico/portage/doc/man/portage.5.html Portage manpage]</ref>):
+{| class="wikitable"
+|-
+! File in {{Path|/etc/portage/}} !! File Description
+|-
+| <span id="about_repos_conf">{{Path|repos.conf}}</span> || Specifies site-specific repository configuration, including the mechanism and [[:Wikipedia:Uniform_resource_identifier{{!}}URI]] via which repositories should be synchronized.
+|-
+| <span id="about_make_conf">{{Path|make.conf}}</span> || Contains definitions of various important variables used by Portage. These variables tell the system, amongst other things:
+* the default licensing to accept (for example, accept only free software), 
+* the system architecture to target (for example, the 'amd64' architecture - actually a generic reference to 64-bit processors, whether from AMD or Intel - used here), 
+* some information about the system video card and input devices
+* whether to build the 'stable' versions of packages, or the latest, 'testing' version (happily, Gnome3 has now hit the 'stable' branch of Gentoo, so we can use this);
+* the default {{Highlight|USE flags}} (<span id="use_flags">USE flags</span> are Portage 'meta-instructions' to control the build process for packages; they are a core Portage concept and introduced in Chapter 2 of Part 2 of the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=2&chap=2 Gentoo handbook]; 
+* what URLs to use when syncing the Portage tree (and many source tarballs) (we'll want to point to local mirrors, to keep things fast), 
+* what logging to perform during builds (we'll switch this on, since its very useful when things go wrong)
+* and many others. 
+To ease the problem of setting things up correctly for your particular use case (e.g., a headless server, or, as in our case, a Gnome desktop with systemd), Portage makes use of [[Profile|profiles]]. <span id="variable_check_order">A profile specifies (inter alia) a set of default values for the variables in {{Path|/etc/portage/make.conf}}, which will be used if the appropriate variable is not defined in the user's environment (checked first) or in the {{Path|/etc/portage/make.conf}} file.</span> (NB - so-called incremental variables, such as the one which holds the list of USE flags, are an exception to this masking approach, as they 'cascade' additively, from profile, through {{Path|/etc/portage/make.conf}}, to the user's environment.)
+
+It <span id="per_package_config">is also possible</span> to specify overrides for certain elements of Portage's operation on a per-package basis, through the use of the following configuration files:
+|-
+| <span id="about_package_mask">{{Path|package.mask}}</span> || Versions of packages specified in [[:/etc/portage/package.mask|package.mask]] are 'masked' - that is, blocked from installation (think of it as an installation blacklist). This is most commonly used to prevent Portage updating a package when there is some bug or incompatibility with the new release. It is also sometimes used to mask out ''everything'' in a large third-party [[Overlay|overlay]], for security (with only the specific packages that are wanted then being allowed, by explicit citation in the {{Path|Package.unmask}} file (discussed next).
+|-
+| <span id="about_package_unmask">{{Path|package.unmask}}</span> || This file overrides {{Path|package.mask}} (think of it as an installation whitelist). It is sometimes used to allow 'activate' specific packages only from a large overlay (which has been otherwise totally masked via {{Path|package.mask}}, above).
+|-
+| <span id="about_package_use">{{Path|package.use}}</span> || [[:/etc/portage/package.use|package.use]] contains a list of USE flags for individual packages. It's comes in handy when specifying flags that have only localized meaning (e.g., suppressing the installation of Guest Additions in VirtualBox), or which you only want to turn on in very selective situations (such as the <tt>test</tt> flag, for example). You can also turn off USE flags for particular packages, by prefixing them with a minus sign ('-').
+|-
+| <span id="about_package_license">{{Path|package.license}}</span> || The package.license file allows you to specify allowed licenses on a per-package basis. It's generally used where you have a restrictive licensing default (such as 'free software only', as we are going to set), but need to add some exceptions for a few cases.
+|-
+| <span id="about_package_accept_keywords">{{Path|package.accept_keywords}}</span> || The package.accept_keywords file allows you to specify packages which should use the testing, rather than stable, software branch. It is best to keep the use of this to a minimum, to avoid dependency pollution, but it is sometimes necessary (for example, when using software for which no stabilized version yet exists in the tree).
+|}
+
+{{Note|It is possible to have any of the above as subdirectories, rather than files, in which case the contents of the subdirectory will be parsed in alphabetical order.<ref>Gentoo Wiki Archives: [http://www.gentoo-wiki.info/TIP_New_/etc/portage_layout "TIP_New_/etc/portage_layout"]</ref> We will keep things simple, however, and stick with the file-based schema.}}  
+
+=== <span id="atoms_and_friends">Atoms, Packages, Categories, Versions, Sets and SLOTs</span> ===
+
+Finally for this background overview, there are a few Portage <span id="atoms_etc">package mangement terms</span> that are worth a brief recap:
+* As mentioned, a '''package''' refers to a homogeneous block of software managed by a single ebuild, whether third-party (e.g., <tt>openvpn</tt>) or internal to Gentoo itself (e.g., <tt>gentoolkit</tt>).
+* Packages are grouped (as leaves of a tree) into '''categories''', which describe broad classes of functionality. For example, <tt>openvpn</tt> is in the <tt>net-misc</tt> category (along with other network tools like <tt>wget</tt> and <tt>rsync</tt>); <tt>gentoolkit</tt> is in the <tt>app-portage</tt> category (along with other Portage applications, like <tt>mirrorselect</tt> and <tt>elogviewer</tt>).
+* A package '''base atom''' simply refers to the name made up of the full category, followed by the package, without version information or other qualifiers. So for example {{Package|net-misc/openvpn}}, {{Package|app-portage/gentoolkit}} etc. You can find all the ebuilds in the currently sync'd tree for a given <category>/<packagename> base atom in the directory {{Path|/usr/portage/<category>/<packagename>}} (so, for example, {{Path|/usr/portage/dev-util/diffstat/}}), and find more information about that base atom online at <tt>https://packages.gentoo.org/package/<category>/<packagename></tt> (so, for example, [https://packages.gentoo.org/package/app-portage/gentoolkit https://packages.gentoo.org/package/app-portage/gentoolkit]). While it is often possible to drop the category name and simply use the package itself, it's generally safer to use the base atom, since two different packages of the same name may exist in different categories (e.g. <tt>axiom</tt> could refer to either {{Package|dev-python/axiom}}, an object database over SQLite, or {{Package|sci-mathematics/axiom}}, a computer algebra system).
+* It is generally possible to specify that a specific repository should be used to supply a package, by appending <tt>::<reponame></tt> to its atom. For example, <tt>emerge --ask --verbose dev-util/diffstat::myrepo</tt> would force Portage to install the <tt>diffstat</tt> package from the <tt>myrepo</tt> repository (and would fail if either that overlay was unknown, or if the {{Package|dev-util/diffstat}} package was not present in it).
+* Any given package will normally be supported at multiple <span id="versioning">'''versions'''</span> within Portage (one ebuild per version). Not all versions from the upstream tree may be present as ebuilds, only certain selected versions. The online package data referred to above will show what versions are available, on which architectures, and which are marked as 'stable', which are 'testing' (shown with a tilde ('~')), and which are masked (will not be installed by Portage, generally due to known problems or with the ebuild, or incompatibilities with other packages). You can fully qualify an atom by specifying its version as a suffix - generally, you take the base atom, then add a hyphen ('-'), then add a period-separated list of numbers (possibly finishing with a letter, and/or a revision suffix). So, for example, version 2.3.2 of <tt>openvpn</tt> would be written as {{Package|net-misc/openvpn-2.3.2}}; version 1.14 (r1) of <tt>wget</tt> as {{Package|net-misc/wget-1.14-r1}}. Revisions are Gentoo <tt>ebuild</tt> specific, they do not relate to upstream versioning.
+* When specifying atoms to Portage in certain places (such as configuration files, like {{Path|/etc/portage/package.use}}), you can either specify base atoms (meaning apply the action to all ebuild versions), or a <span id="qualified_version_atom">qualified version atom</span>. You can qualify a versioned atom with:
+** A <span id="atom_prefix">'''prefix'''</span> ('>', '>=', '=', '<=', '<'], to restrict the action to particular versions relative to the stated variant (for example, if you appended "<tt>>=net-misc/openvpn-2.3.1 passwordsave</tt>" to {{Path|/etc/portage/package.use}}, you'd be telling Portage to apply the <tt>passwordsave</tt> use flag to any version of <tt>openvpn</tt> at or above 2.3.1.
+** A '''extended prefix''': there are a number of these but the most important is '~', which is used to specify any revision of the base version specified. So, for example, <tt>~app-portage/gentoolkit-0.3.0.8</tt> would refer to {{Package|app-portage/gentoolkit-0.3.0.8}}, {{Package|app-portage/gentoolkit-0.3.0.8-r1}}, {{Package|app-portage/gentoolkit-0.3.0.8-r2}} etc.
+** A '''wildcard suffix''' ('*'). This can be used to match any version with the same string ''prefix''. So for example, <tt>net-misc/openvpn-2.3*</tt> would match {{Package|net-misc/openvpn-2.3.0}}, {{Package|net-misc/openvpn-2.3.1}}, {{Package|net-misc/openvpn-2.3.2}} etc.
+For more information on atom naming, see the <tt>ebuild</tt> (5) manpage.<ref>[http://dev.gentoo.org/~zmedico/portage/doc/man/ebuild.5.html <tt>ebuild</tt> (5) manpage]</ref>
+* A number of atoms may be <span id="about_sets">grouped together into a '''set'''</span>, so that operations (e.g. reinstallation) can be easily targeted at the whole group. Sets are special names and are prefixed by '@': some of these are pre-defined in Portage (for example, the [[System|<tt>@system</tt>]] set (containing vital system software packages, the contents of the stage 3 tarball plus other component dictated by your [[Profile|profile]]), or the dynamically populated [[Preserve-libs|<tt>@preserved-rebuild</tt>]] set (which holds a list of packages using libraries whose [[:Wikipedia:Soname|sonames]] have changed (during an upgrade or downgrade) but whose rebuild has not been triggered automatically). The [[World|<tt>@world</tt>]] set refers to all packages you explicitly requested be installed (plus the <tt>@system</tt> set), and is contained in a file {{Path|/var/lib/portage/world}}. You can even [http://makuro.wordpress.com/2010/12/12/intro-to-portage-sets/ define your own sets] if you like.
+* Portage <span id="slot_intro">also allows</span> (subject to certain limitations) different versions of the same package to exist on a machine at the same time: we speak of them being installed in different '''SLOT'''s. We won't need to refer to the SLOT technology explicitly in this tutorial, but should you see a versioned atom with a colon ':' followed by some numbers and possibly other characters at the end, that's a SLOT reference. For example, with the {{Package|x11-libs/gtk+}} library, it is possible to have version 2.24.24 and 3.10.7 installed in parallel, should you desire it (in SLOTs 2 and 3).<ref>Gentoo Development Guide: [http://devmanual.gentoo.org/general-concepts/slotting/ "Slotting"]</ref> You might then see a reference to <tt>x11-libs/gtk+:3</tt>, which would refer to ''any'' version of <tt>gtk+</tt> in SLOT 3 (which would, for example, cover version 3.4.4 as well).
+
+That's about it for this sidebar on atoms and versioning, apart from one last point: unlike other Linux distributions, you'll see no reference to 'releases' of Gentoo itself - there's nothing similar to Ubuntu's [[:Wikipedia:Ubuntu_(operating_system)#Releases|"Quantal Quetzal" or "Trusty Tahr"]], Debian's [[:Wikipedia:Debian#Releases|"squeeze" or "wheezy"]], Fedora's [[:Wikipedia:Fedora_(operating_system)#Releases|"Spherical Cow" or "Heisenbug"]] etc. That's because, once installed, Gentoo itself is essentially ''versionless'' - when you update your system (more on which later), all installed software updates to the latest supported versions (subject to restrictions imposed by the Gentoo developers and you yourself, through settings in {{Path|/etc/portage/make.conf}}, {{Path|/etc/portage/package.mask}} etc.). 
+
+The upside of this is that you can get access to the latest and (often) greatest versions of software as soon as new ebuilds get released into the tree. The downside is that (particularly on the 'testing' (rather than the 'stable') branch), that sometimes updates fail to complete successfully, something which is very rare indeed when using binary distributed, release-based distributions such as Ubuntu.
+
+Time to get back to the install!
+
+== <span id="configure_compile_opts">Configuring {{Path|/etc/portage/make.conf}}</span> ==
+
+Our first Portage configuration task is to ensure that the download / unpack / compile / install cycle (aka 'emerging') - which you'll see rather a lot of when running Gentoo - is as <span id="parallel_emerge">efficient</span> as possible. That primarily means taking advantage of whatever parallelism your system can offer.
+
+{{Important|Remember that we have not yet performed a <tt>chroot</tt>. As such, our vestigial system is still mounted at {{Path|/mnt/gentoo}}. Therefore, our new system configuration files are at {{Path|/mnt/gentoo/etc/portage}}, not {{Path|/etc/portage}}, and so on. Confusingly, since the minimal install system is ''also'' a Gentoo system, there actually '''is''' a {{Path|/etc/portage}} directory, but the files in there are ''not'' the ones you need to edit. Make sure you don't get mixed up! In what follows, if you are instructed to ''edit'' a file, its full path (including mountpoint prefix) will always be given, to avoid any ambiguity.}}
+
+There are two main dimensions to this - the maximum number of concurrent Portage jobs that will be run at any one time, and the maximum number of parallel threads executed by the <tt>make</tt> process invoked by each ebuild itself. 
+
+As has been recommended, we'll set our number of concurrent jobs and parallel make threads to attempt, to be equal to the number of CPUs on the system, plus one.<ref>Preney, Paul. [http://www.preney.ca/paul/archives/341 "Parallel Builds with Gentoo's Emerge"]</ref> We'll also prevent new jobs or compilations starting when the system load average hits or exceeds the number of CPUs.
+
+The two variables we'll need to set here are EMERGE_DEFAULT_OPTS (for Portage job control) and [[MAKEOPTS]] (to pass options on to <tt>make</tt>). These are often defined in the {{Path|make.conf}} file, but we want to allow the values to be set programmatically. Since Portage doesn't support fancy [[:Wikipedia:Bash_(Unix_shell)|bash]] features like command substitution,<ref>[http://dev.gentoo.org/~zmedico/portage/doc/man/make.conf.5.html make.conf manpage]</ref> we'll set and export these variables in root's {{Path|.bashrc}} instead (these will then override any conflicting values in the {{Path|make.conf}} or profile, as explained [[#variable_check_order|earlier]]).
+{{Note|Generally speaking, <tt>emerge</tt> is launched as the root user (superuser) in Gentoo. <tt>emerge</tt> usually drops its privilege level to run as the "portage" user when compiling.}} 
+
+Start up your favourite editor: in this tutorial we'll be assuming <tt>nano</tt>:
+{{RootCmd
+|nano -w /mnt/gentoo/root/.bashrc
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|The <tt>-w</tt> option tells the nano editor ''not'' to auto-wrap long lines (auto-wrapping can really mess up config files!).}}
+
+<tt>nano</tt> is a pretty simple editor to use: move around using the arrow keys, type to edit as you would in any text processing program, and exit with {{Key|Ctrl}}{{Key|x}} when done: you'll be prompted whether to save changes if you have modified the file. At this point, enter {{Key|y}} and {{Key|Enter}} to exit, saving changes, or {{Key|n}} to exit without making changes. For some more information on the <tt>nano</tt> editor, see [[Nano/Basics_Guide|this Wiki entry]].
+
+Add the following text to the file:
+
+{{File|/mnt/gentoo/root/.bashrc|Setting up MAKEOPTS and EMERGE_DEFAULT_OPTS|<pre>
+export NUMCPUS=$(grep -E 'processor\s+:' /proc/cpuinfo | wc -l)
+export NUMCPUSPLUSONE=$(( NUMCPUS + 1 ))
+export MAKEOPTS="-j${NUMCPUSPLUSONE} -l${NUMCPUS}"
+export EMERGE_DEFAULT_OPTS="--jobs=${NUMCPUSPLUSONE} --load-average=${NUMCPUS}"
+</pre>
+}}
+
+Save and exit the <tt>nano</tt> editor.
+
+Next, we need to make sure that the {{Path|.bashrc}} file is picked up by root's login shell, so copy across the default {{Path|.bash_profile}}:
+{{RootCmd
+|cp -v /mnt/gentoo/etc/skel/.bash_profile /mnt/gentoo/root/
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Next, <span id="setup_make_conf">on to the {{Path|make.conf}}</span> configuration file itself. The stage 3 tarball we extracted already contains a skeleton configuration. We'll open this file with <tt>nano</tt> (feel free to substitute your favourite alternative editor), delete the existing lines (in <tt>nano</tt>, {{Key|Ctrl}}{{Key|k}} can be used to quickly cut the current line), and enter our alternative configuration instead (see [[#make_conf_summary|after]] for a line-by-line explanation). Issue:
+{{RootCmd
+|nano -w /mnt/gentoo/etc/portage/make.conf
+|prompt=livecd <span style{{=}}"color:blue;">~ #</span>
+}}
+Edit the file so it reads:
+{{File|/mnt/gentoo/etc/portage/make.conf|Setting up essential Portage variables|<pre>
+# Build setup as of <add current date>
+
+# C and C++ compiler options for GCC.
+CFLAGS="-march=native -O2 -pipe"
+CXXFLAGS="${CFLAGS}"
+
+# Note: MAKEOPTS and EMERGE_DEFAULT_OPTS are set in .bashrc
+
+# Only free software, please.
+ACCEPT_LICENSE="-* @FREE"
+
+# WARNING: Changing your CHOST is not something that should be done lightly.
+# Please consult http://www.gentoo.org/doc/en/change-chost.xml before changing.
+CHOST="x86_64-pc-linux-gnu"
+
+# Use the 'stable' branch - 'testing' no longer required for Gnome 3.
+ACCEPT_KEYWORDS="amd64"
+
+# Additional USE flags in addition to those specified by the current profile.
+USE="sse3 ssse3 sse4 avx avx2"
+
+# Important Portage directories.
+PORTDIR="/usr/portage"
+DISTDIR="${PORTDIR}/distfiles"
+PKGDIR="${PORTDIR}/packages"
+
+# Turn on logging - see http://gentoo-en.vfose.ru/wiki/Gentoo_maintenance.
+PORTAGE_ELOG_CLASSES="info warn error log qa"
+PORTAGE_ELOG_SYSTEM="save"
+# Logs go to /var/log/portage/elog by default - view them with elogviewer.
+
+# Settings for X11
+VIDEO_CARDS="intel i965"
+INPUT_DEVICES="evdev synaptics"
+</pre>
+}}
+{{Note|Set <tt>VIDEO_CARDS</tt> and <tt>INPUT_DEVICES</tt> to appropriate values for your particular system in {{Path|/etc/portage/make.conf}}. See table [[#video_cards_variable{{!}}below]] for discussion.}}
+
+Save the file and exit <tt>nano</tt>.
+
+Here is a <span id="make_conf_summary">brief summary</span> of the shipped ('stage 3') values are, and what our version achieves:
+
+{| class="wikitable"
+|-
+! Variable !! Value in Stage 3's make.conf!! Our Value !! Description
+|-
+| <tt>CFLAGS</tt> || <tt>-O2 -pipe</tt> || <tt style="color:blue">-march=native</tt><tt> -O2 -pipe</tt>|| This variable is used to inform the [[:Wikipedia:GNU_Compiler_Collection|GNU Compiler Collection]] (GCC) what switches to use when compiling source code. The defaults specify [[GCC_optimization#-O|<tt>-O2</tt>]], which sets the recommended level of optimization (producing smaller, faster code at the expense of a slightly longer compilation), and [[GCC_optimization#-pipe|<tt>-pipe</tt>]], which instructs the compiler to use pipes rather than temporary files where possible (speeding up compilation in exchange for additional memory requirements). We retain these, and add [[GCC_optimization#-march|<tt>-march=native</tt>]]. This instructs the compiler to detect your CPU type automatically, and then produce code exploiting its idiosyncratic features, special instruction sets and so on. '''Setting <tt>-march=native</tt> implies that code produced will very likely not run on other CPUs: don't use it if you intend to compile packages for use on other machines!'''
+|-
+| <tt>CXXFLAGS</tt> || <tt>${CFLAGS}</tt> || ${CFLAGS} || This is the equivalent of CFLAGS for C++ code. We retain the default behaviour, which is to copy the CFLAGS.
+|-
+| <tt style="color:blue"><span id="set_license">ACCEPT_LICENSE</span></tt> || ''absent'' || <tt style="color:blue">-* @FREE</tt> || This incremental variable [[GLEP:23|controls]] which licenses are acceptable for packages used on your system, another nice feature of Portage. Here, we first of all disable any permitted licenses that may have been inherited from the profile (with <tt>-*</tt>) and then enable only the 'free' license [[License_Groups#Metasets|metaset]] (with <tt>@FREE</tt>). (This is 'free' in the Free Software Foundation sense, so is relatively safe.<ref>Free Software Foundation: [http://www.gnu.org/philosophy/free-sw.html "What is free software?"]</ref>)
+|-
+| <tt>CHOST</tt> || <tt>x86_64-pc-linux-gnu</tt> || <tt>x86_64-pc-linux-gnu</tt> || The [[CHOST]] variable is very important. It is a dash-separated tuple of ''architecture''-''vendor''-''operating_system''-''C_library'' and is used to control the build process. The default value here (architecture: x86_64, vendor: pc, operating system: linux, C library: gnu) is fine for our purposes so we will not change it. In general, you should simply copy this value across from the original stage 3 {{Path|make.conf}} file.
+|-
+| <tt style="color:blue"><span id="set_keywords">ACCEPT_KEYWORDS</span></tt> || ''absent'' || <tt style="color:blue">amd64</tt> || This variable instructs Portage which ebuild ''keywords'' it should accept. '''As Gnome 3 has now been stabilized, there is no need to use the 'testing' branch'''; (<span id="choose_testing_branch">but should you wish to do so,</span> use '~amd64' rather than 'amd64'; please note that a consequence of doing so is that you will receive very up-to-date versions of ''all'' the software on your system (good), and occasionally, you may encounter the odd problem when updating (due to conflicts or bugs that have not yet surfaced and been resolved) (not so good)).
+|-
+| <tt>USE</tt> || <tt>bindist mmx sse sse2</tt> || <tt style="color:blue">sse3 ssse3 sse4 avx avx2</tt>|| As discussed [[#use_flags|above]], use flags specify package features to Portage (and often, but not always, map directly to [[:Wikipedia:Autoconf|autoconf]] feature options 'under the cover'<ref>Gentoo Development Guide: [http://devmanual.gentoo.org/general-concepts/autotools/index.html "The Basics of Autotools"]</ref><ref>Gentoo Development Guide: [http://devmanual.gentoo.org/quickstart/index.html#ebuild-with-use-flags "Quickstart Ebuild Guide: Ebuild with USE Flags"]</ref><ref>Calcote, John. ''Autotools''. No Starch Press, 2010. "Supporting Optional Features and Packages", p. 107 ff.</ref>). As we will be building packages for a personal machine, and not for binary redistribution, we omit the <tt>bindist</tt> flag; omitting it allows certain additional codecs etc. to be enabled. The [[:Wikipedia:MMX_(instruction_set)|<tt>mmx</tt>]], [[:Wikipedia:Streaming_SIMD_Extensions|<tt>sse</tt>]] and [[:Wikipedia:SSE2|<tt>sse2</tt>]] flags specify certain CPU-specific instruction sets. We omit them because they will be enabled by default in the profile we'll be using anyway, so are redundant here. However, a quick <tt>cat</tt> of {{Path|/proc/cpuinfo}} shows that our processor ''also'' supports the [[:Wikipedia:SSE3|<tt>sse3</tt>]] instruction set (shows up as <tt>pni</tt> in {{Path|/proc/cpuinfo}}), and also [[:Wikipedia:SSSE3|<tt>ssse3</tt>]], [[:Wikipedia:SSE4|<tt>sse4</tt>]] and [[:Wikipedia:Advanced_Vector_Extensions|<tt>avx</tt>]] and [[:Wikipedia:Advanced_Vector_Extensions|<tt>avx2</tt>]]. Since these will ''not'' end up enabled by default in the profile, we set them here. (Note - these architecture flags should not be mixed up with the compiler-related CFLAGS and CXXFLAGS, although they appear somewhat similar. Generally, architecture use flags will set package-features (for example, in [[:Wikipedia:Ffmpeg|<tt>ffmpeg</tt>]], enabling specific blocks of pre-written assembly code).
+
+If your target machine has a different processor, '''make sure''' that these features are present in {{Path|/proc/cpuinfo}} before adding their use flags here, otherwise, your system may crash. If in doubt, omit them (doing so is always safe).
+|-
+| <tt>PORTDIR</tt> || <tt>/usr/portage</tt> || <tt>/usr/portage</tt> || This variable simply defines the location of the [[PORTDIR|Portage tree]]. We leave it as-is.
+|-
+| <tt>DISTDIR</tt> || <tt>${PORTDIR}/distfiles</tt> || <tt>${PORTDIR}/distfiles</tt> || This variable defines where Portage will store its [[DISTDIR|source code tarballs]]. Again, we leave it as is.
+|-
+| <tt>PKGDIR</tt> || <tt>${PORTDIR}/packages</tt> || <tt>${PORTDIR}/packages</tt> || This variable decides where [[Binary_package_guide#PKGDIR|binary packages]] will be stored, should you decide to download them (as an alternative to compiling from source), or to create your own (as a side-effect of compiling from source). We won't be doing either in this tutorial, but leave the setting as is anyhow. (Note - if you do create binaries for redistribution, you '''must''' set the <tt>bindist</tt> use flag.)
+
+|-
+| <tt style="color:blue">PORTAGE_ELOG_CLASSES</tt> || ''absent'' || <tt style="color:blue">info warn error log qa</tt> || This variable tells Portage what kinds of ebuild messages you want logged. The flags given here switch on all messages; modify to suit your own requirements (see the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?style=printable&part=3&chap=1#doc_chap4 Gentoo handbook], part 3 chapter 1 for more details).
+|-
+| <tt style="color:blue">PORTAGE_ELOG_SYSTEM</tt> || ''absent'' || <tt style="color:blue">save</tt> || This variable instructs Portage what to do with log messages - in this case <tt>save</tt> them (rather than pass them to a user-defined command, etc.)
+|-
+| <tt style="color:blue"><span id="video_cards_variable">VIDEO_CARDS</span></tt> || ''absent'' || <tt style="color:blue">intel i965</tt> || This variable is used to inform various packages which video card you have in your system (it is a [http://devmanual.gentoo.org/general-concepts/use-flags/#use_expand-and-arch-use-flags <tt>USE_EXPAND</tt>] variable). You ''can'' omit it, in which case modular support for all available systems is implied (as such, it's more efficient to specify it). The Panasonic CF-AX3 has modern [[Intel|integrated Intel graphics]], as do many laptops, so we specify <tt>intel i965</tt> here. If you have an nVidea card, and wish to use open-source drivers, you should specify [[Nouveau|<tt>nouveau</tt>]] instead here, for example; if an ATI card, [[Radeon|<tt>radeon</tt>]], etc. (See [[Xorg/Configuration#make.conf_configuration|these comments]] on the Gentoo wiki.)
+|-
+| <tt style="color:blue"><span id="input_devices_variable">INPUT_DEVICES</span></tt> || ''absent'' || <tt style="color:blue">evdev synaptics</tt> || This variable instructs the X Window server (which we will be installing shortly) which input devices to support. It is also a <tt>USE_EXPAND</tt> variable. Most systems will require [[Evdev|<tt>evdev</tt>]]; as the Panasonic CF-AX3 is a laptop with a touchpad, we also include [[Synaptics|<tt>synaptics</tt>]] (see [[Xorg/Configuration#make.conf_configuration|these comments]] on the Gentoo wiki).
+|}
+
+== <span id="next_steps">Next Steps</span> ==
+
+Now we have these options configured, we're ready to <tt>chroot</tt> into our 'stage 3' environment and start building! [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel|Click here]] to go to the next chapter, "Building the Gentoo Base System Minus Kernel".
+
+== <span id="notes">Notes</span> ==
+{{reflist}}
+
+== <span id="acknowledgements">Acknowledgements</span> ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* {{Mail|sakaki@deciban.com|sakaki}}
+
+{| style="margin: 1em auto 1em auto;"
+|-
+| [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key|<]]
+| [[EFI_Gentoo_End_to_End_Install|Home]]
+| [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel|>]]
+|}
+
+[[Category:Installation]]
+[[Category:Core system]]
+[[Category:Laptops]]
+[[Category:Portage]]
