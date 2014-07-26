@@ -1,0 +1,432 @@
+<!-- Page: Configuring_Secure_Boot -->
+
+<span id="config_secure_boot">In this section</span>, which has no equivalent in the standard Gentoo handbook, we'll be setting up [[:Wikipedia:Unified_Extensible_Firmware_Interface#Secure_boot|secure boot]] on your target machine.
+
+Windows 8-certified hardware ships with secure boot turned on by default (but only the Windows-sanctioned public keys installed in the machine), which is why, to get things started, we had to turn this feature off in the BIOS [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#turn_off_secure_boot|earlier]] in the tutorial. Now, however, we're going to 'take control of the platform' and add our own keys, so that we can use self-signed EFI stub kernels (which our <tt>buildkernel</tt> utility can create). The original Microsoft keys will be retained as well, so both Windows 8 ''and'' our self-signed Gentoo kernels should be able to boot with secure mode on. 
+
+While secure boot has received [[:Wikipedia:Unified_Extensible_Firmware_Interface#Secure_boot_criticism|mixed reviews]] from the Linux community, it ''is'' a useful facility. With it activated, your machine will refuse to boot an executable that has been changed since it was signed (in an [http://searchsecurity.techtarget.com/definition/evil-maid-attack 'evil maid attack'] for example), thereby closing off an important attack vector.
+{{Note|Of course, by retaining the Microsoft keys, your kernel binary could technically still be compromised in such an attack by someone with access to the ''Windows'' private keys (since they could resign it after making changes). If this bothers you, you can always remove the Windows keys from the machine completely, and fall back to non-secure-boot for Windows operation.}}
+
+The steps we'll be undertaking are as follows (see [[#secure_boot_intro|below]] for a brief explanation of the terms used):
+# We'll begin by saving off the current contents of the <tt>PK</tt>, <tt>KEK</tt>, <tt>db</tt> and <tt>dbx</tt> variables, as all four will be cleared when we enter setup mode (in step 4).
+# We will then create three new private / public keypairs, to be used respectively as:
+## our platform key (this will ultimately be stored in the <tt>PK</tt> signature database);
+## our key exchange key (this will ultimately be appended to the <tt>KEK</tt> signature database); and
+## our kernel-signing key (this will ultimately be appended to the <tt>db</tt> signature database).
+# We'll create a ''signed signature list'' for our new <tt>PK</tt> (more on what this means later). 
+# We will then reboot the machine, and en route use the BIOS GUI to clear the secure variables, thereby entering setup mode.
+# Then we will re-install our saved values of <tt>KEK</tt>, <tt>db</tt> and <tt>dbx</tt>.
+# Next, we'll append our own public keys to <tt>KEK</tt> and <tt>db</tt>.
+# Then, we'll set our own key in <tt>PK</tt>, thereby re-entering user mode. We'll use the signed signature list for this.
+# We will then run <tt>buildkernel</tt>, to rebuild our EFI-stub kernel, this time appropriately signed with our new kernel-signing (private) key.
+# Then we will restart the machine, enable secure boot, and check that our signed kernel is permitted to start up by the BIOS (it should be).
+# We'll then reboot into Windows, and check that it is also still permitted to start (again, it should be). When in Windows, we'll take the chance to set the clock format to UTC.
+# Finally, we'll reboot back into our signed kernel, (optionally setting a BIOS password en route) and proceed with the tutorial.
+
+Let's get started!
+
+== <span id="secure_boot_intro">Introduction</span> ==
+
+We'll begin with a (very brief) primer on secure boot. (For a more in-depth review, please refer to James Bottomley's article "The Meaning of all the UEFI Keys"<ref name="uefi_key_meanings">Bottomley, J. [http://blog.hansenpartnership.com/the-meaning-of-all-the-uefi-keys/ "The Meaning of all the UEFI Keys"]</ref>, Greg Kroah-Hartman's article "Booting a Self-signed Linux Kernel"<ref name="boot_self_signed">Kroah-Hartman, G. [http://www.kroah.com/log/blog/2013/09/02/booting-a-self-signed-linux-kernel/ "Booting a Self-signed Linux Kernel"]</ref>, and of course the UEFI specification itself<ref name="uefi_spec">''Unified Extensible Firmware Specification'', Version 2.4, April 2014. Download available after registration from [http://www.uefi.org/specifications UEFI]</ref>.)
+
+{{Note|If you're already familiar with secure boot, simply [[#save_keystore_create_new_keys{{!}}click here]] to skip directly to the next section.}}
+
+{{Note|A <span id{{=}}"digital_signatures_primer">brief "meta-primer"</span> on {{Highlight|digital signatures}} may be in order first, since they are central to the operation of secure boot.
+
+To sign a file (for example, an executable EFI-stub kernel), a [[:Wikipedia:Message_digest{{!}}''message digest'']] of that file is first created (a message digest is a cryptographic hash function, which creates a fixed-length summary value from input data of arbitrary size, in a manner that is practically impossible to invert).
+
+Next, this digest is [[:Wikipedia:Public-key_cryptography{{!}}''asymmetrically encrypted'']] using a private key known only to the certifier. The resulting [[:Wikipedia:Ciphertext{{!}}ciphertext]] is a ''digital signature'', which may be appended to the original data to produce a ''digitally signed file''.
+
+To verify the signature, a recipient (or an automated system, such as the UEFI BIOS) splits the target file into the main body and digital signature, produces a digest of the first and compares it with the plaintext produced by decrypting (using a counterpart public key) the second. If the hashes match, the signature is valid (and the recipient can be confident that the payload was not tampered with). 
+
+The diagram below illustrates this process:
+{{{!}}style{{=}}"background:transparent; color:black" 
+{{!}}[[File:Digital_Signature_diagram.png{{!}}thumb{{!}}none{{!}}400px{{!}}Applying and Verifying a Digital Signature]]
+{{!}}}
+}}
+
+The UEFI specification defines four secure, non-volatile variables, which are used to control the secure boot subsystem. They are:
+# The '''Platform Key (PK)'''. The '''<tt>PK</tt>''' variable contains a UEFI (small 's', small 'b') 'signature database' which has at most one entry in it. When PK is emptied (which the user can perform via a BIOS GUI action), the system enters {{Highlight|setup mode}} (and secure boot is turned off). In setup mode, any of the four special variables can be updated without authentication checks. However, immediately a valid platform key is written into PK (in practice, this would be an [[:Wikipedia:X.509|X.509]] public key, using a 2048-bit [[:Wikipedia:RSA_(cryptosystem)|RSA]] scheme), the system (aka, 'platform') enters {{Highlight|user mode}}. Once in user mode, updates to any of the four variables ''must'' be digitally signed with an acceptable key.<br>The private key counterpart to the public key stored in PK may be used to sign user-mode updates to <tt>PK</tt> or <tt>KEK</tt>, but ''not'' db or dbx (nor can it be used to sign executables).
+# The '''Key Exchange Key (KEK)'''. This variable holds a signature database containing one (or more) X.509 / 2048-bit RSA public keys (other formats are possible). In user mode, any <tt>db</tt>/<tt>dbx</tt> (see below) updates ''must'' be signed by the private key counterpart of one of these keys (the <tt>PK</tt> cannot be used for this).<br>While <tt>KEK</tt> keys (or, more accurately, their private-key counterparts) ''may'' also be used to sign executables, it is uncommon to do so, since that's really what <tt>db</tt> is for (see below).
+# The (caps 'S', caps 'B') '''Signature Database (db)'''. As the name suggests, this variable holds a UEFI signature database which may contain (any mixture of) public keys, signatures and plain hashes. In practice, X.509 / RSA-2048 public keys are most common. It functions essentially as a boot executable whitelist (described in more detail shortly).
+# The '''Forbidden Signatures Database (dbx)'''. This variable holds a signature database of similar format to <tt>db</tt>. It functions essentially as a boot executable blacklist.
+
+Now, here's the key point (excuse the pun): when the system is in user mode, and secure boot is enabled, the machine will '''only''' boot EFI executables which:
+* are unsigned, but have a hash (message digest) in <tt>db</tt> and not in <tt>dbx</tt>; ''or''
+* are signed, where that signature appears in <tt>db</tt> but not in <tt>dbx</tt>; ''or''
+* are signed, where that signature is verifiable by a public key in <tt>db</tt>, or a public key in <tt>KEK</tt>, and where neither that key, not the signature itself, appears in <tt>dbx</tt>.
+
+{{Note|PK is ''not'' consulted when attempting to verify executables.}}
+
+When you buy a new Windows 8 machine, it will usually be set up as follows:
+* The PK variable will be loaded with a public key issued by the hardware vendor (for example, Panasonic).
+* The KEK variable will be loaded with a public key issued by Microsoft.
+* The db variable will be loaded with a set of public keys issued by various vendors authorized by Microsoft).
+* The dbx variable will generally contain some revoked signatures (although it may also be empty, it depends on the revision of Windows 8 on your machine).
+
+== <span id="save_keystore_create_new_keys">Saving Current Keystore Values, and Creating New Keys</span> ==
+
+We begin by re-establishing an <tt>ssh</tt> connection, as before (as it will make the work of entering commands etc. easier). From the helper PC, issue:
+{{Cmd
+|ssh root@192.168.1.106
+|prompt=user@pc2 $
+|output=<pre>
+Password: <enter root password>
+... additional output suppressed ...
+</pre>}}
+{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#post_reboot_ip{{!}}earlier]] for 192.168.1.106 in the above command. It is possible (although unlikely, with modern DHCP) that the target's IP address will have changed during the reboot for <tt>plymouth</tt> testing. If so, log in directly at the target machine's keyboard, use <tt>ifconfig</tt> to find out the new address, then issue the above <tt>ssh</tt> command citing that address. As before, in such a case you may need to clean out any previous record of <tt>ssh</tt> connections to (other machines at) that new address (since the fingerprints will not match), using:
+{{Cmd
+|sed -i '/^[^[:digit:]]*192.168.1.106[^[:digit:]]/d' ~/.ssh/known_hosts
+|prompt=user@pc2 $}}
+obviously substituting the new address for <tt>192.168.1.106</tt> in the above. Then, be sure to check the fingerprint when prompted (by the subsequent <tt>ssh</tt> command), against those you noted down [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#note_new_fingerprints{{!}}earlier]].
+}}
+
+Now proceed as below, using the <tt>ssh</tt> connection to enter all commands unless otherwise specified (incidentally, there is no need to use <tt>screen</tt> at this point, since we'll be rebooting again shortly). Issue:
+{{RootCmd
+|mkdir /etc/efikeys
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+{{Note|The <tt>buildkernel</tt> script expects to find its keys in the {{Path|/etc/efikeys}} directory, so please don't change the location.}}
+
+Ensure only the superuser can access this directory, using [[File_System_Security#Managing permission_bits,_bit_wrangling|<tt>chmod</tt>]] - issue:
+{{RootCmd
+|chmod -v 700 /etc/efikeys
+|cd /etc/efikeys
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+Next, <span id="save_old_secure_vars">we'll use</span> the <tt>efi-readvar</tt> tool (from the {{Package|app-crypt/efitools}}) to store off the current values of <tt>PK</tt>, <tt>KEK</tt>, <tt>db</tt> and <tt>dbx</tt>, in machine-readable signature list format. Issue:
+{{RootCmd
+|efi-readvar -v PK -o old_PK.esl
+|efi-readvar -v KEK -o old_KEK.esl
+|efi-readvar -v db -o old_db.esl
+|efi-readvar -v dbx -o old_dbx.esl
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+{{Note|If you omit the <tt>-o</tt> option, the variables will be dumped as text, and you won't be able to reload them, so take care!}}
+{{Note|If you have problems with the <tt>efi-readvar</tt> command, make sure that you have symbolically linked {{Path|/etc/mtab}} to {{Path|/proc/self/mounts}}, as described [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#symlink_etc_mtab{{!}}earlier in the tutorial]], because <tt>efi-readvar</tt> is vulnerable a problem similar to {{Bug|434090}}. If you haven't got this symbolic link in place, you should do it now, restart, reconnect <tt>ssh</tt>, and then rejoin the tutorial from this point, trying the above commands again.}}
+
+Now we <span id="create_secure_boot_keys">can create</span> a new platform keypair, key-exchange keypair and kernel-signing keypair. We'll use <tt>openssl</tt> to do this. The requested keys will:
+* use [[:Wikipedia:X.509|X.509]] certificate format for the public key (this allows various additional data fields to be passed with the key if desired, for subsequent identification); 
+* utilise the [[:Wikipedia:RSA_(cryptosystem)|RSA]] asymmetric cryptosystem, with a 2048 bit key length;
+* have 10 years (3650 days) to run until expiry;
+* use [[:Wikipedia:SHA256|SHA-256]] as the public key's message digest.
+
+Issue:
+{{RootCmd
+|openssl req -new -x509 -newkey rsa:2048 -subj "/CN{{=}}sakaki's platform key/" -keyout PK.key -out PK.crt -days 3650 -nodes -sha256
+|openssl req -new -x509 -newkey rsa:2048 -subj "/CN{{=}}sakaki's key-exchange-key/" -keyout KEK.key -out KEK.crt -days 3650 -nodes -sha256
+|openssl req -new -x509 -newkey rsa:2048 -subj "/CN{{=}}sakaki's kernel-signing key/" -keyout db.key -out db.crt -days 3650 -nodes -sha256
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+{{Note|You can substitute anything you like for the "common name" (<tt>CN</tt>) text in the above commands (and you should in any event change the name from 'sakaki'! ^-^ ). Alternatively, if you omit the <tt>-subj "/CN{{=}}<...>/"</tt> text completely, you will be ''prompted'' to enter values, in exactly the same manner as when creating a self-signed domain certificate.<ref>Stevens, Didier. Blog: [http://blog.didierstevens.com/2008/12/30/howto-make-your-own-cert-with-openssl/ "Howto: Make Your Own Cert With OpenSSL"]</ref> None of the information fields (<tt>CN</tt>, <tt>C</tt> etc.) affect the operation of secure boot. However, putting ''some'' meaningful text in there can help when later reviewing the contents of the four secure variables (which you can do by simply issuing <tt>efi-readvar</tt>, with no arguments).}}
+
+This will have created three X.509 public-key certificate files (<tt>PK.crt</tt>, <tt>KEK.crt</tt> and <tt>db.crt</tt>), and three counterpart private key files (<tt>PK.key</tt>, <tt>KEK.key</tt> and <tt>db.key</tt>). We'll make the private keys readable only by root (an extra precaution, since they already in a directory readable only by root). Issue:
+{{RootCmd
+|chmod -v 400 *.key
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+
+The <tt>efi-updatevar</tt> tool (also from the {{Package|app-crypt/efitools}}), which we'll use shortly, can use raw X.509 certificates and keys to update the <tt>KEK</tt>, <tt>db</tt> and <tt>dbx</tt> secure variables. However, it is more picky (as of the time of writing) about the <tt>PK</tt> variable, and will only accept this in the 'signed signature list' ('<tt>.auth</tt>') format. We can create this in a <span id="create_PK_auth">two step process</span> (using two command line tools from {{Package|app-crypt/efitools}}). First, we make a signature list (which requires a unique ID, the value of which is essentially unimportant), and then we use our own (private) platform key to sign it. Let's do both now - issue:
+{{RootCmd
+|cert-to-efi-sig-list -g "$(uuidgen)" PK.crt PK.esl
+|sign-efi-sig-list -k PK.key -c PK.crt PK PK.esl PK.auth
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+
+The file we need out of this is <tt>PK.auth</tt>.
+
+== <span id="install_new_keys">Entering Setup Mode, and Installing New Keys</span> ==
+
+With the preparations completed, we're ready to enter [[:Wikipedia:Unified_Extensible_Firmware_Interface#Secure_boot|setup mode]]. Reboot the machine:
+{{RootCmd
+|systemctl reboot
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+
+''Immediately'' your target PC starts to come back up again, enter the BIOS setup screen. As mentioned before, the exact method of entering the BIOS varies greatly from machine to machine (as does the BIOS user interface itself). On the Panasonic CF-AX3, press {{Key|F2}} during startup (you may need to press it repeatedly, and you do this directly on the target machine's keyboard).
+
+Once the BIOS setup screen comes up, using the same navigation techniques as [[EFI_Gentoo_End_to_End_Install/Creating_and_Booting_the_Minimal-Install_Image_on_USB#bios_navigation|before]], perform the following steps:
+# clear the UEFI secure boot variables, thereby entering setup mode; and
+# restart your machine (saving changes).
+
+It's impossible to be precise about the GUI actions required to achieve the above, as they will vary from BIOS to BIOS. However, to give you some idea, here's how you go about it on the Panasonic CF-AX3 (which has an AMT BIOS).
+
+To achieve step 1, use the arrow keys to navigate across to the 'Security' tab. Then, navigate down to the 'Secure Boot' item, and press {{Key|Enter}}. This enters a special 'Security' sub-page. Navigate down to the 'Clear Secure Boot Keys' item, and press {{Key|Enter}}. Confirm that you wish to proceed by selecting 'Yes' in the popup which appears, then press {{Key|Enter}}. If asked to reconfirm, select 'Yes' and press {{Key|Enter}} again:
+{|style="background:transparent; color:black" 
+|[[File:Bios_clear_boot_keys.jpg|thumb|none|400px|Clearing Boot Keys (Entering Setup Mode)]]
+|}
+
+Next, ensure that your boot USB key is still inserted, then press {{Key|F10}} to restart (step 2), and confirm if prompted.
+
+The machine should restart, and, just as [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#entering_plymouth_LUKS_password|before]], you will see the <tt>plymouth</tt> passphrase screen. Enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard, and wait for the text console login to appear.
+
+Then, re-connect to the machine via <tt>ssh</tt>. From the helper PC, issue:
+{{Cmd
+|ssh root@192.168.1.106
+|prompt=user@pc2 $
+|output=<pre>
+Password: <enter root password>
+... additional output suppressed ...
+</pre>}}
+{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#post_reboot_ip{{!}}earlier]] for 192.168.1.106 in the above command. It is possible (although unlikely, with modern DHCP) that the target's IP address will have changed during the reboot. If so, log in directly at the target machine's keyboard, use <tt>ifconfig</tt> to find out the new address, then issue the above <tt>ssh</tt> command citing that address. As before, in such a case you may need to clean out any previous record of <tt>ssh</tt> connections to (other machines at) that new address (since the fingerprints will not match), using:
+{{Cmd
+|sed -i '/^[^[:digit:]]*192.168.1.106[^[:digit:]]/d' ~/.ssh/known_hosts
+|prompt=user@pc2 $}}
+obviously substituting the new address for <tt>192.168.1.106</tt> in the above. Then, be sure to check the fingerprint when prompted (by the subsequent <tt>ssh</tt> command), against those you noted down [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#note_new_fingerprints{{!}}earlier]].
+}}
+
+Now proceed as below, using the <tt>ssh</tt> connection to enter all commands unless otherwise specified (again, we will not need <tt>screen</tt>). Issue:
+{{RootCmd
+|cd /etc/efikeys
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+You can verify that the secure variables have been cleared. To do so, enter:
+{{RootCmd
+|efi-readvar
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+and review the output.
+{{Note|You may see a fifth variable, <tt>MokList</tt>, displayed when you do this. This is an EFI "Boot Services Only Variable" which some Linux distributions use to allow their bootloader shims to work under secure boot.<ref>SUSE Conversations: [https://www.suse.com/communities/conversations/uefi-secure-boot-details/ "SUSE and Secure Boot: The Details"]</ref> We won't need to worry about it.}}
+
+Next, we'll reload the old contents of <tt>KEK</tt>, <tt>db</tt> and <tt>dbx</tt>, which we saved off [[#save_old_secure_vars|above]], thereby ensuing that Windows will still be permitted to load under secure boot (if we don't do this, it will be blocked). Issue:
+{{RootCmd
+|efi-updatevar -e -f old_KEK.esl KEK
+|efi-updatevar -e -f old_db.esl db
+|efi-updatevar -e -f old_dbx.esl dbx
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+The <tt>-e</tt> option specifies that an EFI signature list file is to be loaded (and the <tt>-f</tt> option precedes the filename itself). Because we are in setup mode, no private key is required for these operations (which it would be, if we were in user mode).
+
+Assuming that completed successfully, we can now ''append'' our own key-exchange and kernel-signing public keys, which we created and stored into <tt>KEK.crt</tt> and <tt>db.crt</tt> (respectively) [[#create_secure_boot_keys|earlier]]. Issue:
+{{RootCmd
+|efi-updatevar -a -c KEK.crt KEK
+|efi-updatevar -a -c db.crt db
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+Note that here, we are using the <tt>-a</tt> option to append (rather than replace), and a slightly different format for the input file (since it is a X.509 certificate, rather than a signature list, we drop the <tt>-e</tt>, and use <tt>-c</tt> rather than <tt>-f</tt> to introduce the pathname). More details can be found in the <tt>efi-updatevar</tt> manpage.
+
+Having made our changes, we can now write our own platform key into PK, using the signed signature list we created [[#create_PK_auth|earlier]]. Issue:
+{{RootCmd
+|efi-updatevar -f PK.auth PK
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+If this succeeds, the target machine will have been switched back to user mode (although secure boot is not yet enabled).
+
+Display the contents of all the secure variables now. Issue:
+{{RootCmd
+|efi-readvar
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+and verify that both your new keys, and Microsoft's original set, are present.
+
+Now, let's make a backup (in machine readable signature list format) of the current state of the variables. Issue:
+{{RootCmd
+|efi-readvar -v PK -o new_PK.esl
+|efi-readvar -v KEK -o new_KEK.esl
+|efi-readvar -v db -o new_db.esl
+|efi-readvar -v dbx -o new_dbx.esl
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+
+== <span id="test_secure_boot">Testing Secure Boot with a Signed Kernel</span> ==
+
+Our next step is to create an appropriately signed kernel. The <tt>buildkernel</tt> script will do this automatically for us, provided that the files {{Path|/etc/efikeys/db.key}} (the private kernel-signing key) and {{Path|/etc/efikeys/db.crt}} (it's public key counterpart) exist (which they now do). Ensure that the boot USB key is still inserted, then issue:
+{{RootCmd
+|buildkernel
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+
+This should not take long to complete (as by default it does not <tt>make clean</tt>).
+{{Note|You may see some output similar to the following from <tt>buildkernel</tt>:
+{{GenericCmd| 
+ ... additional output suppressed ...
+ <span style{{=}}"color:green;">*</span> Signing kernel
+ warning: file-aligned section .text extends beyond end of file
+ warning: checksum areas are greater than image size. Invalid section table?
+ ... additional output suppressed ...
+}}
+These warnings may safely be ignored.
+}}
+
+Assuming the kernel build completed successfully, we can now restart, turn on secure boot, and try it out! Issue:
+{{RootCmd
+|systemctl reboot
+|prompt=koneko <span style{{=}}"color:blue;">efikeys #</span>
+}}
+
+''Immediately'' your target PC starts to come back up again, enter the BIOS setup screen. As mentioned before, the exact method of entering the BIOS varies greatly from machine to machine (as does the BIOS user interface itself). On the Panasonic CF-AX3, press {{Key|F2}} during startup (you may need to press it repeatedly, and you do this directly on the target machine's keyboard).
+
+Once the BIOS setup screen comes up, using the same navigation techniques as [[EFI_Gentoo_End_to_End_Install/Creating_and_Booting_the_Minimal-Install_Image_on_USB#bios_navigation|before]], perform the following steps:
+# turn on secure boot; and
+# restart your machine (saving changes).
+
+It's impossible to be precise about the GUI actions required to achieve the above, as they will vary from BIOS to BIOS. However, to give you some idea, here's how you go about it on the Panasonic CF-AX3 (which has an AMT BIOS).
+
+To achieve step 1 on the CF-AX3, use the arrow keys to select the 'Security' tab, then navigate down to the 'Secure Boot' item, and select it by pressing {{Key|Enter}}. This enters a 'Security' page; navigate to the 'Secure Boot control' item, and press {{Key|Enter}}. In the popup that appears, select 'Enabled' using the arrow keys, and press {{Key|Enter}}:
+{|style="background:transparent; color:black" 
+|[[File:Bios_enable_secure_boot.jpg|thumb|none|400px|Enabling Secure Boot]]
+|}
+
+Next, ensure that your USB boot key is still inserted, then press {{Key|F10}} to restart (step 2), and confirm if prompted.
+
+The machine should restart, and, if all goes well, you should shortly be prompted with the <tt>plymouth</tt> passphrase screen. If so, then congratulations, you are running a self-signed kernel under secure boot! Enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard, and wait for the text console login to appear, as previously.
+
+{{Note|If you <span id{{=}}secure_boot_problems>have problems</span> (for example, the target PC refuses to boot your signed kernel), then simply restart, turn off secure boot again via the BIOS (as described [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#turn_off_secure_boot|earlier]]), and then try working through the steps in this section again. 
+
+If that ''still'' doesn't work, or if you experience difficulties using the <tt>efi-readvar</tt> or <tt>efi-updatevar</tt> commands, then you may have more luck by either:
+* using the standalone <tt>keytool.efi</tt> utility; this is an EFI executable, available as a bootable USB image, which you can use to manipulate the secure variables;<ref name="boot_self_signed"/> or
+* using a [[:Wikipedia:UEFI_shell#The_UEFI_shell|UEFI shell]] to invoke special-purpose binaries from the <tt>efitools</tt> package.<ref>Smith, Rod. [http://www.rodsbooks.com/efi-bootloaders/secureboot.html#installing "Managing EFI Boot Loaders for Linux: Dealing with Secure Boot: Installing Your Own Keys"]</ref>
+
+These alternative approaches are however beyond the scope of this tutorial.
+}}
+
+== <span id="verify_win8_secure_boot">Verifying Secure Boot with Windows (and Fixing RTC)</span> ==
+
+Having successfully booted our own self-signed kernel, we next have to check that Windows 8 still works. '''Remove''' the boot USB key from the target machine, then (while it is still running Gentoo) log in directly at the target machine's keyboard (at the login prompt, enter 'root' as the user (without quotes), and then type the root password you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]]). Then issue (directly at the machine's keyboard):
+{{RootCmd
+|systemctl reboot
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+
+As the boot USB key is not inserted, Windows 8 should start automatically. If it does boot, you have just verified that Windows also starts properly under your modified secure boot settings (and if it does not, follow the troubleshooting hints [[#secure_boot_problems|above]]).
+
+Now, while Windows is running, let's take the chance to switch its clock to UTC, to match that used by <tt>systemd</tt> (which we set [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#systemd_utc|earlier]] in the tutorial). 
+
+To achieve this, login to your Windows account (which must have administrator rights - the first user created on a new Windows 8 install has these by default), as usual. Next, perform the following steps (these also work with Windows 8.1):<ref>SuperUser Forum: [http://superuser.com/questions/494432/force-windows-8-to-use-utc-when-dealing-with-bios-clock#552275 "Force Windows 8 to use UTC when dealing with BIOS clock"]</ref>
+
+# First we'll {{Highlight|check the Windows time, date and timezone is correct}}. Hit {{Key|Windows Key}} to get back to the main Windows 8 'tiles' view (aka "Start screen"), and type {{GenericCmd|date and time}} Click on the 'Settings' icon (underneath the search box on the right of the screen). On the left side of the screen, click on the 'Date and time settings' entry that then appears. (Note - on Windows 8.1, this item appears directly below the search bar when you type.) A 'Date and time' page appears. Set appropriate values for your locale.
+# Next, we'll {{Highlight|instruct Windows to use UTC}} (this will require a registry edit). Hit {{Key|Windows Key}} to get back to the main Windows 8 tiles view, and type {{GenericCmd|regedit}} Then, click on the 'regedit' item that appears on the left (on Windows 8.1, this item appears directly below the search bar when you type). If prompted (via a dialog) whether to allow it to make changes to your computer, click 'Yes'. You drop to the desktop, with the <tt>regedit</tt> program open; using the navigation tree-view on the left, select <tt>HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\TimeZoneInformation</tt> (you need to click on the little arrows to see the lower levels of the tree). Once this item has been selected, various time-zone related information will display on the right-hand pane. Right-click in the white area at the bottom of this pane, and choose <tt>New->DWORD (32-bit Value)</tt> from the context menu that appears. A fresh DWORD entry is added to the end of the list with its name selected - overtype this with {{GenericCmd|RealTimeIsUniversal}} then press {{Key|Enter}}. Now double-click on the name, and a dialog will appear, in which you can edit the key's value. Type in '1' (the number one) for the value, as shown below:[[File:Win8Regedit.png|thumb|none|400px|Setting UTC Under Windows 8]] Close the dialog by clicking on 'OK'. Then exit the <tt>regedit</tt> application (using the menu item <tt>File->Exit</tt>).
+# Now we'll {{Highlight|disable the Windows Time Service}}. This is easily done from the Windows command line. Hit {{Key|Windows Key}} to get back to the main Windows 8 tiles view, and type {{GenericCmd|command}} Now ''right-click'' on the 'Command Prompt' icon that appears on the left side of the screen, then click on 'Run as administrator' icon at the bottom of the screen (in Windows 8.1, this option is in a context menu, and the 'Command Prompt' item itself appears directly below the search bar). If asked whether you wish to proceed, click 'Yes'. You drop to the desktop with an open command window. Now enter {{GenericCmd|sc config w32time start{{=}} disabled}} Hopefully, this should report <tt>SUCCESS</tt>. Close out the command window (by clicking on the 'x' in its title bar).
+# Next, we'll force Windows to {{Highlight|update the time}}. Hit {{Key|Windows Key}} to get back to the main Windows 8 tiles view, and type {{GenericCmd|date and time}} Click on the 'Settings' icon (underneath the search box on the right of the screen). On the left side of the screen, click on the 'Date and time settings' entry that then appears. (Note - on Windows 8.1, this item appears directly below the search bar when you type.) The 'Date and time' page (which we used above) appears. Move the 'Set time automatically' slider to 'Off', and then back to 'On' again. Assuming you have a network connection, the time should immediately update when you do this (and, assuming your locale is set correctly, it should be accurate).
+
+== <span id="set_bios_password">Setting BIOS Password (Optional), and Restarting Gentoo Linux</span> ==
+
+Next, we will <span id="reboot_from_win8_to_linux">reboot back into Gentoo</span>. Re-insert the boot USB key into the target PC. Then, in Windows-8, hit {{Key|Ctrl}}{{Key|Alt}}{{Key|Delete}}, then click on the power icon at the bottom right of the screen, and choose 'Restart' from the pop-up menu.
+
+''Immediately'' your target PC starts to come back up again, enter the BIOS setup screen. As mentioned a number of times now, the exact method of entering the BIOS varies greatly from machine to machine (as does the BIOS user interface itself). On the Panasonic CF-AX3, press {{Key|F2}} during startup (you may need to press it repeatedly, and you do this directly on the target machine's keyboard).
+
+{{Note|If your target machine is using the 'fast boot' option with Windows, you may not have sufficient time to hit the BIOS-enter key on restart. See [[EFI_Gentoo_End_to_End_Install/Creating_and_Booting_the_Minimal-Install_Image_on_USB#fast_boot_to_BIOS{{!}}this earlier note]] for a solution.}}
+
+Once you have the BIOS configuration screen up, you need to perform the following steps:
+# select the "<tt>Gentoo Linux (USB Key)</tt>" EFI boot item as top priority;
+# (optionally) set a BIOS password; then
+# restart your machine (saving changes).
+
+It's impossible to be precise about the GUI actions required to achieve the above, as they will vary from BIOS to BIOS. However, to give you some idea, here's how you go about it on the Panasonic CF-AX3 (which has an AMT BIOS).
+
+To <span id="set_boot_order_gentoo">achieve step 1</span> on the CF-AX3, use the arrow keys the arrow keys to navigate to the 'Boot' tab, and then down to the 'UEFI Priorities' item. Press {{Key|Enter}}, and a sub-page is displayed. Ensure the item 'UEFI Boot from USB' is enabled (if it isn't, enable it now, and then press {{Key|F10}} to restart, and come back to this point). Navigate down to 'Boot Option #1' and press {{Key|Enter}}. In the pop-up menu that appears, select the "<tt>Gentoo Linux (USB Key)</tt>" item (which was added to the boot list when we ran <tt>buildkernel</tt> earlier):
+
+{|style="background:transparent; color:black" 
+|[[File:Bios_set_efi_boot_order_gentoo.jpg|thumb|none|400px|Reselecting Gentoo as the First Boot Option]]
+|}
+
+Press {{Key|Enter}} to set this as the top boot option. Finally, press {{Key|Esc}} to exit the subpage.
+{{Note|Some PC UEFI BIOSes may not accept / display a USB boot target unless you:
+* insert the USB device when the BIOS screen is active;
+* then power cycle (e.g., via {{Key|F10}} on the Panasonic CF-AX3); and then 
+* come back immediately into the BIOS (via {{Key|F2}} on the CF-AX3).
+You'll need to experiment to find what works on your particular machine.}}
+{{Note|Each time you use Windows, you'll need to go through this BIOS process prior to using your USB key to boot into Linux again, because Windows will generally place itself at the top of the list when it runs.<ref>Watson, J. ZDNet: [http://www.zdnet.com/uefi-and-windows-8-update-on-windowslinux-dual-boot-systems-7000028217/ "UEFI and Windows 8 Update on Windows/Linux dual-boot systems"]</ref> It's a little annoying, but we ''have'' avoided the need for a shim bootloader! (Furthermore, you only have to go through this process when switching from Windows to Linux, and ''not'' when power cycling Linux, or switching from Linux to Windows (since you simply restart without the USB boot key inserted to do that).)}}
+{{Note|<span id{{=}}"win_restart_use_a_device">There ''is'' an alternative procedure</span>, but it comes with some complications. When you are running Windows 8 (and want to restart into Linux),  hit {{Key|Ctrl}}{{Key|Alt}}{{Key|Delete}}, then click on the power icon at the bottom right of the screen, and then ''while holding down'' {{Key|Shift}}, click 'Restart' from the pop-up menu. This will pass you into the Windows boot options menu. Once this comes up (and asks you to 'Choose an option'), click on the 'Use a device' tile. This will show another page, on which you will see a tile entitled 'Gentoo Linux (USB Key)' (and possibly some others). Insert the boot USB key, click the tile, and you should find that the system restarts and that Linux is loaded (and you get the usual <tt>plymouth</tt> passphrase screen, etc.).
+So far, so good, since this way of working avoids going through the BIOS. However, when you do this, Windows has only really set the (one-time) 'boot next' value in EFI, which means that once you restart ''again'' from Gentoo (even with the boot USB key still inserted), Windows will start up.
+To get around this, <span id{{=}}"use_efibootmgr">once you</span> have booted into Gentoo and logged in as root, you need to use the <tt>efibootmgr</tt> tool (which you already have installed on your system at this point, as it is a dependency of <tt>buildkernel</tt>), to show (and then re-order) the boot list. As root, issue:
+{{RootCmd
+|efibootmgr
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+BootCurrent: 0000
+Timeout: 1 seconds
+BootOrder: 0003,0004,0005,0000
+Boot0000* Gentoo Linux (USB Key)
+Boot0003* Windows Boot Manager
+Boot0004* UEFI: IP4 Intel(R) Ethernet Connection I218-LM
+Boot0005* UEFI: IP6 Intel(R) Ethernet Connection I218-LM
+</pre>
+}}
+Clearly, the above is only an example, and your output would probably differ; but the important point to note is that while you are booted into item X on the list (as shown by <tt>BootCurrent</tt>, here <tt>0000</tt>), the underlying <tt>BootOrder</tt> has entry Y first on the list (which is Windows, here <tt>0003</tt>).
+
+You could then fix this by issuing (for our example here):
+{{RootCmd
+|efibootmgr --bootorder 0000,0003,0004,0005
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|output=<pre>
+BootCurrent: 0000
+Timeout: 1 seconds
+BootOrder: 0000,0003,0004,0005
+Boot0000* Gentoo Linux (USB Key)
+Boot0003* Windows Boot Manager
+Boot0004* UEFI: IP4 Intel(R) Ethernet Connection I218-LM
+Boot0005* UEFI: IP6 Intel(R) Ethernet Connection I218-LM
+</pre>
+}}
+Obviously, it's fairly simple to automate this with a script (which runs each time at Linux startup). This is left as an exercise for the reader ^-^.
+}}
+
+<span id="set_bios_pw">The next step</span> (#2, installing a BIOS password) is optional, but it is sensible to ensure that secure boot cannot be switched off by an attacker with temporary access to your machine (to permit a tampered kernel to run without your knowledge, for example). Most machines support some form of BIOS password, but the means of setting it varies widely. On the CF-AX3, use the arrow keys to navigate to the 'Security' tab, and then move down to the 'Set Supervisor Password' item, and press {{Key|Enter}}. Type your password into the pop-up that appears:
+{|style="background:transparent; color:black" 
+|[[File:Bios_set_password.jpg|thumb|none|400px|Setting a BIOS Password]]
+|}
+When done, press {{Key|Enter}}. Then, when prompted, re-type the password to confirm and press {{Key|Enter}}.
+{{Warning|Write this password down in a safe place! If you forget it, you won't be able to access your BIOS, and you'll have to contact your machine's manufacturer to have it reset.}}
+
+It is then sensible (on the CF-AX3, at any rate) to disable the BIOS's ''boot'' password prompt (otherwise, you'll have to type in the BIOS (supervisor) password every time you boot from USB). On the CF-AX3, navigate up to the 'Password On Boot' item, and press {{Key|Enter}}. Then, in the pop-up that appears, use the arrow keys to select 'Disabled', and press {{Key|Enter}} to select:
+{|style="background:transparent; color:black" 
+|[[File:Bios_disable_boot_password.jpg|thumb|none|400px|Ensuring BIOS Password Not Prompted for on Boot]]
+|}
+
+That's it! Now ensure that the boot USB key is still inserted, then press {{Key|F10}} to restart (step 3), and confirm if prompted.
+
+The machine should restart, and, if all goes well, you should shortly be prompted with the (by now familiar) <tt>plymouth</tt> passphrase screen. Enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard, and wait for the text console login to appear, just as before.
+
+Then, re-connect to the machine via <tt>ssh</tt>. From the helper PC, issue:
+{{Cmd
+|ssh root@192.168.1.106
+|prompt=user@pc2 $
+|output=<pre>
+Password: <enter root password>
+... additional output suppressed ...
+</pre>}}
+{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#post_reboot_ip{{!}}earlier]] for 192.168.1.106 in the above command. It is possible (although unlikely, with modern DHCP) that the target's IP address will have changed during the reboot. If so, log in directly at the target machine's keyboard, use <tt>ifconfig</tt> to find out the new address, then issue the above <tt>ssh</tt> command citing that address. As before, in such a case you may need to clean out any previous record of <tt>ssh</tt> connections to (other machines at) that new address (since the fingerprints will not match), using:
+{{Cmd
+|sed -i '/^[^[:digit:]]*192.168.1.106[^[:digit:]]/d' ~/.ssh/known_hosts
+|prompt=user@pc2 $}}
+obviously substituting the new address for <tt>192.168.1.106</tt> in the above. Then, be sure to check the fingerprint when prompted (by the subsequent <tt>ssh</tt> command), against those you noted down [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#note_new_fingerprints{{!}}earlier]].
+}}
+
+Use the <tt>ssh</tt> connection to enter all subsequent commands unless otherwise specified (do not start up <tt>screen</tt> at this point, we'll do so again shortly). 
+
+The final thing thing we must do here is to check that our system time details have not been messed up by Windows (which, given the changes we have just made, they should not have been). Issue:
+{{RootCmd
+|timedatectl
+|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+}}
+and make sure the time and date are still correct, and in particular that the "<tt>RTC in local TZ</tt>" field reports as <tt>no</tt>.
+
+== <span id="next_steps">Next Steps</span> ==
+
+Congratulations, setup of secure boot is complete! Next, we can install the GNOME 3 graphical environment. [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop|Click here]] to go to the next chapter, "Setting up the GNOME 3 Desktop".
+
+== <span id="notes">Notes</span> ==
+{{reflist}}
+
+== <span id="acknowledgements">Acknowledgements</span> ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* {{Mail|sakaki@deciban.com|sakaki}}
+
+{| style="margin: 1em auto 1em auto;"
+|-
+| [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools|<]]
+| [[EFI_Gentoo_End_to_End_Install|Home]]
+| [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop|>]]
+|}
+
+[[Category:Installation]]
+[[Category:Bootloaders]]
+[[Category:Core system]]
+[[Category:Laptops]]
+[[Category:Kernel]]
+[[Category:Security]]
