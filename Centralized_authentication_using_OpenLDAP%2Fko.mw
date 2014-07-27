@@ -1,7 +1,7 @@
 <languages />
 
 
-{{Metadata|abstract=이 안내서는 LDAP 기초를 소개하고 그룹과 젠투 머신 사이에 인증 목적으로 OpenLDAP 를 어떻게 설치하는지 보여드립니다.}}
+{{Metadata|abstract=이 안내서는 LDAP 기초를 소개하고 컴퓨터 그룹을 인증하는데 사용할 OpenLDAP를 어떻게 설정하는지 보여드립니다.}}
 
 
 This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for authentication purposes between a group of computers.
@@ -13,7 +13,7 @@ This guide introduces the basics of LDAP and shows you how to setup OpenLDAP for
 
 LDAP는 "경량 디렉터리 접근 프로토콜을 의미합니다. X.500을 기반하며 주된 기능의 대부분을 아우르고 있지만 X.500이 가진 일부 기능은 부족합니다. 자, 그러면 X.500은 무엇이고 왜 LDAP가 있는걸까요? 
 
-X.500은 OSI 개념속의 디렉터리 서비스 모델입니다. 여기엔 이름 공간의 정의와 디렉터리 요청 및 업데이트를 위한 프로토콜이 들어가 있습니다. 그러나, X.500은 대부분의 시뮬레이션을 박살내놓고도 남았습니다. LDAP로 들어오십시오. X.500과 같이 디렉터리에 대한 데이터/이름 공간 모델과 프로토콜도 제공합니다. 그러나 LDAP는 TCP/IP 스택을 통해 동작하도록 설계했습니다. LDAP를 X.500에서 군더더기를 뺀 모습으로 보십시오. 
+X.500 is a model for Directory Services in the OSI concept. It contains namespace definitions and the protocols for querying and updating the directory. However, X.500 has been found to be overkill in many situations. Enter LDAP. Like X.500 it provides a data/namespace model for the directory and a protocol. However, LDAP is designed to run directly over the TCP/IP stack. See LDAP as a slim-down version of X.500. 
 
 === 잘 모르겠는데요. 디렉터리가 뭔가요? ===
 
@@ -34,7 +34,7 @@ uid: ..   John            ## (OU-specific data)
 </pre>
 }}
 
-아스키 이미지 같은 방식으로 데이터베이스에 데이터를 넣지 않았기 때문에 모든 트리의 노드를 반드시 정의해야 ㅎ바니다. 이 노드에 이름을 부여하기 위해 LDAP에서는 작명 스킴을 사용합니다. 대부분의 LDAP 배포(OpenLDAP 포함)에서는 이미 설정한 스킴과 설정 몇가지를 포함합니다. inetorgperson 같은 경우, 사용자를 정의하는 스킴을 자주 사용합니다.
+Since you don't feed data to the database in this ascii-art like manner, every node of such a tree must be defined. To name such nodes, LDAP uses a naming scheme. Most LDAP distributions (including OpenLDAP) already contain quite a number of predefined (and general approved) schemas, such as the ''inetOrgPerson'', or a frequently used schema to define users which Unix/Linux boxes can use, called ''posixAccount''. Note there are GUI web based tools to make managing LDAP painless: see [[#Working_with_OpenLDAP|Working with OpenLDAP]] for an non-exhaustive list.
 
 흥미로운 사용자라면 [http://www.openldap.org/doc/admin24/ OpenLDAP 관리자 안내서]를 보십시오.
 
@@ -58,7 +58,7 @@ LDAP can be used for various things. This document focuses on centralised user m
 
 == OpenLDAP Server Configuration  ==
 
-{{Note/ko|이 문서에서 genfic.com 주소를 예로 들겠습니다. 물론 바꿀 수도 있습니다. 그러나 상위 노드가 공식 상위 레벨 도메인(net, com, cc, be, ...)인지 확인하십시오.}}
+The domain genfic.com is an example in this guide. You will of course want to change this. However, make sure that the top node is an official top level domain (net, com, cc, be, ...).
 
 
 Let's first emerge OpenLDAP. Ensure the USE flags ''berkdb, crypt, gnutls, ipv6, sasl, ssl, syslog'' and ''tcpd'' are used.
@@ -166,11 +166,11 @@ OPTS="-F /etc/openldap/slapd.d -h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenl
 </pre>
 }}
 
-마지막으로, {{Path|/var/lib/openldap-ldbm}} 구조를 만드십시오: 
+Finally, create the {{Path|/var/lib/openldap-data}} structure: 
 
-{{RootCmd|mkdir -p /var/lib/openldap-ldbm
-|chown ldap:ldap /var/lib/openldap-ldbm
-|chmod 700 /var/lib/openldap-ldbm}}
+{{RootCmd|mkdir -p /var/lib/openldap-data
+|chown ldap:ldap /var/lib/openldap-data
+|chmod 700 /var/lib/openldap-data}}
 
 
 Start slapd: 
@@ -280,7 +280,7 @@ session     required      pam_unix.so
 
 Now try logging in from another box.
 
-=== PAM 설정 ===
+=== Client PAM configuration the pam_ldap Module Method ===
 
 First, we will configure PAM to allow LDAP authorization. Install {{Package|sys-auth/pam_ldap}} so that PAM supports LDAP authorization, and {{Package|sys-auth/nss_ldap}} so that your system can cope with LDAP servers for additional information (used by {{Path|nsswitch.conf}}). 
 
@@ -289,31 +289,24 @@ First, we will configure PAM to allow LDAP authorization. Install {{Package|sys-
 The last file is the most critical open a few extra root windows as a backup before editing this. The lines in bold have been added to enable remote authentication.
 
 {{Code|/etc/pam.d/system-auth|<pre>
-## # Note: only add them. Don't kill stuff already in there or your box won't let you login again!
-auth       sufficient   pam_ldap.so use_first_pass
-account    sufficient   pam_ldap.so
-password   sufficient   pam_ldap.so use_authtok use_first_pass
-session    optional     pam_ldap.so
- 
-## # Example file:
 #%PAM-1.0
  
 auth       required     pam_env.so
 auth       sufficient   pam_unix.so try_first_pass likeauth nullok
-auth       sufficient   pam_ldap.so use_first_pass
+'''auth       sufficient   pam_ldap.so use_first_pass'''
 auth       required     pam_deny.so
  
-account    sufficient   pam_ldap.so
+'''account    sufficient   pam_ldap.so'''
 account    required     pam_unix.so
  
 password   required     pam_cracklib.so difok=2 minlen=8 dcredit=2 ocredit=2 try_first_pass retry=3
 password   sufficient   pam_unix.so try_first_pass use_authtok nullok md5 shadow
-password   sufficient   pam_ldap.so use_authtok use_first_pass
+'''password   sufficient   pam_ldap.so use_authtok use_first_pass'''
 password   required     pam_deny.so
  
 session    required     pam_limits.so
 session    required     pam_unix.so
-session    optional     pam_ldap.so
+'''session    optional     pam_ldap.so'''
 </pre>
 }}
 
@@ -357,7 +350,7 @@ shadow:         files ldap
 
 If you noticed one of the lines you pasted into your {{Path|/etc/ldap.conf}} was commented out (the <code>rootbinddn</code> line): you don't need it unless you want to change a user's password as superuser. In this case you need to echo the root password to {{Path|/etc/ldap.secret}} in plaintext. This is '''DANGEROUS''' and should be chmoded to 600. What you might want to do is keep that file blank and when you need to change someone's password that's both in the ldap and {{Path|/etc/passwd}}, put the pass in there for 10 seconds while changing the users password and remove it when done.
 
-=== 기존 데이터를 LDAP로 이전 ===
+== Migrate existing data to ldap ==
 
 Configuring OpenLDAP for centralized administration and management of common Linux/Unix items isn't easy, but thanks to some tools and scripts available on the Internet, migrating a system from a single-system administrative point-of-view towards an OpenLDAP-based, centralized managed system isn't hard either. 
 
@@ -412,9 +405,9 @@ The next step now is to migrate the information of your system to OpenLDAP. The 
 
 == 복제 ==
 
-=== 고가용성이 필요한 경우 ===
+=== High availability ===
 
-고가용성을 필요로 하는 환경일 경우, 다중 LDAP 시스템에 걸친 변경 복제를 설정해야 합니다. OpenLDAP 내의 복제는 이 안내서에서 특정 복제 계정을 사용하여 설정하며(<code>ldapreader</code>), 첫번째 LDAP 서버에 대한 읽기 권한을 부여하고, 두번째 LDAP 서버에 첫번째 LDAP서버의 바뀐점을 보냅니다. 
+To setup replication of changes across multiple LDAP systems. Replication within OpenLDAP is, in this guide, set up using a specific replication account ( <code>ldapreader</code> ) which has read rights on the primary LDAP server and which pulls in changes from the primary LDAP server to the secondary. 
 
 두번째 LDAP 서버가 첫번째 서버의 동작과 유사한 동작을 허용한 상태에서 이 설정을 복제합니다. OpenLDAP의 내부 구조에 감사해야 할 일은 LDAP 구조상 바뀐 내용이 또 있다 할지라도 중복 적용하지 않습니다.
 
@@ -487,7 +480,7 @@ This example gives root and John access to read/write/search for everything in t
 
 === 디렉터리 관리 ===
 
-아파치/proftpd/qmail/삼바에서 사용자를 인증할 때 디렉터리를 사용하는걸로 시작할 수 있습니다. 쉬운 관리 인터페이스를 제공하는 phpldapadmin,diradm, jxplorer, lat으로 관리할 수 있습니다.
+You can start using the directory to authenticate users in apache/proftpd/qmail/samba. You can manage it with [https://www.ldap-account-manager.org/lamcms/ LAM (Ldap Account Manager)], phpldapadmin, diradm, jxplorer, or lat, which provide easy management interfaces.
 
 == 감사문 ==
 
