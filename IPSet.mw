@@ -4,7 +4,7 @@
 }}
 ''IPSet is used to set up, maintain and inspect so called IP sets in the Linux kernel. Depending on  the  type of  the  set,  an IP set may store IP(v4/v6) addresses, (TCP/UDP) port numbers, IP and MAC address pairs, IP address and port number pairs, etc.'' - Wikipedia
 
-IPSet is a tool for [[Iptables]] successor if IPpool is an administration tool for IP sets. 
+IPSet is a tool for [[Iptables]] successor if IPpool is an administration tool for IP sets which can be added to iptables rules to filter out networks. 
 
 == Installation ==
 Install {{Package|net-firewall/ipset}}:
@@ -17,31 +17,38 @@ Install {{Package|net-firewall/ipset}}:
 == Filtering ==
 The simple following script can be used to filter IP adresses based on a file that have to be retrieved on the intertubes, and then create or update iptables firewall rules.
 
-{{File|~/.scripts/ips||<pre>
+{{File|~/scripts/ips.sh||<pre>
 #!/bin/sh
-opt="hash:ip --netmask 24 --hashsize 64"
+opt="hash:net --hashsize 64"
 datadir=/var/lib/ipset
 target=http://feeds.dshield.org/block.txt
 wget -qNP $datadir $target || exit
-set="${target##*/}"
-tmp=${set/txt/tmp}
+set=IPBlock
+tmp=${set}-tmp
 ipset create $tmp $opt
-networks=($(grep -E '^[0-9]' $datadir/$set | sed -rne 's/(^([0-9]{1,3}.){3}[0-9]{1,3}).*$/\1/p'))
-ip=${#networks[*]}
-while [ $((--ip)) -ge 0 ]; do
-    ipset add $tmp ${networks[ip]}
+networks="$(grep -E '^[0-9]' $datadir/$set | sed -rne 's/(^([0-9]{1,3}\.){3}[0-9]{1,3}).*$/\1/p')"
+for i in $networks; do
+    ipset add $tmp ${i}/24
 done
-ipset create -exist $set $opt
-ipset swap $tmp $set
-ipset destroy $tmp
+ipset create -exist $set $opt &&
+ipset swap $tmp $set &&
+ipset destroy $tmp &&
 echo "IPSet: $set updated"
-unset -v ip networks opt set tmp</pre>}}
+unset -v i networks opt set tmp</pre>}}
 
 The previous script is just a simple way to retrieve different or various IPSet table and make use of an up to date filtering.
 
 The script just create an new table and swap and destroy a previous set if there's one. For a more refined script see:
 * [https://raw.github.com/tokiclover/dotfiles/master/.scripts/ips.bash ips.bash] - [[bash]] version
 *[https://raw.github.com/tokiclover/dotfiles/master/.scripts/ips.zsh ips.zsh] - [[zsh]] version
+
+And then save the rules to a file and start ipset init service.
+
+{{RootCmd|/etc/init.d/ipset save||/etc/init.d/ipset start||rc-update add ipset boot}}
+
+The previous network filtering can be added to iptables with the following command.
+
+{{RootCmd|iptables -I INPUT -m set --match-set IPBlock src,dst -j Drop}}
 
 == See also ==
 * [https://forums.gentoo.org/viewtopic-t-863121.html Forum thread]
