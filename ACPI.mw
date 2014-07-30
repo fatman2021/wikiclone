@@ -160,92 +160,94 @@ You will have to edit {{Path|/etc/acpi/default.sh}} along with {{Path|/etc/acpi/
 
 A basic {{Path|default.sh}} may be enough. The following is an example on what could be done.
 
-{{File|/etc/acpi/default.sh||<pre>
-#!/bin/sh
-# $Id: /etc/acpi/default.sh, 2012/08/01 13:22:59 -tclover Exp $
+{{File|/etc/acpi/default.sh||<pre>#!/bin/sh
+# $Id: /etc/acpi/default.sh, 2014/07/22 14:22:59 -tclover Exp $
+
+log() { logger -p daemon "ACPI: $*"; }
+uhd() { log "event unhandled: $*"; }
 
 set $*
-group=${1%%/*}
+group=${1%/*}
 action=${1#*/}
 device=$2
 id=$3
 value=$4
 
-unhandled() { logger "ACPI event unhandled: $*"; }
+[ -e /run/openrc/started/alsasound ] && alsa=true || alsa=false
+[ -e /run/openrc/started/oss ]       && oss=true  || oss=false
+amixer="amixer -q set Master"
+ossmix="ossmix -- vmix0-outvol"
 
-case "$group" in
+case $group in
 	ac_adapter)
-		case "$value" in
-			*0) if [ "rc-status -r" != "battery" ]; then
-					logger "Switching to battery runlevel"
-					rc battery; hprofile power.bat
-				fi
-				;;
-			*1) if [ "rc-status -r" != "default" ]; then
-					logger "Switching to default runlevel"
-					rc default; hprofile power.adp
-				fi
-				;;
-			*)	unhandled $*;;
+		case $value in
+			*0) log "switching to power.bat power profile"
+				hprofile power.bat;;
+			*1) log "switching to power.adp power profile"
+				hprofile power.adp;;
+			*) uhd $*;;
 		esac
 		;;
 	battery)
-		case "$value" in
-			*0) if [ "rc-status -r" != "default" ]; then
-					logger "Switching to default runlevel"
-					hprofile power.adp; rc default
-				fi
-				;;
-			*1) if [ "rc-status -r" != "default" ]; then
-						logger "Switching to default runlevel"
-						hprofile power.adp; rc default
-				fi
-				;;
-			*)	unhandled $*;;
+		case $value in
+			*0) log "switching to power.adp power profile"
+				hprofile power.adp;;
+			*1) log "switching to power.adp power profile"
+				hprofile power.adp;;
+			*) uhd $*;;
 		esac
 		;;
 	button)
-		case "$action" in
+		case $action in
 			lid)
 				case "$id" in
-					close) pm-suspend --quirk-none;;
-					*) unhandled $*;;
+					close) hibernate-ram;;
+					open) :;;
+					*) uhd $*;;
 				esac
 				;;
-			power) telinit 0;;
-			prog1) :;;
+			power) shutdown -H now;;
+			sleep) hibernate-ram;;
 			mute) 
-				/etc/init.d/alsasound status &>/dev/null && amixer -q set Master toggle;;
+				$alsa && $amixer toggle;;
 			volumeup) 
-				/etc/init.d/alsasound status &>/dev/null && amixer -q set Master 3dB+
-				/etc/init.d/oss status &>/dev/null && ossmix -- vmix0-outvol +3;;
+				$alsa && $amixer 3dB+
+				$oss && $ossmix +3;;
 			volumedown) 
-				/etc/init.d/alsasound status &>/dev/null && amixer -q set Master 3dB-
-				/etc/init.d/oss status &>/dev/null && ossmix -- vmix0-outvol -3;;
-			*)	unhandled $*;;
+				$alsa && $amixer 3dB-
+				$oss && $ossmix -3;;
+			*) uhd $*;;
 		esac
 		;;
 	cd)
-		case "$action" in
+		case $action in
 			play) :;;
 			stop) :;;
 			prev) :;;
 			next) :;;
+			*) uhd $*;;
 		esac
 		;;
 	jack)
-		case "$id" in
-			unplug|plug) :;;
-			*) unhandled;;
+		case $id in
+			*plug) :;;
+			*) uhd $*;;
 		esac
 		;;
-	*)	unhandled $*;;
+	video)
+		case $action in
+			displayoff) :;;
+			*) uhd $*;;
+		esac
+		;;
+	*) uhd $*;;
 esac
 
-# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:
-</pre>}}
+unset alsa oss amixer ossmix group action device id
 
-{{Note|Notice that the script is compatible with [[ALSA]] and [[OSS]], so no extra actions to undergo when switching to using OSS from ALSA or the opposite. An extra notice should be taken for switching runlevels when AC power is unplugged or plugged in. Just make a battery runlevel with a simple `cp -a /etc/runlevels/{default,battery}' or else remove or comment out the related lines. My laptop multimedia ACPI capable key events used to be taken care of by MPRIS in [[enlightenment]] and I enjoyed being able to control multimedia player with them. So I did not thought something about the related events when writing the script. If somebody is experiencing with the same annoyance, do not hesitate to edit the script and share it back!}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=4:sw=4:ts=4:</pre>}}
+
+{{Note|Notice that the script is compatible with [[ALSA]] and [[OSS]], so no extra actions to undergo when switching to using OSS from ALSA or the opposite. My laptop multimedia ACPI capable key events used to be taken care of by MPRIS in [[enlightenment]] and I enjoyed being able to control multimedia player with them. So I did not thought something about the related events when writing the script. If somebody is experiencing with the same annoyance, do not hesitate to edit the script and share it back!}}
 
 {{Note|The previous script make use of a power management profile using [[hprofile]]. Refer to that article for more information.}}
 ===Examples===
