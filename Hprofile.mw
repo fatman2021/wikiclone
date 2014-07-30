@@ -3,66 +3,55 @@
 }}
 {{Package|sys-apps/hprofile}} is a little application that can be used to manage multiple profiles be it hardware or software. The following subsection are just examples on what could be done with hprofile.
 
-To be able to to go further, one should, of course, merge the package.
-
 {{Emerge|sys-apps/hprofile}}
 
 == Hardware profiles ==
 
 === Preparation ===
-{{Important|The following sections assume that you have a patched hprofile init service. So grab the following patch if you want to make any use of the following hardware profiles.}}
+{{Important|The following sections assume that you have a patched hprofile init service. So grab the following patch if you want to make any use of the following hardware profiles. (This patch is reversed, so pass -p1 -R to patch.)}}
 
-{{File|hprofile.initd.patch||<pre>
---- /etc/init.d/hprofile	2012-07-04 02:01:29.861618809 +0200
-+++ /etc/init.d/hprofile	2012-07-04 02:03:49.713870416 +0200
-@@ -2,24 +2,26 @@
- # Copyright 1999-2002 Gentoo Technologies, Inc.
- # Distributed under the terms of the GNU General Public License, v2 or later
- 
--
- depend() {
--	before modules
-+	after modules
+{{File|/etc/hprofile/hprofile.initd.patch||<pre>
+--- a/etc/init.d/hprofile	2014-07-19 20:14:14.608007022 +0000
++++ b/etc/init.d/hprofile	2014-07-19 20:09:14.482006076 +0000
+@@ -8,20 +8,16 @@
  }
  
  start() {
--	profile=$(/usr/local/sbin/hpdet boot)
--	ebegin "Selecting hardware profile ${profile}"
--	/usr/local/sbin/hprofile boot
-+	local vgap=$(/usr/sbin/hpdet vga)
-+	local pwrp=$(/usr/sbin/hpdet disk)
-+	ebegin "Selecting hardware profile vga.$vgap and power.$pwrp"
-+	/usr/sbin/hprofile vga 
-+	/usr/sbin/hprofile power
+-	local vga=$(/usr/sbin/hpdet vga)
+-	local pwr=$(/usr/sbin/hpdet power)
+-	ebegin "Selecting hardware profile vga.$vga and pwr.$pwr"
+-	/usr/sbin/hprofile vga 
+-	/usr/sbin/hprofile power
++	profile=$(/usr/sbin/hpdet boot)
++	ebegin "Selecting hardware profile ${profile}"
++	/usr/sbin/hprofile boot
  	eend $?
  }
  
  stop() {
--	profile=$(/usr/local/sbin/hprofile -c boot)
--	ebegin "Stopping hardware profile ${profile}"
--	/usr/local/sbin/hprofile -s boot
-+	local vgap=$(/usr/sbin/hprofile -c vga)
-+	local pwrp=$(/usr/sbin/hprofile -c disk)
-+	ebegin "Stopwrping hardware profile vga.$vgap and power.$pwrp"
-+	/usr/sbin/hprofile -s vga
-+	/usr/sbin/hprofile -s power
+-	local vga=$(/usr/sbin/hpdet vga)
+-	local pwr=$(/usr/sbin/hpdet power)
+-	ebegin "Selecting hardware profile vga.$vga and power.$pwr"
+-	/usr/sbin/hprofile vga 
+-	/usr/sbin/hprofile power
++	profile=$(/usr/sbin/hprofile -c boot)
++	ebegin "Stopping hardware profile ${profile}"
++	/usr/sbin/hprofile -s boot
  	eend $?
  }
  
--
- # vim:ts=4
 </pre>}}
 
-{{Note|Every script file `/etc/hprofile/profiles/$profile', `ptest', `stop' and `post-start' should have the executable bit set.}}
+{{Note|Every script file `/etc/hprofile/profiles/$profile/{scripts/*,ptest,stop,post-start}' should have the executable bit set. Or else, a peculiar error will rise up.}}
 
 === Power ===
-When thinking a better to have different dynamic power profiles that could dynamically switched depending on hardware of software state is not straightforward especially for power management which could depend on many software e.g. {{Package|sys-power/powertop}}, {{Package|sys-power/cpufrequtils}}, {{Package|sys-apps/hdparm}} to name a few. So how could you get hardware profiles and switch between them dynamically? And how to get everything together? How many deamons to start depending on what hardware or software state?
+When thinking about a better way to have dynamic power profiles that could be dynamically switched depending on hardware or software state is not straightforward especially for power management which could depend on many software e.g. {{Package|sys-power/powertop}}, {{Package|sys-power/cpufrequtils}}, {{Package|sys-apps/hdparm}} to name a few. So, how could you get hardware profiles and switch between them dynamically? And how to get everything together? How many deamons to start depending on what hardware or software state?
 
-That sum up quite a few considerations to what a user can face when trying to build a nice setup with power management in mind. [S]he can remember of Windows(tm) days power management profiles if [s]he ever used it. Or else, [s]he did not any thought about it because [s]he used to run a GNU Linux or BSD based distribution with everything putted together and does not know how to begin with if [s]he is not satisfied with what [s]he gets. 
+That sum up quite a few considerations to what a user can face when trying to build a nice setup with power management in mind. [S]he can remember of Windows(tm) power management profiles if [s]he ever used it. Or else, [s]he did not thought about it because [s]he used to run a GNU Linux or BSD based distribution with everything putted together and does not know how to begin with if [s]he is not satisfied with what [s]he gets. 
 
-Now {{Package|sys-power/powertop}}-2 grew up to be quite a good piece of software. If you're runnng an Intel based platform, you can get access to pretty much everything one would expect if trying to build power manager profiles. But the package does not ship with a daemon nor with a configuration or profile file which PowerTOP could pick up when launched in the next restart. One has to launch it again and again in a terminal and enable power management for every power manageable hardware.
+Now {{Package|sys-power/powertop}}-2 grew up to be quite a good piece of software. If you're runnng an Intel based platform, you can get access to pretty much everything one would expect if trying to build power profiles. But the package does not ship with a daemon-ish like software nor with a configuration or profile file which PowerTOP could pick up when launched in the next restart. One has to launch it again and again in a terminal and enable power management for every power manageable hardware... quite the redundant an manual way evertime the system boot up.
 
-Now, it will a bit long to go pick enough power management tuning that a software like PowerTOP use to be able to manage almost everything. This is just a beginning to that. One can use [[ACPI|acpid]] to switch between different hardware profiles depending on hardware state.
+{{Note|Now PowerTOP shows up the command line executed for each option, it became easy to pick them up and make power management profiles. Although the following is based on Intel hardware, the idea is there to be picked up for AMD hardware power profiles.}}
 
 This basic profile will try to implement [[Hprofile#Hard_disk|Disk]], CPU (see [[Hprofile#External_resources|External resources]]), network interfaces and [[ALSA]] drivers power saving capabilities.
 
@@ -79,112 +68,243 @@ quiet</pre>}}
 {{File|/etc/hprofile/profiles/power/default||adp}}
 
 {{File|/etc/hprofile/profiles/power/ptest||<pre>#!/bin/sh
-if [ -e "/sys/class/power_supply/ADP1/online" ]; then
-	status=$(cat /sys/class/power_supply/ADP1/online)
-	case "$status" in
+if [ -e "/sys/class/power_supply/A*/online" ]; then
+	status=$(cat /sys/class/power_supply/A*/online)
+	case ${status} in
 		1) profile="adp";;
 		0) profile="bat";;
 	esac
 fi
-
-echo "${profile:-adp}"</pre>}}
+echo "${profile:-adp}"
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/power/scripts/adp.start||<pre>#!/bin/sh
+
 hprofile disk.adp
-for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo ondemand >$c/cpufreq/scaling_governor
+
+for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo powersave >$cpu/cpufreq/scaling_governor
 done
-echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
-echo 0   >/sys/devices/system/cpu/sched_mc_power_savings
-echo default >/sys/module/pcie_aspm/parameters/policy
-for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ "$(cat $h/proc_name)" = "ahci" ] &&
-		echo min_power >$h/link_power_management_policy
+
+[ -e /sys/module/pcie_aspm/parameters/policy ] &&
+	echo default >/sys/module/pcie_aspm/parameters/policy
+for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ -e $scsi/link_power_management_policy ] || continue
+	case $(cat $scsi/proc_name) in
+		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
+	esac
 done
-[ -e /run/openrc/started/alsasound ] &&
-	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
-#iwpriv wlan0 set_power 2
-xbacklight -set 40
-xset dpms 600 900 1200</pre>}}
+
+# set usb host to auto powersave
+for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
+	echo auto >$usb/power/control
+done
+
+# pci power control
+for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
+	echo on >$pci/power/control
+done
+
+# snd-hda-intel powersave
+[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
+	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
+
+# turn off NMI watchdog
+[ -e /proc/sys/kernel/nmi_watchdog ] &&
+	echo 0 >/proc/sys/kernel/nmi_watchdog
+
+# VM write back timeout
+[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
+	echo 1000 >/proc/sys/vm/dirty_writeback_centisecs
+
+xbacklight -set 30
+xset dpms 300 400 600
+
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/power/scripts/bat.start||<pre>#!/bin/sh
-hprofile disk.adp
-for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo ondemand >$c/cpufreq/scaling_governor
+
+hprofile disk.bat
+
+for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo powersave >$cpu/cpufreq/scaling_governor
 done
-echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
-echo 1   >/sys/devices/system/cpu/sched_mc_power_savings
-echo powersave >/sys/module/pcie_aspm/parameters/policy
-for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ "$(cat $h/proc_name)" = "ahci" ] &&
-		echo min_power >$h/link_power_management_policy
+
+[ -e /sys/module/pcie_aspm/parameters/policy ] &&
+	echo powersave >/sys/module/pcie_aspm/parameters/policy
+for scsi in $(ls -d /sys/class/scsi_host/host[0-9]); do
+	[ -e $scsi/link_power_management_policy ] || continue
+	case $(cat $scsi/proc_name) in
+		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
+	esac
 done
-[ -e /run/openrc/started/alsasound ] &&
-	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
-#iwpriv wlan0 set_power 4
-xbacklight -set 30
-xset dpms 300 400 600</pre>}}
+
+# set usb host to auto powersave
+for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
+	echo auto >$usb/power/control
+done
+
+# pci power control
+for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
+	echo auto >$pci/power/control
+done
+
+# snd-hda-intel powersave
+[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
+	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
+
+# turn off NMI watchdog
+[ -e /proc/sys/kernel/nmi_watchdog ] &&
+	echo 0 >/proc/sys/kernel/nmi_watchdog
+
+# VM write back timeout
+[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
+	echo 1500 >/proc/sys/vm/dirty_writeback_centisecs
+
+xbacklight -set 20
+xset dpms 300 400 600
+
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/power/scripts/dyn.start||<pre>#!/bin/sh
-hprofile disk.adp
-for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo performance >$c/cpufreq/scaling_governor
+
+hprofile disk.dyn
+
+for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo performance >$cpu/cpufreq/scaling_governor
 done
-echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
-echo 0   >/sys/devices/system/cpu/sched_mc_power_savings
-echo performance >/sys/module/pcie_aspm/parameters/policy
-for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ "$(cat $h/proc_name)" = "ahci" ] &&
-		echo max_performance >$h/link_power_management_policy
+
+[ -e /sys/module/pcie_aspm/parameters/policy ] &&
+	echo powersave >/sys/module/pcie_aspm/parameters/policy
+for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ -e $scsi/link_power_management_policy ] || continue
+	case $(cat $scsi/proc_name) in
+		ahci|usb-storage) echo max_power >$scsi/link_power_management_policy;;
+	esac
 done
-[ -e /run/openrc/started/alsasound ] &&
-	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
-#iwpriv wlan0 set_power 1
-xbacklight -set 40
-xset dpms 0 0 2400</pre>}}
+
+# set usb host to auto powersave
+for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
+	echo on >$usb/power/control
+done
+
+# pci power control
+for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
+	echo on >$pci/power/control
+done
+
+# snd-hda-intel powersave
+[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
+	echo >/sys/module/snd_hda_intel/parameters/power_save
+
+# turn off NMI watchdog
+[ -e /proc/sys/kernel/nmi_watchdog ] &&
+	echo >/proc/sys/kernel/nmi_watchdog
+
+# VM write back timeout
+[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
+	echo 500 >/proc/sys/vm/dirty_writeback_centisecs
+
+xbacklight -set 35
+xset dpms 300 400 600
+
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/power/scripts/med.start||<pre>#!/bin/sh
+
 hprofile disk.adp
-for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo ondemand >$c/cpufreq/scaling_governor
+
+for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo performance >$cpu/cpufreq/scaling_governor
 done
-echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
-echo 1   >/sys/devices/system/cpu/sched_mc_power_savings
-echo performance >/sys/module/pcie_aspm/parameters/policy
-for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ "$(cat $h/proc_name)" = "ahci" ] &&
-		echo min_power >$h/link_power_management_policy
+
+[ -e /sys/module/pcie_aspm/parameters/policy ] &&
+	echo default >/sys/module/pcie_aspm/parameters/policy
+for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ -e $scsi/link_power_management_policy ] || continue
+	case $(cat $scsi/proc_name) in
+		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
+	esac
 done
-[ -e /run/openrc/started/alsasound ] &&
-	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
-#iwpriv wlan0 set_power 6
-xbacklight -set 30
-xset dpms 500 700 900</pre>}}
+
+# set usb host to auto powersave
+for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
+	echo auto >$usb/power/control
+done
+
+# pci power control
+for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
+	echo on >$pci/power/control
+done
+
+# snd-hda-intel powersave
+[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
+	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
+
+# turn off NMI watchdog
+[ -e /proc/sys/kernel/nmi_watchdog ] &&
+	echo 0 >/proc/sys/kernel/nmi_watchdog
+
+# VM write back timeout
+[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
+	echo 1000 >/proc/sys/vm/dirty_writeback_centisecs
+
+xbacklight -set 25
+xset dpms 300 400 600
+
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/power/scripts/quiet.start||<pre>#!/bin/sh
-hprofile disk.adp
-for c in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo ondemand >$c/cpufreq/scaling_governor
-done
-echo 200 >/sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor
-echo 1   >/sys/devices/system/cpu/sched_mc_power_savings
-echo powersave >/sys/module/pcie_aspm/parameters/policy
-for h in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ "$(cat $h/proc_name)" = "ahci" ] &&
-		echo min_power >$h/link_power_management_policy
-done
-[ -e /run/openrc/started/alsasound ] &&
-	echo 0 >/sys/module/snd_hda_intel/parameters/power_save
-#iwpriv wlan0 set_power 6
-xbacklight -set 20
-xset dpms 0 0 300</pre>}}
 
-{{Note|xset dpms argument unit is second, first for ''standby'', second for ''suspend'' and third for ''off'' mode; I do not remember the effect of increasing/decreasing ''sampling_down_factor'' anymore, and I could not found the source (that setting impact on how often CPU should scale down/up obviously); the other lines are pretty obvious.}}
+hprofile disk.quiet
 
-I have a ''battery'' runlevel, a copycat of default runlevel, that is dynamically switched if AC power is unplugged. See [[ACPI]] article for more info. That's not enough? Do you want more tunings? Expand the article then! I wish PowerTOP implement a daemon-ish profile-able application which is the right sport for Intel based hardware.
+for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
+	echo powersave >$cpu/cpufreq/scaling_governor
+done
+
+[ -e /sys/module/pcie_aspm/parameters/policy ] &&
+	echo powersave >/sys/module/pcie_aspm/parameters/policy
+for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
+	[ -e $scsi/link_power_management_policy ] || continue
+	case $(cat $scsi/proc_name) in
+		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
+	esac
+done
+
+# set usb host to auto powersave
+for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
+	echo auto >$usb/power/control
+done
+
+# pci power control
+for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
+	echo auto >$pci/power/control
+done
+
+# snd-hda-intel powersave
+[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
+	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
+
+# turn off NMI watchdog
+[ -e /proc/sys/kernel/nmi_watchdog ] &&
+	echo 0 >/proc/sys/kernel/nmi_watchdog
+
+# VM write back timeout
+[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
+	echo 2500 >/proc/sys/vm/dirty_writeback_centisecs
+
+xbacklight -set 15
+xset dpms 300 400 600
+
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+
+{{Note|xset dpms argument unit is second, first for ''standby'', second for ''suspend'' and third for ''off'' mode. Second, the new version of those scripts toggle almost every scsi host, pci and usb controler to ''auto'' power management control. Maybe this behaviour is not wanted for some use cases, so edit the scripts for your needs!}}
+
+I have a ''/etc/acpi/defaults.sh'' script that make use of those scripts, at least ''battery'' and ''AC Adapter''. Those two power profiles are dynamically switched if AC power is un/plugged. See [[ACPI]] article for more info about the acpid ''default.sh'' script. It's not enough? Do you want more tunings? Expand the article then! 
 
 === RFKill ===
-This hardware profile subsection could be beneficial to the previous section, but killing radio of devices can be quite troublesome which require hard reboot and removing battery/AC power for a few second to be able to get back usable wireless interfaces again. This happen on my Intel GM45 based laptop. Luckily there is a physical switch to kill bluetooth and wifi radio.
+
+This hardware profile subsection could be beneficial to the previous section, however software RF killing/switching can be quite troublesome which require cold reboot and removing battery/AC power for a few seconds to be able to get back usable wireless (Wifi/Bluetooth) interfaces again. This happen on my Intel GM45 based laptop. Luckily there is a physical switch to kill bluetooth and wifi radio.
 
 There's no much consideration for this section, if your hardware support RFKill, add it to your hardware profile!
 
@@ -192,32 +312,39 @@ There's no much consideration for this section, if your hardware support RFKill,
 
 {{File|/etc/hprofile/profiles/rfkill/ptest||&nbsp;}}
 {{File|/etc/hprofile/profiles/rfkill/default||&nbsp;}}
-{{Note|The previous file are intentionally left empty!}}
+{{Note|The two previous files are intentionally left empty!}}
 {{File|/etc/hprofile/profiles/rfkill/profiles||<pre>bsw
 ksw
 wsw</pre>}}
 {{File|/etc/hprofile/profiles/rfkill/scripts/bsw.start||<pre>#!/bin/sh
 echo 1 >/sys/class/rfkill/rfkill1/state
-echo 1 >/sys/class/rfkill/rfkill7/state</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/rfkill/scripts/bsw.stop||<pre>#!/bin/sh
 echo 0 >/sys/class/rfkill/rfkill1/state
-echo 0 >/sys/class/rfkill/rfkill7/state</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/rfkill/scripts/wsw.start||<pre>#!/bin/sh
 echo 1 >/sys/class/rfkill/rfkill0/state
-echo 1 >/sys/class/rfkill/rfkill2/state</pre>}}
+echo 1 >/sys/class/rfkill/rfkill2/state
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/rfkill/scripts/wsw.stop||<pre>#!/bin/sh
 echo 0 >/sys/class/rfkill/rfkill0/state
-echo 0 >/sys/class/rfkill/rfkill2/state</pre>}}
+echo 0 >/sys/class/rfkill/rfkill2/state
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/rfkill/scripts/ksw.start||<pre>#!/bin/sh
+hprofile rfkill.bsw
 hprofile rfkill.wsw
-hprofile rfkill.bsw</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/rfkill/scripts/ksw.stop||<pre>#!/bin/sh
+hprofile rfkill.bsw
+hprofile rfkill.wsw
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{Note|To determine what RFKill switch is for what, you will have to `cat /sys/class/rfkill/rfkill*/type' to know that. Of course, there are several manner to make this profile as each $profile.st* is just runned to apply a state so each $profile.start and $profile.stop is a profile in its own. So, feel free to expand those to your needs.}}
 
 === VGA ===
-I use {{Package|sys-apps/hprofile}} to manage VGA profile to my laptop and my desktop. On my desktop, I use hprofile to switch between [[nVidia/nvidia-drivers|nvidia-drivers]], [[nouveau]] and nv ({{Package|x11-drivers/xf86-video-nv}}) when the previous profiles do no work; and to switch [[radeon]] and [[intel]] on my laptop which has switchable graphics via VGASwitcheroo. 
+I use {{Package|sys-apps/hprofile}} to manage VGA profile to my laptop and my desktop. On my desktop, I use hprofile to switch between [[nVidia/nvidia-drivers|nvidia-drivers]], [[nouveau]] and nv ({{Package|x11-drivers/xf86-video-nv}}) when the previous profiles do no work; and to switch [[radeon]] and [[intel]] on my laptop which has switchable graphics via VGASwitcheroo. Now I have a new laptop with nVidia Optimus, VGASwitcheroo/PRIME does work quite bit avoiding to get a hot potato because that thing has a GT750M GPU! although I have to wait linux-3.16 and Mesa-10.3 to make any use of a GT750M and go through the black screen of death (right, BSOD(tm)).
 
-Just be sure to built kernel modules about everything — at least i9{1,6}5, nouveau, radeon, ttm, drm, and optionally (?) ac, button, video, i2c-algo-bit — to avoid useless hassles.  
+Just be sure to built kernel modules about everything — at least i915, nouveau, radeon, ttm, drm, and optionally (?) ac, button, video, i2c-algo-bit — to avoid useless hassles and be able to boot with a single kernel be it with vesa/nvidia-drivers, or i915, or nouveau.  
 
 Create the necessaries folder {{Path|<nowiki>/etc/hprofile/profiles/vga/{scripts,files/etc/X11/xorg.conf.d}</nowiki>}} and add the following files.
 
@@ -232,97 +359,144 @@ fglrx
 </pre>}}
 
 {{Note|This is necessary because the console font will be messed whenever a new profile is switched.}}
-{{File|/etc/hprofile/profiles/vga/post-start||<pre>
-#!/bin/sh
+{{File|/etc/hprofile/profiles/vga/post-start||<pre>#!/bin/sh
 echo "Finished starting profile ${1}"
 /etc/init.d/consolefont restart
-</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
-{{File|/etc/hprofile/profiles/vga/stop||<pre>
-#!/bin/sh
-[ "${1}" == "intel" ] || [ "${1}" == "radeon" ] &&
-    echo ON >/sys/kernel/debug/vgaswitcheroo/switch
+{{File|/etc/hprofile/profiles/vga/stop||<pre>#!/bin/sh
+if [ -e /sys/kernel/debug/vgaswitcheroo/switch ]; then
+	case ${1} in
+		intel|radeon|nouveau) echo ON >/sys/kernel/debug/vgaswitcheroo/switch;;
+	esac
+fi
 echo "Finished Stopping profile ${1} and moving back xorg.conf"
-</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{Note|If a specific kernel module is loaded with an [[initramfs]] or modules init services, the appropriate profile will be selected with the following script.}}
-{{File|/etc/hprofile/profiles/vga/ptest||<pre>
-if [  ! -e /sys/kernel/debug/vgaswitcheroo/switch ]; then
-    [ -z "$(lsmod | grep -i radeon)" ] && modprobe radeon && sleep 3
-    [ -z "$(lsmod | grep -i i915)" ] && modprobe i915 && sleep 3
-fi
-[ $(grep DIS:+ /sys/kernel/debug/vgaswitcheroo/switch) ] && echo "radeon" && exit
-[ $(grep IGD:+ /sys/kernel/debug/vgaswitcheroo/switch) ] && echo "intel" && exit
-for drv in nouveau nvidia radeon fglrx; do
-    [ -n "$(lspci -k | grep "Kernel driver in use: $drv")" ] && echo "$drv" && exit
-done
-for drv in i9{6,1}5; do
-    [ -n "$(lspci -k | grep "Kernel driver in use: $drv")" ] && echo intel && exit 
-done
-echo "invalid" && exit 1
-</pre>}}
+{{File|/etc/hprofile/profiles/vga/ptest||<pre>#!/bin/sh
 
-{{File|/etc/hprofile/profiles/vga/scripts/fglrx.start||<pre>
-#!/bin/sh
-echo "Starting fglrx profile."
-modprobe fglrx || echo "failed to load fglrx module." && exit 1
+vgp=/sys/kernel/debug/vgaswitcheroo/switch
+if [  ! -e ${vgp} ]; then
+	grep -q i915    /proc/modules || modprobe i915
+	grep -q radeon  /proc/modules || modprobe radeon
+	grep -q nouveau /proc/modules || modprobe nouveau
+fi
+
+vga=$(grep + ${vgp})
+pci=$(sed -nre 's/^[0-9].*\+.*[a-zA-Z]:([0-9].*$)/\1/p' ${vgp})
+if [ -d /sys/bus/pci/drivers/nouveau/${pci} ];then
+	drv=nouveau
+elif [ -d /sys/bus/pci/drivers/radeon/${pci} ]; then
+	drv=radeon
+fi
+
+case ${vga} in
+	*:IGD:+*) echo "intel" ; exit;;
+	*:DIS:+*) echo "${drv}"; exit;;
+esac
+
+drv="$(lspci -k | sed -nre 's/Kernel driver in use: ((i915|fglrx|radeon|nouveau|nvidia))/\1/p')"
+
+echo "${drv:-invalid}"
+
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+
+{{File|/etc/hprofile/profiles/vga/scripts/fglrx.start||<pre>#!/bin/sh
+echo "Starting vga profile to fglrx"
+if ! modprobe fglrx; then
+	echo "failed to load fglrx module"
+	exit
+fi
 [ "$(eselect opengl show)" != "ati" ] && eselect opengl set ati
 [ "$(eselect xvmc show)" != "ati" ] && eselect xvmc set ati
-</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/vga/scripts/fglrx.stop||<pre>
 #!/bin/sh
 echo "Stopping nvidia profile."
 rmmod fglrx || echo "failed to remove fglrx module." && exit 1
-</pre>}}
-{{File|/etc/hprofile/profiles/vga/scripts/intel.start||<pre>
-#!/bin/sh
-echo "Starting intel VGA profile."
-echo IGD >/sys/kernel/debug/vgaswitcheroo/switch
-echo OFF >/sys/kernel/debug/vgaswitcheroo/switch
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/intel.start||<pre>#!/bin/sh
+echo "Starting intel vga profile"
+modprobe i915 || exit $?
+if [ -e /sys/kernel/debug/vgaswitcheroo/switch ]; then
+	echo IGD >/sys/kernel/debug/vgaswitcheroo/switch &&
+	echo OFF >/sys/kernel/debug/vgaswitcheroo/switch
+fi
 [ "$(eselect opengl show)" != "xorg-x11" ] && eselect opengl set xorg-x11
-[ "$(eselect xvmc show)" != "intel-i815" ] && eselect xvmc set intel-i815
-</pre>}}
-{{File|/etc/hprofile/profiles/vga/scripts/nouveau.start||<pre>
-#!/bin/sh
-echo "Starting nouveau profile."
-modprobe nouveau || echo "failed to load nouveau module."
+[ "$(eselect xvmc show)" != "intel-i915/i965" ] && eselect xvmc set 'intel-i915/i965'
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/nouveau.start||<pre>#!/bin/sh
+echo "Starting nouveau vga profile"
+modprobe nouveau || exit$?
+if [ -e /sys/kernel/debug/vgaswitcheroo/switch ]; then
+	echo DIS >/sys/kernel/debug/vgaswitcheroo/switch
+#	echo OFF >/sys/kernel/debug/vgaswitcheroo/switch
+fi
 [ "$(eselect opengl show)" != "xorg-x11" ] && eselect opengl set xorg-x11
-exit
-</pre>}}
-{{File|/etc/hprofile/profiles/vga/scripts/nouveau.stop||<pre>
-#!/bin/sh
-echo "Stopping nouveau profile."
-echo 0 >/sys/class/vtconsole/vtcon1/bind
-rmmod nouveau || echo "failed to remove nouveau module." && exit 1
-/etc/init.d/consolefont restart
-rmmod ttm
-rmmod drm_kms_helper
-rmmod dri
-</pre>}}
-{{File|/etc/hprofile/profiles/vga/scripts/radeon.start||<pre>
-#!/bin/sh
-echo "Starting radeon profile."
-echo DIS >/sys/kernel/debug/vgaswitcheroo/switch
-echo OFF >/sys/kernel/debug/vgaswitcheroo/switch
+[ "$(eselect xvmc show)" != "xorg-x11" ] && eselect opengl set xorg-x11
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/nouveau.stop||<pre>#!/bin/sh
+echo "Stopping nouveau vga profile"
+# uncomment the following line and last one if one need
+# to force remove nouveau/kms driver for e.g. nvidia
+if [ ! -e sys/kernel/debug/vgaswitcheroo/switch ]; then
+	echo 0 >/sys/class/vtconsole/vtcon1/bind
+	if ! rmmod nouveau; then
+		echo "failed to remove nouveau module"
+	else
+		/etc/init.d/consolefont restart
+		rmmod ttm
+		rmmod drm_kms_helper
+		rmmod dri
+	fi
+fi
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/radeon.start||<pre>#!/bin/sh
+echo "Starting radeon vga profile"
+modprobe radeon || exit $?
+if [ -e /sys/kernel/debug/vgaswitcheroo/switch ]; then
+	echo DIS >/sys/kernel/debug/vgaswitcheroo/switch
+#	echo OFF >/sys/kernel/debug/vgaswitcheroo/switch
+fi
 echo low >/sys/class/drm/card0/device/power_profile
 [ "$(eselect opengl show)" != "xorg-x11" ] && eselect opengl set xorg-x11
 [ "$(eselect xvmc show)" != "xorg-x11" ] && eselect xvmc set xorg-x11
-echo dynpm >/sys/class/drm/card0/device/power_method
-# or use the following because "dynpm" can cause screen flickering
-# echo profile >/sys/class/drm/card0/device/power_method
-# echo auto[|low|mid] >/sys/class/drm/card0/device/power_profile
-</pre>}}
-{{File|/etc/hprofile/profiles/vga/scripts/nvidia.start||<pre>
-#!/bin/sh
-echo "Starting nvidia profile."
-modprobe nvidia || echo "failed to load nvidia module." && exit 1
+echo profile >/sys/class/drm/card0/device/power_method  # or 'dynpm'
+echo    auto >/sys/class/drm/card0/device/power_profile # or 'low|mid'
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/radeon.stop||<pre>#!/bin/sh
+echo "Stopping fglrx vga profile."
+# uncomment the following line and last one if one need
+# to force remove nouveau/kms driver for e.g. fglrx
+if [ ! -e sys/kernel/debug/vgaswitcheroo/switch ]; then
+#	echo 0 >/sys/class/vtconsole/vtcon1/bind
+	if ! rmmod nouveau; then
+		echo "failed to remove fglrx module"
+	else
+		/etc/init.d/consolefont restart
+#		rmmod ttm
+#		rmmod drm_kms_helper
+#		rmmod dri
+	fi
+fi
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/nvidia.start||<pre>#!/bin/sh
+echo "Starting nvidia vga profile"
+if ! modprobe nvidia; then
+	echo "failed to load nvidia module"
+	exit $?
+fi
 [ "$(eselect opengl show)" != "nvidia" ] && eselect opengl set nvidia
-</pre>}}
-{{File|/etc/hprofile/profiles/vga/scripts/nvidia.stop||<pre>
-#!/bin/sh
-echo "Stopping nvidia profile."
-rmmod nvidia || echo "failed to remove nvidia module." && exit 1
-</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/vga/scripts/nvidia.stop||<pre>#!/bin/sh
+echo "Stopping nvidia vga profile"
+if ! rmmod nvidia; then
+	ret=$?
+	echo "failed to remove nvidia module"
+	exit $?
+fi
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/vga/files/etc/X11/xorg.conf.d/40-monitor.conf.fglrx||<pre>
 Section "Monitor"
@@ -416,13 +590,15 @@ Section "Screen"
 EndSection
 </pre>}}
 
-And with that, you should be able to switch vga profile as you like without needing an extra kernel and setup.
+And with that, you should be able to switch vga profile as you like without needing an extra kernel and setup. Just close your X session and type hprofile vga.$profile ENTER.
 
-The ptest script will just look if VGASwitcheroo is available and which driver is loaded and then start the appropriate profile. One can black list a module and leave the other un-black listed to be able to chose ...a default VGA profile. Or else, use of {{Path|/etc/hprofile/profiles/vga/default}} file.
+The ptest script will just look if VGASwitcheroo (Intel HD Graphics/AMD ATI Radeon hybrid graphics) or PRIME (Intel HD Graphicss/nVidia Optimus) is available and which driver is loaded and then start the appropriate profile. One can black list modules and leave the other un-black listed to be able to chose ...a default VGA profile. Or else, use of {{Path|/etc/hprofile/profiles/vga/default}} file.
 
 {{File|/etc/hprofile/profiles/vga/default||intel}}
 
 {{Warning|This hardware profile shall be used out of X server by killing, if necessary, X server or display manager or desktop environment or windows manager session or even all of them.}}
+
+{{Note|Notice that two lines should be commented out in ''nouveau.stop'' and/or ''radeon.stop'' to force remove radeon/nouveau and ttm,kms... drivers to be able to load nvidia or fglrx driver.}}
 
 === Hard disk ===
 A disk profile is even straightforward because there fewer issue to keep in mind. So this section will be short and straightforward. Additionally, one need {{Package|sys-apps/hdparm}}.
@@ -441,12 +617,9 @@ done
 for dev in $(ls -d /sys/devices/pci*/*/usb*/*/*/host*/target*/*/block/sd[a-z] 2>/dev/null)
 do echo noop  >/sys/block/${dev##*/}/queue/scheduler; done
 </pre>}}
-{{File|/etc/hprofile/profiles/disk/ptest||<pre>
-#!/bin/sh
-[ -e /etc/runlevels/battery ] &&
-    [ "rc-status -r" != "default" ] && echo "bat" || echo "adp"
-exit
-</pre>}}
+{{File|/etc/hprofile/profiles/disk/ptest||<pre>#!/bin/sh
+echo "adp"
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofil/profiles/disk/profiles||<pre>
 bat
 adp
@@ -456,7 +629,7 @@ quiet
 {{File|/etc/hprofile/profiles/disk/stop||<pre>
 #!/bin/sh
 hdparm -q -S120 -B254 -M254 /dev/sd[a-z]
-</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:<</pre>}}
 
 {{File|/etc/hprofile/profiles/disk/scripts/adp.start||<pre>
 #!/bin/sh
@@ -475,7 +648,7 @@ hdparm -q -S180 -B254 -M254 /dev/sd[a-z]
 hdparm -q -S120 -B200 -M200 /dev/sd[a-z]
 </pre>}}
 
-{{Important|When using this script, you do not obviously need any extra hdparm init service, setting up dynamically hard disk profiles is more than sufficient. Or else, edit it to your needs.}}
+{{Important|When using this hrdware profile, you do not obviously need any extra hdparm init service, setting up dynamically hard disk profiles is more than sufficient. Or else, edit it to your needs. So remove hdparm service with rc-update if need be.}}
 
 == External resources ==
 * [[Power management/Processor]] - See that article for CPU power management insight.
