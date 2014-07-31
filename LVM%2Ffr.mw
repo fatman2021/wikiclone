@@ -94,21 +94,21 @@ Pour démarrer LVM au démarrage de la machine.
 
 La plupart des chargeurs d'amorçage ne peuvent pas démarrer depuis LVM directement - Ni GRUB patrimonial, ni LILO ne le peuvent. GRUB2 peut amorcer depuis un volume logique linéaire, un volume logique miroir et possiblement depuis quelques volume logiques RAID. Aucun chargeur d'amorçage ne prend actuellement en charge les volumes logiques parcimonieux. 
 
-Pour cette raison, il est conseillé d'utiliser une partition de démarrage (boot) non LVM et de monter la racine LVM depuis un système de fichiers virtuel de démarrage (initramfs). Un tel système de fichiers virtuel peut être généré automatiquement via [[Genkernel|genkernel]], genkernel-next et [[dracut]]:
+For that reason, it is recommended to use a non-LVM /boot partition and mount the LVM root from an initramfs. Such an initramfs can be generated automatically through [[Genkernel|genkernel]], {{Package|sys-kernel/genkernel-next}} and [[dracut]]:
 
-*'''genkernel''' ne peut pas amorcer depuis tous les types sauf depuis les volumes parcimonieux (puisqu'il ne compile/construit ni ne copie les binaires des outils thin-provisionning (allocation parcimonieuse) de l'hôte de compilation/construction) et peut-être RAID10 (la prise en charge de RAID10 nécessite LVM2 2.02.98, mais genkernel compile 2.02.89, néanmoins si des binaires statiques sont disponibles, il peut les copier)
-*'''genkernel-next''' ne peut pas amorcer depuis tous les types volumes, mais a besoin d'un paquet app-misc/pax-utils suffisamment récent sous peine de voir les binaires ''thin'' (parcimonieux) cassés (voir {{Bug|482504}}) 
-*'''dracut''' devrait amorcer tous les types, mais n'inclut que la prise en charge ''thin'' (''parcimonieux'') dans le système de fichiers virtuel de démarrage (initramfs) si l'hôte sur lequel on l'exécute à une racine ''thin'' (''parcimonieuse'').
+* '''genkernel''' can boot from all types except thin volumes (as it neither builds nor copies the {{Package|thin-provisioning-tools}} binaries from the build host) and maybe RAID10 (RAID10 support requires LVM2 2.02.98, but genkernel builds 2.02.89, however if static binaries are available it can copy those) 
+* '''genkernel-next''' can boot from all types volumes, but needs a new enough {{Package|app-misc/pax-utils}} or the resulting thin binaries will be broken (See {{Bug|482504}}) 
+* '''dracut''' should boot all types, but only includes thin support in the initramfs if the host being run on has a thin root.
 
 ==== Genkernel/Genkernel-next ====
 
-Installez le paquet {{Package|sys-kernel/genkernel}} ou le paquet {{Package|sys-kernel/genkernel-next}}. L'option ''static'' de la variable  USE doit aussi être activée sur le paquet  {{Package|sys-fs/lvm2}} de façon à ce que genkernel utilise les binaires système (autrement il construirait sa propre copie privée). L'exemple suivant construit seulement un système de fichiers virtuel de démarrage (pas un noyau entier) et active la prise en charge de LVM.
+Emerge either {{Package|sys-kernel/genkernel}} or {{Package|sys-kernel/genkernel-next}}. The static USE flag may also be enabled on the package {{Package|sys-fs/lvm2}} so that genkernel will use the system binaries (otherwise it will build its own private copy). The following example will build only an initramfs (not an entire kernel) and enable support for LVM.
 
 {{RootCmd|genkernel --lvm initramfs}}
 
 La page de manuel de genkernel présente d'autres options qui dépendent des besoins du système.
 
-Le disque virtuel de démarrage (initrd) demande certains paramètres pour savoir démarrer lvm. Ils lui sont fournis de la même manière que les autres paramètres du noyau. Par exemple :
+The initrd will require parameters to tell it how to start LVM, and they are supplied the same way as other kernel parameters. For example:
 
 {{File|/etc/default/grub|Ajouter dolvm en tant que paramètre de démarrage du noyau|<pre>
 GRUB_CMDLINE_LINUX="dolvm"
@@ -126,7 +126,7 @@ Le disque virtuel de démarrage requiert quelques paramètres pour le renseigner
 GRUB_CMDLINE_LINUX="rd.lvm.vg=vol00"
 </pre>}}
 
-Pour une liste exhaustive des options de lvm avec dracut, reportez-vous à la section concernée du [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm  manuel de dracut].
+For a comprehensive list of LVM options within dracut please see the section in the [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm Dracut Manual].
 
 == Utilisation ==
 
@@ -148,7 +148,7 @@ Par exemple, pour définir le type, via <code>fdisk</code>, d'une partition  {{P
 
 {{RootCmd|fdisk /dev/sda}}
 
-Dans <code>fdisk</code>, ajoutez une partition en tapant  '''n''' (nouvelle) et changez le type de la partition en tapant  '''t''' (type) et en saisissant  ''8e''.
+In <code>fdisk</code>, create partitions using the {{Key|n}} key and then change the partition type with the {{Key|t}} key to ''8e''.
 
 ==== Créer un volume physique ====
 
@@ -576,7 +576,7 @@ Il es possible de faire en sorte que LVM recrée le miroir avec des ''étendues 
 
 ==== Miroir parcimonieux ====
 
-Il n'est pas possible actuellement de créer un pool parcimonieux réfléchi ou un volume parcimonieux réfléchi. Il est possible de créer un pool parcimonieux réfléchi en créant un volume logique ordinaire réfléchi et en le convertissant en pool parcimonieux avec la commande <tt>lvconvert</tt>. 2 volumes logiques sont requis: un pour le pool parcimonieux et l'autre pour les méta-données parcimonieuses ; le processus de conversion les fusionnera en un unique volume logique.
+It is not (yet) possible to create a mirrored thin pool or thin volume. It is possible to create a mirrored thin pool by creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/fr|LVM 2.02.98 ou postérieur est requis pour que cela fonctionne correctement. Les versions antérieures sont, soit  incapables, soit produiront des erreurs de segmentation et corrompront le groupe de volumes. De plus, la conversion d'un miroir en un pool parcimonieux '''détruit''' toutes les données présentes dans le miroir ! }}
 
@@ -586,7 +586,7 @@ Il n'est pas possible actuellement de créer un pool parcimonieux réfléchi ou 
 
 ==== Segmentation répartie (RAID0) ====
 
-Au lieu d'un volume linéaire, où de multiples volumes physiques  contigües sont ajoutés, il est possible de créer un volume ''à segmentation répartie'' ou ''RAID 0'' pour améliorer la performance.Ce principe segmente l'information  et  répartit alternativement les segments sur les volumes physiques disponibles ; une suite de segment contigües formant un bande qui s'étend à travers les différents volumes physiques.
+Instead of a linear volume, where multiple contiguous physical volumes are appended, it possible to create a ''striped'' or ''RAID0'' volume for better performance. This will alternate storage allocations across the available physical volumes.
 
 Pour créer un volume à segmentation répartie sur 3 volumes physiques :
 
@@ -600,7 +600,7 @@ Il est possible de réfléchir un volume à segmentation répartie. Les options 
 
 {{RootCmd|lvcreate -i 2 -m 1 -l 10%VG vg0}}
 
-Ceci crée 2 volumes à segmentation répartie et les réfléchit sur 2 volumes physiques différents, pour un total de 4 volumes physiques. Un volume à segmentation répartie existant peut être réfléchi via la commande <tt>lvconvert</tt>.
+This creates a 2 physical volume stripe set and mirrors it on 2 different physical volumes, for a total of 4 physical volumes. An existing stripe set can be mirrored with <code>lvconvert</code>.
 
 Un pool parcimonieux peut être rendu à segmentation répartie comme tout autre volume logique. Tous les volumes parcimonieux créés à partir du pool héritent de ces réglages - ne les spécifiez pas à la main lorsque vous créez un volume parcimonieux.
 
@@ -610,7 +610,7 @@ Il n'est pas possible de transformer  un volume existant en un volume à segment
 
 À la différence de RAID 0, qui correspond à la segmentation répartie, RAID 1 correspond à la réflexion, mais mis en œuvre différemment du miroir LVM original. Sous RAID 1, les lectures sont réparties à travers les volumes physiques, améliorant ainsi la performance. Une panne du miroir RAID 1 ne conduit pas à un blocage des entrées/sorties parce que LVM n'a pas besoin de le casser en écriture.
 
-Partout où un miroir LVM peut être utilisé, un miroir RAID 1 peut l'être à sa place. Il est possible de faire que LVM crée implicitement des miroirs RAID 1 au lieu de miroir ordinaires en définissant la variable <tt>mirror_segtype_default</tt> à ''raid1'' dans le fichier {{Path|lvm.conf}}.
+Any place where an LVM mirror could be used, a RAID1 mirror can be used in its place. It is possible to have LVM create RAID1 mirrors instead of regular mirrors implicitly by setting ''mirror_segtype_default'' to ''raid1'' in {{Path|lvm.conf}}.
 
 Pour créer un volume logique avec un miroir unique :
 
@@ -618,7 +618,7 @@ Pour créer un volume logique avec un miroir unique :
 
 Notez la différence pour créer un miroir : il n'y a pas de ''mirorlog'' spécifié, parce que les volumes RAID1 n'ont pas de journal miroir explicite - it built-in to the logical volume.
 
-Il est possible de convertir un volume existant en RAID 1 :
+It is possible to convert an existing logical volume to RAID1:
 
 {{RootCmd|lvconvert -m 1 --type raid1 -b vg0/lvol1}}
 
@@ -630,7 +630,7 @@ Si une partie de RAID1 est indisponible (en général parce qu'un des disques co
 
 {{RootCmd|vgchange -ay --partial vg0}}
 
-Unlike an LVM mirror, writing does NOT breaking the mirroring. If the failure is only transient, and the missing physical volume returns, LVM will resync the mirror by copying cover the out-of-date segments instead of the entire logical volume. If the failure is permanent, then the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on a different PV). The mirror can then be repaired with <code>lvconvert</code>, and the old physical volume can be removed from the volume group:
+Unlike an LVM mirror, writing does NOT break the mirroring. If the failure is only transient, and the missing physical volume returns, LVM will resync the mirror by copying cover the out-of-date segments instead of the entire logical volume. If the failure is permanent, then the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on a different PV). The mirror can then be repaired with <code>lvconvert</code>, and the old physical volume can be removed from the volume group:
 
 {{RootCmd|vgextend vg0 /dev/sdc1
 |lvconvert --repair -b vg0/lvm_raid1
@@ -640,7 +640,7 @@ Unlike an LVM mirror, writing does NOT breaking the mirroring. If the failure is
 
 Il n'est pas, pour le moment, possible de créer un pool RAID 1 parcimonieux ou un volume parcimonieux. Il est possible de créer un pool RAID 1 parcimonieux en créant un volume logique réfléchi ordinaire et en convertissant le volume logique en un pool parcimonieux avec la commande  <tt>lvconvert</tt>. 2 volumes logiques sont nécessaires : un pour le pool parcimonieux et un pour les méta-données parcimonieuses ; le processus de conversion les fusionnera alors en un unique volume logique.
 
-{{Warning/fr|LVM 2.02.98 ou postérieure est nécessaire pour que cela fonctionne correctement. Les versions antérieures sont, soit incapables, soit conduisent à des fautes de segmentation et corrompent le groupe de volumes. Notez également que  la conversion d'un RAID 1 en un pool parcimonieux '''détruit''' toutes les données existantes dans le miroir ! }}
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID1 into a thin pool '''destroys''' all existing data in the mirror!}}
 
 {{RootCmd|lvcreate -m 1 --type raid1 -l40%VG -n thin_pool vg0
 |lvcreate -m 1 --type raid1 -L4MB -n thin_meta vg0
@@ -662,7 +662,7 @@ Lorsqu'un volume physique est défaillant, le groupe de volume doit être mis da
 
 {{RootCmd|vgchange -ay --partial vg0}}
 
-Le volume fonctionnera normalement à partir de là, cependant ceci dégrade la grappe en RAID 0 jusqu'à ce qu'un volume physique de rechange soit ajouté. La performance ne devrait pas être affectée lors de la dégradation de la grappe.
+The volume will work normally at this point, however this degrades the array to RAID0 until a replacement physical volume is added. Performance is unlikely to be affected while the array is degraded - although it does need to recompute its missing data via parity, it only requires simple XOR for the parity block with the remaining data. The overhead is negligible compared to the disk I/O.
 
 Réparer le RAID 5 :
 
@@ -678,7 +678,7 @@ Les mêmes restrictions qui s'appliquent aux  volumes à segmentation répartie 
 
 ==== Volumes logiques RAID 5 parcimonieux ====
 
-Au stade actuel, il n'est pas possible de créer des pools parcimonieux  de volumes à segmentation répartie avec parité (RAID5). Il est possible de créer un pool parcimonieux  RAID5  en créant un volume logique RAID5 ordinaire et en le convertissant en un pool parcimonieux avec la commande <tt>lvconvert</tt>. Deux volumes logiques sont nécessaires : un pour le pool parcimonieux et un pour les méta-données parcimonieuses ; le processus de conversion les fusionnera en un volume logique unique.
+It is not (yet) possible to create stripe set with parity (RAID5) thin pools or thin logical volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/fr|Une version 2.02.98 de LVM ou ultérieure est requise pour que cela fonctionne correctement. Les versions antérieures sont, soit incapables, soit conduisent à des fautes de segmentation  et corrompent le groupe de volumes. Notez également que la conversion d'un volume logique RAID5 en un pool parcimonieux  '''détruit''' toutes les données existantes du volume logique !}}
 
@@ -690,7 +690,7 @@ Au stade actuel, il n'est pas possible de créer des pools parcimonieux  de volu
 
 {{Note|RAID6 requiert au moins 5 volumes physiques.}}
 
-RAID 6 est très similaire à  RAID 5, néanmoins RAID 6 peut survivre à '''deux'' défaillances de volumes physiques, offrant ainsi une plus grand tolérance aux défaillances que RAID5 en contrepartie de l'utilisation de volumes physiques supplémentaires. 
+RAID6 is similar to RAID5, however RAID6 can survive up to '''two''' physical volume failures, thus offering more fault tolerance than RAID5 at the expense of extra physical volumes. 
 
 {{RootCmd|lvcreate --type raid6 -l 20%VG -i 3 -n lvm_raid6 vg00}}
 
@@ -702,7 +702,7 @@ La récupération pour RAID6 est la même que pour RAID5.
 
 ==== Les volumes logiques RAID6 parcimonieux ====
 
-Au stade actuel, il n'est pas possible de créer un pool de volumes RAID6 ou de volumes parcimonieux. Il est possible de créer un pool de volumes RAID6 parcimonieux en créant un volume logique RAID5 ordinaire et en le convertissant en un pool de volumes parcimonieux via la commande <tt>lvconvert</tt>. Deux volumes logiques sont requis : un pour le pool de volumes parcimonieux et un pour les méta-données parcimonieuses ; le processus de conversion les fusionnera en un volume logique unique.
+It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/fr |Une version 2.02.98 de LVM ou ultérieure es requise pour que cela fonctionne bien. Les versions antérieures sont, soit incapables, soit conduisent à des fautes de segmentation et corrompent le groupe de volumes. Notez également que la conversion d'un volume RAID6 en un pool parcimonieux ''détruit''' toutes les données existantes dans le volume logique !}}
 
