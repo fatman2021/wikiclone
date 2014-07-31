@@ -93,21 +93,21 @@ Para iniciar LVM cuando arranque el sistema:
 
 La mayoría de los cargadores de arranque no pueden iniciar directamente desde LVM. Ni GRUB Legacy ni LILO pueden hacerlo. Grub 2 PUEDE iniciar desde un volumen lógico LVM lineal, desde un volumen lógico en espejo y probablemente desde algunos tipos de volúmenes lógicos RAID. Ningún cargador de arranque ofrece soporte actualmente para volúmenes lógicos delgados (thin). 
 
-Debido a esto, se recomienda utilizar una partición de arranque que no sea LVM y montar la partición raíz LVM desde un initramfs. Se puede generar este initramfs de forma automática mediante [[Genkernel/es|genkernel]], genkernel-next y [[dracut]]:
+Debido a esto, se recomienda utilizar una partición de arranque que no sea LVM y montar la partición raíz LVM desde un initramfs. Se puede generar este initramfs de forma automática mediante [[Genkernel/es|genkernel]], {{Package|sys-kernel/genkernel-next}} y [[dracut]]:
 
-* '''genkernel''' puede iniciar desde cualquier tipo excepto volúmenes delgados (ya que ni construye ni copia los binarios de thin-provisioning-tools del equipo de construcción) y quizá desde RAID10 (El soporte de RAID10 requiere LVM2 2.02.98, pero genkernel construye la versión 2.02.89. Sin embargo, si se dispone de binarios estáticos, éstos se puede copiar)
-* '''genkernel-next''' puede iniciar desde todos los tipos de volúmenes, pero necesita un nuevo app-misc/pax-utils o, de lo contrario, los binarios para volúmenes delgados estarán rotos (Mirar la incidencia {{Bug|482504}})
-* '''dracut''' debería poder iniciar desde todos los tipos, pero únicamente incluye soporte para volúmenes delgados en el initramfs si el equipo en el que corre tiene un volumen raíz delgado.
+* '''genkernel''' can boot from all types except thin volumes (as it neither builds nor copies the {{Package|thin-provisioning-tools}} binaries from the build host) and maybe RAID10 (RAID10 support requires LVM2 2.02.98, but genkernel builds 2.02.89, however if static binaries are available it can copy those) 
+* '''genkernel-next''' can boot from all types volumes, but needs a new enough {{Package|app-misc/pax-utils}} or the resulting thin binaries will be broken (See {{Bug|482504}}) 
+* '''dracut''' should boot all types, but only includes thin support in the initramfs if the host being run on has a thin root.
 
 ==== Genkernel/Genkernel-next ====
 
-Haga emerge de {{Package|sys-kernel/genkernel}} o de {{Package|sys-kernel/genkernel-next}}. El ajuste USE static también se puede activar en el paquete {{Package|sys-fs/lvm2}} de modo que genkernel utilice los binarios del sistema (de lo contrario construirá su propia copia privada). El siguiente ejemplo construirá únicamente un initramfs (no el núcleo completo) y habilitará el soporte para lvm.
+Emerge either {{Package|sys-kernel/genkernel}} or {{Package|sys-kernel/genkernel-next}}. The static USE flag may also be enabled on the package {{Package|sys-fs/lvm2}} so that genkernel will use the system binaries (otherwise it will build its own private copy). The following example will build only an initramfs (not an entire kernel) and enable support for LVM.
 
 {{RootCmd|genkernel --lvm initramfs}}
 
 La página del manual de genkernel describe otras opciones que dependen de los requisitos del sistema.
 
-El initrd requerirá parámetros para indicarle cómo iniciar lvm. Éstos se pasan igual que el resto de parámetros del núcleo. Por ejemplo:
+The initrd will require parameters to tell it how to start LVM, and they are supplied the same way as other kernel parameters. For example:
 
 {{File|/etc/default/grub|Añadir dolvm como parámetro de inicio del núcleo|<pre>
 GRUB_CMDLINE_LINUX="dolvm"
@@ -125,7 +125,7 @@ El initrd requerirá parámetros para indicarle cómo iniciar lvm. Éstos se pas
 GRUB_CMDLINE_LINUX="rd.lvm.vg=vol00"
 </pre>}}
 
-Para obtener una lista completa de opciones de dracut, por favor, lea la sección en el [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm Manual de Dracut].
+For a comprehensive list of LVM options within dracut please see the section in the [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm Dracut Manual].
 
 == Utilización ==
 
@@ -147,7 +147,7 @@ Por ejemplo, para definir el tipo usando <code>fdisk</code> para una partición 
 
 {{RootCmd|fdisk /dev/sda}}
 
-En <code>fdisk</code>, cree particiones usando la tecla '''n''' y a continuación cambie el tipo de partición con la tecla '''t''' a ''8e''.
+In <code>fdisk</code>, create partitions using the {{Key|n}} key and then change the partition type with the {{Key|t}} key to ''8e''.
 
 ==== Crear PV ====
 
@@ -571,7 +571,7 @@ Es posible hacer que LVM recree el espejo con extensiones disponibles en un volu
 
 ==== Espejos delgados ====
 
-No es posible (aún) crear una reserva delgada o un volumen delgado en espejo. Es posible si se crea en primer lugar un volumen lógico en espejo normal y a continuación convertir el volumen lógico en una reserva delgada con <tt>lvconvert</tt>. Se necesitan dos volúmenes lógicos: uno para la reserva delgada y otro para los metadatos delgados. El proceso de conversión los mezclará en un único volumen lógico.
+It is not (yet) possible to create a mirrored thin pool or thin volume. It is possible to create a mirrored thin pool by creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/es|Se necesita la versión de LVM 2.02.98 o posterior para que esto funcione correctamente. Las versiones anteriores no pueden hacerlo o causarán un fallo de segmente y corromperán el grupo de volumen. Además, la conversión de un espejo en una reserva delgada ¡'''Destruye''' todos los datos existentes en el espejo!}}
 
@@ -581,7 +581,7 @@ No es posible (aún) crear una reserva delgada o un volumen delgado en espejo. E
 
 ==== Seccionado (RAID0) ====
 
-En lugar de un volumen lineal en el que múltiples volúmenes físicos contiguos se añaden, es posible crear un volumen ''seccionado'' o ''RAID 0'' para mejorar el rendimiento. Esto causará que las asignaciones de espacio de almacenamiento se alternen entre los volúmenes físicos disponibles.
+Instead of a linear volume, where multiple contiguous physical volumes are appended, it possible to create a ''striped'' or ''RAID0'' volume for better performance. This will alternate storage allocations across the available physical volumes.
 
 Para crear un volumen seccionado sobre tres volúmenes físicos:
 
@@ -595,7 +595,7 @@ Es posible reflejar un conjunto seccionado. Las opciones -i y -m se pueden combi
 
 {{RootCmd|lvcreate -i 2 -m 1 -l 10%VG vg0}}
 
-Esto crea un conjunto seccionado de dos volúmenes lógicos y hace el espejo en dos volúmenes físicos diferentes obteniendo así un total de cuatro volúmenes físicos. Un conjunto seccionado ya existente se puede reflejar con la orden <tt>lvconvert</tt>.
+This creates a 2 physical volume stripe set and mirrors it on 2 different physical volumes, for a total of 4 physical volumes. An existing stripe set can be mirrored with <code>lvconvert</code>.
 
 Una reserva delgada se puede seccionar como cualquier otro volumen lógico. Todos los volúmenes lógicos creados en la reserva heredan esos ajustes. No los especifique manualmente cuando cree un volumen delgado.
 
@@ -605,7 +605,7 @@ No es posible seccionar un volumen ya existente ni redimensionar las secciones e
 
 Unlike RAID0, which is striping, RAID1 is mirroring, but implemented differently than the original LVM mirror. Under RAID1, reads are spread out across physical volumes, improving performance. RAID1 mirror failures do not cause I/O to block because LVM does not need to break it on write.
 
-Cualquier lugar en el que se pueda utilizar un espejo LVM, se puede utilizar un espejo RAID 1 en su lugar. Es posible hacer que LVM cree espejos RAID1 en lugar de espejos normales definiendo ''mirror_segtype_default'' a ''raid1'' en {{Path|lvm.conf}}.
+Any place where an LVM mirror could be used, a RAID1 mirror can be used in its place. It is possible to have LVM create RAID1 mirrors instead of regular mirrors implicitly by setting ''mirror_segtype_default'' to ''raid1'' in {{Path|lvm.conf}}.
 
 Para crear un volumen lógico con un solo espejo:
 
@@ -613,7 +613,7 @@ Para crear un volumen lógico con un solo espejo:
 
 Observe la diferencia a la hora de crear un espejo: No se especifica ''mirrorlog'' debido a que los volúmenes lógicos RAID1 no tienen un registro espejo explícito, se incluyen en el volumen lógico.
 
-Es posible convertir un volumen lógico existente a RAID 1:
+It is possible to convert an existing logical volume to RAID1:
 
 {{RootCmd|lvconvert -m 1 --type raid1 -b vg0/lvol1}}
 
@@ -673,7 +673,7 @@ The same restrictions of stripe sets apply to stripe sets with parity as well: i
 
 ==== Thin RAID5 logical volumes ====
 
-No es posible (aún) crear reservas delgadas o volúmenes delgados que sean conjuntos con paridad (RAID5). Es posible crear una reserva delgada RAID5 creando en primer lugar un volumen lógico RAID5 normal y a continuación convertirlo en una reserva delgada con <tt>lvconvert</tt>. Se necesitan dos volúmenes lógicos: una para la reserva delgada y otro para los metadatos delgados. El proceso de conversión los mezclará en un único volumen lógico.
+It is not (yet) possible to create stripe set with parity (RAID5) thin pools or thin logical volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, coversion of a RAID5 LV into a thin pool '''destroys''' all existing data in the LV!}}
 
@@ -697,7 +697,7 @@ Recovery for RAID6 is the same as RAID5.
 
 ==== Thin RAID6 logical volumes ====
 
-No es posible (aún) crear una reserva delgada o un volumen delgado RAID6. Es posible crear una reserva delgada RAID6 creando en primer lugar un volumen lógico RAID6 y a continuación convertirlo en una reserva delgada con <tt>lvconvert</tt>. Se necesitan dos volúmenes lógicos: una para la reserva delgada y otro para los metadatos delgados. El proceso de conversión los mezclará en un único volumen lógico.
+It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID6 LV into a thin pool '''destroys''' all existing data in the LV!}}
 
