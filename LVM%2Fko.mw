@@ -94,21 +94,21 @@ lvm을 별도로 시작하려면:
 
 대부분의 부트 로더는 LVM에서 직접 부팅할 수 있습니다. 기존의 GRUB은 물론이고 LILO에서도 안됩니다. Grub2는 LVM 선형 논리 볼륨, 미러링한 논리 볼륨, 몇가지 RAID 논리 볼륨으로 부팅할 수 있습니다. 씬 논리 볼륨을 지원하는 부트로더는 없습니다. 
 
-이런 이유로, /boot 파티션은 비 LVM 파티션으로 사용하고 initramfs에서 LVM 루트를 마운트하는 방식을 권장합니다. initramfs 같은요소는 [[Genkernel|genkernel]], genkernel-next, [[dracut]]에서 자동으로 만들 수 있습니다:
+For that reason, it is recommended to use a non-LVM /boot partition and mount the LVM root from an initramfs. Such an initramfs can be generated automatically through [[Genkernel|genkernel]], {{Package|sys-kernel/genkernel-next}} and [[dracut]]:
 
-* '''genkernel'''은 씬 볼륨(빌드 호스트에서 나온 thin-provisioning-tools 바이너리 사본이나 빌드도 마찬가지로)과 RAID10(RAID10은 LVM10 2.02.98을 필요로 하겠지만, genkernel은 2.02.89를 빌드하는데, 정적 바이너리가 있다면 복사할 수 있습니다)을 제외한 모든 형식의 파티션에서 부팅할 수 있습니다.
-* '''genkernel-next'''에서는 모든 형식의 볼륨에서 부팅할 수 있습니다만, 충분히 최신의 app-misc/pax-utils가 필요하며, 그렇지 않으면 씬 바이너리가 깨집니다({{Bug|482504}} 참고)
-* '''dracut'''은 모든 형식의 볼륨에서 부팅하지만, 씬 루트가 있는 상태에서 호스트가 동작하는 경우 initramfs에서 씬을 지원하는 호스트에서만 부팅합니다.
+* '''genkernel''' can boot from all types except thin volumes (as it neither builds nor copies the {{Package|thin-provisioning-tools}} binaries from the build host) and maybe RAID10 (RAID10 support requires LVM2 2.02.98, but genkernel builds 2.02.89, however if static binaries are available it can copy those) 
+* '''genkernel-next''' can boot from all types volumes, but needs a new enough {{Package|app-misc/pax-utils}} or the resulting thin binaries will be broken (See {{Bug|482504}}) 
+* '''dracut''' should boot all types, but only includes thin support in the initramfs if the host being run on has a thin root.
 
 ==== Genkernel/Genkernel-next ====
 
-{{Package|sys-kernel/genkernel}} 또는 {{Package|sys-kernel/genkernel-next}} 둘 중 하나를 이머지하십시오. {{Package|sys-fs/lvm2}} 패키지를 이머지할 때는 static USE 플래그를 활성화하여 genkernel이 시스템 바이너리를 사용할 수 있게 하십시오(그렇지 않으면 자체 사본을 만듭니다). 다음 예제에서는 initramfs(전체 커널 아님)만 빌드하며 lvm 지원을 활성화합니다.
+Emerge either {{Package|sys-kernel/genkernel}} or {{Package|sys-kernel/genkernel-next}}. The static USE flag may also be enabled on the package {{Package|sys-fs/lvm2}} so that genkernel will use the system binaries (otherwise it will build its own private copy). The following example will build only an initramfs (not an entire kernel) and enable support for LVM.
 
 {{RootCmd|genkernel --lvm initramfs}}
 
 genkernel 맨페이지에서는 시스템 요구사항에 따라 다른 옵션을 설명합니다.
 
-initrd는 lvm 시작 방법을 알리는 매개 변수가 필요하며, 다른 커널 매개 변수를 넣는 동일한 방식으로 처리합니다. 예를 들면:
+The initrd will require parameters to tell it how to start LVM, and they are supplied the same way as other kernel parameters. For example:
 
 {{File|/etc/default/grub|dolvm을 커널 부팅 매개변수로 넣기|<pre>
 GRUB_CMDLINE_LINUX="dolvm"
@@ -126,7 +126,7 @@ initrd는 lvm 시작 방법을 알리는 매개 변수가 필요하며, 다른 �
 GRUB_CMDLINE_LINUX="rd.lvm.vg=vol00"
 </pre>}}
 
-dracut에서 활용하는 lvm 옵션 실제 목록을 보려면 [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm Dracut 설명서]의 LVM 장을 참고하십시오.
+For a comprehensive list of LVM options within dracut please see the section in the [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_lvm Dracut Manual].
 
 == 사용법 ==
 
@@ -148,7 +148,7 @@ LVM은 다음 세가지 레벨의 저장소로 구성되어 있습니다:
 
 {{RootCmd|fdisk /dev/sda}}
 
-<code>fdisk</code>에서, 분할 공간을 만들려면 '''n'''키를 사용하고, '''t'''키를 사용하여 분할 공간 형식을 ''8e''로 바꾸십시오.
+In <code>fdisk</code>, create partitions using the {{Key|n}} key and then change the partition type with the {{Key|t}} key to ''8e''.
 
 === PV 만들기 ===
 
@@ -573,7 +573,7 @@ LVM 에서는 ''미러링''(복제) 볼륨을 지원하며, 드라이브가 망�
 
 ==== 씬 미러 ====
 
-(아직은) 미러링한 씬 풀이나 씬 볼륨을 만들 수 없습니다. 미러링한 씬 풀을 보통의 미러링 논리 볼륨을 만들어서 만들 수는 있으며, 이 과정을 거치고 나면 <tt>lvconvert</tt> 명령으로 논리 볼륨을 씬 풀로 변환할 수 있습니다. 2개의 논리 볼륨이 필요합니다: 하나는 씬 풀에 사용하며 하나는 씬 메타 데이터를 위해 사용합니다. 변환 과정을 통해 이들을 단일 논리 볼륨으로 합칩니다.
+It is not (yet) possible to create a mirrored thin pool or thin volume. It is possible to create a mirrored thin pool by creating a normal mirrored logical volume and then converting the logical volume to a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/ko|제대로 동작하게 하려면 LVM 2.02.98 이상이 필요합니다. 이전 버전은 이 기능을 활용할 수 없을 뿐더러 세그 폴트를 일으키고, 볼륨 그룹을 깨먹을 수 있습니다. 또한 미러를 씬 풀로 변환하는 동작으로 미러상의 모든 데이터를 '''파괴'''합니다!}}
 
@@ -583,7 +583,7 @@ LVM 에서는 ''미러링''(복제) 볼륨을 지원하며, 드라이브가 망�
 
 ==== 스트라이핑(RAID0) ====
 
-선형 볼륨과는 달리, 다중 연속 물리 볼륨이 붙는 경우, 보다 나은 성능을 위해 ''스트라이핑'' 또는 ''RAID 0'' 만들 수 있습니다. 여러 존재하는 물리 볼륨에 대한 저장소 할당 방식을 대체합니다.
+Instead of a linear volume, where multiple contiguous physical volumes are appended, it possible to create a ''striped'' or ''RAID0'' volume for better performance. This will alternate storage allocations across the available physical volumes.
 
 세 개의 물리 볼륨에 스트라이프 볼륨을 만들려면:
 
@@ -597,7 +597,7 @@ Using default stripesize 64.00 KiB
 
 {{RootCmd|lvcreate -i 2 -m 1 -l 10%VG vg0}}
 
-이 명령은 4개의 물리 볼륨에 대해 2개의 물리 볼륨 스트라이프 모음을 만들고 2개의 각기 다른 물리 볼륨에 미러링을 수행합니다. 기존 스트라이프 모음은 <tt>lvconvert</tt> 명령으로 미러링 할 수 있습니다.
+This creates a 2 physical volume stripe set and mirrors it on 2 different physical volumes, for a total of 4 physical volumes. An existing stripe set can be mirrored with <code>lvconvert</code>.
 
 다른 논리 볼륨처럼 씬 풀을 스트라이핑 할 수 있습니다. 모든 씬 볼륨은 설정에 따라 풀에서 만들 수 있습니다. 씬 볼륨을 만들때 직접 지정하지마십시오.
 
@@ -607,7 +607,7 @@ Using default stripesize 64.00 KiB
 
 스트라이핑을 하는 RAID 0과는 달리, RAID 1은 미러링 방식이지만, 원래 LVM 미러링과는 다른 방식으로 구현했습니다. RAID 1에서는, 성능 향상을 위해 물리 볼륨 전체를 읽어들입니다. RAID1 미러가 고장나면 장치를 차단하기 위해 I/O 가 일어나지 않는데, LVM 에서는 기록 과정을 멈출 필요가 없기 때문입니다.
 
-LVM 미러를 활용할 수 있는 곳에서는, RAID1 미러를 각 위치에서 사용할 수 있습니다.  {{Path|lvm.conf}}에 <tt>mirror_segtype_default</tt> 값을 ''raid1''으로 설정하면 LVM에서 보통 미러대신 RAID1 미러를 무조건 만들 수 있습니다.
+Any place where an LVM mirror could be used, a RAID1 mirror can be used in its place. It is possible to have LVM create RAID1 mirrors instead of regular mirrors implicitly by setting ''mirror_segtype_default'' to ''raid1'' in {{Path|lvm.conf}}.
 
 논리 볼륨을 단일 미러로 만들려면:
 
@@ -615,7 +615,7 @@ LVM 미러를 활용할 수 있는 곳에서는, RAID1 미러를 각 위치에�
 
 미러를 만드는 방식과는 차이점이 있습니다: ''mirrorlog''를 지정하지 않는데, RAID1 논리 볼륨에선 확실한 미러 로그를 지니고 있지 않습니다. 논리 볼륨 안에 만들기 때문입니다.
 
-기존 논리 볼륨을 RAID 1으로 변환할 수 있습니다:
+It is possible to convert an existing logical volume to RAID1:
 
 {{RootCmd|lvconvert -m 1 --type raid1 -b vg0/lvol1}}
 
@@ -627,7 +627,7 @@ RAID1 부분을 사용할 수 없다면(보통 물리 볼륨이 들어간 디스
 
 {{RootCmd|vgchange -ay --partial vg0}}
 
-Unlike an LVM mirror, writing does NOT breaking the mirroring. If the failure is only transient, and the missing physical volume returns, LVM will resync the mirror by copying cover the out-of-date segments instead of the entire logical volume. If the failure is permanent, then the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on a different PV). The mirror can then be repaired with <code>lvconvert</code>, and the old physical volume can be removed from the volume group:
+Unlike an LVM mirror, writing does NOT break the mirroring. If the failure is only transient, and the missing physical volume returns, LVM will resync the mirror by copying cover the out-of-date segments instead of the entire logical volume. If the failure is permanent, then the failed physical volume needs to be removed from the volume group, and a replacement physical volume needs to be added (or if the volume group has a free physical volume, it can be created on a different PV). The mirror can then be repaired with <code>lvconvert</code>, and the old physical volume can be removed from the volume group:
 
 {{RootCmd|vgextend vg0 /dev/sdc1
 |lvconvert --repair -b vg0/lvm_raid1
@@ -637,7 +637,7 @@ Unlike an LVM mirror, writing does NOT breaking the mirroring. If the failure is
 
 (아직은) RAID 1 씬 풀이나 씬 볼륨을 만들 수 없습니다. RAID 1 씬 풀을 보통의 미러링 논리 볼륨을 만들어서 만들 수는 있으며, 이 과정을 거치고 나면 <tt>lvconvert</tt> 명령으로 논리 볼륨을  씬 풀로 변환할 수 있습니다. 2개의 논리 볼륨이 필요합니다: 하나는 씬 풀에 사용하며 하나는 씬 메타 데이터를 위해 사용합니다. 변환 과정을 통해 이들을 단일 논리 볼륨으로 합칩니다.
 
-{{Warning/ko|제대로 동작하려면 LVM 2.02.98 이상이 필요합니다. 이전 버전에서는 기능을 사용할 수 없거나, 세그폴트를 일으키기도 하며 볼륨 그룹을 깨먹습니다. RAID 1을 씬 풀로 변환하면 미러상의 모든 데이터를 '''파괴합니다'''!}}
+{{Warning|LVM 2.02.98 or above is required for this to work properly. Prior versions are either not capable or will segfault and corrupt the VG. Also, conversion of a RAID1 into a thin pool '''destroys''' all existing data in the mirror!}}
 
 {{RootCmd|lvcreate -m 1 --type raid1 -l40%VG -n thin_pool vg0
 |lvcreate -m 1 --type raid1 -L4MB -n thin_meta vg0
@@ -659,7 +659,7 @@ RAID 0에는 내고장성 보증이 없습니다. 물리 볼륨중 하나가 고
 
 {{RootCmd|vgchange -ay --partial vg0}}
 
-이 시점에서 볼륨은 정상적으로 동작합니다만, 교체 물리 볼륨을 추가하기 전에는 이 명령으로 어레이를 RAID 0로 강등합니다. 어레이는 강등되지만 성능에는 전혀 영향이 없습니다. 비록 패리티로 빠진 데이터를 재계산 처리할 필요가 있긴 하지만,  남은 데이터에 대한 패리티 블록은 단순한 XOR 연산만을 필요로 합니다. 부하는 디스크 입출력에 비하면 무시해도 될 정도의 수준입니다.
+The volume will work normally at this point, however this degrades the array to RAID0 until a replacement physical volume is added. Performance is unlikely to be affected while the array is degraded - although it does need to recompute its missing data via parity, it only requires simple XOR for the parity block with the remaining data. The overhead is negligible compared to the disk I/O.
 
 RAID5를 복원하려면:
 
@@ -675,7 +675,7 @@ RAID5를 복원하려면:
 
 ==== 씬 RAID5 논리 볼륨 ====
 
-(아직은) 패리티(RAID5) 씬 풀을 붙인 스트라이프 셋이나 씬 볼륨을 만들 수 없습니다. RAID5 씬 풀을 RAID5 논리 볼륨을 만들어서 만들 수는 있으며, 이 과정을 거치고 나면 <tt>lvconvert</tt> 명령으로 논리 볼륨을 씬 풀로 변환할 수 있습니다. 2개의 논리 볼륨이 필요합니다: 하나는 씬 풀에 사용하며 하나는 씬 메타 데이터를 위해 사용합니다. 변환 과정을 통해 이들을 단일 논리 볼륨으로 합칩니다.
+It is not (yet) possible to create stripe set with parity (RAID5) thin pools or thin logical volumes. It is possible to create a RAID5 thin pool by creating a normal RAID5 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/ko|제대로 동작하려면 LVM 2.02.98 이상이 필요합니다. 이전 버전에서는 기능을 사용할 수 없거나, 세그폴트를 일으키기도 하며 볼륨 그룹을 깨먹습니다. RAID5 논리 볼륨을 씬 풀로 변환하면 논리 볼륨의 모든 데이터를 '''파괴합니다'''!}}
 
@@ -687,7 +687,7 @@ RAID5를 복원하려면:
 
 {{Note/ko|RAID6에서는 최소한 5개의 물리 볼륨이 필요합니다.}}
 
-RAID 6는 RAID 5와 유사하지만, RAID 6에서는 '''두 개'''의 물리 볼륨 고장을 구할 수 있어, 추가 물리 볼륨에 비용이 들어가는 만큼 RAID5보다 더 우수한 내고장성을 보장합니다. 
+RAID6 is similar to RAID5, however RAID6 can survive up to '''two''' physical volume failures, thus offering more fault tolerance than RAID5 at the expense of extra physical volumes. 
 
 {{RootCmd|lvcreate --type raid6 -l 20%VG -i 3 -n lvm_raid6 vg00}}
 
@@ -699,7 +699,7 @@ RAID6 복구는 RAID5와 같습니다.
 
 ==== 씬 RAID6 논리 볼륨 ====
 
-(아직은) RAID6 씬 풀이나 씬 볼륨을 만들 수 없습니다. RAID6 씬 풀을 RAID6 논리 볼륨을 만들어서 만들 수는 있으며, 이 과정을 거치고 나면 <tt>lvconvert</tt> 명령으로 논리 볼륨을 씬 풀로 변환할 수 있습니다. 2개의 논리 볼륨이 필요합니다: 하나는 씬 풀에 사용하며 하나는 씬 메타 데이터를 위해 사용합니다. 변환 과정을 통해 이들을 단일 논리 볼륨으로 합칩니다.
+It is not (yet) possible to create a RAID6 thin pool or thin volumes. It is possible to create a RAID6 thin pool by creating a normal RAID6 logical volume and then converting the logical volume into a thin pool with <code>lvconvert</code>. 2 logical volumes are required: one for the thin pool and one for the thin metadata; the conversion process will merge them into a single logical volume.
 
 {{Warning/ko|제대로 동작하려면 LVM 2.02.98 이상이 필요합니다. 이전 버전에서는 기능을 사용할 수 없거나, 세그폴트를 일으키기도 하며 볼륨 그룹을 깨먹습니다. RAID6 논리 볼륨을 씬 풀로 변환하면 논리 볼륨의 모든 데이터를 '''파괴합니다'''!}}
 
