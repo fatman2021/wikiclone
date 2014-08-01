@@ -78,44 +78,61 @@ fi
 echo "${profile:-adp}"
 # vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
-{{File|/etc/hprofile/profiles/power/scripts/adp.start||<pre>#!/bin/sh
+{{File|/etc/hprofile/profiles/power/start||<pre>#!/bin/sh
+# $Id: /etc/hprofile/profiles/power/base-start, 2014/07/31 -tclover $
 
-hprofile disk.adp
+CPU=${1:-powersave}
+PCI=${2:-auto}
+USB=${3:-auto}
+HDA=${5:-1}
+NMI=${6:-0}
+VMW=${7:-1000}
+ASPM=${8:-default}
+SCSI=${4:-min_power}
 
 for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo powersave >$cpu/cpufreq/scaling_governor
+	echo $CPU >$cpu/cpufreq/scaling_governor
 done
 
 [ -e /sys/module/pcie_aspm/parameters/policy ] &&
-	echo default >/sys/module/pcie_aspm/parameters/policy
+	echo $ASPM >/sys/module/pcie_aspm/parameters/policy
 for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
 	[ -e $scsi/link_power_management_policy ] || continue
 	case $(cat $scsi/proc_name) in
-		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
+		ahci|usb-storage) echo $SCSI >$scsi/link_power_management_policy;;
 	esac
 done
 
 # set usb host to auto powersave
 for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
-	echo auto >$usb/power/control
+	echo $USB >$usb/power/control
 done
 
 # pci power control
 for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
-	echo on >$pci/power/control
+	echo $PCI >$pci/power/control
 done
 
 # snd-hda-intel powersave
 [ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
-	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
+	echo $HDA >/sys/module/snd_hda_intel/parameters/power_save
 
 # turn off NMI watchdog
 [ -e /proc/sys/kernel/nmi_watchdog ] &&
-	echo 0 >/proc/sys/kernel/nmi_watchdog
+	echo $NMI >/proc/sys/kernel/nmi_watchdog
 
 # VM write back timeout
 [ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
-	echo 1000 >/proc/sys/vm/dirty_writeback_centisecs
+	echo $VMW >/proc/sys/vm/dirty_writeback_centisecs
+
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+
+{{File|/etc/hprofile/profiles/power/scripts/adp.start||<pre>#!/bin/sh
+
+script=/etc/hprofile/profiles/power/start
+$script "powersave" "auto" "auto" "min_power" "1" "0" "default"
+
+hprofile disk.adp
 
 if [ -n "$DISPLAY" ]; then
     xbacklight -set 30
@@ -126,44 +143,13 @@ fi
 
 {{File|/etc/hprofile/profiles/power/scripts/bat.start||<pre>#!/bin/sh
 
+script=/etc/hprofile/profiles/power/start
+$script "powersave" "auto" "auto" "min_power" "1" "0" "1500" "powersave"
+
 hprofile disk.bat
 
-for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo powersave >$cpu/cpufreq/scaling_governor
-done
-
-[ -e /sys/module/pcie_aspm/parameters/policy ] &&
-	echo powersave >/sys/module/pcie_aspm/parameters/policy
-for scsi in $(ls -d /sys/class/scsi_host/host[0-9]); do
-	[ -e $scsi/link_power_management_policy ] || continue
-	case $(cat $scsi/proc_name) in
-		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
-	esac
-done
-
-# set usb host to auto powersave
-for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
-	echo auto >$usb/power/control
-done
-
-# pci power control
-for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
-	echo auto >$pci/power/control
-done
-
-# snd-hda-intel powersave
-[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
-	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
-
-# turn off NMI watchdog
-[ -e /proc/sys/kernel/nmi_watchdog ] &&
-	echo 0 >/proc/sys/kernel/nmi_watchdog
-
-# VM write back timeout
-[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
-	echo 1500 >/proc/sys/vm/dirty_writeback_centisecs
-
 if [ -n "$DISPLAY" ]; then
+    p
     xbacklight -set 30
     xset dpms 300 400 600
 fi
@@ -172,42 +158,10 @@ fi
 
 {{File|/etc/hprofile/profiles/power/scripts/dyn.start||<pre>#!/bin/sh
 
+script=/etc/hprofile/profiles/power/start
+$script "performance" "on" "on" "max_power" "0" "1" "500" "performane"
+
 hprofile disk.dyn
-
-for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo performance >$cpu/cpufreq/scaling_governor
-done
-
-[ -e /sys/module/pcie_aspm/parameters/policy ] &&
-	echo powersave >/sys/module/pcie_aspm/parameters/policy
-for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ -e $scsi/link_power_management_policy ] || continue
-	case $(cat $scsi/proc_name) in
-		ahci|usb-storage) echo max_power >$scsi/link_power_management_policy;;
-	esac
-done
-
-# set usb host to auto powersave
-for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
-	echo on >$usb/power/control
-done
-
-# pci power control
-for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
-	echo on >$pci/power/control
-done
-
-# snd-hda-intel powersave
-[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
-	echo >/sys/module/snd_hda_intel/parameters/power_save
-
-# turn off NMI watchdog
-[ -e /proc/sys/kernel/nmi_watchdog ] &&
-	echo >/proc/sys/kernel/nmi_watchdog
-
-# VM write back timeout
-[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
-	echo 500 >/proc/sys/vm/dirty_writeback_centisecs
 
 if [ -n "$DISPLAY" ]; then
     xbacklight -set 30
@@ -218,88 +172,25 @@ fi
 
 {{File|/etc/hprofile/profiles/power/scripts/med.start||<pre>#!/bin/sh
 
+
+script=/etc/hprofile/profiles/power/start
+$script "performance" "on" "on" "min_power" "0" "1" "500" "performance"
+
 hprofile disk.adp
-
-for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo performance >$cpu/cpufreq/scaling_governor
-done
-
-[ -e /sys/module/pcie_aspm/parameters/policy ] &&
-	echo default >/sys/module/pcie_aspm/parameters/policy
-for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ -e $scsi/link_power_management_policy ] || continue
-	case $(cat $scsi/proc_name) in
-		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
-	esac
-done
-
-# set usb host to auto powersave
-for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
-	echo auto >$usb/power/control
-done
-
-# pci power control
-for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
-	echo on >$pci/power/control
-done
-
-# snd-hda-intel powersave
-[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
-	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
-
-# turn off NMI watchdog
-[ -e /proc/sys/kernel/nmi_watchdog ] &&
-	echo 0 >/proc/sys/kernel/nmi_watchdog
-
-# VM write back timeout
-[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
-	echo 1000 >/proc/sys/vm/dirty_writeback_centisecs
 
 if [ -n "$DISPLAY" ]; then
     xbacklight -set 30
     xset dpms 300 400 600
 fi
 
-vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+# vim:fenc=utf-8:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/power/scripts/quiet.start||<pre>#!/bin/sh
 
+script=/etc/hprofile/profiles/power/start
+$script "powersave" "auto" "auto" "min_power" "1" "0" "2500" "powersave"
+
 hprofile disk.quiet
-
-for cpu in $(ls -d /sys/devices/system/cpu/cpu[0-9]*); do
-	echo powersave >$cpu/cpufreq/scaling_governor
-done
-
-[ -e /sys/module/pcie_aspm/parameters/policy ] &&
-	echo powersave >/sys/module/pcie_aspm/parameters/policy
-for scsi in $(ls -d /sys/class/scsi_host/host[0-9]*); do
-	[ -e $scsi/link_power_management_policy ] || continue
-	case $(cat $scsi/proc_name) in
-		ahci|usb-storage) echo min_power >$scsi/link_power_management_policy;;
-	esac
-done
-
-# set usb host to auto powersave
-for usb in $(ls -d /sys/bus/usb/devices/{usb[0-9],[0-9]-[0-9]}); do
-	echo auto >$usb/power/control
-done
-
-# pci power control
-for pci in $(ls -d /sys/bus/pci/devices/0000:0*); do 
-	echo auto >$pci/power/control
-done
-
-# snd-hda-intel powersave
-[ -e /sys/module/snd_hda_intel/parameters/power_save ] &&
-	echo 1 >/sys/module/snd_hda_intel/parameters/power_save
-
-# turn off NMI watchdog
-[ -e /proc/sys/kernel/nmi_watchdog ] &&
-	echo 0 >/proc/sys/kernel/nmi_watchdog
-
-# VM write back timeout
-[ -e /proc/sys/vm/dirty_writeback_centisecs ] &&
-	echo 2500 >/proc/sys/vm/dirty_writeback_centisecs
 
 if [ -n "$DISPLAY" ]; then
     xbacklight -set 30
