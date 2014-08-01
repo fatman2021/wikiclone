@@ -1,0 +1,316 @@
+== Introduction ==
+For 64bit systems it is sometimes necessary to execute 32bit binaries, e.g. if the application is only available as 32bit binary like Opera, Steam, Windows applications and games via wine, ...
+To achieve this, Gentoo has a multilib profile which offers some emul-linux packages that bundle some 32bit libraries.
+So if an application like Opera, Steam or wine gets installed, then it pulls the emul-linux packages it needs to run.
+This approach works but has at least two drawbacks:
+* The bundled libraries are several months old (based on the stable libraries in Gentoo). Owners of relatively modern graphic cards (1-2 years old) who want to play a game once in a while (without proprietary drivers) need the latest available drivers and libraries because versions older than a month may render even old games completely unplayable. If the performance is excellent with multimedia and desktop applications but very low with wine and steam (native or not), then the problem lies with the emul-linux packages.
+* Prepackaged software compiled by other people is not the Gentoo way where the user wants to set his USE-flags and compiler flags etc. by himself.
+
+But the end of emul-linux is coming: Several months ago Gentoo packages introduced a new flag (abi_x86_32) which will also create 32bit libraries of every package where this flag has been activated.
+So the times where a user e.g. had a fast 64bit mesa-10.2 library for his RadeonSI card and a 32bit emul-linux-opengl bottleneck with mesa-10.0 are over:
+If everything is set up properly, emerge mesa will install the same version of mesa in 64bit and 32bit on the system; same USE-flags, same everything.
+
+This document will show how to setup a Gentoo ~amd64 system for this new way of dealing with 32bit libraries.
+A stable amd64 system may not work this way but if the new feature is completely stable, it will be available to all users eventually.
+
+== Overview ==
+The following steps are needed to setup the system for abi_x86_32:
+# Unmerge all packages from Overlays that replace packages from the base system (like X11 packages from x11-overlay) and all packages that depend on emul-linux packages, because they will interfere with the transition process.
+# Note which emul-linux packages are installed, remove and mask them
+# Set the abi_x86_32 flag for those packages which were part of the previously uninstalled emul-linux packages. The flag may be set globally but it makes no sense to create additional 32bit binaries for really everything (a 32bit copy of your desktop and GUI applications is probably very useless)
+# Recompile everything that changed (which may need several hours)
+
+== Detailed Guide ==
+For this guide you need eix and gentoolkit installed unless you know how to achieve the same things without their functionality.
+The guide follows the steps from the overview above.
+
+=== Dealing with Overlays ===
+Removing overlay packages depends on what you have installed so it cannot be handled here. If dependency problems or USE-flag problems occur later, you will see which package caused it.
+
+=== Remove emul-linux and all dependencies ===
+To find out which packages depend on emul-linux packages, you can use the following shell command: 
+{{RootCmd|for EMUL in $(eix -I --only-names emul-linux); do equery depends $EMUL; done}}
+Note which packages were printed, then unmerge them.
+
+Execute
+{{RootCmd|eix -I --only-names emul-linux}} to know which emul-packages you had installed, open http://dev.gentoo.org/~pacho/emul.html and open the linked site listing the contents of the emul-packages.
+Now unmerge all emul-packages and mask them by adding them to {{Path|/etc/portage/package.mask}}
+{{File|/etc/portage/package.mask|Masking all emul-linux packages|<pre>
+# mask emul-linux
+app-emulation/emul-linux-x86-*
+</pre>}}
+
+=== Apply the abi_x86_32 flag ===
+Open {{Path|/etc/portage/package.use}}, append all package names from the site to it and append to every package name the flag ''abi_x86_32'', like so:
+{{File|/etc/portage/package.use|Setting abi_x86_32|<pre>
+# app-emulation/emul-linux-x86-baselibs-20140508-r14  USE="development kerberos ldap pam" ABI_X86="-32" 39,395 kB
+app-admin/gamin abi_x86_32
+app-arch/bzip2 abi_x86_32
+app-arch/xz-utils abi_x86_32
+app-crypt/mit-krb5 abi_x86_32
+app-text/libpaper abi_x86_32
+dev-db/sqlite abi_x86_32
+dev-lang/perl abi_x86_32
+dev-lang/python abi_x86_32
+dev-libs/dbus-glib abi_x86_32
+dev-libs/elfutils abi_x86_32
+dev-libs/expat abi_x86_32
+dev-libs/glib abi_x86_32
+dev-libs/gmp abi_x86_32
+dev-libs/json-c abi_x86_32
+dev-libs/libffi abi_x86_32
+dev-libs/libgcrypt abi_x86_32
+dev-libs/libgpg-error abi_x86_32
+dev-libs/libnl abi_x86_32
+dev-libs/libpcre abi_x86_32
+dev-libs/libtasn1 abi_x86_32
+dev-libs/libusb abi_x86_32
+dev-libs/libusb-compat abi_x86_32
+dev-libs/libxml2 abi_x86_32
+dev-libs/libxslt abi_x86_32
+dev-libs/lzo abi_x86_32
+dev-libs/nettle abi_x86_32
+dev-libs/nspr abi_x86_32
+dev-libs/nss abi_x86_32
+dev-libs/openssl abi_x86_32
+dev-libs/udis86 abi_x86_32
+media-libs/giflib abi_x86_32
+media-libs/lcms abi_x86_32
+media-libs/libart_lgpl abi_x86_32
+media-libs/libjpeg-turbo abi_x86_32
+media-libs/libmng abi_x86_32
+media-libs/libpng abi_x86_32
+media-libs/tiff abi_x86_32
+media-sound/pulseaudio abi_x86_32
+net-dialup/capi4k-utils abi_x86_32
+net-dns/libidn abi_x86_32
+net-libs/gnutls abi_x86_32
+net-libs/libgssglue abi_x86_32
+net-libs/libsoup abi_x86_32
+net-libs/libtirpc abi_x86_32
+net-libs/neon abi_x86_32
+net-misc/curl abi_x86_32
+net-nds/openldap abi_x86_32
+net-print/cups abi_x86_32
+net-wireless/bluez abi_x86_32
+sys-apps/acl abi_x86_32
+sys-apps/attr abi_x86_32
+sys-apps/dbus abi_x86_32
+sys-apps/file abi_x86_32
+sys-apps/keyutils abi_x86_32
+sys-apps/pciutils abi_x86_32
+sys-apps/tcp-wrappers abi_x86_32
+sys-apps/util-linux abi_x86_32
+sys-auth/nss-mdns abi_x86_32
+sys-auth/nss_ldap abi_x86_32
+sys-auth/pam_ldap abi_x86_32
+sys-devel/binutils abi_x86_32
+sys-devel/gettext abi_x86_32
+sys-devel/libperl abi_x86_32
+sys-devel/libtool abi_x86_32
+sys-devel/llvm abi_x86_32
+sys-fs/e2fsprogs abi_x86_32
+sys-fs/udev abi_x86_32
+sys-libs/cracklib abi_x86_32
+sys-libs/db abi_x86_32
+sys-libs/e2fsprogs-libs abi_x86_32
+sys-libs/gdbm abi_x86_32
+sys-libs/gpm abi_x86_32
+sys-libs/libavc1394 abi_x86_32
+sys-libs/libraw1394 abi_x86_32
+sys-libs/ncurses abi_x86_32
+sys-libs/pam abi_x86_32
+sys-libs/pwdb abi_x86_32
+sys-libs/readline abi_x86_32
+sys-libs/slang abi_x86_32
+sys-libs/talloc abi_x86_32
+sys-libs/zlib abi_x86_32
+
+#app-emulation/emul-linux-x86-db-20140508-r1  USE="development" ABI_X86="-32" 1,470 kB
+dev-db/myodbc abi_x86_32
+dev-db/mysql abi_x86_32
+dev-db/unixODBC abi_x86_32
+
+# app-emulation/emul-linux-x86-medialibs-20140508-r6  USE="development" ABI_X86="-32" 11,058 kB
+app-misc/lirc abi_x86_32
+dev-libs/DirectFB abi_x86_32
+dev-libs/fribidi abi_x86_32
+dev-libs/libcdio abi_x86_32
+dev-libs/liboil abi_x86_32
+media-gfx/sane-backends abi_x86_32
+media-libs/a52dec abi_x86_32
+media-libs/faac abi_x86_32
+media-libs/faad2 abi_x86_32
+media-libs/gst-plugins-base abi_x86_32
+media-libs/gstreamer abi_x86_32
+media-libs/libcuefile abi_x86_32
+media-libs/libdca abi_x86_32
+media-libs/libdv abi_x86_32
+media-libs/libdvdnav abi_x86_32
+media-libs/libdvdread abi_x86_32
+media-libs/libgphoto2 abi_x86_32
+media-libs/libid3tag abi_x86_32
+media-libs/libiec61883 abi_x86_32
+media-libs/libmad abi_x86_32
+media-libs/libmimic abi_x86_32
+media-libs/libmms abi_x86_32
+media-libs/libmpeg2 abi_x86_32
+media-libs/libofa abi_x86_32
+media-libs/libreplaygain abi_x86_32
+media-libs/libshout abi_x86_32
+media-libs/libsidplay abi_x86_32
+media-libs/libtheora abi_x86_32
+media-libs/libv4l abi_x86_32
+media-libs/libvisual abi_x86_32
+media-libs/libvpx abi_x86_32
+media-libs/speex abi_x86_32
+media-libs/taglib abi_x86_32
+media-libs/x264 abi_x86_32
+media-libs/xvid abi_x86_32
+media-sound/lame abi_x86_32
+media-video/ffmpeg abi_x86_32
+media-video/mjpegtools abi_x86_32
+sys-libs/libieee1284 abi_x86_32
+
+# app-emulation/emul-linux-x86-opengl-20140508  USE="development" ABI_X86="-32" 48,065 kB
+media-libs/freeglut abi_x86_32
+media-libs/glew abi_x86_32
+media-libs/glu abi_x86_32
+media-libs/mesa abi_x86_32
+x11-libs/libdrm abi_x86_32
+
+# app-emulation/emul-linux-x86-soundlibs-20140508  USE="alsa development pulseaudio" ABI_X86="-32" 7,090 kB
+dev-libs/libical abi_x86_32
+media-libs/alsa-lib abi_x86_32
+media-libs/alsa-oss abi_x86_32
+media-libs/audiofile abi_x86_32
+media-libs/flac abi_x86_32
+media-libs/ladspa-sdk abi_x86_32
+media-libs/libao abi_x86_32
+media-libs/libmikmod abi_x86_32
+media-libs/libmodplug abi_x86_32
+media-libs/libogg abi_x86_32
+media-libs/libsamplerate abi_x86_32
+media-libs/libsndfile abi_x86_32
+media-libs/libvorbis abi_x86_32
+media-libs/portaudio abi_x86_32
+media-libs/webrtc-audio-processing abi_x86_32
+media-plugins/alsa-plugins abi_x86_32
+media-plugins/alsaequal abi_x86_32
+media-plugins/caps-plugins abi_x86_32
+media-plugins/swh-plugins abi_x86_32
+media-sound/cdparanoia abi_x86_32
+media-sound/gsm abi_x86_32
+media-sound/jack-audio-connection-kit abi_x86_32
+media-sound/mpg123 abi_x86_32
+media-sound/musepack-tools abi_x86_32
+media-sound/pulseaudio abi_x86_32
+media-sound/twolame abi_x86_32
+media-sound/wavpack abi_x86_32
+net-wireless/bluez abi_x86_32
+sci-libs/fftw abi_x86_32
+
+# app-emulation/emul-linux-x86-xlibs-20140508  USE="(development) opengl" ABI_X86="-32" 2,704 kB
+media-libs/fontconfig abi_x86_32
+media-libs/freetype abi_x86_32
+x11-libs/libICE abi_x86_32
+x11-libs/libSM abi_x86_32
+x11-libs/libX11 abi_x86_32
+x11-libs/libXScrnSaver abi_x86_32
+x11-libs/libXau abi_x86_32
+x11-libs/libXaw abi_x86_32
+x11-libs/libXcomposite abi_x86_32
+x11-libs/libXcursor abi_x86_32
+x11-libs/libXdamage abi_x86_32
+x11-libs/libXdmcp abi_x86_32
+x11-libs/libXext abi_x86_32
+x11-libs/libXfixes abi_x86_32
+x11-libs/libXft abi_x86_32
+x11-libs/libXi abi_x86_32
+x11-libs/libXinerama abi_x86_32
+x11-libs/libXmu abi_x86_32
+x11-libs/libXp abi_x86_32
+x11-libs/libXpm abi_x86_32
+x11-libs/libXrandr abi_x86_32
+x11-libs/libXrender abi_x86_32
+x11-libs/libXt abi_x86_32
+x11-libs/libXtst abi_x86_32
+x11-libs/libXv abi_x86_32
+x11-libs/libXvMC abi_x86_32
+x11-libs/libXxf86dga abi_x86_32
+x11-libs/libXxf86vm abi_x86_32
+x11-libs/libpciaccess abi_x86_32
+x11-libs/libvdpau abi_x86_32
+x11-libs/libxcb abi_x86_32
+x11-proto/scrnsaverproto abi_x86_32
+</pre>}}
+It does not matter if you need or want all these packages, just set the flag in case it gets emerged.
+I also added
+{{File|/etc/portage/package.use|Setting abi_x86_32 for wine|<pre>
+app-emulation/wine abi_x86_32
+</pre>}}
+because my main motivation was to play games via wine and mostly every commercial Windows game comes as 32bit binary.
+
+=== Update the System ===
+Emerge everything that changed:
+{{RootCmd|emerge <nowiki>--keep-going --update --newuse --deep --with-bdeps=y world</nowiki>}}. It is imperative to emerge with dependency and newuse checks.
+If emerge complains about missing useflags for some packages (it probably will!), add them to the /etc/portage/package.use file like you did for the emul-linux packages. In my case I needed to add
+{{File|/etc/portage/package.use|Setting additional abi_x86_32 flags - EXAMPLE|<pre>
+dev-util/pkgconfig abi_x86_32
+x11-proto/dri2proto abi_x86_32
+x11-proto/xf86vidmodeproto abi_x86_32
+x11-libs/pixman abi_x86_32
+x11-proto/xineramaproto abi_x86_32
+virtual/libudev abi_x86_32
+media-libs/libsdl abi_x86_32
+media-libs/libass abi_x86_32
+x11-proto/xf86bigfontproto abi_x86_32
+x11-proto/xf86dgaproto abi_x86_32
+dev-libs/icu abi_x86_32
+net-libs/libasyncns abi_x86_32
+media-libs/harfbuzz abi_x86_32
+x11-proto/xextproto abi_x86_32
+net-libs/glib-networking abi_x86_32
+app-i18n/enca abi_x86_32
+media-libs/libwebp abi_x86_32
+x11-proto/renderproto abi_x86_32
+virtual/opengl abi_x86_32
+virtual/libusb abi_x86_32
+virtual/pkgconfig abi_x86_32
+x11-proto/xproto abi_x86_32
+x11-proto/recordproto abi_x86_32
+virtual/libiconv abi_x86_32
+x11-proto/compositeproto abi_x86_32
+x11-libs/pango abi_x86_32
+x11-proto/presentproto abi_x86_32
+dev-lang/orc abi_x86_32
+x11-proto/dri3proto abi_x86_32
+virtual/jpeg abi_x86_32
+media-libs/vo-aacenc abi_x86_32
+sys-libs/libcap abi_x86_32
+x11-proto/xcb-proto abi_x86_32
+x11-proto/xf86driproto abi_x86_32
+x11-proto/inputproto abi_x86_32
+x11-proto/randrproto abi_x86_32
+media-libs/opus abi_x86_32
+media-gfx/graphite2 abi_x86_32
+net-libs/libproxy abi_x86_32
+x11-proto/videoproto abi_x86_32
+virtual/libintl abi_x86_32
+media-libs/libdvdcss abi_x86_32
+x11-proto/glproto abi_x86_32
+virtual/glu abi_x86_32
+virtual/libffi abi_x86_32
+x11-libs/cairo abi_x86_32
+x11-libs/libxshmfence abi_x86_32
+dev-libs/libpthread-stubs abi_x86_32
+x11-proto/damageproto abi_x86_32
+x11-proto/kbproto abi_x86_32
+sys-devel/flex abi_x86_32
+x11-proto/fixesproto abi_x86_32
+</pre>}}
+but the exact list will most likely depend on your USE-flags and will vary!
+
+After all has been rebuilt, it is a good idea to restart the system or at least X. Then emerge all applications that needed emul-linux packages before. If something still depends on these packages now, fill out a bug.
+
+[[Category:Core system]]
