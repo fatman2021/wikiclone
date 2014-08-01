@@ -8,39 +8,39 @@
 == Hardware profiles ==
 
 === Preparation ===
-{{Important|The following sections assume that you have a patched hprofile init service. So grab the following patch if you want to make any use of the following hardware profiles. (This patch is reversed, so pass -p1 -R to patch.)}}
+{{Important|The following sections assume that you have a patched hprofile init service. So grab the following init service because the default is too old... and I finished by completly re-writing it.)}}
 
-{{File|/etc/hprofile/hprofile.initd.patch||<pre>
---- a/etc/init.d/hprofile	2014-07-19 20:14:14.608007022 +0000
-+++ b/etc/init.d/hprofile	2014-07-19 20:09:14.482006076 +0000
-@@ -8,20 +8,16 @@
- }
- 
- start() {
--	local vga=$(/usr/sbin/hpdet vga)
--	local pwr=$(/usr/sbin/hpdet power)
--	ebegin "Selecting hardware profile vga.$vga and pwr.$pwr"
--	/usr/sbin/hprofile vga 
--	/usr/sbin/hprofile power
-+	profile=$(/usr/sbin/hpdet boot)
-+	ebegin "Selecting hardware profile ${profile}"
-+	/usr/sbin/hprofile boot
- 	eend $?
- }
- 
- stop() {
--	local vga=$(/usr/sbin/hpdet vga)
--	local pwr=$(/usr/sbin/hpdet power)
--	ebegin "Selecting hardware profile vga.$vga and power.$pwr"
--	/usr/sbin/hprofile vga 
--	/usr/sbin/hprofile power
-+	profile=$(/usr/sbin/hprofile -c boot)
-+	ebegin "Stopping hardware profile ${profile}"
-+	/usr/sbin/hprofile -s boot
- 	eend $?
- }
- 
-</pre>}}
+{{File|hprofile.initd||<pre>#!/sbin/runscript
+# Copyright 1999-2014 Gentoo Foundation
+# Distributed under the terms of the 2-clause BSD or GPL-2 license
+# $Header: hprofile.initd,v 1.1 2014/07/31 13:05:23 -tclover Exp $
+
+depend() {
+	after modules
+}
+
+start() {
+	local vga=$(hpdet vga)
+	local pwr=$(hpdet pwr)
+	ebegin "Selecting hardware profile vga.$vga and power.$pwr"
+	hprofile vga.$vga
+	eend $?
+	hprofile power.$pwr
+	eend $?
+	return 0
+}
+
+stop() {
+	local vga=$(hpdet vga)
+	local pwr=$(hpdet power)
+	ebegin "Selecting hardware profile vga.$vga and power.$pwr"
+	hprofile -s vga 
+	eend $?
+	hprofile -s power
+	eend $?
+}
+
+# vim:fenc=utf-8:ft=gentoo-init-d:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{Note|Every script file `/etc/hprofile/profiles/$profile/{scripts/*,ptest,stop,post-start}' should have the executable bit set. Or else, a peculiar error will rise up.}}
 
