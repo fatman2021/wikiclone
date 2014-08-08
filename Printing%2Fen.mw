@@ -102,77 +102,56 @@ Installing CUPS with Gentoo is a breeze. CUPS has a few optional features that m
 ! USE flag
 ! Impact on CUPS
 |- 
+| X
+| Allows you to use your desktop menu to load the CUPS configuration webpage into your preferred browser.
+|- 
 | dbus
 | Adds support for the <code>dbus</code> system message bus.
-|- 
-| jpeg
-| Adds support for printing JPEG images.
-|- 
-| nls
-| Enable National Language Support. With nls in place, CUPS is able to deliver localized feedback so you can hopefully enjoy CUPS in your native language.
 |- 
 | pam
 | If you need print job authentication through the Pluggable Authentication Modules, this will activate PAM support for CUPS.
 |- 
-| php
-| Adds support for php scripting.
-|- 
-| png
-| Adds support for printing PNG images.
-|- 
-| ppds
-| Adds support for automatically generated ppd (printing driver) files. See [[#Installing_the_Best_Driver]] .
-|- 
-| samba
-| If you want to be able to share locally attached printers to Windows systems on your network using the SMB-CIFS protocol, or you want to be able to use shared printers from Windows systems, you need SAMBA support.
-|- 
-| slp
-| In a managed environment the printer might be made available as a service to others. With the Service Location Protocol you can easily find and configure a service on your system. Enable this USE flag if your printer is available as a service or should be made available as one.
-|- 
 | ssl
 | If you want remote authentication and/or privacy, you need support for the Secure Socket Layer, allowing for encrypted printing sessions. Support for SSL must be available on all participating systems in your network.
-|- 
-| tiff
-| Adds support for printing TIFF images.
-|- 
-| X
-| Allows you to use your desktop menu to load the CUPS configuration webpage into your preferred browser.
 |-
+| usb
+| Support for working with printers connected via USB.
+|- 
 |}
 
 Check the current USE settings. If you want to deviate from your current USE settings for CUPS alone, add the appropriate USE flags to {{Path|/etc/portage/package.use}} . 
 
 {{RootCmd|emerge -pv cups|output=<pre>
-[ebuild N     ] net-print/cups-1.2.6  "X dbus jpeg nls pam png ppds ssl -php -samba -slp -tiff" 0 kB
+[ebuild N     ] net-print/cups-1.7.3  USE="X acl dbus pam ssl threads usb -debug -gnutls -java -kerberos -lprng-compat -python (-selinux) -static-libs -systemd -xinetd -zeroconf" ABI_X86="(64) (-32) (-x32)" LINGUAS="ca es fr it ja pt_BR ru" PYTHON_SINGLE_TARGET="python2_7" PYTHON_TARGETS="python2_7" 0 kB
 </pre>}}
 
 If you are happy with the result, have Portage install CUPS. 
 
-For instance, to enable SAMBA support for CUPS:
+{{Emerge|cups}}
 
-{{File|/etc/portage/package.use/cups||<pre>
-net-print/cups samba
-</pre>
+To enable SAMBA support, {{Package|net-fs/samba}} needs to be installed with CUPS support. Update the {{Path|/etc/portage/package.use}} file or directory to enable the <code>cups</code> USE flag:
+
+{{File|/etc/portage/package.use||
+<pre>net-fs/samba cups</pre>
 }}
-
-If you are happy with the result, have Portage install CUPS.
 
 Then (re)install Samba:
 
 {{Emerge|net-fs/samba}}
 
-{{RootCmd|emerge cups}}
-
 {{Important|Any user that needs to print should be added to the <code>lp</code> group:
  
-{{RootCmd|gpasswd-a username lp}}
+{{RootCmd|gpasswd -a username lp}}
  
 In order to be able to add printers and edit them via cups's web interface, any system user that is allowed to edit these settings should be in the <code>lpadmin</code> group:
  
 {{RootCmd|gpasswd -a username lpadmin}}
-}} 
+}}
 
-If the printer is attached to your system locally, you need to load CUPS automatically on start-up. Make sure your printer is attached and powered on before you start CUPS.
+If the printer is attached to your system locally, you need to load CUPS automatically on start-up. Make sure your printer is attached and powered on before you start CUPS. 
+
+{{RootCmd|/etc/init.d/cupsd start
+|rc-update add cupsd default}}
 
 === Configuration ===
 
@@ -438,13 +417,13 @@ Now navigate to the top of the {{Path|smb.conf}} file until you are inside the <
 </pre>
 }}
 
-Make sure you enabled the [[#windows_pcl]] support in CUPS. Then, restart the <code>smb</code> service to have the changes take effect. 
+Make sure you enabled the [[#windows_pcl]] support in CUPS. Then, restart the <code>smb</code> service to have the changes take effect.
 
 === Configuring a Linux Client for a Windows Print Server ===
 
-First of all, make sure that the printer is shared on your Windows system.
+First of all, make sure that the printer is shared on your Windows system and that you have emerged <code>samba</code> with the <code>cups</code> USE-flag enabled as instructed above.
 
-Next, in the CUPS web interface, configure your printer as described previously. You will notice that CUPS has added another driver called <code>Windows Printer via SAMBA</code> . Select it and use the <code>smb://username:password@workgroup/server/printername</code> or <code>smb://server/printername</code> syntax for the URI.
+To find the desired printer's URI, run the following command, substituting "server" with the computer that you want to probe for samba-shared printers:
 
 {{Cmd|smbclient -N '\\server\'}}
 
