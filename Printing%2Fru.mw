@@ -98,72 +98,60 @@ File systems -->
 Установка CUPS на Gentoo проще простого. CUPS имеет несколько дополнительных функций, которые могут Вас заинтересовать. Чтобы включить или отключить эти функции, используйте USE-флаги, связанные с ними. 
 
 {| class="wikitable" style="text-align: left;" 
-|- 
-! USE flag
-! Impact on CUPS
-|- 
-| dbus
-| Adds support for the <code>dbus</code> system message bus.
-|- 
-| jpeg
-| Adds support for printing JPEG images.
-|- 
-| nls
-| Enable National Language Support. With nls in place, CUPS is able to deliver localized feedback so you can hopefully enjoy CUPS in your native language.
-|- 
-| pam
-| If you need print job authentication through the Pluggable Authentication Modules, this will activate PAM support for CUPS.
-|- 
-| php
-| Adds support for php scripting.
-|- 
-| png
-| Adds support for printing PNG images.
-|- 
-| ppds
-| Adds support for automatically generated ppd (printing driver) files. See [[#Installing_the_Best_Driver]] .
-|- 
-| samba
-| If you want to be able to share locally attached printers to Windows systems on your network using the SMB-CIFS protocol, or you want to be able to use shared printers from Windows systems, you need SAMBA support.
-|- 
-| slp
-| In a managed environment the printer might be made available as a service to others. With the Service Location Protocol you can easily find and configure a service on your system. Enable this USE flag if your printer is available as a service or should be made available as one.
-|- 
-| ssl
-| If you want remote authentication and/or privacy, you need support for the Secure Socket Layer, allowing for encrypted printing sessions. Support for SSL must be available on all participating systems in your network.
-|- 
-| tiff
-| Adds support for printing TIFF images.
-|- 
+|-
+! USE-флаг
+! Влияние на CUPS
+|-
 | X
-| Allows you to use your desktop menu to load the CUPS configuration webpage into your preferred browser.
+| Позволяет использовать меню вашего DE для загрузки веб-страницы с настройками CUPS в предпочитаемом вами браузере.
+|-
+| dbus
+| Добавляет поддержку системной шины сообщений <code>dbus</code>.
+|-
+| pam
+| Если вам требуется аутентификация заданий печати через подключаемые модули аутентификации, этот флаг активирует поддержку PAM в CUPS.
+|-
+| ssl
+| Если вы хотите использовать удаленную аутентификацию и/или улучшить конфиденциальность, вам необходима поддержка уровня защищенных сокетов (Secure Socket Layer), разрешающая зашифрованные сессии печати. Поддержка SSL должна быть доступна на всех принимающих участие в печати системах вашей сети.
+|-
+| usb
+| Поддежка работы с принтерами, подключаемыми через USB.
 |-
 |}
 
 Проверьте текущие настройки USE-флагов. Если Вы хотите отклониться от текущих настроек USE-флагов только для CUPS, добавьте подходящие USE-флаги в {{Path|/etc/portage/package.use}} . 
 
 {{RootCmd|emerge -pv cups|output=<pre>
-[ebuild N     ] net-print/cups-1.2.6  "X dbus jpeg nls pam png ppds ssl -php -samba -slp -tiff" 0 kB
+[ebuild N     ] net-print/cups-1.7.3  USE="X acl dbus pam ssl threads usb -debug -gnutls -java -kerberos -lprng-compat -python (-selinux) -static-libs -systemd -xinetd -zeroconf" ABI_X86="(64) (-32) (-x32)" LINGUAS="ca es fr it ja pt_BR ru" PYTHON_SINGLE_TARGET="python2_7" PYTHON_TARGETS="python2_7" 0 kB
 </pre>}}
 
-Например, чтобы включить поддержку SAMBA для CUPS:
+If you are happy with the result, have Portage install CUPS. 
+
+{{Emerge|cups}}
 
 {{File|/etc/portage/package.use/cups||<pre>
 net-print/cups samba
 </pre>
 }}
 
-Если Вы довольны результатом, установите CUPS с помощью Portage. 
+Если Вы довольны результатом, установите CUPS с помощью Portage.
 
-{{RootCmd|emerge cups}}
+Then (re)install Samba:
 
-{{Important/ru|Любые пользователи, которым нужна печать, должны быть добавлены в группу <code>lp</code> . Добавьте их запуском команды (в качестве администратора)
-<code>gpasswd -a username lp</code> .}}
+{{Emerge|net-fs/samba}}
 
-Если принтер подсоединен к системе локально, Вам нужно загружать CUPS автоматически при запуске системы. Убедитесь, что принтер подключен к компьютеру и сети перед запуском CUPS. 
+{{Important|Any user that needs to print should be added to the <code>lp</code> group:
+ 
+{{RootCmd|gpasswd -a username lp}}
+ 
+In order to be able to add printers and edit them via cups's web interface, any system user that is allowed to edit these settings should be in the <code>lpadmin</code> group:
+ 
+{{RootCmd|gpasswd -a username lpadmin}}
+}}
 
-{{RootCmd|/etc/init.d/cupsd start
-|rc-update add cupsd default}}
+If the printer is attached to your system locally, you need to load CUPS automatically on start-up. Make sure your printer is attached and powered on before you start CUPS. 
+
+Если принтер подсоединен к системе локально, Вам нужно загружать CUPS автоматически при запуске системы. Убедитесь, что принтер подключен к компьютеру и сети перед запуском CUPS.
 
 === Конфигурация ===
 
@@ -433,9 +421,25 @@ Microsoft Windows поддерживает IPP (пользователи Windows
 
 === Конфигурация Linux клиента для сервера печати Windows ===
 
-Прежде всего, убедитесь, что на системе Windows открыт общий доступ к принтеру. 
+Прежде всего, убедитесь, что на системе Windows открыт общий доступ к принтеру.
 
-Затем, в веб-интерфейсе CUPS, настройте принтер как описано ранее. Вы заметите, что CUPS добавил другой драйвер, названный <code>Windows Printer via SAMBA</code> . Выберите его и используйте для URI синтаксис <code>smb://username:password@workgroup/server/printername</code> или <code>smb://server/printername</code> . 
+Затем, в веб-интерфейсе CUPS, настройте принтер как описано ранее. Вы заметите, что CUPS добавил другой драйвер, названный <code>Windows Printer via SAMBA</code> . Выберите его и используйте для URI синтаксис <code>smb://username:password@workgroup/server/printername</code> или <code>smb://server/printername</code> .
+
+{{Cmd|smbclient -N '\\server\'}}
+
+Next, in the CUPS web interface, configure your printer as described previously. You will notice that CUPS has added another driver called <code>Windows Printer via SAMBA</code> . Select it and use the <code>smb://username:password@workgroup/server/printername</code> or <code>smb://server/printername</code> syntax for the URI.
+
+{{Important|Any special characters in the above URI need to be appropriately quoted. For example:
+<code>smb://BEN-DESKTOP/HP Color LaserJet CP1510 series PCL6</code>
+  
+becomes:
+  
+<code>smb://BEN-DESKTOP/HP%20Color%20LaserJet%20CP1510%20series%20PCL6</code>
+  
+  
+You can get this result string by running the following command:
+{{Cmd|python2 -c 'import urllib; print "smb://" + urllib.quote("BEN-DESKTOP/HP Color LaserJet CP1510 series PCL6")'}}
+}}
 
 == Приложения, связанные с печатью ==
 
