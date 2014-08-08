@@ -517,11 +517,16 @@ The ptest script will just look if VGASwitcheroo (Intel HD Graphics/AMD ATI Rade
 === Hard disk ===
 A disk profile is even straightforward because there fewer issue to keep in mind. So this section will be short and straightforward. Additionally, one need {{Package|sys-apps/hdparm}}.
 
-{{Note|''/etc/hprofile/profiles/disk/ata'' should have the executable bit set, this is just a little helper to make the profiles less blind at applying disk power management.}}
+{{Note|''/etc/hprofile/profiles/disk/{ata,usb}'' should have the executable bit set, this is just a little helper to make the profiles less blind at applying disk power management.}}
 
 {{File|/etc/hprofile/profiles/disk/default||adp}}
 {{File|/etc/hprofile/profiles/disk/ata||<pre>#!/bin/sh
 echo "$(ls -d /sys/devices/pci*/*/ata*/host*/target*/*/block/sd[a-z] 2>/dev/null)"
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
+{{File|/etc/hprofile/profiles/disk/usb||<pre>#!/bin/sh
+for dev in $(ls -d /sys/devices/pci*/*/usb*/*/*/host*/target*/*/block/sd[a-z]); do
+	echo noop  >/sys/block/${dev##*/}/queue/scheduler
+done
 # vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/disk/post-start||<pre>
 #!/bin/sh
@@ -533,10 +538,7 @@ for dev in $(/etc/hprofile/profiles/disk/ata); do
     echo 1024 >/sys/block/${dev##*/}/queue/nr_requests
     echo 2    >/sys/block/${dev##*/}/device/queue_depth
 done
-for dev in $(ls -d /sys/devices/pci*/*/usb*/*/*/host*/target*/*/block/sd[a-z] 2>/dev/null)
-    do echo noop  >/sys/block/${dev##*/}/queue/scheduler
-done
-</pre>}}
+# vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 {{File|/etc/hprofile/profiles/disk/ptest||<pre>#!/bin/sh
 echo "adp"
 # vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
@@ -548,27 +550,32 @@ quiet
 </pre>}}
 {{File|/etc/hprofile/profiles/disk/stop||<pre>
 #!/bin/sh
+/etc/hprofile/profiles/disk/usb
 ata="$(/etc/hprofile/profiles/disk/ata)"
 [ -n "$ata" ] && hdparm -q -S120 -B254 -M254 $ata
 # vim:fenc=utf-8:ft=sh:ci:pi:sts=0:sw=4:ts=4:</pre>}}
 
 {{File|/etc/hprofile/profiles/disk/scripts/adp.start||<pre>
 #!/bin/sh
+/etc/hprofile/profiles/disk/usb
 ata="$(/etc/hprofile/profiles/disk/ata)"
 [ -n "$ata" ] && hdparm -q -S120 -B230 -M254 $ata
 </pre>}}
 {{File|/etc/hprofile/profiles/disk/scripts/bat.start||<pre>
 #!/bin/sh
+/etc/hprofile/profiles/disk/usb
 ata="$(/etc/hprofile/profiles/disk/ata)"
 [ -n "$ata" ] && hdparm -q -S120 -B210 -M230 $ata
 </pre>}}
 {{File|/etc/hprofile/profiles/disk/scripts/fast.start||<pre>
 #!/bin/sh
+/etc/hprofile/profiles/disk/usb
 ata="$(/etc/hprofile/profiles/disk/ata)"
 [ -n "$ata" ] && hdparm -q -S180 -B254 -M254 $ata
 </pre>}}
 {{File|/etc/hprofile/profiles/disk/scripts/quiet.start||<pre>
 #!/bin/sh
+/etc/hprofile/profiles/disk/usb
 ata="$(/etc/hprofile/profiles/disk/ata)"
 [ -n "$ata" ] && hdparm -q -S120 -B200 -M200 $ata
 </pre>}}
