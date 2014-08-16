@@ -227,13 +227,14 @@ Finally, re-generate your environment, and check all looks good with the locale 
 
 === <span id="set_rc_local_systemd">Post-Boot Script</span> ===
 
-At this point, it's useful to setup an {{Path|/etc/postboot}} script (and invoking <tt>systemd</tt> service) that will be run each time the main boot process has concluded.<ref>Raymii.org blog: [https://raymii.org/s/tutorials/rc.local_support_on_Arch_Linux_and_systemd.html "rc.local support on Arch Linux with systemd"]</ref> We will use this to address two minor glitches:
+At this point, it's useful to setup an {{Path|/etc/postboot}} script (and invoking <tt>systemd</tt> service) that will be run each time the main boot process has concluded.<ref>Raymii.org blog: [https://raymii.org/s/tutorials/rc.local_support_on_Arch_Linux_and_systemd.html "rc.local support on Arch Linux with systemd"]</ref> We will use this to address three minor glitches:
 # Often, the <tt>systemd-vconsole-setup</tt> service (which reads the {{Path|/etc/vconsole.conf}} file that we set up [[#set_vconsole_font|above]]) can end up being run too early, meaning that these settings get applied, but are then overridden.<ref>Unix & Linux Stack Exchange Forum: [http://unix.stackexchange.com/questions/57085/setting-console-font-in-vconsole-conf-does-not-work-systemd#118345 "Setting console font in vconsole.conf does not work (systemd)"]</ref>
 # The virtual console does not always fully clear the [[:Wikipedia:Framebuffer|frame buffer]] properly (particularly, when taking over from <tt>plymouth</tt>), meaning that you sometimes get grey lines at the top or bottom of the console screen.
+# Depending on the version of <tt>gdm</tt>, <tt>plymouthd</tt> may remain running in the background (even though <tt>plymouth-quit-wait.service</tt> has completed). This can consume CPU and cause screen glitches.
 
 Whereas the first of these problems ''could'' be solved by changing the scheduling dependencies of the <tt>systemd-vconsole-setup</tt> service, that's risky, since other services depend on it and we might cause a scheduling loop.
 
-Instead, we'll create a new <tt>systemd</tt> service, which we'll instruct to run as part of the <tt>multi-user.target</tt> (boot synchronization point, [https://wiki.archlinux.org/index.php/systemd#Targets_table similar to runlevel 3]), and only when <tt>plymouth</tt> is no longer running (or was never started in the first place)). Per the [[Systemd#Installing_custom_service_files|Gentoo wiki]], we'll place the [http://www.freedesktop.org/software/systemd/man/systemd.service.html <tt>systemd</tt> service file] in {{Path|/etc/systemd/system}}.
+Instead, we'll create a new <tt>systemd</tt> service, which we'll instruct to run as part of the <tt>multi-user.target</tt> (boot synchronization point, [https://wiki.archlinux.org/index.php/systemd#Targets_table similar to runlevel 3]), and specify that it should run ''after'' the <tt>plymouth-quit-wait.service</tt>. Per the [[Systemd#Installing_custom_service_files|Gentoo wiki]], we'll place the [http://www.freedesktop.org/software/systemd/man/systemd.service.html <tt>systemd</tt> service file] in {{Path|/etc/systemd/system}}.
 
 Issue:
 {{RootCmd
@@ -270,6 +271,11 @@ and place the following text in the file:
 cat /dev/zero > /dev/fb0 2>/dev/null
 # ...and then re-run the vconsole setup (it may have run too early)
 systemctl restart systemd-vconsole-setup
+
+# ensure plymouth really has stopped
+if pgrep "plymouthd" > /dev/null 2>&1; then
+    plymouth quit
+fi
 </pre>
 }}
 {{Note|The <tt>cat</tt> of zeros will stop automatically when the end of the framebuffer ({{Path|/dev/fb0}}) is reached; this will be after 1920*1080*4 (rgba) {{=}} 8294400 bytes on the CF-AX3, but of course your system may vary.}}
