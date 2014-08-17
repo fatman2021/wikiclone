@@ -1,4 +1,3 @@
-{{Dated}}
 == Introduction ==
 IPsec/L2TP is another commonly used VPN protocol used in Windows. All version of Windows since Windows 2000 have support built-in, not requiring an external client (like OpenVPN does) making it very convenient. However, it is significantly harder to set up on the server side on Linux, as there's at least 3 layers involved: IPsec, L2TP, and PPP.
 
@@ -15,11 +14,11 @@ For the purposes of this guide:
 == IPsec ==
 The first layer - and most difficult one - to set up is IPsec. Note IPsec is a peer-to-peer, so in IPsec terminology, the ''client'' is the called the '''initiator''' and the ''server'' is called the '''responder'''
 
-Windows uses IKEv1 for the process. There are 3 implementation of IPsec in Portage: ipsec-tools (racoon), openswan, and strongswan. If you are running ''arch'', you need to add the appropriate entries to {{Path|/etc/portage/package.keywords}}. 
+Windows uses IKEv1 for the process. There are 4 implementation of IPsec in Portage: ipsec-tools (racoon), libreswan, openswan, and strongswan. If you are running ''arch'', you need to add the appropriate entries to {{Path|/etc/portage/package.keywords}}. 
 === ipsec-tools (racoon) ===
 {{Note|{{Package|net-firewall/ipsec-tools}} must be compiled with the '''nat''' flag, if either the server is behind NAT, or you want to support clients behind NAT}}
 
-ipsec-tools is the least featured one, but for those of you coming from *BSD, you might be more familar with it. However unlike *BSD, Linux does not use separate interface for ipsec
+ipsec-tools is the least featured one, but for those coming from *BSD, it may be more familiar. However unlike *BSD, Linux does not use separate interface for ipsec
 
 After installing ipsec-tools, we need to create a few files: 
 {{RootCmd
@@ -107,69 +106,25 @@ spdadd 0.0.0.0/0 vpn.example.com[l2tp] udp -P in ipsec
 Note that, while this policy says we want ALL L2TP traffic going to and from the server to be protected, if there's no Security Association, the traffic will be not protected and will travel the Internet in the usual way - it won't be dropped just because there's no Security Association.
 
 === LibreSwan ===
-LibreSwan is a fork of Openswan.
-==== PSK setup ====
-{{Note|LibreSwan, unlike Openswan, looks for the *.secrets and *.conf files in {{Path|/etc/ipsec.d/}}.}}
-Create {{Path|/etc/ipsec.d/ipsec.secrets}}:
-{{File|/etc/ipsec.d/ipsec.secrets||<pre>
-: PSK 0x87839cfdab5f74bc211de156d2902d128bec3243
-: PSK "password"</pre>}}
-Remove the '#' from the last line of the {{Path|/etc/ipsec.conf}} file to read:
+LibreSwan is a fork of Openswan. It is actually forked by the original developers of Openswan, however after the original developers left Xelerance, a dispute between the original developers and their employer opened up on the name "Openswan".
+
+Its desirable to have each VPN configuration on it own file, this can be done by uncommenting the last line in {Path|/etc/ipsec.conf}:
 {{File|/etc/ipsec.conf||<pre>
-include /etc/ipsec.d/*.conf</pre>}}
-Create the {{Path|/etc/ipsec.d/*.conf}} files:
-{{File|/etc/ipsec.d/ipsec-NAT.conf||<pre>
-conn L2TP-PSK-NAT
-    rightsubnet=vhost:%priv,%no
-    # Force all to be nat'ed because of iOS
-    forceencaps=yes
-    also=L2TP-PSK-no-NAT</pre>}}
+# You may put your configuration (.conf) file in the "/etc/ipsec.d/" directory
+# by uncommenting this line
+#include /etc/ipsec.d/*.conf</pre>}}
 
-{{File|/etc/ipsec.d/ipsec-no-NAT.conf||<pre>
-conn L2TP-PSK-no-NAT
-    authby=secret
-    pfs=no
-    auto=add
-    keyingtries=3
-    rekey=no
-    # Apple iOS doesn't send delete notify so we need dead peer detection
-    # to detect vanishing clients
-    dpddelay=40
-    dpdtimeout=130
-    dpdaction=clear
-    # Set ikelifetime and keylife to same defaults windows has
-    ikelifetime=8h
-    keylife=1h
-    type=transport
-    # Replace IP address with your local IP (private, behind NAT IP is okay
-    # as well)
-    left=x.x.x.x
-    leftnexthop=%defaultroute
-    # For updated Windows 2000/XP clients, to support old clients as well,
-    # use leftprotoport=17/%any
-    leftprotoport=17/1701
-    right=%any
-    rightprotoport=17/%any</pre>}}
-
-=== Openswan ===
-Openswan is 1 of the 2 forks of the original FreeSWAN,
-{{Note|Unlike most config files, the OpenSwan config file are extremely picky about whitespace. Tabs, spaces, column numbers and blank lines count!}}
-First, we to create some files:
-{{RootCmd
-|touch /etc/ipsec.secrets
-|chmod 600 /etc/ipsec.secrets}}
+NAT traversal is enabled by default in the libreswan config file, so no special configuration needs to be done
 ==== PSK setup ====
-First, we need to create a private key. They may either be specified by a quoted string or by a hex number 
-{{File|/etc/ipsec.secrets||<pre>
-PUT_VPN_SERVER_IP %any : PSK 0x87839cfdab5f74bc211de156d2902d128bec3243
+A shared key must be created. It may either be specified by a quoted string or by a hex number. (PUT_VPN_SERVER_IP should be the server's IP address. The domain name can be used, but its not recommended by the libreswan deleopers.)
+{{File|/etc/ipsec.d/vpn.example.com.secret||<pre>
+PUT_VPN_SERVER_IP %any : PSK 0x87839cfdab5f74bc211de156d2902d128bec3243</pre>}}
+OR
+{{File|/etc/ipsec.d/vpn.example.com.secret||<pre>
 PUT_VPN_SERVER_IP %any : PSK "password_pass"</pre>}}
-Then create {{Path|/etc/ipsec.conf}}:
-{{File|/etc/ipsec.conf||<pre>
-config setup
-        # whatever, but note the position of hash for the comment
-        nat_traversal=yes
-        # more stuff...
 
+Then create {{Path|/etc/ipsec.d/vpn.example.com.conf}}
+{{File|/etc/ipsec.d/vpn.example.com.conf||<pre>
 conn vpnserver
         type=transport
         authby=secret
@@ -182,7 +137,34 @@ conn vpnserver
         right=%any
         rightprotoport=udp/%any
         auto=add</pre>}}
-
+==== PKI setup ====
+=== Openswan ===
+Openswan is 1 of the 2 forks of the original FreeSWAN,
+{{Note|Unlike most config files, the OpenSwan config file are extremely picky about whitespace. Tabs, spaces, column numbers and blank lines count!}}
+{{Note|Openswan is currently package.mask'd in favor of Libreswan}}
+First, we to create some files:
+{{RootCmd
+|touch /etc/ipsec.secrets
+|chmod 600 /etc/ipsec.secrets}}
+==== PSK setup ====
+First, we need to create a private key. They may either be specified by a quoted string or by a hex number 
+{{File|/etc/ipsec.secrets||<pre>
+PUT_VPN_SERVER_IP %any : PSK 0x87839cfdab5f74bc211de156d2902d128bec3243
+PUT_VPN_SERVER_IP %any : PSK "password_pass"</pre>}}
+Then create {{Path|/etc/ipsec.conf}}:
+{{File|/etc/ipsec.conf||<pre>
+conn vpnserver
+        type=transport
+        authby=secret
+        pfs=no
+        rekey=no
+        keyingtries=1
+        left=%defaultroute
+        leftprotoport=udp/l2tp
+        leftid=@vpn.example.com
+        right=%any
+        rightprotoport=udp/%any
+        auto=add</pre>}}
 ==== PKI Setup ====
 ===== Without NSS =====
 We need to copy the appropriate files to the right places 
