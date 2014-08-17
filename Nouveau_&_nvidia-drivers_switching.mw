@@ -92,7 +92,7 @@ menuentry 'Gentoo Linux - Nvidia' {
 
 Next we are going to use a small script similar to the one shown in the "Switching using two kernels" section. It is very similar, but slightly modified. For the sake on continuity we will place it in the same location. The main difference is that is does not use the kernel's name to determine which profile to use, but rather it uses a variable set in the environment by systemd from the kernel command line.
 
-{{File|/etc/local.d/nvidia.start||<pre>
+{{File|/etc/local.d/nvidia.start|OpenGL|<pre>
 #!/bin/bash
 
 if [[ "$GPUMOD" == "nvidia" ]] ; then
@@ -109,6 +109,38 @@ EOF
 else
         if [[ $(eselect opengl show) != xorg-x11 ]] ; then
                 eselect opengl set xorg-x11 &>/dev/null
+        fi
+cat > /etc/X11/xorg.conf.d/01-nv.conf << EOF
+Section "Device"
+  Identifier   "Device0"
+  Driver       "nouveau"
+EndSection
+EOF
+fi
+
+</pre>}}
+
+If you have any software that uses opencl, then it is recommend you use this alternate version of the script that also switches the opencl implementation between mesa and nvidia. If software tries to use opencl under the nouveau driver, but the opencl is still set to nvidia, then bad things happen. You can have the system change to Mesa's Clover Gallium OpenCL state tracker, but you must first ensure that mesa has been built with the opencl USE flag enabled. If that dependency has been taken care of then use the following version.
+
+{{File|/etc/local.d/nvidia.start|OpenGL + OpenCL|<pre>
+#!/bin/bash
+
+if [[ "$GPUMOD" == "nvidia" ]] ; then
+        if [[ $(eselect opengl show) != nvidia ]] ; then
+                eselect opengl set nvidia &>/dev/null
+                eselect opencl set nvidia &>/dev/null
+        fi
+cat > /etc/X11/xorg.conf.d/01-nv.conf << EOF
+Section "Device"
+  Identifier   "Device0"
+  Driver       "nvidia"
+  Option       "NoLogo" "True"
+EndSection
+EOF
+else
+        if [[ $(eselect opengl show) != xorg-x11 ]] ; then
+                eselect opengl set xorg-x11 &>/dev/null
+                eselect opencl set mesa &>/dev/null
         fi
 cat > /etc/X11/xorg.conf.d/01-nv.conf << EOF
 Section "Device"
