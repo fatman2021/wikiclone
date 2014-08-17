@@ -64,4 +64,82 @@ Copy it to {{Path|/etc/local.d/nvidia.start}} and set the executable bit:
 == Switching using a single kernel and hprofile ==
 Another method is switching between two profiles with [[hprofile]], using a single kernel: {{Path|/etc/init.d/hprofile}} has to be modified adding a few lines for vga switching. Warning: hprofile shall be added in boot runlevel.
 
+== Switching using a single kernel and systemd ==
+If you have your system configured to use systemd, you can control setting nvidia and nouveau by using the functionality provided by the kernel command line. 
+
+{{Note|The grub2 menu items shown are for demonstrating the changes to be made. Hopefully you have the common sense not to just copy and paste them verbatim into your grub.cfg.}}
+
+Within the grub.cfg file you need to duplicate the desired menu item and then edit the two versions to specify which modules with be blacklisted, and to pass an environment variable to systemd. If you previously blacklisted nvidia or nouveau modules in /etc/modprobe.d then you need to remove them since that will now be controlled directly from the kernel command line.
+
+{{File|/boot/grub2/grub.cfg|Before:|<pre>
+menuentry 'Gentoo Linux' {
+        root=hd0,1
+        linux /boot/bzImage root=PARTUUID=11111111-2222-3333-4444-555555555555 init=/usr/lib/systemd/systemd console=tty1
+}
+</pre>}}
+
+{{File|/boot/grub2/grub.cfg|After:|<pre>
+menuentry 'Gentoo Linux - Nouveau' {
+        root=hd0,1
+        linux /boot/bzImage root=PARTUUID=11111111-2222-3333-4444-555555555555 init=/usr/lib/systemd/systemd console=tty1 modprobe.blacklist=nvidia systemd.setenv=GPUMOD=nouveau
+}
+
+menuentry 'Gentoo Linux - Nvidia' {
+        root=hd0,1
+        linux /boot/bzImage root=PARTUUID=11111111-2222-3333-4444-555555555555 init=/usr/lib/systemd/systemd console=tty1 modprobe.blacklist=nouveau systemd.setenv=GPUMOD=nvidia
+}
+</pre>}}
+
+Next we are going to use a small script similar to the one shown in the "Switching using two kernels" section. It is very similar, but slightly modified. For the sake on continuity we will place it in the same location. The main difference is that is does not use the kernel's name to determine which profile to use, but rather it uses a variable set in the environment by systemd from the kernel command line.
+
+{{File|/etc/local.d/nvidia.start||<pre>
+#!/bin/bash
+
+if [[ "$GPUMOD" == "nvidia" ]] ; then
+        if [[ $(eselect opengl show) != nvidia ]] ; then
+                eselect opengl set nvidia &>/dev/null
+        fi
+cat > /etc/X11/xorg.conf.d/01-nv.conf << EOF
+Section "Device"
+  Identifier   "Device0"
+  Driver       "nvidia"
+  Option       "NoLogo" "True"
+EndSection
+EOF
+else
+        if [[ $(eselect opengl show) != xorg-x11 ]] ; then
+                eselect opengl set xorg-x11 &>/dev/null
+        fi
+cat > /etc/X11/xorg.conf.d/01-nv.conf << EOF
+Section "Device"
+  Identifier   "Device0"
+  Driver       "nouveau"
+EndSection
+EOF
+fi
+
+</pre>}}
+
+As mentioned in the previous section, don't forget to set the executable bit.
+{{RootCmd|chmod +x /etc/local.d/nvidia.start}}
+
+To have this script get called during the systemd init process, you can create a service file for it, but it's just as effective to integrate it into the currently existing xdm | gdm | kdm | other(?) display manager service file. Edit the desired service file located in /usr/lib/systemd/system and under the "[Service]" section, add an entry for ExecStartPre. This is used to specify any command to be run before the main command of the service file is executed. The example shown below for demonstration is a modified version of the default kdm service file, but the same modification can be made to any display manager service file.
+
+{{File|/usr/lib/systemd/system/kdm.service|Actual contents may vary|<pre>
+[Unit]
+Description=KDM Display Manager
+Conflicts=getty@tty1.service
+After=systemd-user-sessions.service getty@tty1.service plymouth-quit.service
+
+[Service]
+ExecStartPre=/etc/local.d/nvidia.start
+ExecStart=/usr/bin/kdm -nodaemon
+Restart=always
+IgnoreSIGPIPE=no
+
+[Install]
+Alias=display-manager.service
+</pre>}}
+
+
 [[Category:Graphics Adapters]]
