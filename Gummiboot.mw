@@ -1,0 +1,83 @@
+The {{Package|sys-boot/gummiboot}} package is a simple UEFI boot manager, capable of booting Linux and Windows in EFI mode.
+
+== Installation ==
+
+For the moment, {{Package|sys-boot/gummiboot}} is still in ~arch so needs to be added to the {{Path|/etc/portage/package.accepted_keywords}} first:
+
+{{RootCmd|mkdir -p /etc/portage/package.accepted_keywords
+|echo "sys-boot/gummiboot" >> /etc/portage/package.accepted_keywords/efi}}
+
+Next, install the {{Package|sys-boot/gummiboot}} package:
+
+{{Emerge|sys-boot/gummiboot}}
+
+The installation of gummiboot isn't sufficient to have a working gummiboot bootloader. There are two steps to perform:
+
+1. Prepare the EFI system partition
+2. Install gummiboot UEFI boot manager.
+
+=== Preparing the EFI system partition ===
+
+Make sure that an EFI system partition is available on the system. This is a GPT partition on the disk that is marked as EF00 (EFI System partition).
+
+For instance, with {{Package|sys-apps/gptfdisk}}:
+
+{{RootCmd|gdisk /dev/sda|output=<pre>
+Command (? for help): n
+Partition number (1-128, default 1): 1
+First sector: (enter desired start sector and size, 100 MB should be plenty)
+Command (? for help): t
+Partition number (1-2): 1
+Hex code or GUID (L to show codes, Enter = 8300): EF00
+Command (? for help): w
+</pre>}}
+
+The file system on this partition must be FAT32:
+
+{{RootCmd|mkfs.vfat -F 32 /dev/sda1}}
+
+Mount this location on the system ({{Path|/boot}} works just fine) and create the {{Path|/boot/EFI/boot}} location.
+
+{{RootCmd|mount /dev/sda1 /boot
+|mkdir -p /boot/EFI/boot}}
+
+=== Installing the gummiboot UEFI boot manager ===
+
+The '''gummiboot''' application makes the installation, which only needs to be performed once (unless a new version of gummiboot needs to be installed), fairly simple:
+
+{{RootCmd|gummiboot --path /boot install}}
+
+The installation will install the proper EFI files so that the EFI-capable system will boot the gummiboot bootloader.
+
+== Configuring ==
+
+For each operating system, a boot loader entry file needs to be created.
+
+Next to the boot loader entries, a small default configuration file can be created as well.
+
+=== Default configuration entries ===
+
+In {{Path|./loader}} a file called {{Path|loader.conf}} can be created which contains at most the following two entries:
+* A ''default'' entry, specifying which operating system entry to boot as default
+* A ''timeout'' entry, specifying the number of seconds to wait before the default boot entry is loaded
+
+For instance, this would look like so:
+
+{{File|/boot/loader/loader.conf|Default gummiboot settings|<pre>
+default gentoo
+timeout 3
+</pre>}}
+
+The name of the ''default'' entry is the name of the configuration entry file, as created in the next section, without the {{Path|.conf}} suffix.
+
+=== Operating system configuration entries ===
+
+These entry files need to be located on the EFI system partition, in the {{Path|./loader/entries}} location. So if the EFI system partition is mounted at {{Path|/boot}} then this is at {{Path|/boot/loader/entries}}. The following is an example configuration entry named "gentoo":
+
+{{File|./loader/entries/gentoo.conf|Gentoo gummiboot configuration entry|<pre>
+title Gentoo Linux
+linux /vmlinuz
+options root=/dev/sda3
+</pre>}}
+
+The ''linux'' entry points to an [[EFI_stub_kernel|EFI stub Linux kernel]] file, installed on the EFI system partition.
