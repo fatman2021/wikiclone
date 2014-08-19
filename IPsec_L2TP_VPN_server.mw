@@ -138,6 +138,33 @@ conn vpnserver
         rightprotoport=udp/%any
         auto=add</pre>}}
 ==== PKI setup ====
+Unlike, Openswan, NSS is required. To make things easy, a PKCS#12 bundle should be created containing the servers secret key, the server's certificate and the CA certificate.
+{{Cmd|openssl pkcs12 -export -certfile ca.crt -inkey vpn.example.com.key -in vpn.example.com.crt -out /etc/ipsec.d/vpn.example.com.p12}}
+The bundle can then be imported into the NSS database:
+{{RootCmd
+|cd /etc/ipsec.d
+|pk12util -i ''somewhere''/vpn.example.com.p12 -d .}}
+The Libreswan configuration files will refer to the nickname for the imported objects. Use   Use '''certutil -L -d .''' and '''certutil -K -d .''' to see what they are.
+{{File|/etc/ipsec.d/vpn.example.com.secrets||<pre>
+ : RSA "vpn.example.com"</pre>}}
+''vpn.example.com'' was the nickname obtained via '''certutil -K -d .'''
+{{File|/etc/ipsec.d/vpn.example.com.conf||<pre>
+conn vpnserver
+        type=transport
+        authby=rsasig
+        pfs=no
+        rekey=no
+        keyingtries=1
+        left=%defaultroute
+        leftprotoport=udp/l2tp
+        leftcert=vpn.example.com
+        leftid=@vpn.example.com
+        right=%any
+        rightprotoport=udp/%any
+        rightrsasigkey=%cert
+        auto=add</pre>}}
+''vpn.example.com'' was the nickname obtained via '''certutil -L -d .'''
+
 === Openswan ===
 Openswan is 1 of the 2 forks of the original FreeSWAN,
 {{Note|Unlike most config files, the OpenSwan config file are extremely picky about whitespace. Tabs, spaces, column numbers and blank lines count!}}
