@@ -261,12 +261,36 @@ conn vpnserver
 The configuration above works just fine if the the server is behind NAT. 
 ==== Troubleshooting ====
 === strongSwan ===
-{{Note|{{Package|net-misc/strongswan}} must be compiled with the '''nat-transport''' flag, if either the server is behind NAT, or you want to support clients behind NAT}}
+As of strongSwan 5.0, NAT traversal is automatic, no configuration is needed.
+strongSwan does not create an ipsec.secrets file, thus, one must be created:
+{{RootCmd|OLD_UMASK{{=}}"$(umask -p)"; umask 002; >/etc/ipsec.secrets; $(echo ${OLD_UMASK))}}
 ==== PSK setup ====
+A shared key must be created. It may either be specified by a quoted string or by a hex number. (PUT_VPN_SERVER_IP should be the server's IP address.
+{{File|/etc/ipsec.secrets||<pre>
+PUT_VPN_SERVER_IP %any : PSK 0x87839cfdab5f74bc211de156d2902d128bec3243</pre>}}
+OR
+{{File|/etc/ipsec.secrets||<pre>
+PUT_VPN_SERVER_IP %any : PSK "password_pass"</pre>}}
+
+{{File|/etc/ipsec.conf ||<pre>
+conn vpnserver
+        type=transport
+        authby=secret
+        pfs=no
+        rekey=no
+        keyingtries=1
+        left=%any
+        leftprotoport=udp/l2tp
+        leftid=@vpn.example.com
+        right=%any
+        rightprotoport=udp/%any
+        auto=add</pre>}}
+When both ''left'' and ''right'' are '%any', strongSwan assumes the '''l'''ocal machine is '''l'''eft. 
 ==== PKI Setup ====
 ==== Troubleshooting ====
 ===== IPsec passthrough / broken NAT =====
-strongSwan does not seem to work with IPsec passthough. It return "cannot respond to IPsec SA request because no connection is known" or (which heavy editing of the config file) INVALID_HASH_INFORMATION error.
+strongSwan does not seem to work with IPsec passthough. It return "cannot respond to IPsec SA request because no connection is known" or (which heavy editing of the config file) INVALID_HASH_INFORMATION error. (This may not be true anymore with strongSwan 5.0)
+
 === IPsec Troubleshooting ===
 ==== Server behind NAT ====
 ===== Opening ports =====
