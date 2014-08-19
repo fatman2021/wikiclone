@@ -112,8 +112,8 @@ common {
                 # ping-timeout data-integrity-alg tcp-cork on-congestion
                 # congestion-fill congestion-extents csums-alg verify-alg
                 # use-rle
-                protocol C;
-                #allow-two-primaries yes; (Enable this after sync completed)
+                # protocol C;
+                # allow-two-primaries yes;
         }
 }
 </pre>}}
@@ -125,11 +125,14 @@ Please create the files below.<br />
 If you have multiple resource setup, you can do it one resource per files to avoid confusion.<br />
 
 Below files is a 2 Node Resource example.
-
+Note on the Comment Part, they will need to be uncomment when we want to enable dual primary.
 {{File|/etc/drdb.d/r0.res|Resource name r0 DRBD |<pre>
 resource r0 {
+        handlers {
+                split-brain "/usr/lib64/drbd/notify-split-brain.sh root";
+        }
         startup {
-                become-primary-on both;
+                # become-primary-on both;
         }
         on serverNode01 {
                 device    /dev/drbd1;
@@ -147,6 +150,8 @@ resource r0 {
                 after-sb-0pri discard-zero-changes;
                 after-sb-1pri discard-secondary;
                 after-sb-2pri disconnect;
+                protocol C;
+                # allow-two-primaries yes;
         }
 }
 </pre>}}
@@ -378,7 +383,54 @@ Writing lost+found: done
 mkfs.ocfs2 successful
 </pre>}}
 
-We can now mount it the OCFS2 cluster
+== Enable Dual-Primary Mode == 
+To enable Dual-Primary mode is easy, just uncomment the resources files we have made on top.
+
+{{File|/etc/drdb.d/r0.res|Resource name r0 DRBD Dual Primary |<pre>
+resource r0 {
+        handlers {
+                split-brain "/usr/lib64/drbd/notify-split-brain.sh root";
+        }
+        startup {
+                become-primary-on both;
+        }
+        on serverNode01 {
+                device    /dev/drbd1;
+                disk      /dev/sda5;
+                address   192.168.11.23:7789;
+                meta-disk internal;
+        }
+        on serverNode02 {
+                device    /dev/drbd1;
+                disk      /dev/sda5;
+                address   192.168.11.27:7789;
+                meta-disk internal;
+        }
+        net {
+                after-sb-0pri discard-zero-changes;
+                after-sb-1pri discard-secondary;
+                after-sb-2pri disconnect;
+                protocol C;
+                allow-two-primaries yes;
+        }
+}
+</pre>}}
+
+Than time to make change on both node, in sequence primary then only secondary.
+{{RootCmd
+|drbdadm adjust r0
+|drbdadm primary r0
+}}
+
+Check if drbd are now dual primary 
+{{RootCmd|cat /proc/drbd|output=<pre>
+version: 8.4.3 (api:1/proto:86-101)
+built-in
+
+ 1: cs:Connected ro:Primary/Primary ds:UpToDate/UpToDate C r-----
+    ns:0 nr:535088 dw:535088 dr:928 al:0 bm:131068 lo:0 pe:0 ua:0 ap:0 ep:1 wo:f oos:0
+</pre>}}
+We can now mount it the OCFS2 cluster on both node.
 
 {{RootCmd
 |mount /var/lib/samba/sysvol/
