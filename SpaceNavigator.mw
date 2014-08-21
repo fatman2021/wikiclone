@@ -34,6 +34,9 @@ SpaceNavigator can be operated in two mutually exclusive modes:
 # [[#Supported applications|as a 3D mouse controlled by a particular application]], e.g. Blender
 
 == Xorg xinput device ==
+
+=== xf86-input-evdev ===
+
 You can use your SpaceNavigator as a mouse without any additional drivers except for [[#Kernel configuration|Kernel Event Support]] and xf86-input-evdev with
 
 {{File|/etc/X11/xorg.conf.d/20-spacenavigator.conf ||<pre>
@@ -77,6 +80,69 @@ These keys can be used to alter the current configuration, for example:
 |xinput --set-prop '3Dconnexion Space Navigator' 'Device Accel Constant Deceleration' 10
 |xinput --set-prop '3Dconnexion Space Navigator' 'Evdev Axis Inversion' 1 1
 }}
+
+=== xf86-input-joystick ===
+
+The evdev approach above provides an absolute pointer that always re-centers on the screen.
+For a relative pointer that works more like a pointing stick, use xf86-input-joystick instead.
+
+{{File|/etc/X11/xorg.conf.d/20-spacenavigator.conf ||<pre>
+Section "InputClass"
+        Identifier "SpaceNavigator"
+        MatchProduct "3Dconnexion|SpaceNavigator|Space Navigator"
+
+	Driver "joystick"
+
+	# X: move left/right - horizontal scroll
+	Option "MapAxis1"   "mode=relative axis=+5zx deadzone=15000"
+
+	# Y: move up/down - vertical scroll
+	Option "MapAxis2"   "mode=relative axis=+5zy deadzone=15000"
+
+	# Z: pull up / push down - right / left click
+	Option "MapAxis3"   "mode=relative keyhigh=251 keylow=252 deadzone=2000"
+
+	# RY: tilt up/down - move pointer
+	Option "MapAxis4"   "mode=relative axis=+5y deadzone=500"
+
+	# RX: tilt left/right (inverted) - move pointer
+	Option "MapAxis5"   "mode=relative axis=-5x deadzone=500"
+
+	# RZ: twist left/right - horizontal scroll
+	Option "MapAxis6"   "mode=relative axis=+10zy deadzone=5000"
+
+	# Button 2 - right click
+	Option "MapButton2" "button=3"
+EndSection
+</pre>}}
+
+The mouse buttons on the Z axis are mapped to unused keycodes which can be configured through Xkb as mouse keys:
+<pre>
+    key <I251> {         [     XF86User1KB ] };
+    key <I252> {         [     XF86User2KB ] };
+
+    interpret XF86User1KB+AnyOfOrNone(all) {
+        action= PtrBtn(button=1);
+    };
+    interpret XF86User2KB+AnyOfOrNone(all) {
+        action= PtrBtn(button=3);
+    };
+</pre>
+
+Mouse keys then can be enabled using xkbset:
+
+{{Cmd
+|xkbset mousekeys
+|xkbset exp \{{=}}mousekeys
+}}
+
+With the above configuration it is quite usable as a mouse, only thing missing is middle click, not sure where to map that.
+
+==== Firefox ====
+
+* Ctrl + left click can be used as an alternative to middle click.
+* Shift + scroll navigates the history, it would be more intuitive to reverse its direction, though.  FIXME: how?
+* Ctrl + scroll zooms the page, this could be reversed as well.
 
 == Supported applications ==
 
