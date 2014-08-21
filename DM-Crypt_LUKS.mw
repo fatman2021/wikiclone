@@ -107,12 +107,14 @@ The following is a simple script that will build an initramfs with LUKS support 
 {{File|mkinitramfs.bash||<pre>
 #!/bin/bash
 kv=${1:-$(uname -r)}
-[[ -n "$(uname -m | grep 64)" ]] && arc=64 || arc=32
-pushd
+arc=$(getconf LONG_BIT)
+
 mkdir -p initramfs-$kv && pushd initramfs-$kv
-mkdir -p {,s}bin lib$arc dev proc sys newroot mnt
-[[ "$arc" = "64" ]] && mkdir lib32
-ln -s lib$arc lib
+mkdir -p {usr/,}{{,s}bin,lib$arc} dev proc sys newroot mnt/tok
+ln -s lib{$arc,}
+pushd usr && ln -s lib{$arc,} && popd
+mkdir -p usr/share/{consolefonts,keymap}
+
 mknod -m 600 dev/console c 5 1
 mknod -m 666 dev/urandom c 1 9
 mknod -m 666 dev/random  c 1 8
@@ -121,31 +123,65 @@ mknod -m 666 dev/null    c 1 3
 mknod -m 666 dev/tty     c 5 0
 mknod -m 666 dev/zero    c 1 5
 mknod -m 640 dev/tty1    c 4 1
+
 [[ $(echo "$kv" | cut -d'.' -f1 ) -eq 3 ]] &&
     [[ $(echo "$kv" | cut -d'.' -f2) -ge 1 ]] &&
     mknod -m 600 dev/loop-control c 10 237
-cp $(which bb) bin/busybox || exit 1
-cp ../init . && chmod 755 init || exit 1
-for app in $(bin/busybox --list-full); do
-    ln -sf /bin/busybox $app
-done
+
+cp $(which busybox) bin/busybox || exit
+cp ../init . && chmod 755 init || exit
+
 # this is handy for password
-keymap="${2:-$(grep -E '^keymap' /etc/conf.d/keymaps|cut -d'"' -f2)}"
-loadkeys -b -u $keymap > usr/share/keymaps/${keymap}-$(uname -m).bin
-cp $(which cryptsetup) sbin/
-cp $(which lvm.static) sbin/lvm
-mount /boot &>/dev/null
+keymap="${2:-$(sed -nre 's,^keymap="([a-zA-Z].*)",\1,p' /etc/conf.d/keymaps)}"
+[[ $keymap ]] && loadkeys -b -u $keymap >usr/share/keymaps/${keymap}-$(uname -m).bin
+
+consolefont="${3:-$(sed -nre 's,^consolefont="([a-zA-Z].*)",\1,p' /etc/conf.d/consolefont)}"
+[[ $consolefont ]] && pushd usr/share/consolefonts &&
+cp /usr/share/consolefonts/${consolefont}*.gz . &&
+gzip -d ${consolefont}*.gz && popd
+
+cp $(which cryptsetup) sbin || exit
+cp $(which lvm.static) sbin/lvm && lvm=lvm
+
+function docp()
+{
+	local link=${1} prefix
+	[[ -n ${link} ]] || return
+	cp -a {,.}${link}
+
+	[[ -h ${link} ]] &&
+	while true; do
+	    prefix=${link%/*}
+		link=$(readlink ${link})
+		[[ ${link%/*} == ${link} ]] && link=${prefix}/${link}
+		cp -a {,.}${link} || die
+		[[ -h ${link} ]] || break
+	done
+
+	return 0
+}
+
+for bin in busybox cryptsetup $lvm; do
+    ldd $bin >/dev/null || continue
+    for lib in $(ldd $bin  | sed -nre 's,.* (/.*lib.*/.*.so.*) .*,\1,p' \      
+        -e 's,.*(/lib.*/ld.*.so.*) .*,\1,p')
+    do
+        mkdir -p ${lib%/*} && docp {,.}$lib
+    done
+done
+
+mount /boot
 find . -print0 | cpio --null -ov --format=newc | xz -9 --check=crc32 > /boot/initramfs-$kv.cpio.xz
+
 popd
-unset -v arc kv keymap</pre>}}
+unset -v arc consolefont kv keymap</pre>}}
 
 And the following is a simple init script which will mount rootfs in initramfs environment. The following script and the previous are adapted from mkinitramfs-ll.
 
 {{File|init||<pre>
 #!/bin/sh
-init=/sbin/init # real init to execute after switching to real root
-rmap=root       # root mapping for dmcrypt
-sh=/bin/sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export init=/sbin/init newroot=/newroot sh=/bin/sh
 
 rescueshell() {
     export PS1='rsh:$(tty | cut -c6-):$PWD # '
@@ -159,26 +195,22 @@ die() {
     rescueshell || exec $sh -i
 }
 
-kmap() {
-    local _font=$(echo "$kmap" | cut -d':' -f2)
-    local _kmap=$(echo "$kmap" | cut -d':' -f1)
-    if [ -n "$_kmap" ]; then
-        for _dir in /usr/share/keymaps /etc /; do
-            if [ -f "$_dir/$_kmap" ]; then
-                loadkmap < "$_dir/$_kmap" && break
-            fi
-        done
-    fi
-    if [ -n "$_font" ]; then
-        for _dir in /usr/share/consolefonts /etc /; do
-            if [ -f "$_dir/$_font" ]; then
-                loadfont < "$_dir/$_font" && break
-            fi
-        done
-    fi
+getdev() {
+    echo $(blkid | grep $1 | cut -d: -f1)
 }
 
-export PATH=/bin:/sbin
+for arg in $(cat /proc/cmdline); do                                             
+    case $arg in                                                                
+        rescue*) export rescue=1;;                                            
+        ro|rw) export mtopt=$arg;;                        
+        single) export level=2;;
+        console*|font*|init*|keyfile*|keymap*|lvm*|root*) export $arg;;                                           
+     esac                                                                       
+done
+
+[ $keymap ] && loadkmap </usr/share/keymaps/$keymap
+[ $font ] && loadfont </usr/share/consolefont/$font
+
 umask 0077
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -192,35 +224,33 @@ echo /sbin/mdev > /proc/sys/kernel/hotplug
 [ -n /dev/stderr ] || ln -fs /proc/self/fd/2 /dev/stderr
 [ -n /dev/stdin  ] || ln -fs /proc/self/fd/0 /dev/stdin
 [ -n /dev/stdout ] || ln -fs /proc/self/fd/1 /dev/stdout
-:   ${console:=/dev/tty1}
+:   ${console:=/dev/console}
 exec 0<$console 1>$console 2>&1
 
-for arg in $(cat /proc/cmdline); do
-   case $arg in
-      rescue*)  rescue=1;;
-      single)   level=2;;
-      *init=*)  export init=${arg#*=};;
-      *root*|kmap*) export $arg;;
-   esac
-done
+if [ $keyfile ]; then
+    dev=$(echo $keyfile | cut -d: -f1)
+    key=$(echo $keyfile | cut -d: -f2)
+    dev=$(getdev $dev)
+    mount $dev /mnt/tok || die
+fi
 
-[ -n "$kmap" ] && kmap
-# do your stuff here e.g. opening LUKS device, scanning for LVM etc. (this section
-# needs to be tweaked to match your setup (LUKS devices, LVM volume groups etc.)
-# 
-# cryptsetup luksOpen /dev/sda vault
-# lvm vgscan
-# lvm vgchange -ay vg
-# mount /dev/mapper/vg-root /newroot
-#
-# You should also take care of /dev, /proc and /sys filesystems - mount them into
-# the new root (/newroot).
-# 
-# mount -t devtmpfs none /newroot/dev
-# mount -t proc none /newroot/proc
-# mount -t sysfs none /newroot/sys
+root=$(getdev $root)
+[ $root ] || die
+cryptsetup open $root root ${key:+-d $key} && root=/dev/mapper/root || die
 
-exec switch_root /newroot ${init:-/sbin/init} $level
+if [ $lvm ]; then
+    lvm vgscan
+    lvm vgchange -ay vg && root=/dev/mapper/vg-root || die
+fi
+
+mount $root $newroot
+
+umount -l /mnt/tok
+umount /sys
+umount /dev
+umount /proc
+
+exec switch_root $newroot ${init:-/sbin/init} $level
 </pre>}}
 
 See [https://github.com/tokiclover/mkinitramfs-ll/blob/master/init mkintramfs-ll/init] for a fully featured init script.
