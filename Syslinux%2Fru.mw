@@ -7,7 +7,7 @@
 |{{InfoBox ohloh}}
 }}
 
-'''Syslinux''' - это пакет, который содержит семейство [[:Category:Bootloaders|загрузчиков]]. Пакет включает SYSLINUX (загрузчик для файловых систем FAT), EXTLINUX ([[ext4|ext2/3/4]] и загрузчик файловой системы btrfs), PXELINUX (сетевой загрузчик PXE) и ISOLINUX (ISO-9660 (CDROM) загрузчик).
+'''Syslinux''' is a package that contains a family of [[:Category:Bootloaders|bootloaders]]. The package includes SYSLINUX (FAT filesystem bootloader), EXTLINUX ([[ext4|ext2/3/4]], [[btrfs]] and [[XFS|xfs]] filesystem bootloader), PXELINUX (Network PXE bootloader) and ISOLINUX (ISO-9660 (CDROM) bootloader).
 
 == Установка ==
 
@@ -19,9 +19,9 @@
 
 {{Emerge|syslinux}}
 
-== Настройка ==
+== Setup on BIOS systems ==
 
-{{Note/ru|Предполагается, что {{Path|/dev/sda1}} - это загрузочный раздел. Если нет: сделайте поправки!}}
+{{Note|These instructions are for BIOS systems. For (U)EFI, read [[#Setup_on_EFI_systems|Setup on EFI systems]].}}
 
 {{Note|Assuming {{Path|/dev/sda1}} is the boot partition. If not: make adjustments!}}
 
@@ -78,7 +78,7 @@ Command (m for help): w
 
 {{Note/ru|Символьная ссылка "boot-> ." не является сама по себе необходимой, но в целях связности, она приведена, так чтобы примеры конфигурации были одни и те же для пользователей с {{Path|/boot}} на одном разделе и тех, кто пользуется отдельными разделами.}}
 
-Пакет syslinux содержит различные модули для включения дополнительных функций. Начиная с syslinux версии 5, некоторые модули зависят от других, поэтому хорошей идеей будет скопировать большинство основных модулей независимо от варианта использования.
+The syslinux package contains various modules to enable additional features. Starting with syslinux version 5, some modules depends on others, so it is a good idea to copy most basic modules regardless of the use case. See [[#Checking_dynamic_links|Checking dynamic links]] to verify whether all dependencies are installed.
 
 {{RootCmd|cd /usr/share/syslinux
 |cp menu.c32 memdisk libcom32.c32 libutil.c32 /boot/extlinux}}
@@ -101,6 +101,10 @@ Command (m for help): w
 Скопируйте двоичный файл {{Path|memdisk}} в каталог {{Path|kernel}}:
 
 {{RootCmd|cp /usr/share/syslinux/memdisk kernel/}}
+
+{{Note|In order to use the mkisofs command you will need to emerge the {{Package|app-cdr/cdrtools}} package:
+{{RootCmd| emerge app-cdr/cdrtools}}
+}}
 
 Когда конфигурация завершена, следующая команда <code>mkisofs</code> может быть использована для создания конечного образа ISO (замените <code>${BASEDIR}</code> на действительный основной каталог):
 
@@ -188,9 +192,9 @@ Now create a new boot entry using {{Package|sys-boot/efibootmgr}}:
 
 == Конфигурация ==
 
-Файл конфигурации называется по аналогии с загрузчиком:
+The configuration file is called {{Path|syslinux.cfg}}.
 
-* SYSLINUX: {{Path|syslinux.cfg}}
+For compatibility with existing installs, the following legacy configuration file names are still supported:
 * EXTLINUX: {{Path|extlinux.conf}}
 * ISOLINUX: {{Path|isolinux.cfg}}
 
@@ -200,7 +204,7 @@ Now create a new boot entry using {{Package|sys-boot/efibootmgr}}:
 
 Это отобразит простую строку "<tt>boot:</tt>", подобную той, которая используется в Gentoo Minimal LiveCD:
 
-{{File|/boot/extlinux/extlinux.conf||<pre>
+{{File|syslinux.cfg||<pre>
 DEFAULT gentoo
   
 LABEL gentoo
@@ -239,19 +243,20 @@ LABEL gentoo-old
       LINUX /boot/kernel-3.5.7-gentoo
 </pre>}}
 
-{{Note/ru|Избегайте использования 'KERNEL' для выбора образов ядра, вместо этого используйте LINUX. Если Вы используете KERNEL и образ оканчивается на .0, то extlinux неправильно это истолкует и попытается использовать PXE для загрузки по сети, завершившись экраном полным графических артефактов и ничем другим.}}
+{{Note|Avoid using 'KERNEL' for selecting the Linux kernel images, use LINUX instead. If you use KERNEL and the image ends with .0 then extlinux will misinterpret it and try to PXE it ending with a screen full of graphical artifacts and nothing else.}}
 
 {{Note|In the configuration file, absolute paths will be relative to the filesystem root, non-absolute paths will be relative to the syslinux installation directory.}}
 
 === Передача параметров ядра ===
 
-Если только параметры ядра не закодированы жестко в образ ядра, их нужно передать ядру через загрузчик. Чтобы это сделать, используйте параметр <code>APPEND</code>, как приведено здесь:
+Unless the kernel parameters are hard-coded and the initramfs is built-in into the kernel image, these may need to be passed on to the kernel through the boot loader. To do so, use the <code>APPEND</code> and/or <code>INITRD</code> parameter, like this:
 
-{{File|/boot/extlinux/extlinux.conf|Добавление параметров ядра|<pre>
+{{File|syslinux.cfg|Adding kernel parameters|<pre>
 DEFAULT gentoo
   
 LABEL gentoo
       LINUX /boot/kernel-3.6.11-gentoo
+      INITRD /boot/initramfs-3.6.11-gentoo
       APPEND root=/dev/sda1
 </pre>}}
 
