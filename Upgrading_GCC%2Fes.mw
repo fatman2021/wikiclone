@@ -17,7 +17,7 @@ La siguiente sección ofrece una introducción rápida a las actualizaciones de 
 
 Si está actualizando GCC entonces no necesita hacer nada salvo cambiar la versión del compilador y reconstruir libtool: 
 
-{{RootCmd|emerge -u gcc
+{{RootCmd|emerge -u sys-devel/gcc
 |gcc-config -l|output=<pre>
 [1] i686-pc-linux-gnu-4.4.5 *
 [2] i686-pc-linux-gnu-4.5.3
@@ -84,19 +84,31 @@ version `GLIBCXX_3.4.11' not found
 }}
 
 Esto significa que está intentando construir un paquete con una versión de GCC ''más antigua'' que el usado para construir algunas de sus librerías dependientes. ¿Recuerde cuando dijimos que el ABI C++
-era compatible a futuro? Esto es cierto, pero segura solamente que versiones ''más recientes'' (o iguales) de GCC se pueden utilizar para construir aplicaciones y librerías enlazadas (en comparación con la versión de GCC usada para construir esas librerías). 
+era compatible a futuro? Esto es cierto, pero segura solamente que versiones ''más recientes'' (o iguales) de GCC se pueden utilizar para construir aplicaciones y librerías enlazadas (en comparación con la versión de GCC usada para construir esas librerías).
+
+To rebuild all the packages depending on libstdc++ the next bash script can be executed.
+
+{{Code|Script to rebuild libstdc++ depending packages|<pre>
+#!/bin/bash
+while read i ; do
+  [ -n "$(ldd -r $i | grep 'libstdc++')" ] && qfile "$i" >> rebuild.packages
+done < $(find $(echo $PATH | tr ':' ' ') -type f -executable)
+cut -d ' ' -f1 rebuild.packages | sort -u -o rebuild.packages
+emerge -1av $(cat rebuild.packages)
+</pre>
+}}
 
 === ¿Qué paquetes se sabe que deben reconstruirse? ===
 
 La siguiente tabla indica los paquetes que ''si se instalan'', se necesitarán reconstruir y el motivo por el cual necesitan reconstruirse. 
 
-{| class="wikitable" style="text-align: left;"
-|-
-! Paquete
-! Necesita reconstrucción porque ...
-|-
-| sys-devel/libtool
-| La aplicación libtool tiene las rutas definidas explícitamente hacia las librerías interna de GCC
+{| class="wikitable" style="text-align: left;" 
+|- 
+! Package
+! Rebuild needed because ...
+|- 
+| {{Package|sys-devel/libtool}}
+| libtool application has hardcoded paths towards GCC internal libraries
 |-
 |}
 
