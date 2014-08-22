@@ -17,7 +17,7 @@ GCC "업그레이드"에 대한 내용입니다. GCC를 다운그레이드 하�
 
 GCC를 업그레이드 한다면 컴파일러 버전을 바꾸고 libtool을 다시 빌드하는것 이외에는 필요한 일이 없습니다: 
 
-{{RootCmd|emerge -u gcc
+{{RootCmd|emerge -u sys-devel/gcc
 |gcc-config -l|output=<pre>
 [1] i686-pc-linux-gnu-4.4.5 *
 [2] i686-pc-linux-gnu-4.5.3
@@ -76,7 +76,19 @@ version `GLIBCXX_3.4.11' not found
 </pre>
 }}
 
-이는 빌드한 의존 라이브러리보다 "오래된" GCC 버전으로 패키지를 빌드하려 함을 의미합니다. 차기 호환성을 찾으려 할때 C++ ABI를 호출했음을 기억하십니까? 맞는 말이긴 한데, 프로그램을 빌드하고 라이브러리에 연결(이들 라이브러리를 빌드할때 사용한 GCC 버전과 비교했을 때)할 때는 "더 높은" GCC버전에 대해서만 동작이 보장됩니다. 
+이는 빌드한 의존 라이브러리보다 "오래된" GCC 버전으로 패키지를 빌드하려 함을 의미합니다. 차기 호환성을 찾으려 할때 C++ ABI를 호출했음을 기억하십니까? 맞는 말이긴 한데, 프로그램을 빌드하고 라이브러리에 연결(이들 라이브러리를 빌드할때 사용한 GCC 버전과 비교했을 때)할 때는 "더 높은" GCC버전에 대해서만 동작이 보장됩니다.
+
+To rebuild all the packages depending on libstdc++ the next bash script can be executed.
+
+{{Code|Script to rebuild libstdc++ depending packages|<pre>
+#!/bin/bash
+while read i ; do
+  [ -n "$(ldd -r $i | grep 'libstdc++')" ] && qfile "$i" >> rebuild.packages
+done < $(find $(echo $PATH | tr ':' ' ') -type f -executable)
+cut -d ' ' -f1 rebuild.packages | sort -u -o rebuild.packages
+emerge -1av $(cat rebuild.packages)
+</pre>
+}}
 
 === 리빌드 해야 한다고 알려진 꾸러미는 무엇인지요? ===
 
@@ -84,11 +96,11 @@ version `GLIBCXX_3.4.11' not found
 
 {| class="wikitable" style="text-align: left;" 
 |- 
-! 패키지
-! 리빌드가 필요한 이유
+! Package
+! Rebuild needed because ...
 |- 
-| sys-devel/libtool
-| GCC 내부 라이브러리에 대해 libtool 프로그램에 경로가 하드코딩 되어 있음
+| {{Package|sys-devel/libtool}}
+| libtool application has hardcoded paths towards GCC internal libraries
 |-
 |}
 
