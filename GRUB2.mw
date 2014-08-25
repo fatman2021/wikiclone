@@ -570,9 +570,15 @@ If you have a separate {{Path|/boot}} partition and plan to install GRUB2, be su
 
 === Booting from LVM, RAID and/or Encrypted Volumes ===
 
-{{Note|GRUB2 booting to volumes that are using these technologies requires that, when partitioning, the size allotted for the MBR/post-MBR gap be greater than the conventional 32 kilobytes (63 sectors of 512 bytes). This is needed do to the enlarged size of the ''core.img'' file which GRUB embeds in the post-MBR gap region. It is recommended that the size before the first physical partition be 1 megabyte (or 2048 sectors of 512 bytes).
+This section is based on my experience converting a non-UEFI, MBR/partition based system to boot from a GPT/Raid disk. (Currently incomplete, partially edited from the previous version.)
 
-For the following two code blocks, observe that the first (only 63 sectors of 512 bytes) will not allow GRUB2 to work with these technologies... though the latter (2048 sectors of 512 blocks) is adequate.
+{{Note|GRUB2 is a mini-OS in its own right, and much larger than previous bootloaders.
+
+On MBR disks, fdisk et al leave a space at the start of the disk for the bootloader. The conventional 32 kilobytes (63 sectors of 512 bytes) is not enough for GRUB2 when RAID etc is enabled, the space should be at least 1 megabyte, ie your first partition should start on or after sector 2048. Modern fdisks will do this for you.
+
+On GPT disks, you need to explicitly allocate space for GRUB2. Create a disk at least 1 megabyte in size, type EF02 (BIOS boot partition). (This will not be used in a UEFI system, so you could use the same space for the EFI partition (type EF00) when swapping the disk between systems)
+
+For the following three code blocks, observe that if GRUB2 installs on the first (only 63 sectors of 512 bytes) it will not have support for complex disk setups such as RAID, and will not boot your system. The second block (2048 sectors) is adequate. The third (GPT) block shows the EF02 partition without which GRUB2 will refuse to install.
 }}
 
 {{Code||<pre>
@@ -598,6 +604,34 @@ Disk identifier: 0x0009d633
 
    Device Boot      Start         End      Blocks   Id  System
 /dev/sda1   *        2048      499711      248832   8e  Linux LVM
+
+</pre>}}
+
+{{Code||<pre>
+
+GPT fdisk (gdisk) version 0.8.8
+
+Partition table scan:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.
+Disk /dev/sdb: 5860533168 sectors, 2.7 TiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 47915407-BA7E-4869-8D3E-3CB44F5FDA12
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 5860533134
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 1050590 sectors (513.0 MiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048         1050623   512.0 MiB   EF02  BIOS boot partition
+   2         1312768        68421631   32.0 GiB    8200  Linux swap
+   3        68683776       270010367   96.0 GiB    8300  root
+   4       270272512       471599103   96.0 GiB    8300  var
+   5       471861248      5860533134   2.5 TiB     8300  home
 
 </pre>}}
 
