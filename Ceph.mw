@@ -5,24 +5,29 @@ The Floss Weekly podcast interviewd Sage Weil in 2013 for their [http://twit.tv/
 
 === Overview ===
 Ceph consists of four major components:
-* Distributed Object Store
+* Object Store Device
 * Monitor Server
 * RADOS Block Device (RBD) and RADOS Gateway
 * Metadata Server providing a POSIX compliant Filesystem
 
 
-==== Distributed Object Store ====
-This component is always implemented in a Ceph rollout.  It sits on top of an existing filesystem such as [[Ext4|ext4]]
-, [http://en.wikipedia.org/wiki/XFS xfs], [[ZFS|zfs]] or [[Btrfs|btrfs]] and is created and maintained by an Object Store Device Daemon (OSD).  It is up to the underlying filesystem and volume management scheme to provide the redundancy and reliability for the object storage and also the recovery that may be necessary when a drive fails and gets replaced.  
+==== Object Store Device ====
+Two object stores mark the beginning of a Ceph cluster and they may be joined by potentially thousands more.  They sit on top of an existing filesystem such as [[Ext4|ext4]]
+, [http://en.wikipedia.org/wiki/XFS xfs], [[ZFS|zfs]] or [[Btrfs|btrfs]] and are created and maintained by an Object Store Device Daemon (OSD).  While the underlying filesystem may provide for redundancy, error detection and repair on its own, Ceph implements its own layer of error detection, recovery and n-way replication.  There is a tradeoff between using a RAID1,5,6 or 10 scheme with the underlying filesystem and then having a single OSD server versus having individual drives and multiple OSD servers.  The former provides a defense in depth strategy against data loss, but the latter has less of an impact on the cluster when a drive fails and requires replacement.  The latter also potentially provides better performance than a software RAID or a filesystem built on top of a number of JBOD devices.
 
-An OSD will take advantage of advanced features of the underlying filesystem such as Extents, Copy On Write (COW), and snapshotting.  It makes extended use of the xattr feature to store metadata about an object and will often exceed the 4kb limitation of ext4 filesystems such that a workaround will be necessary.  The ceph.com site documentation recommends either ext4 or xfs in production for OSDs, but it is obvious that zfs or btrfs would be better because of their ability to self-repair, snapshot and handle COW.  Ultimately btrfs will probably become the preferred underlying filesystem for a Linux based OSD when the majority is satisfied that it is stable enough.
+An OSD will take advantage of advanced features of the underlying filesystem such as Extents, Copy On Write (COW), and snapshotting.  It can make extended use of the xattr feature to store metadata about an object, but this will often exceed the 4kb limitation of ext4 filesystems such that an alternative metadata store will be necessary.  The ceph.com site documentation recommends either ext4 or xfs in production for OSDs, but it is obvious that zfs or btrfs would be better because of their ability to self-repair, snapshot and handle COW.  Ultimately btrfs will become the preferred underlying filesystem for a Linux based OSD when the majority is satisfied that it is stable enough.  If you are still unsure about btrfs, look at the performance tuning research that has been done already such as that done by an Inktank employee on Bobtail at this [http://ceph.com/community/ceph-bobtail-jbod-performance-tuning/ page].
 
 The task of the OSD is to handle the distribution of objects by Ceph across the cluster.  The user can specify the number of copies of an object to be created and distributed amongst the OSDs.  The default is 2 copies with a minimum of 1, but those values can be increased up to the number of OSDs that are implemented.  Since this redundancy is on top of whatever may be provided the underlying RAID arrays, the cluster enjoys an added layer of protection that guards against catastrophic failure of a disk array.  When a drive array fails, only the OSD or OSDs that make use of it are brought down.
 
-{{Note|Ceph documentation recommends that only one OSD be implemented per drive or logical volume.  This is both for performance reasons and to avoid the possibility that a volume failure doesn't cause a multi-OSD failure that destroys all copies of an object that have been created}}
+Objects are broken down into extants, or shards, when distributed instead of having them treated as a single entity.  In a 2-way replication scheme where there are more than 2 OSD servers, an object's shards will actually end up distributed across potentially all of the OSD servers.
 
 
-{{Note|Although Ceph will work with prebuilt RAID arrays, the Inktank developers suggest that "you are doing it wrong" if you take this approach.  They would rather that you have one disk device per OSD and thus prefer JBODs to hardware or software based RAIDs.  In our example cluster we implemented ceph on top of pre-existing BTRFS based software RAIDs.  We will eventually explore taking down the old arrays one at a time to re-do them as individual OSD servers to look at the performance impact.}}
+
+{{Note|An OSD server also implements a Journal (typically 1-10GB) which can be a file or a raw device.  The default journal goes into the same filesystem as the rest of an object store, but this is not optimal for either performance nor fault tolerance.  When implementing OSDs on a host, consider dedicating a drive to handle just journals.  An SSD would be a huge performance boost for this purpose.  If your system drive is an SSD, consider using that for journals if you can't dedicate a drive to journals.  Otherwise partition off a 1-10GB section of each drive that will be used for OSD filesystems and then put the journal of one OSD server and the rest of the OSD for another server on each drive.}}
+
+
+
+{{Note|Although Ceph will work with prebuilt RAID arrays, the Inktank developers suggest that "you are doing it wrong" if you take this approach.  They would rather that you have one disk device per OSD and thus prefer JBODs to hardware or software based RAIDs.  In our example cluster we implemented Ceph on top of pre-existing BTRFS based software RAIDs.  We will eventually explore taking down the old arrays one at a time to re-do them as individual OSD servers to look at the performance impact.}}
 
 
 
@@ -33,14 +38,18 @@ A single MON would be a single point of failure for Ceph, so it is recommended t
 
 MONs coordinate object traffic by implementing the Controlled Replication Under Scalable Hashing (CRUSH) map.  This is an algorithm that computes the locations for storing objects in the OSD pools.  MONS also keep track of the map of daemons running the various flavors of Ceph server in the cluster.  An "Initial Members" setting allows the user the specify the minimum number of MON servers that must be running in order to form a quorum.  When there are not enough MONs to form a quorum, the Ceph cluster will stop processing until a quorum is re-established in order to avoid a "split-brain" situation.
 
-The CRUSH map defaults to an algorithm that automatically computes which OSDs an object should be placed, but it can be influenced by additional human specified policies.  This way, a site administrator can sway CRUSH when making choices such as:
+The CRUSH map defaults to an algorithm that automatically computes where in the OSDs an object's shards should be placed, but it can be influenced by additional human specified policies.  This way, a site administrator can sway CRUSH when making choices such as:
 
 * use the sites faster OSDs by default
 * divide OSDs into "hot" (SSD based), "normal" and "archival" (slow or tape backed) storage
 * localize replication to OSDs sitting on the same switch or subnet
 * prevent replication to OSDs on the same rack to avoid downtime when an entire RACK has a power failure
 
+It is this spreading out of the load with the CRUSH map that allows Ceph to scale up to thousands of OSDs so easily while increasing performance as new stores are added.  Because of the spreading, the bottleneck transfers from raw disk performance (about 100mb/sec for a SATA drive for example) to the bandwidth capacity of your network and switches.
+
+
 There are a number of ways to work with the MON pool and Praxis database to monitor and administrate the cluster, but the most common is the <code>/usr/bin/ceph</code> command.  This is a Python script that uses a number of Ceph supplied Python modules that use json to communicate with the MON pool.
+
 
 ==== RADOS Block Device and RADOS Gateway====
 Ceph provides a kernel module for the RADOS Block Device (RBD) and a librados library which libvirt and KVM can be linked against.  This is essentially a virtual disk device that distributes its "blocks" across the OSDs in the Ceph cluster.  An RBD provides the following capabilities:
