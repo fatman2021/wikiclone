@@ -126,6 +126,14 @@ Network File Systems
 ==== Network Config ====
 Ceph is sensitive to IP address changes, so you should make sure that all of your Ceph servers are assigned static IP addresses.  You also may want to proactively treat the Ceph cluster members as an independent subnet from your existing network by multi-homing your existing network adapters as necessary.  That way if an ISP change or other topology changes are needed, you can keep your cluster setup intact.  It also gives you the luxury of migrating the ceph subnet later on to dedicated nics, switches and faster hardware such as 10Gbit ethernet or Infiniband.  If the cluster subnet is small enough, consider keeping the hostnames in your /etc/hosts files, at least until things grow to the point where a pair of DNS servers  among the cluster members becomes a compelling solution.
 
+
+{{Note|Ceph MON servers require accurate (or at least synched) system clocks and will mark the cluster with HEALTH_WARN if the pool detects that the servers are not within a second or two or each other.  If you haven't already installed a time synchroniziation mechanism such as NTP, you really want to get that installed and configured before building the cluster.}}
+
+
+{{Note|The <code>/etc/init.d/ceph</code> script for openrc only has a depend "after net" in place at the moment.  It is quite possible that your servers on a host will be started before ntp-client and ntpd (or your preferred time service) is started.  We have opened a bug report with the ceph gentoo team to add "after ntp-client" in the depend function in order to avoid having to restart ceph services after a boot if the clock was off.}}
+
+
+
 We will be using four hosts in our Example implementation.  All four will be MON servers with an initial quorum of 3 so that we can safely avoid a "split-brain" situation and still be able to run the cluster when a single server is rebooted.
 
 
@@ -160,7 +168,6 @@ dns_search-eth0="example.com"
 192.168.2.3     kroll3
 192.168.2.4     kroll4
 </pre>}}
-
 
 ==== Our Example Ceph Cluster ====
 We have chosen to roll out Ceph on a portion of our home network.  The four kroll hosts are as follows:
