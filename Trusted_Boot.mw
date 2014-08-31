@@ -1,0 +1,115 @@
+Trusted Boot is a technology to provide a chain of trust for all the components during boot. In this guide, we introduce this technology and how it can be enabled in Gentoo Linux.
+
+== Purpose of Trusted Boot ==
+
+=== Introduction ===
+
+{{Warning|Using Trusted Boot on your system is currently only recommended for development purposes.}}
+
+This guide will introduce Dynamic root-of-trust using Intel's TXT to support measuring the booted kernel and initramfs before it is loaded. The measured values are extended into the TPM chip so that values can be sealed and unsealed within it.
+
+=== Dynamic vs Static Root of Trust ===
+
+Trusted boot relies on having a ''Root of Trust'' that all the rest relies on. Originally there was a Static Root of Trust in which each component measured the next component in the chain. This method is fickle because if anything at all changes in the bios setup or boot chain then the PCR values will end up different and difficult to predict.
+
+Dynamic Root of Trust instead uses Intel's Trusted Execution Technology to reset to a known state during boot.
+
+=== TPM Platform Configuration Registers ===
+
+The TPM Chip is an integral part of Trusted Boot. The important part are the ''Platform Configuration Registers'' (PCRs), special registers that can not be set, only ''extended'' with another measurement. A TPM usually has 23 PCRs, which are reset to zero during boot and after that point, are extended. An extend operation works like:
+
+{{Code|An extend operation:|
+New PCR value = SHA1( Old PCR value {{!}} SHA1( New Measurement to be Extended ) ) 
+}}
+
+TPM chips support ''bind'' and ''seal'' operations. Binding means that the data is encrypted using a key only found within the TPM and cannot be extracted. Sealing is like binding but data will only be unencrypted if the PCRs are the same values as when the data was sealed. Sealing will be very useful for our purposes.
+
+=== The Big Fat Warnings ===
+
+Using Trusted Boot on your system is currently only recommended for development purposes. Gentoo Hardened is working on integrating Trusted Boot properly, so please be aware that a value sealed with TPM PCRs can only be unsealed if the PCR values are exactly the same as when sealing. Make sure you have a backups of all the data and other ways to unlock your machine if the TPM will not unseal the data.
+
+== Setting up IMA ==
+
+=== Kernel configuration ===
+
+First of all, enable Intel TXT in the Linux kernel configuration. Intel TXT is supported in the main tree since 2.6.38.
+
+{{Kernel|Linux kernel configuration for IMA|<pre>
+CONFIG_ACPI=y
+CONFIG_INTEL_IOMMU=y
+CONFIG_INTEL_IOMMU_DEFAULT_ON=y
+CONFIG_INTEL_TXT=y
+</pre>
+}}
+
+=== BIOS configuration ===
+
+Reboot and enter your BIOS setup, look for an enable any options about VT-x, VT-d, Intel TXT. The TPM must also be set to ''Active'', ''Enabled'' in some bios setups means that the chip is visible to the OS but cannot be used.
+
+After this reboot like normal and check dmesg to make sure the IOMMU is enabled:
+
+{{Code|dmesg | grep -i iommu|<pre>
+
+</pre>
+}}
+
+=== Install the software ===
+
+{{RootCmd|layman -a hardened-development}}
+{{RootCmd|emerge -av tboot}}
+
+This will pull in tboot and its dependencies TrouSerS and tpm-tools. TrouSerS will install some udev rules for the tpm /dev node, you must either make udev re-read its rules or just reboot now.
+
+=== Taking Ownership of the TPM ===
+
+Next, we have to setup the TPM:
+
+{{RootCmd|/etc/init.d/tcsd start}}
+
+{{RootCmd|tpm_takeownership -y -z}}
+
+This will take ownership of the TPM chip using the ''well known password'' for both the Owner and SRK passwords. We will change the owner password later on, this is just for testing the initial parts.
+
+=== Intel TXT SINIT module ===
+
+Intel TXT requires an SINIT module that is signed by Intel and trusted by the CPU. The module for your specific CPU must be downloaded from: https://software.intel.com/en-us/articles/intel-trusted-execution-technology
+
+Download, extract and copy the SINIT module into /boot/.
+
+=== Grub config ===
+
+{{RootCmd|mount /boot/}}
+
+{{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg|<pre>
+</pre>
+}}
+
+At this point, rebooting and choosing the tboot option should start like normal using the default ''launch control policy''.
+
+=== Checking the PCR values ===
+
+{{RootCmd|cat /sys/class/misc/tpm0/device/pcrs|output=<pre>
+</pre>
+}}
+
+{{RootCmd|txt-stat|output=<pre>
+</pre>
+}}
+
+== Setting the Launch Control Policy ==
+
+TODO
+
+== Sealing data in the TPM ==
+
+TODO
+
+== Asked Questions with Answers ==
+
+{{Warning|If you use an initramfs, then you might notice that {{Path|/usr}} is not properly mounted. This is because busybox mount does not support the iversion mount option which is required. Update the initramfs to mount without iversion, and remount it as soon as possible later.}}
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* Jason Zaman
