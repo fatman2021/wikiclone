@@ -17,7 +17,9 @@
 
 {{emerge|runit}}
 
-=== Post-Install Configuration ===
+== Post-Install Configuration ==
+
+=== As PID 1 ===
 
 Runit can be used as the system init. To do this, simply add <tt>init=/sbin/runit-init</tt> to your bootloader's command line and reboot. You can leave sysvinit installed and go back to it at any time by reverting the change.
 
@@ -38,7 +40,29 @@ chmod 0 /etc/runit/stopit
 </pre>}}
 (If you're making the above change after the first reboot, there's no need to reboot twice for it to take effect - just run "rc default" manually.)
 
-Runit isn't directly compatible with sysvinit's "telinit", "halt", "poweroff", "reboot" and "shutdown" commands, however, it's possible to emulate the interface they use [https://forums.gentoo.org/viewtopic-p-7610342.html#7610342 with a simple script].
+Runit isn't directly compatible with sysvinit's "telinit", "halt", "poweroff", "reboot" and "shutdown" commands, however, it's possible to emulate the interface they need [https://forums.gentoo.org/viewtopic-p-7610342.html#7610342 with a simple script].
+
+=== As a system service ===
+
+Runit can supervise processes without running as init, or even necessarily as root:
+
+{{Cmd|mkdir /path/to/service-dir/}}
+{{GenericCmd|(Create your service directories and run scripts here, using the same layout as /etc/runit/runsvdir/all/)}}
+{{Cmd|chmod a+x /path/to/service-dir/*/run}}
+
+OpenRC can start this for you using <tt>/etc/init.d/local</tt> (see <tt>/etc/local.d/README</tt> for more details):
+
+{{File|/etc/local.d/runsvdir.start||<pre>
+#!/bin/sh
+# Remember to add --user if you don't want to run as root!
+start-stop-daemon --start --background --make-pidfile \
+    --pidfile /run/runsvdir.pid \
+    --exec /usr/bin/runsvdir -- /path/to/service-dir/
+</pre>}}
+{{File|/etc/local.d/runsvdir.stop||<pre>
+#!/bin/sh
+start-stop-daemon --stop --pidfile /run/runsvdir.pid
+</pre>}}
 
 == External Resources ==
 https://wiki.archlinux.org/index.php/runit
