@@ -1,5 +1,3 @@
-{{stub}}
-{{warning|this page is incomplete and will not produce a functioning vpn.}}
 {{InfoBox stack
 |{{InfoBox homepage|https://openvpn.net/index.php/open-source.html|header=true}}
 |{{InfoBox wikipedia}}
@@ -28,6 +26,120 @@ Device Drivers ->  Network device support
 |static
 }}
 
+== Installation ==
+
+Install openvpn package by running
+
+{{RootCmd|emerge -v net-misc/openvpn}}
+
+== Setup and Configuration ==
+
+=== Server side ===
+
+If this is the first time setting up an openvpn server, we will need to [[Create a Public Key Infrastructure Using the easy-rsa Scripts|create a PKI (Public Key Infrastructure) from scratch]].
+
+{{Note|In this example, we would place all generated keys into <code>/etc/openvpn/exmaple/</code>}}
+
+{{Note|The example will just setup a single server. For multiple openvpn instance, see following 'Gentoo Specifics' section.}}
+
+Write a server-side openvpn configuration.
+
+{{File|/etc/openvpn/openvpn.conf|setup a example udp openvpn server|<pre>
+# server binding port
+port 12112
+
+# openvpn protocol, could be tcp / udp / tcp6 / udp6
+proto udp
+
+# tun/tap devcie
+dev tun0
+
+# keys configuration, use generated keys
+ca example/ca.crt
+cert example/example.crt
+key example/example.key
+dh example/dh2048.pem
+
+# optional tls-auth key to secure identifying
+# tls-auth example/ta.key 0
+
+# OpenVPN 'virtual' network infomation, network and mask
+server 10.100.0.0 255.255.255.0
+
+# persistent device and key settings
+persist-key
+persist-tun
+ifconfig-pool-persist ipp.txt
+
+# pushing route tables
+push "route 192.168.1.0 255.255.255.0"
+# push "dhcp-option DNS 192.168.1.1"
+
+# connection
+keepalive 10 120
+comp-lzo
+
+user nobody
+group nobody
+
+# logging
+status openvpn-status.log
+log /etc/openvpn/openvpn.log
+verb 4</pre>}}
+
+to start openvpn server, run
+
+{{RootCmd|/etc/init.d/openvpn start}}
+
+=== Client side ===
+
+Copy the necessary key files to client, via a '''secure''' way (such as SSH), including
+
+* ca.crt
+* client1.csr (in this example)
+* client1.crt (in this example)
+* client1.key (in this example)
+* ta.key (if using tls-auth)
+
+Write a client-side openvpn configuration.
+
+{{File|/etc/openvpn/openvpn.conf|client-side udp openvpn configuration|<pre>
+# specify client-side
+client
+
+# tun/tap devcie
+dev tun0
+
+# protocol, according to server
+proto udp
+
+# server address
+remote address.to.server 12112
+
+# connection
+comp-lzo
+resolv-retry 30
+nobind
+
+# persistent device and keys
+persist-key
+persist-tun
+
+# keys settings
+ca example/ca.crt
+cert example/client1.crt
+key example/client1.key
+
+# logging
+log /etc/openvpn/openvpn.log
+verb 4</pre>}}
+
+To start client, run
+
+{{RootCmd|/etc/init.d/openvpn start}}
+
+If all goes well, this would give you a working OpenVPN server and client connection.
+
 == Gentoo Specifics ==
 The init script allows multiple tunnels. Decide on a name for the tunnel - eg EXAMPLE
 
@@ -38,6 +150,8 @@ Now create your config as /etc/openvpn/EXAMPLE.conf
 {{RootCmd|/etc/init.d/openvpn.EXAMPLE start}}
 
 You can then create more tunnels by replacing EXAMPLE with more names.  Each one has its own configuration and can be stopped and started individually.  The default is simply to use openvpn.conf and not symlink the service.  You can of course use both methods.
+
+== Trouble shooting ==
 
 == External Resources ==
 
