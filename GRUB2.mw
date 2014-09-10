@@ -279,9 +279,31 @@ Create a FAT filesystem using mkdosfs and add it to fstab.
 {{RootCmd|grub2-install --target{{=}}x86_64-efi}}
 This will install grub in {{Path|/boot/grub}}, copy the core image to {{Path|/boot/efi/EFI/gentoo/grubx64.efi}}, and call efibootmgr to add a boot entry.
 
-efibootmgr may fail if the system is not already booted in EFI mode. If so, you will need to boot your system in EFI mode using an EFI shell or a suitable EFI boot media.
+{{Note|It might  be necessary to build a customized core.img with a few builtin modules to be safe or to satisfy specific requirements.}}
+{{RootCmd|grub2-mkimage -p /grub2 -o /boot/efi/GRUB2/grub.efi -O x86_64-efi ext2 fat lvm part_msdos part_gpt search_fs_uuid normal}}
 
-==== Creating EFI boot media ====
+{{Warning|A successful GRUB2 installation does not ensure that the system will actually boot with GRUB2 after restart; it (just) installs the option to select GRUB2 bootloader from EFI (vendor) interface. So one would have to undergo manual installation.}}
+
+{{Note|According to UEFI 2 specifications, the default bootloader location is ''[EFI System Partition]\EFI\BOOT\BOOTx64.EFI'' for 64bit systems (and ''[EFI System Partition]\EFI\BOOT\BOOTIA32.EFI'' for 32bit systems).}}
+
+{{Note|To override the default boot loader, according to UEFI 2 specifications, one has to run the following command. This is handy when one cannot add an EFI boot entry as the utility will fails if `/sys/firmware/efi/vars/' is not empty meaning that you have to boot in EFI mode to be able to have a non empty directroy.}}
+
+{{RootCmd|cp -a /usr/lib/grub/x86_64-efi/* /boot/efi/GRUB2/}}
+{{RootCmd|cp /boot/efi/GRUB2/grub.efi /boot/EFI/BOOT/BOOTX64.EFI}}
+
+=== Add GRUB meny entry to EFI ===
+{{Note|Darn, I had to go fish in the diff to get this! Do not remove inmportant information. Or I should go elsewere to retrieve some info after adding them hgere?!}}
+
+And then add an boot menu entry with the following command.
+{{RootCmd|efibootmgr --create --gpt --disk /dev/sda --part 1 --write-signature --label "GRUB2" --loader "\\EFI\\GRUB2\\grub.efi"}}
+
+However, before any attempt to add a menu entry to EFI boot menu, inserting EFI module and merge the utility is necessary.
+{{RootCmd|modprobe efivars
+{{Emerge|sys-boot/efibootmgr}}
+
+Of course one has too boot in EFI mode to be able to this. So creating removable boot media may be necessary. See the previous sub-section.
+
+=== Creating EFI boot media ===
 * USB EFI bootable flashdrive can be created with (assuming FAT formatted drive, mounted under {{Path|/media/flashdrive}}) {{RootCmd|grub2-install --target{{=}}x86_64-efi --efi-directory{{=}}/media/flashdrive --removable --modules{{=}}part_gpt}}
 * Kernel support: (re)compile kernel with CONFIG_EFI_VARS{{=}}y OR modprobe efivars. Copy kernel on {{Path|/media/flashdrive/vmlinuz}} for convenience.
 * Reboot machine from the flashdrive in UEFI mode - motherboard/notebook manual should contain instructions on how to do this.
