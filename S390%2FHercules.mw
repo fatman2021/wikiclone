@@ -1,0 +1,104 @@
+== Overview ==
+Installing Gentoo on a hercules...etc
+
+=== Environment ===
+
+== Requirements ==
+To be able to install Gentoo, you'll need the following:
+
+* A machine that is able to run Hercules
+* Hercules, the emulator
+* A network connection
+* iptables if you want to add networking to hercules
+
+== Setting up the z/VM environment for installing ==
+
+=== Overview ===
+
+For installing Gentoo, we're going to transfer the installation files...
+
+=== Choosing the userland ===
+
+Before going further with the process, we have to choose which userland we want to install.
+
+In Gentoo we provide two userlands: a 31-bit one, which in the Linux on zSeries is named as '''''s390''''' and a 64-bit one, which in the Linux on zSeries is called '''''s390x'''''.
+
+=== Downloading the installation images ===
+
+Once you've made up your choice, you can now download the needed files from the mirrors in the experimental directory, blablabla...
+
+
+=== Adjusting boot parameters for the installation image ===
+
+One of the files you've downloadesomething.params''''gentoo.params'''''. You need to edit this file and adjust the '''''dasd=xxx''''' parameter according to your z/VM environment.
+
+If your DASD has the 0190 ID, then you need to put dasd=0190. If you have more than one DASD you can append the IDs of them to the dasd parameter, like dasd=0190,0191,0192, etc.
+
+That will translate, in the Linux environment, the 0190 DASD as /dev/dasda, 0191 as /dev/dasdb and so on...
+
+=== Create the work directory ===
+
+Let's create a directory where our VM will be located, so we can put in there all the files we need. For example, '''/home/user/hercules'''.
+
+{{RootCmd|mkdir hercules
+|cd hercules
+}}
+
+Create the following directories: '''dasd''', '''rdr''' and '''prt'''
+
+{{RootCmd|mkdir dasd rdr prt
+}}
+
+Download the files from http:// to the '''rdr''' directory.
+
+Create a configuration file for hercules, let's call it '''s390x.cnf''' with this content:
+{{GenericCmd|<pre>
+CPUSERIAL 002623        # CPU serial number
+CPUMODEL  2098          # CPU model number
+MAINSIZE  1024           # Main storage size in megabytes
+XPNDSIZE  0             # Expanded storage size in megabytes
+CNSLPORT  3270          # TCP port number to which consoles connect
+NUMCPU    2             # Number of CPUs
+LOADPARM  0120....      # IPL parameter
+OSTAILOR  LINUX         # OS tailoring
+PANRATE   SLOW          # Panel refresh rate (SLOW, FAST)
+ARCHMODE  ESAME         # Architecture mode ESA/390 or ESAME
+
+# .-----------------------Device number
+# |     .-----------------Device type
+# |     |       .---------File name and parameters
+# |     |       |
+# V     V       V
+#---    ----    --------------------
+
+#---    ----    --------------------
+
+# console
+001F    3270
+
+# terminal
+0009    3215
+
+# reader
+000C    3505    ./rdr/gentoo ./rdr/gentoo.parmfile ./rdr/gentoo.igz autopad eof
+
+# printer
+000E    1403    ./prt/print00e.txt crlf
+
+# dasd
+0120    3390    ./dasd/3390.LINUX.0120
+#0121    3390    ./dasd/3390.LINUX.0121
+
+# tape
+0581    3420
+
+# network                               s390     realbox
+0A00,0A01  CTCI -n /dev/net/tun -t 1500 10.1.1.2 10.1.1.1
+</pre>}}
+
+From the first part, the important parameters are '''CPUMODEL''', which specifies which kind of machine we are emulating. Note that Hercules doesn't support all the machines. '''MAINSIZE''' the RAM quantity you want to use for the VM. '''NUMCPU''' is the number of cores you want the VM to have. There are some reports in Debian that Hercules doesn't work well with a high quantity of cores.
+
+
+=== References ===
+* http://www.josefsipek.net/docs/s390-linux/hercules-s390.html
+* http://www.hercules-390.org/
