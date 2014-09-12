@@ -51,6 +51,10 @@ Create the following directories: '''dasd''', '''rdr''' and '''prt'''
 
 Download the files from http:// to the '''rdr''' directory.
 
+
+=== Setup the hercules environment ===
+
+
 Create a configuration file for hercules, let's call it '''s390x.cnf''' with this content:
 {{GenericCmd|<pre>
 CPUSERIAL 002623        # CPU serial number
@@ -96,9 +100,33 @@ ARCHMODE  ESAME         # Architecture mode ESA/390 or ESAME
 0A00,0A01  CTCI -n /dev/net/tun -t 1500 10.1.1.2 10.1.1.1
 </pre>}}
 
-From the first part, the important parameters are '''CPUMODEL''', which specifies which kind of machine we are emulating. Note that Hercules doesn't support all the machines. '''MAINSIZE''' the RAM quantity you want to use for the VM. '''NUMCPU''' is the number of cores you want the VM to have. There are some reports in Debian that Hercules doesn't work well with a high quantity of cores.
+From the first part, the important parameters are '''CPUMODEL''', which specifies which kind of machine we are emulating. Note that Hercules doesn't support all the machines. '''MAINSIZE''' the RAM quantity you want to use for the VM. '''NUMCPU''' is the number of cores you want the VM to have. There are some reports in Debian that Hercules doesn't work well with a high quantity of cores(more than 4)
 
+The other important part is the last line, which defines the networking, the first IP is the one the VM will have while the second is the one the host machine will have.
 
+=== Create the disks ===
+
+Go into the '''dasd''' directory and create the disks. In this guide, we'll use one partition for everything.
+
+{{RootCmd|dasdinit -lfs -linux 3390.LINUX.0120 3390-3 LIN120 4818
+}}
+
+The '''4818''' is the number of cylinders. In this type of storage, each cylinder has 15 tracks per cylinder, and 56832 bytes per track, therefore one cylinder equals to 0.85MBytes. So if you wanted to create a 4GB disk, you should do '''4096 * 0.85''' = 4818 rounded.
+
+=== Run Hercules ===
+
+Let's go back to our root work directory and run hercules:
+{{RootCmd|hercules -f s390.cnf
+}}
+
+=== Setup networking with iptables ===
+
+{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -s 10.1.1.0/24 -j MASQUERADE
+|iptables -A FORWARD -s 10.1.1.0/24 -j ACCEPT
+|iptables -A FORWARD -d 10.1.1.0/24 -j ACCEPT
+|echo 1 > /proc/sys/net/ipv4/ip_forward
+|echo 1 > /proc/sys/net/ipv4/conf/all/proxy_arp
+}}
 === References ===
 * http://www.josefsipek.net/docs/s390-linux/hercules-s390.html
 * http://www.hercules-390.org/
