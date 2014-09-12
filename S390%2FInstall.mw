@@ -43,7 +43,7 @@ That will translate, in the Linux environment, the 0190 DASD as /dev/dasda, 0191
 
 For connecting to the console of the z/VM, you need a 3270 terminal emulator. On a Gentoo system, emerge net-misc/suite3270 with X support.
 
-{{RootCmd| emerge net-misc/suite3270
+{{RootCmd|emerge net-misc/suite3270
 }}
 
 
@@ -59,8 +59,30 @@ In '''Local File Name''' type the full path to the '''gentoo.exec''' file, and i
 Next, we're going to send the binary files '''gentoo''', which is the kernel, and '''gentoo.igz''' which is the initramfs. Select '''Transfer binary file''' and '''Record Format''' as '''Fixed''' and type '''80''' in '''LRECL'''.
 Same as before, in '''Local File Name''', type the full path to the '''gentoo''' file and in '''Host File Name''' type '''GENTOO KERNEL A1'''. For the '''gentoo.igz''' file, type '''GENTOO INITRD A1'''.
 
+Here's a table of how you should transfer files:
+{| class="wikitable"
+|-
+! Local File Name !! Host File Name !! Type !! Record Format !! LECL
+|-
+| gentoo.exec || GENTOO EXEC A1 || ASCII || Variable || Empty
+|-
+| gentoo.params || GENTOO PARMFILE A1 || ASCII || Variable || Empty
+|-
+| gentoo || GENTOO KERNEL A1 || Binary || Fixed || 80
+|-
+| gentoo.igz || GENTOO INITRD A1 || Binary || Fixed || 80
+|}
+
 === Boot the install environment ===
 
+Now, to boot into the install environment, type:
+
+{{GenericCmd|<pre>
+IPL CMS
+GENTOO
+</pre>}}
+
+This should boot into the busybox-based install environment.
 
 == Installing Gentoo ==
 
@@ -78,19 +100,57 @@ What we'll have to do to setup our installation is:
 # Configure hostname and networking (optional, but recommended)
 # Enable SSH access (optional, but recommended)
 # Enable serial console access
-# Setup the network in the install environment
+
+
+=== Setup the network in the install environment ===
 
 In this guide we'll document the configuration of the network using the '''''qeth''''' module.
 
 For using qeth, you need to know the read, write and data bus ID of your virtual network card. In this guide we'll use 0.0.600, 0.0.601 and 0.0.602.
 
-{{RootCmd| modprobe qeth_l3
+{{RootCmd|modprobe qeth_l3
 |echo 0.0.0600,0.0.0601,0.0.0602 > /sys/bus/ccwgroup/drivers/qeth/group
 |echo 0 > /sys/bus/ccwgroup/drivers/qeth/0.0.0600/layer2
 |echo 1 > /sys/bus/ccwgroup/drivers/qeth/0.0.0600/online
 }}
 
 Now you should have the '''''eth0''''' interface ready to be setup.
+
+==== Static networking ====
+
+For configuring the static networking, use '''net-setup''':
+
+In this example, I have a 192.168.1.1/24 IP and my gateway is 192.168.1.254:
+{{RootCmd|net-setup 192.168.1.1/24 192.168.1.254
+}}
+
+==== Dynamic networking ====
+
+{{RootCmd|net-setup dhcp
+}}
+
+==== Networking for something else than eth0 ====
+
+Unfortunately '''net-setup''' only wants to touch eth0 (Will try to fix that), so if your network ends up being anything else than '''eth0''', this is what net-setup does:
+
+===== Static =====
+{{RootCmd|/sbin/ifconfig eth0 192.168.1.1 broadcast 192.168.1.255 netmask 255.255.255.0
+| /sbin/route add -net default gw 192.168.1.254 netmask 0.0.0.0 metric 1 
+}}
+
+===== Dynamic =====
+{{RootCmd|udhcpc -i eth0 -q
+}}
+
+===== Loopback =====
+
+{{Important|This part is important for the SSH daemon to work and must be done in both static and dynamic
+}}
+
+{{RootCmd|/sbin/ifconfig lo 127.0.0.1 
+|/sbin/route add -net 127.0.0.0 netmask 255.0.0.0 gw 127.0.0.1 dev lo 
+}}
+
 
 {{Warning|Its highly recommended to use SSH to finish the install, since it will be more comfortable and you have to use a text editor to finish the installation. However the installation images have a little bug....review this(loopback interface)
 }}
@@ -107,29 +167,29 @@ If you haven't formatted yet your DASD disks outside of Linux, you can do that n
 * Before creating any partitions, you need to initialize the disks. You can do that with dasdfmt.
 
 We initialize the first partition
-{{RootCmd| dasdfmt -f /dev/dasda --label{{=}}gentoo
+{{RootCmd|dasdfmt -f /dev/dasda --label{{=}}gentoo
 }}
 
 For creating partitions, we'll use '''fdasd'''. There are several different modes to run '''fdasd''' in. The first mode is an interactive mode. You can simply do that by running '''fdasd /dev/dasda'''.
 
 There is also a mode that will automatically create one partition on the disk. To keep the setup simple, we'll do that.
 
-{{RootCmd| fdasd -a /dev/dasda -a -l gentoo
+{{RootCmd|fdasd -a /dev/dasda -a -l gentoo
 }}
 
 Now we'll have one partition, '''/dev/dasda1''', which we can format with the known Linux filesystems. In our case, we'll format this partition with '''ext4'''.
 
-{{RootCmd| mkfs.ext4 /dev/dasda1
+{{RootCmd|mkfs.ext4 /dev/dasda1
 }}
 
 Now let's mount this partition on /mnt/gentoo.
 
-{{RootCmd| mount /dev/dasda1 /mnt/gentoo
+{{RootCmd|mount /dev/dasda1 /mnt/gentoo
 }}
 
 And let's change to the mounted directory
 
-{{RootCmd| cd /mnt/gentoo
+{{RootCmd|cd /mnt/gentoo
 }}
 
 === Downloading a stage3 ===
@@ -138,21 +198,21 @@ Remember the choice you made before between 31-bit '''s390''' and 64-bit '''s390
 
 === Extracting a stage3 ===
 
-{{RootCmd| tar xjpf stage3-s390x-latest.tar.bz2 -C /mnt/gentoo
+{{RootCmd|tar xjpf stage3-s390x-latest.tar.bz2 -C /mnt/gentoo
 }}
 
 === Extracting a portage snapshot ===
 
 {{Note| Please note that it may take a while}}
-{{RootCmd| tar xjpf portage-latest.tar.bz2 -C /mnt/gentoo/usr
+{{RootCmd|tar xjpf portage-latest.tar.bz2 -C /mnt/gentoo/usr
 }}
 === Chrooting into your new system ===
 
 To chroot into the real system we need to mount some directories.
 
-{{RootCmd| mount -t proc none /mnt/gentoo/proc
-| mount --rbind /sys /mnt/gentoo/sys
-| mount --rbind /dev /mnt/gentoo/dev
+{{RootCmd|mount -t proc none /mnt/gentoo/proc
+|mount --rbind /sys /mnt/gentoo/sys
+|mount --rbind /dev /mnt/gentoo/dev
 }}
 
 === Setup fstab ===
@@ -172,16 +232,16 @@ This is the most important part of the installation. As without the root passwor
 
 For setting the password, simply run passwd
 
-Code Listing 4.11: Change the default root password
-# passwd
-Setup hostname and networking
+{{RootCmd|passwd}}
+
+=== Setup hostname and networking ===
 
 Please read the network configuration chapter of the ARM handbook to configure the network.
 
 === Enabling SSH access ===
 
 We add sshd to the startup of our system so we can access our system using ssh.
-{{RootCmd| rc-update sshd default
+{{RootCmd|rc-update sshd default
 }}
 
 === Bootloader ===
@@ -190,7 +250,7 @@ We add sshd to the startup of our system so we can access our system using ssh.
 
 Exit from the chroot and umount the filesystem
 
-{{RootCmd| exit
+{{RootCmd|exit
 |umount /mnt/gentoo/sys /mnt/gentoo/proc /mnt/gentoo/dev /mnt/gentoo
 }}
 
@@ -200,7 +260,7 @@ This is pretty much all of the installation. I'd highly recommend that you read 
 
 We need to exit the installation environment before we boot our installed system.
 
-Code Listing 4.14: cmd
+
 IPL SYSTEM CLEAR
 == Booting up our new system ==
 
@@ -209,7 +269,7 @@ something
 == References ==
 
 * http://debblog.philkern.de/2011/11/how-to-install-debian-within-zvm-with.html
-* 
+* http://dev.gentoo.org/~vapier/s390/
 
 == Thanks ==
 * Dave Jones @ V/Soft Software(http://www.vsoft-software.com/]) for providing us access to a z/VM system to document this procedure and his help.
