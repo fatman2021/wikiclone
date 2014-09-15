@@ -1,0 +1,62 @@
+This is a '''draft'''! Nothing of this is really decided upon.
+
+== commit policy ==
+
+* atomic commits (one logical change)
+* commits may span across multiple ebuilds/directories if it's one logical change
+* every commit on the first parent of the history must be gpg signed by a gentoo dev
+* repoman must be run from all related directories (or the top-level directory) on the latest commit that is being pushed
+
+=== commit message format ===
+* all lines max 70-75 chars
+* first line brief explanation
+* second line always empty
+* optional detailed multiline explanation must start at the third line
+* for commits that affect only a single package, prepend "CATEGORY/PN: " to the first line
+* for commits that affect only the profile directory, prepend "profiles: " to the first line
+* for commits that affect only the eclass directory, prepend "ECLASSNAME.eclass: " to the first line
+* for commits that affect only licenses directory, prepend "licenses: " to the first line
+* for commits that affect only metadata directory, prepend "metadata: " to the first line
+
+== branching model ==
+
+* the primary production-ready branch is master (users will pull from here), there are no non-fast-forward pushes allowed
+* there may be developer-specific, task-specific, project-specific branches etc
+
+=== naming convention ===
+
+* developer branches: dev/<name>
+* project branches: project/<name>
+* if in doubt or if the branch could be useful to others, discuss the naming on-list beforehand
+
+=== when/how to rebase ===
+
+* primary use case: in case of a non-fast-forward push conflict to remote master, try 'git pull --rebase=preserve' first; if that yields complicated conflicts, abort the rebase and continue with a regular merge
+* to preserve merges during a rebase use 'git merge --preserve-merges ...' (if appropriate, e.g. for user branches)
+* don't use --preserve-merges if you do an interactive rebase (see BUGS in git-rebase manpage)
+* commits that are not on the remote master branch yet may be rewritten/squashed/splitted etc via interactive rebase, however the rebase must never span beyond those commits
+* never rebase on already pushed commits
+* there are no particular rules for rebasing on non-master remote branches, but be aware that others might base their work on them
+* there are no particular rules for rebasing non-remote branches, as long as they don't clutter the history when merged back into master
+* don't do complicated rebases to avoid a merge commit at all cost (it may even cause losing information, e.g. user signatures)
+
+=== when/how to merge ===
+
+* if a rebase fails or is too complicated, do a regular merge instead
+* do a merge if the information is useful (e.g. pulled from a foreign remote user branch or merged a non-trivial eclass conversion back into master) and force a merge commit (non-fast-forward merge via '--no-ff')
+* to avoid a merge commit (e.g. information is not useful), you may try to force a fast-forward merge by first rebasing the feature branch against master and then merging it into master
+* extend merge commit messages with useful information, e.g. how conflicts were solved
+* keep in mind that all commits of the first parent of the history must be gpg signed by a gentoo dev, so you may want to force merge commits especially for user branches
+
+== remote model ==
+
+We have main developer repo where developers work & commit (every developer has direct push access). For every push into developer repo, automated magic thingie merges stuff into user sync repo and updates the metadata cache there.
+
+User sync repo is for power users than want to fetch via git. It's quite fast and efficient for frequent updates, and also saves space by being free of ChangeLogs.
+
+On top of user sync repo rsync is propagated. The rsync tree is populated with all old ChangeLogs copied from CVS (stored in 30M git repo), new ChangeLogs are generated from git logs and Manifests are expanded.
+
+== best practices ==
+
+* before starting work on your local master, it's good to first pull the latest changeset (if any) from remote master
+* it might be a good idea for projects/developers to accumulate changes either in their own branch or a separate repository and only push to remote master in intervals (that decreases the push rate and potential conflicts)
