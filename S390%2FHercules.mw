@@ -11,7 +11,7 @@ To be able to install Gentoo, you'll need the following:
 * A network connection
 * iptables if you want to add networking to hercules
 
-== Setting up the z/VM environment for installing ==
+== Setting up the Hercules environment for installing ==
 
 === Overview ===
 
@@ -121,7 +121,9 @@ Let's go back to our root work directory and run hercules:
 
 You can ignore the "tun0: Operation not supported" message. 
 
-=== Setup networking with iptables ===
+=== Setup networking in the host machine with iptables ===
+
+In another console, setup the networking.
 
 {{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -s 10.1.1.0/24 -j MASQUERADE
 |iptables -A FORWARD -s 10.1.1.0/24 -j ACCEPT
@@ -129,6 +131,193 @@ You can ignore the "tun0: Operation not supported" message.
 |echo 1 > /proc/sys/net/ipv4/ip_forward
 |echo 1 > /proc/sys/net/ipv4/conf/all/proxy_arp
 }}
+
+=== Boot the Gentoo installation environment ===
+
+Let's start the Gentoo installation environment, inside Hercules type:
+
+{{GenericCmd|'''Command {{=}}{{=}}>''' ipl c
+}}
+
+It may take a while until you get a shell prompt, since it has to emulate all the code.
+
+If everything went well, you should see something like this:
+
+{{GenericCmd|BusyBox v1.20.2 (2013-03-01 11:14:08 UTC) built-in shell (ash)                  
+Enter 'help' for a list of built-in commands.                                   
+                                                                                
+/bin/ash: can't access tty; job control turned off                              
+/ #       
+}}
+
+Great, we have our installation environment ready!
+
+=== Typing into the shell ===
+
+In Hercules, if you want to type into the shell, you have to use a . (dot) before the command, for example:
+
+{{GenericCmd|'''Command {{=}}{{=}}>''' .uptime
+}}
+
+will run '''uptime''' in the shell.
+
+=== Setup the networking in the emulated system ===
+
+Okay, we have the networking setup in the host system, but we have to configure it in the emulated machine as well. We'll use the networking to be able to ssh into the install environment, after all typing the commands with a dot in front and the Hercules console isn't very comfortable.
+
+Inside Hercules, type:
+{{GenericCmd|'''Command {{=}}{{=}}>''' .modprobe ctcm
+|'''Command {{=}}{{=}}>''' .echo 0.0.0a00,0.0.0a01 > /sys/bus/ccwgroup/drivers/ctcm/group
+|'''Command {{=}}{{=}}>''' .echo 1 > /sys/devices/ctcm/0.0.0a00/online
+|'''Command {{=}}{{=}}>''' .ifconfig ctc0 10.1.1.2 pointopoint 10.1.1.1 netmask 255.255.255.255
+|'''Command {{=}}{{=}}>''' .route add default gw 10.1.1.1
+|'''Command {{=}}{{=}}>''' .ifconfig lo 127.0.0.1
+}}
+
+We also need to setup the DNS.
+
+{{GenericCmd|'''Command {{=}}{{=}}>''' .echo 'nameserver 8.8.8.8' > /etc/resolv.conf
+}}
+
+
+This should make the network functional.
+
+=== Setup a password and ssh into the emulated machine ===
+
+Last step before ssh'ing into the machine is setup a password:
+
+{{RootCmd|passwd
+}}
+
+{{Note|Remember that you need to use dots to type in the shell!}}
+
+Great, now let's ssh into the machine from our host machine, in this example the emulated machine should have the IP 10.1.1.2
+
+{{RootCmd|ssh root@10.1.1.2
+}}
+
+type the password you've just set and now we should be inside the install environment!!!
+
+{{Warning|Remember that the emulation is slow, so if it seems unresponsive, just wait a bit more}}
+
+Let's proceed with the installation.
+== Installing Gentoo ==
+
+=== Overview ===
+
+We now have an installation environment where we can prepare our Gentoo s390 system.
+
+What we'll have to do to setup our installation is:
+
+# Initialize and format the DASD disks and mount them
+# Download a stage3 and a portage snapshot
+# Setup fstab
+# Setup root password
+# Configure hostname and networking (optional, but recommended)
+# Enable SSH access (optional, but recommended)
+# Enable serial console access
+
+=== Initializing and formatting the DASD disks ===
+
+If you haven't formatted yet your DASD disks outside of Linux, you can do that now. Here are some informations:
+
+* You need to use '''dasdfmt''' before you can use your DASD
+* Swap Partitions cannot exceed 4GiB
+* A maximum of three partitions can be created on a physical volume
+* No gaps should be left between partitions
+* There is no tool for moving or resizing partitions
+* Before creating any partitions, you need to initialize the disks. You can do that with dasdfmt.
+
+We initialize the first partition
+{{RootCmd|dasdfmt -f /dev/dasda --label{{=}}gentoo
+}}
+
+For creating partitions, we'll use '''fdasd'''. There are several different modes to run '''fdasd''' in. The first mode is an interactive mode. You can simply do that by running '''fdasd /dev/dasda'''.
+
+There is also a mode that will automatically create one partition on the disk. To keep the setup simple, we'll do that.
+
+{{RootCmd|fdasd -a /dev/dasda -a -l gentoo
+}}
+
+Now we'll have one partition, '''/dev/dasda1''', which we can format with the known Linux filesystems. In our case, we'll format this partition with '''ext4'''.
+
+{{RootCmd|mkfs.ext4 /dev/dasda1
+}}
+
+Now let's mount this partition on /mnt/gentoo.
+
+{{RootCmd|mount /dev/dasda1 /mnt/gentoo
+}}
+
+And let's change to the mounted directory
+
+{{RootCmd|cd /mnt/gentoo
+}}
+
+=== Downloading a stage3 ===
+
+Remember the choice you made before between 31-bit '''s390''' and 64-bit '''s390x'''? You have to download a stage3 for the choice you've made before from your favorite mirror.
+
+=== Extracting a stage3 ===
+
+{{RootCmd|tar xjpf stage3-s390x-latest.tar.bz2 -C /mnt/gentoo
+}}
+
+=== Extracting a portage snapshot ===
+
+{{Note| Please note that it may take a while}}
+{{RootCmd|tar xjpf portage-latest.tar.bz2 -C /mnt/gentoo/usr
+}}
+=== Chrooting into your new system ===
+
+To chroot into the real system we need to mount some directories.
+
+{{RootCmd|mount -t proc none /mnt/gentoo/proc
+|mount --rbind /sys /mnt/gentoo/sys
+|mount --rbind /dev /mnt/gentoo/dev
+}}
+
+=== Setup fstab ===
+
+Edit the '''/mnt/gentoo/etc/fstab''' file to look like this:
+
+Code Listing 4.10: /mnt/gentoo/etc/fstab
+
+{{File|/etc/fstab|Example|<pre>
+/dev/dasda1		/		ext4		noatime	0 1
+
+</pre>}}
+
+=== Setting the default root password ===
+
+This is the most important part of the installation. As without the root password we won't be able to login!
+
+For setting the password, simply run passwd
+
+{{RootCmd|passwd}}
+
+=== Setup hostname and networking ===
+
+Please read the network configuration chapter of the ARM handbook to configure the network.
+
+=== Enabling SSH access ===
+
+We add sshd to the startup of our system so we can access our system using ssh.
+{{RootCmd|rc-update sshd default
+}}
+
+=== Bootloader ===
+
+== Finishing the installation ==
+
+Exit from the chroot and umount the filesystem
+
+{{RootCmd|exit
+|umount /mnt/gentoo/sys /mnt/gentoo/proc /mnt/gentoo/dev /mnt/gentoo
+}}
+
+This is pretty much all of the installation. I'd highly recommend that you read all the recommendations of the handbook.
+
 === References ===
 * http://www.josefsipek.net/docs/s390-linux/hercules-s390.html
 * http://www.hercules-390.org/
