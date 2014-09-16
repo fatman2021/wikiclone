@@ -3,6 +3,8 @@
 }}
 This article describes a simple automated backup scheme using the tool '''rsnapshot''', which is based on [[Wikipedia:Rsync|rsync]]. rsnapshot makes a specified number of incremental backups of specified file trees, using [[Wikipedia:Hard link|hard links]] to save space on the backup medium.
 
+The following backup scheme will rotate the backups on a daily, weekly and monthly basis. That means, it will keep a daily snapshot for 7 days, a weekly snapshot for 4 weeks and a monthly snapshot for 12 month. Furthermore, it uses an extra partition for the backup which will be mounted only for the time of the backup process. 
+
 == Setup ==
 
 === Installation ===
@@ -10,11 +12,11 @@ Install {{Package|app-backup/rsnapshot}}:
 {{Emerge|rsnapshot}}
 
 === fstab ===
-Add an entry like the following in your [[fstab]]:
+Assumed the backup partition is labeled ''backup'', formatted with [[ext4]] and it should be mounted on {{Path|/mnt/backup}} during backup: Add an entry like the following in your [[fstab]]:
 {{File|/etc/fstab||<pre>
 LABEL=backup    /mnt/backup    ext4    noatime,noauto    0 0
 </pre>}}
-In this example, the filesystem is [[ext4]], identified by the label ''backup'', and attaches to a special mount point {{Path|/mnt/backup}}. The ''noauto'' option means that this backup filesystem will not be mounted by default.  The backup filesystem would normally be on an external disk.
+The ''noauto'' option means that this backup filesystem will not be mounted by default.  The backup filesystem would normally be on an external device to be safe in the case of a device failure.
 
 === Cron scripts ===
 Create [[cron]] scripts for the different backup intervals:
@@ -22,7 +24,7 @@ Create [[cron]] scripts for the different backup intervals:
 #!/bin/sh
 
 echo "### RSNAPSHOT DAILY ###"
-mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/daily.conf daily || echo "Backup failure"
+mount /mnt/backup && rsnapshot daily || echo "Backup failure"
 umount /mnt/backup
 echo
 </pre>}}
@@ -31,7 +33,7 @@ echo
 #!/bin/sh
 
 echo "### RSNAPSHOT WEEKLY ###"
-mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/weekly.conf weekly || echo "Backup failure"
+mount /mnt/backup && rsnapshot weekly || echo "Backup failure"
 umount /mnt/backup
 echo
 </pre>}}
@@ -40,18 +42,19 @@ echo
 #!/bin/sh
 
 echo "### RSNAPSHOT MONTHLY ###"
-mount /mnt/backup && rsnapshot -c /etc/rsnapshot.d/monthly.conf monthly || echo "Backup failure"
+mount /mnt/backup && rsnapshot monthly || echo "Backup failure"
 umount /mnt/backup
 echo
 </pre>}}
 {{Note|These scripts must be executable.}}
+{{Note|rsnapshot knows nothing about timing. The daily, weekly and monthly parameters are identifiers for rsnapshot without any semnatic meaning. Therefore, it is important to call the daily snapshot only once a day, to call the weekly snapshot only once a week, etc.}}
 
 === rsnapshot configuration files ===
-Set up the rsnapshot configuration files referred to in the scripts above.  
+Set up the rsnapshot configuration file.
 {{Note|rsnapshot configuration files are '''tab delimited'''. Be careful to always use tabs instead of spaces for the options.}}
 {{Note|Filetree specifications are in ''rsync'' format.  See the ''rsync'' [[man page]] for details.}}
-First a base configuration:
-{{File|/etc/rsnapshot.d/base.conf||<pre>
+Default rsnapshot config file:
+{{File|/etc/rsnapshot.conf||<pre>
 # Default config version
 config_version	1.2
 
@@ -69,44 +72,24 @@ one_fs			1
 
 # Store all backups in one directory per machine
 # A useful alternative may be to create a separate directory for each interval
-snapshot_root   /mnt/backup/
+snapshot_root	/mnt/backup/
+
+# increments, which are kept
+retain	daily	7
+retain	weekly	4
+retain	monthly	12
+
+# Backup folder(s)/files
+backup	/path/to/something	localhost/
+backup	/var			localhost/
+
+# Exclude pattern (refer to --exclude-from from rsync man page)
+exclude		/path/to/something/tmp
 </pre>}}
 
-Then, here are sample configuration files for daily, weekly and monthly backups:
-{{File|/etc/rsnapshot.d/daily.conf||<pre>
-include_conf   /etc/rsnapshot.d/base.conf
+In these files, the second argument of ''backup'' specifies a container directory for the backups, usually referring to the machine (in this case, ''localhost'').  This can be changed to any name of your choosing. The final snapshots will be saved under {{Path|/mnt/backup/{daily,weekly,monthly}.[0-9]*/localhost/path/to/something/}}
 
-# Daily (30 increments)
-retain	daily	30
-backup		/home/me/		localhost/
-</pre>}}
-
-{{File|/etc/rsnapshot.d/weekly.conf||<pre>
-include_conf   /etc/rsnapshot.d/base.conf
-
-# Weekly (12 increments)
-retain	weekly	12
-backup		/etc/			localhost/
-# This is for Paludis; for Portage, use /var/lib/portage/world
-backup		/var/db/pkg/world	localhost/
-backup		/boot/			localhost/
-</pre>}}
-
-{{File|/etc/rsnapshot.d/monthly.conf||<pre>
-include_conf   /etc/rsnapshot.d/base.conf
-
-# Monthly (6 increments)
-retain	monthly	6
-exclude		/home/me/
-exclude		/tmp/**
-exclude		/usr/portage/distfiles/**
-exclude		/boot/
-exclude		/home/scratch/**
-exclude		/var/tmp/ccache/**
-backup		/			localhost/
-</pre>}}
-
-In these files, the second argument of ''backup'' specifies a container directory for the backups, usually referring to the machine (in this case, ''localhost'').  This can be changed to any name of your choosing.
+{{Note|rsnapshot will always take the last daily snapshot to create the first weekly snapshop and the last weekly snapshot to create the first monthly one. It will not take the 7th daily snapshot to create the first weekly snapshot. Therefore, it is possible to keep less or more than 7 daily snapshots, but is this case the first weekly snapshot is not one week old.}}
 
 == Restoration ==
 To restore the ''localhost'' backups specified above, we would use
