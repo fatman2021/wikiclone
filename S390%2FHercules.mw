@@ -108,10 +108,10 @@ The other important part is the last line, which defines the networking, the fir
 
 Go into the '''dasd''' directory and create the disks. In this guide, we'll use one partition for everything.
 
-{{RootCmd|dasdinit -lfs -linux 3390.LINUX.0120 3390-3 LIN120 4818
+{{RootCmd|dasdinit -lfs -linux 3390.LINUX.0120 3390-3 LIN120 6963
 }}
 
-The '''4818''' is the number of cylinders. In this type of storage, each cylinder has 15 tracks per cylinder, and 56832 bytes per track, therefore one cylinder equals to 0.85MBytes. So if you wanted to create a 4GB disk, you should do '''4096 * 0.85''' = 4818 rounded.
+The '''4818''' is the number of cylinders. In this type of storage, each cylinder has 15 tracks per cylinder, and 56832 bytes per track, therefore one cylinder equals to 0.85MBytes. So if you wanted to create a 8GB disk, you should do '''8192 * 0.85''' = 6963 rounded.
 
 === Run Hercules ===
 
@@ -277,11 +277,20 @@ To chroot into the real system we need to mount some directories.
 |mount --rbind /dev /mnt/gentoo/dev
 }}
 
+Copy the '''/etc/resolv.conf''' file to the new system
+
+{{RootCmd|cp -L /etc/resolv.conf /mnt/gentoo/etc
+}}
+
+Finally, let's chroot into the new system
+
+{{RootCmd|chroot /mnt/gentoo /bin/bash
+|source /etc/profile
+|env-update
+}}
 === Setup fstab ===
 
 Edit the '''/mnt/gentoo/etc/fstab''' file to look like this:
-
-Code Listing 4.10: /mnt/gentoo/etc/fstab
 
 {{File|/etc/fstab|Example|<pre>
 /dev/dasda1		/		ext4		noatime	0 1
@@ -298,7 +307,16 @@ For setting the password, simply run passwd
 
 === Setup hostname and networking ===
 
-Please read the network configuration chapter of the ARM handbook to configure the network.
+Edit the '''/etc/conf.d/net''' file like this, to fit our example:
+
+{{File|/etc/conf.d/net|Example|<pre>
+config_eth0="10.1.1.2/32"
+routes_eth0="default via 10.1.1.1"
+ccwgroup_eth0="0.0.0a00 0.0.0a01"
+ccwgroup_type_eth0="ctc"
+
+</pre>}}
+
 
 === Enabling SSH access ===
 
@@ -306,18 +324,85 @@ We add sshd to the startup of our system so we can access our system using ssh.
 {{RootCmd|rc-update sshd default
 }}
 
+=== Kernel ===
+
+We have to build a kernel first. Let's emerge a kernel source.
+
+Unfortunately s390 is nowadays an unstable arch in Gentoo, so this means that some packages aren't stable. One of those packages is gentoo-sources. So before we emerge '''gentoo-sources''', we have to do:
+
+{{RootCmd|echo 'sys-kernel/gentoo-sources **' > /etc/portage/package.keywords
+}}
+
+Once you've done that, we'll do:
+
+{{RootCmd|emerge gentoo-sources
+}}
+
+Once that is done, we should have in /usr/src/linux the kernel sources, so let's cd into that directory.
+
+{{RootCmd|cd /usr/src/linux
+}}
+
+We need a kernel configuration file. To make sure we are able to boot our Hercules VM we'll use the kernel configuration from the installation environment.
+
+{{RootCmd|zcat /proc/config.gz .config
+}}
+
+Now let's compile it and its modules
+
+{{RootCmd|make && make modules && make modules_install
+}}
+
+Once that is done, copy the kernel file to the '''/boot''' directory:
+
+{{RootCmd|cp arch/s390/boot/image /boot/image
+}}
+
 === Bootloader ===
 
+Edit the '''/etc/zipl.conf''' file like this, to fit our example:
+
+{{File|/etc/zipl.conf|Example|<pre>
+[defaultboot]
+defaultmenu = menu
+
+[Gentoo]
+    image = /boot/image
+    target = /boot/zipl
+    parameters = "dasd=0150 root=/dev/dasda1 rootfstype=ext4 TERM=dumb"
+
+:menu
+    default = 1
+    prompt = 1
+    target = /boot/zipl
+    timeout = 10
+    1 = Gentoo
+
+</pre>}}
+
+Now let's run '''zipl''':
+
+{{RootCmd|zipl
+}}
 == Finishing the installation ==
 
-Exit from the chroot and umount the filesystem
+Great, we're done. Let's exit from the chroot and umount the filesystem
 
 {{RootCmd|exit
 |umount /mnt/gentoo/sys /mnt/gentoo/proc /mnt/gentoo/dev /mnt/gentoo
 }}
 
-This is pretty much all of the installation. I'd highly recommend that you read all the recommendations of the handbook.
+
+
+== Boot our installed system ==
+
+How to boot...
+
+{{GenericCmd|'''Command ${{=}}${{=}}>''' ipl 120
+}}
 
 === References ===
 * http://www.josefsipek.net/docs/s390-linux/hercules-s390.html
 * http://www.hercules-390.org/
+* http://dev.gentoo.org/~vapier/s390/
+* http://dev.gentoo.org/~vapier/s390/hercules
