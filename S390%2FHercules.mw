@@ -1,7 +1,5 @@
 == Overview ==
-Installing Gentoo on a hercules...etc
-
-=== Environment ===
+This guide is about installing Gentoo in a emulated S390 machine using Hercules.
 
 == Requirements ==
 To be able to install Gentoo, you'll need the following:
@@ -15,26 +13,15 @@ To be able to install Gentoo, you'll need the following:
 
 === Overview ===
 
-For installing Gentoo, we're going to transfer the installation files...
+For installing Gentoo, we're going to need to download some files for the installation environment. Once we boot into the installation environment, we'll be able to install Gentoo.
+
+Keep reading.
 
 === Choosing the userland ===
 
 Before going further with the process, we have to choose which userland we want to install.
 
 In Gentoo we provide two userlands: a 31-bit one, which in the Linux on zSeries is named as '''''s390''''' and a 64-bit one, which in the Linux on zSeries is called '''''s390x'''''.
-
-=== Downloading the installation images ===
-
-Once you've made up your choice, you can now download the needed files from the mirrors in the experimental directory, blablabla...
-
-
-=== Adjusting boot parameters for the installation image ===
-
-One of the files you've downloadesomething.params''''gentoo.params'''''. You need to edit this file and adjust the '''''dasd=xxx''''' parameter according to your z/VM environment.
-
-If your DASD has the 0190 ID, then you need to put dasd=0190. If you have more than one DASD you can append the IDs of them to the dasd parameter, like dasd=0190,0191,0192, etc.
-
-That will translate, in the Linux environment, the 0190 DASD as /dev/dasda, 0191 as /dev/dasdb and so on...
 
 === Create the work directory ===
 
@@ -49,7 +36,17 @@ Create the following directories: '''dasd''', '''rdr''' and '''prt'''
 {{RootCmd|mkdir dasd rdr prt
 }}
 
-Download the files from http:// to the '''rdr''' directory.
+=== Downloading the installation images ===
+
+Once you've made up your choice, you can now download the needed files from the mirrors. In the s390 autobuilds directory, inside the directory with the last date, there should be another directory called '''netboot'''.
+
+In there, there should be two more directories, '''s390''' and '''s390x''', select one of the directories depending in the choice you made in the previous step, whether you want 31bit or 64bit. Once you've made your choice, download the following files:
+
+* gentoo
+* gentoo.igz
+* gentoo.params
+
+and put them into the '''rdr''' directory.
 
 
 === Setup the hercules environment ===
@@ -307,15 +304,36 @@ For setting the password, simply run passwd
 
 === Setup hostname and networking ===
 
+Edit the '''/etc/conf.d/hostname''' file to adjust the hostname:
+{{File|/etc/conf.d/hostname|Example|<pre>
+# Set to the hostname of this machine
+hostname="s390"
+</pre>}}
+
 Edit the '''/etc/conf.d/net''' file like this, to fit our example:
 
 {{File|/etc/conf.d/net|Example|<pre>
-config_eth0="10.1.1.2/32"
-routes_eth0="default via 10.1.1.1"
-ccwgroup_eth0="0.0.0a00 0.0.0a01"
-ccwgroup_type_eth0="ctc"
+config_ctc0="10.1.1.2/30"
+routes_ctc0="default via 10.1.1.1"
+ccwgroup_ctc0="0.0.0a00 0.0.0a01"
+ccwgroup_type_ctc0="ctcm"
 
 </pre>}}
+
+=== Adjust inittab ===
+
+You have to adjust the following lines in the '''/etc/inittab''':
+{{File|/etc/inittab|Example|<pre>
+# TERMINALS                                                                     
+#c1:12345:respawn:/sbin/agetty 38400 tty1 linux
+#c2:2345:respawn:/sbin/agetty 38400 tty2 linux
+#c3:2345:respawn:/sbin/agetty 38400 tty3 linux
+#c4:2345:respawn:/sbin/agetty 38400 tty4 linux
+#c5:2345:respawn:/sbin/agetty 38400 tty5 linux
+#c6:2345:respawn:/sbin/agetty 38400 tty6 linux
+</pre>}}
+
+In other words, you have to comment the tty1-6 lines.
 
 
 === Enabling SSH access ===
@@ -324,6 +342,15 @@ We add sshd to the startup of our system so we can access our system using ssh.
 {{RootCmd|rc-update sshd default
 }}
 
+=== Remove errors from boot process ===
+
+There are two init scripts that in our s390 machine aren't going to work: '''termencoding''' and '''keymaps'''. The failures will show up as a failures in the console.
+
+To avoid the useless messages, because they aren't going to work in our machine, let's remove them from the boot process:
+
+{{RootCmd|rc-update del termencoding boot
+|rc-update del keymaps boot
+}}
 === Kernel ===
 
 We have to build a kernel first. Let's emerge a kernel source.
@@ -369,7 +396,7 @@ defaultmenu = menu
 [Gentoo]
     image = /boot/image
     target = /boot/zipl
-    parameters = "dasd=0150 root=/dev/dasda1 rootfstype=ext4 TERM=dumb"
+    parameters = "dasd=0120 root=/dev/dasda1 rootfstype=ext4 TERM=dumb net.ifnames=0"
 
 :menu
     default = 1
@@ -384,22 +411,84 @@ Now let's run '''zipl''':
 
 {{RootCmd|zipl
 }}
+
+If everything went fine it should output something like this:
+
+{{GenericCmd|<pre>
+Using config file '/etc/zipl.conf'
+Building bootmap in '/boot/zipl'
+Building menu 'menu'
+Adding #1: IPL section 'Gentoo' (default)
+Preparing boot device: dasda (0120).
+Done.
+</pre>
+}}
 == Finishing the installation ==
 
 Great, we're done. Let's exit from the chroot and umount the filesystem
 
 {{RootCmd|exit
-|umount /mnt/gentoo/sys /mnt/gentoo/proc /mnt/gentoo/dev /mnt/gentoo
+|cd
+|umount /mnt/gentoo/sys /mnt/gentoo/proc /mnt/gentoo/dev/shm /mnt/gentoo/dev/pts /mnt/gentoo/dev /mnt/gentoo
 }}
 
+And let's power off the machine:
 
+{{RootCmd|poweroff -f
+}}
 
 == Boot our installed system ==
 
 How to boot...
 
-{{GenericCmd|'''Command ${{=}}${{=}}>''' ipl 120
+{{GenericCmd|'''Command {{=}}{{=}}>''' ipl 120
 }}
+
+== Issues ==
+
+These are some issues when running hercules:
+
+=== Reboot doesn't work ===
+Rebooting doesn't seem to work. When you reboot, hercules will start displaying some messages like:
+
+{{GenericCmd|<pre>
+ CPU0000: Operand exception CODE=0015 ILC=4                            
+CPU0000:  PSW=00000000 80000000 0000000000111170 INST=B232D116     MSCH  278(13)
+CPU0000:  R:000000000011125C:K:06=00000000 00000000 00000000 00000000  .........
+CPU0000: R0=0000000000000000 R1=00000000001110A0                                
+CPU0000: R2=00000000001110A0 R3=0000000080000000                                
+CPU0000: R4=00000000003EA250 R5=0000000000000000                                
+CPU0000: R6=0000000000000000 R7=0000000000772010                                
+CPU0000: R8=000000003FFFF000 R9=000000000010DAB0
+...
+</pre>
+}}
+
+The only way I have found to stop these messages and boot again is with the following commands:
+
+{{GenericCmd|'''Command {{=}}{{=}}>''' stopall
+|'''Command {{=}}{{=}}>''' ipl 120
+}}
+
+=== Unable to boot the install environment after issuing 'ipl 120' ===
+
+I have found that if you have been running your system with 'ipl 120', after stopping it and issuing 'ipl c', hercules answers:
+
+{{GenericCmd|<pre>
+HHCCP029E z/Arch mode IPL failed: CSW status=0D00                               
+           Sense=00000000           
+</pre>
+}}
+
+To fix this, you need to reinitialize the card reader, you can do that with:
+
+{{GenericCmd|'''Command {{=}}{{=}}>''' devinit c
+}}
+
+And then you can run 'ipl c' again.
+
+== Tips and tricks ==
+* To power off the machine when you can't login, type '''ssd''' into the hercules command line. It should send a shutdown signal to the machine.
 
 === References ===
 * http://www.josefsipek.net/docs/s390-linux/hercules-s390.html
