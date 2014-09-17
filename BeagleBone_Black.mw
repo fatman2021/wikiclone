@@ -1,34 +1,36 @@
 == Installing Gentoo on a Beaglebone Black Rev. C ==
-These instructions are specifically for the Beaglebone Black Rev. C.  I found some instructions here [http://dev.gentoo.org/~armin76/arm/beagleboneblack/install.xml] but they were outdated and for a 3.8 kernel.  This guide will utilize a 3.14.17 kernel.  This was several days of frustration to even get it booting.
+These instructions are specifically for the Beaglebone Black Rev. C.  I found some instructions here [http://dev.gentoo.org/~armin76/arm/beagleboneblack/install.xml] but they were outdated and for a 3.8 kernel.  This guide will utilize a 3.14.17 kernel.
 
-===You will need: ===
+=== You will need ===
 *USB -> serial port debug connector so you can view boot errors, see the u-boot prompt if necessary, and not have to switch out HDMI cables on your monitor.  As described here: [http://elinux.org/Beagleboard:BeagleBone_Black_Serial Elinux.org].
 *4GB micro SD card to create the Gentoo image (you can flash to NAND later).
 *An SD card reader/writer to write the Gentoo image.
 
-===Emerge the toolchain: ===
-*<code>emerge dev-vcs/git sys-devel/crossdev sys-fs/dosfstools app-arch/lzop</code>.  Do not merge u-boot-tools as we will be using a version of u-boot configured specifically for the BBB (Beaglebone Black).
+=== Emerge the toolchain ===
+*<code>emerge dev-vcs/git sys-devel/crossdev sys-fs/dosfstools app-arch/lzop</code><br>
+Do not merge u-boot-tools as we will be using a version of u-boot configured specifically for the BBB (Beaglebone Black).
 
-===Create an overlay for crossdev:===
-<code>mkdir -p /usr/local/portage/{metadata,profiles}<br>
+=== Create an overlay for crossdev ===
+<code>
+mkdir -p /usr/local/portage/{metadata,profiles}<br>
 echo "local_overlay" > /usr/local/portage/profiles/repo_Name<br>
 echo "masters = gentoo" > /usr/local/portage/metadata/layout.conf<br>
 chown -R portage:portage /usr/local/portage<br>
 edit /etc/make.conf: <code>PORTDIR_OVERLAY="/usr/local/portage"
-</code>
+</code><br>
 More info: [http://wiki.gentoo.org/wiki/Overlay/Local_overlay]
 
-===Setup portage for crossdev:===
+=== Setup portage for crossdev ===
 <code>
 mv -i package.use use && mkdir package.use && mv use package.use<br>
-mv -i package.accept_keywords && mkdir package.accept_keywords && mv accept_keywords package.accept_keywords<br>
+mv -i package.accept_keywords accept_keywords && mkdir package.accept_keywords && mv accept_keywords package.accept_keywords<br>
 mv -i package.license license && mkdir package.license && mv license package.license<br>
 mv -i package.mask mask && mkdir package.mask && mv mask package.mask<br>
 mv -i package.keywords keywords && mkdir package.keywords && mv keywords package.keywords
-</code>
+</code><br>
 More info: [https://forums.gentoo.org/viewtopic-t-959774-start-0.html]
 
-===Run Crossdev and let it setup a build environment:===
+=== Run Crossdev and let it setup a build environment ===
 *I settled on the tuple: "armv7a-hardfloat-linux-gnueabihf."  TI recommends: "arm-linux-gnueabihf."[http://processors.wiki.ti.com/index.php/Linux_Core_U-Boot_User%27s_Guide]
 *<code>crossdev -S -P -v -t armv7a-hardfloat-linux-gnueabihf</code>
 *Test with:
@@ -36,16 +38,16 @@ More info: [https://forums.gentoo.org/viewtopic-t-959774-start-0.html]
 **You should see binutils, gcc, glibc, linux-headers, and gdb under /usr/local/portage/cross-armv7a-hardfloat-linux-gnueabihf and stuff under /usr/armv7a-hardfloat-linux-gnueabihf.
 *If you change your mind on the tuple, <code>crossdev -C armv7a-hardfloat-linux-gnueabihf</code>.
 
-===Configure U-Boot for the BBB===
-*FYI: the source from https://github.com/beagleboard/u-boot is out-of-date.
+=== Configure U-Boot for the BBB ===
+*FYI: the source from [https://github.com/beagleboard/u-boot] is out-of-date.
 *make a build directory: <code>mkdir ~/bbb</code>
 *grab latest stable from ftp://ftp.denx.de/pub/u-boot/u-boot-2014.07.tar.bz2 and extract.
-*<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- am335x_boneblack_config</code>.  I did not know about this make target until I saw this: [http://www.crashcourse.ca/wiki/index.php/U-Boot_on_the_BBB].
+*<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- am335x_boneblack_config</code>.  I did not know about this make target until I found this article: [http://www.crashcourse.ca/wiki/index.php/U-Boot_on_the_BBB].
 *<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf-</code>
 *install mkimage so it's in your path.  As root: <code>install tools/mkimage /usr/local/bin</code>.
 *to test: <code>mkimage -V</code> should say 2014.07.
 
-===Grab kernel configured specifically for the Beaglebone===
+=== Grab kernel configured specifically for the Beaglebone ===
 *FYI, [https://github.com/beagleboard/kernel.git] is deprecated.
 *This one from beaglebone.org will build the firmware into the kernel under firmware and I believe the sources are already patched, unlike the older versions where you had to run patch.sh.
 *Go to [https://github.com/beagleboard/linux.git] and decide which branch you want to check out.  I settled on the latest long-term release kernel, 3.14.
@@ -75,7 +77,7 @@ mkdir ~/bbb/linux_modules<br>
 make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- INSTALL_MOD_PATH=../linux_modules modules_install
 </code>
 
-===Create the root filesystem for this SD card.===
+=== Create the root filesystem for the SD card ===
 *grab Gentoo source from your mirror, under releases/arm/autobuilds/20140819/stage3-armv7a_hardfp-20140819.tar.bz2 and snapshots/portage-latest.tar.bz2.
 *<code>mkdir ~/bbb/deploy</code>
 *As root, extract the stage3 since it will execute mknod: <code>tar xjpf stage3-armv7a_hardfp-20121006.tar.bz2 -C ~/bbb/deploy</code>
@@ -100,7 +102,7 @@ make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- INSTALL_MOD_PATH=.
 s0:12345:respawn:/sbin/agetty -L 115200 ttyO0 vt100
 </code>
 
-====Optional====
+==== Optional ====
 *setup a static IP on your BBB first, since we don't have dhcpcd installed: edit ~/bbb/deploy/etc/conf.d/net.
 <code>
 config_eth0="<your IP> netmask <your netmask> brd <network broadcast IP>"<br>
@@ -124,14 +126,14 @@ ls /usr/share/zoneinfo<br>
 echo "America/YOUR_TIMEZONE" > deploy/etc/timezone<br>
 </code>
 
-===Create the root filesystem for this SD card (resumed)===
+=== Finish creating the root filesystem for the SD card ===
 *tar it all up:
 <code>
 cd ~/bbb/deploy<br>
 tar cvzpf ../deploy.tar.gz .
 </code>
 
-===Format the MicroSD card the way BeagleBoard wants it.===
+=== Format the MicroSD card the way BeagleBoard wants it ===
 *Similar scripts: [https://github.com/beagleboard/image-builder/blob/master/tools/setup_sdcard.sh], [http://dev.gentoo.org/~armin76/arm/beaglebone/mkcard.sh], [http://omappedia.org/wiki/Minimal-FS_SD_Configuration].
 *I chose a modified version of TI's from here: [http://downloads.ti.com/dsps/dsps_public_sw/psp/LinuxPSP/AM335x_04_06/04_06_00_08/index_FDS.html].  Original is under host-tools/mksd-am335x.sh.
  #!/bin/bash
@@ -217,7 +219,7 @@ cd ~/bbb
 </code>
 *Don't pull out the card until the light on the SD-Card reader stops flashing, even if the script has stopped.  I guess it takes awhile for the journal to catch up.  Check df -kh (and watch it go down in size, weird) and dmesg for more info and possible errors.  I have seen <code>INFO: task umount:2515 blocked for more than 120 seconds.</code> messages before and it will still be blinking.
 
-===Almost ready===
+=== Almost ready ===
 *Emerge a serial terminal emulator like PuTTY, etc.
 *Create a profile with these settings:
  /dev/ttyUSB0
@@ -231,10 +233,11 @@ cd ~/bbb
 *Insert your SD card into the BBB.
 *Hold down the button closest to the SD card and press the button closest to the Ethernet port once.  More info: [http://elinux.org/Beagleboard:BeagleBoneBlack#BeagleBone_Black_Connector_and_Switch_Locations].
 
-===Moment of truth===
+=== Moment of truth ===
 *You should see a Gentoo prompt!  Thank God!
 
-===Optional follow-on (you should now have a running system and network connectivity)===
+=== Optional follow-on ===
+*you should now have a running system and network connectivity)<br>
 <code>
 date MMDDhhmmYYYY<br>
 emerge --config sys-libs/timezone-data<br>
@@ -242,7 +245,7 @@ emerge --config sys-libs/timezone-data<br>
 *Time will start from this point on next time you boot: <code>touch /sbin/rc</code>
 *emerge --sync
 
-===Tips and tricks===
+=== Tips and tricks ===
 *Do not bother setting boot options in the kernel: u-boot will override them.
 *You can create a /boot/uEnv.txt and override u-boot settings if you want.  I couldn't figure this out so please add this info if you can.
 *If you just need to tweak u-boot or kernel files:
