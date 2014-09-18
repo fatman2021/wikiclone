@@ -27,56 +27,17 @@ Once you have installed dracut, you can use it to build an initramfs image. The 
 The initramfs image created this way is a generic image, which will include all installed modules and system tools that it can find, suitable for booting a variety of machines. If you are producing an initramfs for just a single machine, you can specify that dracut should go into host-only mode:
 {{RootCmd|dracut --hostonly}}
 
-The produced image will contain only those elements used by the local machine for booting. Certain modules behave differently in host-only mode. The kernel-modules module, for example, will only include the tools and modules used by the current rootfs file system, and the i18n module will install the fonts and keymaps for the local machine. Otherwise, every available file system, font, etc. would be included.
+The produced image will contain only those elements used by the local machine for booting. Certain modules behave differently in host-only mode. The kernel-modules module, for example, will only include the tools and modules used by the current rootfs file system, and the i18n module will install the fonts and keymaps for the local machine. Otherwise, every available file system, font, etc. would be included. You can set hostonly mode as the default in {{path|/etc/dracut.conf}}.
 
-By default, dracut will produce an image suitable for booting the currently active kernel; it will pull the kernel modules needed for that kernel, etc. The output will be written into your {{path|/boot}} folder (which you should already have mounted), in a file called {{path|/boot/initramfs-<kernel version>.img}}. You can override both options by specifying a new file name and kernel version on the command line, in that order. Both parameters are optional, but if you want to override the kernel version and keep the default file name you need to pass a placeholder empty string as the first parameter:
+By default, dracut will produce an image suitable for booting the currently active kernel; it will pull the kernel modules needed for that kernel, etc. The output will be written into your current folder, in a file called {{path|/boot/initramfs-<kernel version>.img}}. You can override both options by specifying a new file name and kernel version on the command line, in that order. Both parameters are optional, but if you want to override the kernel version and keep the default file name you need to pass a placeholder empty string as the first parameter:
 
 {{RootCmd|dracut --hostonly <nowiki>''</nowiki> 3.2.5-hardened}}
 
-=== Default Modules ===
-When installed without any use flags, dracut installs a basic set of modules that can boot a system using a locally attached block device for its rootfs. The purpose of each module is to arrange for files to be included in the final initramfs image. In addition, dracut exposes hooks that run at certain points, which modules can hook into to perform required boot actions.
+=== Modules ===
+Dracut installs all available modules though some may need additional dependencies. The purpose of each module is to arrange for files to be included in the final initramfs image. In addition, dracut exposes hooks that run at certain points, which modules can hook into to perform required boot actions.
 
-{| class="wikitable"
-! Module !! Description !! Enabled?
-|-
-| dash || includes {{Path|/bin/dash}} as {{Path|/bin/sh}} || always
-|-
-| i18n || includes keymaps, console fonts, etc. || always
-|-  
-| rpmversion || includes dracut version in initramfs || when {{path|/etc/redhat-release}} exists
-|-
-| convertfs || merges {{Path|/}} into {{Path|/usr}} on next boot || never
-|-
-| kernel-modules || includes the kernel modules for root filesystems and other boot-time devices || always
-|-
-| fstab-sys || arranges for arbitrary partitions to be mounted before rootfs || when {{Path|/etc/fstab.sys}} exists, or command line includes <code>--fstab</code> or <code>--add_fstab</code>
-|-
-| resume || allows initramfs to resume from low-power state || when swap partition exists
-|- 
-| rootfs-block || arranges for the block device containing the rootfs to be mounted || always
-|-
-| terminfo || includes a terminfo file || always
-|-
-| udev-rules || includes udev and some basic rules || always
-|-
-| securityfs || arranges for the securityfs to be mounted early || never
-|-
-| usrmount || arranges for {{Path|/usr}} to be mounted  || always
-|-
-| base || includes most basic utilities || always
-|- 
-| fs-lib || includes filesystem tools (including mount) || always
-|-
-| img-lib || includes tools to decompress images || never
-|-
-| shutdown || sets up hooks to run on shutdown || always
-|}
-
-* The Enabled field indicates when a particular module will be included ''by default'' into your initramfs image.
-* Modules with pre-requisite packages cannot be included (even explicitly) if the required software is missing from the host.
-
-=== Adding Modules ===
-The table above indicates when a particular module will be included in your initramfs image by default. You can override this module list in two ways: command line, or configuration file. Editing your configuration file will set up dracut to be re-run easily when you change kernels or other boot-time options. Options specified in {{path|/etc/dracut.conf}} can be overridden by files in {{path|/etc/dracut.conf.d}}, which are installed by various dracut-aware packages. Both options can be overridden by command-line parameters. The following configuration options deal with the default modules list:
+== Adding Modules ==
+Dracut comes with a suitable set of defaut modules (see below). You can override this module list in two ways: command line, or configuration file. Editing your configuration file will set up dracut to be re-run easily when you change kernels or other boot-time options. Options specified in {{path|/etc/dracut.conf}} can be overridden by files in {{path|/etc/dracut.conf.d}}, which are installed by various dracut-aware packages. Both options can be overridden by command-line parameters. The following configuration options deal with the default modules list:
 
 {{File|/etc/dracut.conf||<pre>
 # Equivalent to -H
@@ -96,62 +57,96 @@ Specifying <code>dracutmodules</code> (or the <code>-m</code> parameter) will ov
 
 The other options can be used to add or remove items from the default list, including your own [[#Custom_Modules|custom modules]]. If a module refuses to install (for example, its prerequisite binaries are mossing) there is a <code>--force-add</code> command-line switch (but no matching configuration option) to add them anyway. Note that forcing a module to be added this way is dangerous, as the installed scripts will likely to run execute commands that are not present.
 
-=== Optional Modules ===
-Each additional module you include brings with it additional prerequisite packages, and may require {{highlight|USE}} flag changes to dependent packages. In most cases, you should already have the additional packages installed.
+== List of Modules ==
 
-The optional modules included as of {{package|sys-kernel/dracut-016}} are listed below, with their additional requirements. 
+An incomplete list of modules is below, with their additional requirements. 
 
-{|class="wikitable sortable"
-! Module !! Purpose !! Enabled? !! USE Flag !! Additional Packages
+{| class="wikitable"
+! Module !! Description !! Enabled? !!  Additional Packages
 |-
-| biosdevname || enables BIOS network device renaming  || always || || {{package|sys-apps/biosdevname}}, {{package|sys-apps/pciutils}}
+| dash || includes {{Path|/bin/dash}} as {{Path|/bin/sh}} || always ||
 |-
-| btrfs || supports a btrfs rootfs || host-only: rootfs || || {{package|sys-fs/btrfs-progs}}
+| i18n || includes keymaps, console fonts, etc. || always ||
+|-  
+| rpmversion || includes dracut version in initramfs || when {{path|/etc/redhat-release}} exists ||
 |-
-| caps || supports dropping capabilities before init || always || || {{package|sys-libs/libcap}} (also replaces <code>dash</code> with <code>bash</code>)
+| convertfs || merges {{Path|/}} into {{Path|/usr}} on next boot || never ||
+|-
+| kernel-modules || includes the kernel modules for root filesystems and other boot-time devices || always ||
+|-
+| fstab-sys || arranges for arbitrary partitions to be mounted before rootfs || when {{Path|/etc/fstab.sys}} exists, or command line includes <code>--fstab</code> or <code>--add_fstab</code> ||
+|-
+| resume || allows initramfs to resume from low-power state || when swap partition exists ||
 |- 
-| crypt || supports an encrypted rootfs || host-only: rootfs || <code>device-mapper</code>, <code>static-libs</code><sup>4</sup> || {{package|sys-fs/cryptsetup}}
+| rootfs-block || arranges for the block device containing the rootfs to be mounted || always ||
 |-
-| crypt-gpg || use gpg for crypt support (requires <code>crypt</code> module) || never || || {{package|app-crypt/gnupg}}
+| terminfo || includes a terminfo file || always ||
 |-
-| dmraid || support rootfs on FakeRAID || host-only: rootfs || <code>device-mapper</code> || {{package|sys-fs/multipath-tools}}, {{package|sys-fs/dmraid}}
+| udev-rules || includes udev and some basic rules || always ||
 |-
-| dmsquash-live || supports LiveCD rootfs || never (host-only: refused) || <code>device-mapper</code> ||
+| securityfs || arranges for the securityfs to be mounted early || never ||
 |-
-| gensplash || include a static splash screen || never || <code>static-libs</code><sup>4</sup> || {{package|media-gfx/splashutils}}
+| usrmount || arranges for {{Path|/usr}} to be mounted  || always ||
 |-
-| iscsi || supports rootfs on iscsi devices || host-only: rootfs || <code>net</code> || {{package|sys-block/open-iscsi}}
+| base || includes most basic utilities || always ||
 |- 
-| livenet || retrieve rootfs over HTTP (requires <code>dmsquash-live</code> modules) || never || <code>device-mapper</code>, <code>net</code> ||
+| fs-lib || includes filesystem tools (including mount) || always ||
 |-
-| lvm  || supports rootfs on LVM device || host-only: rootfs || <code>device-mapper</code> || {{package|sys-fs/lvm2}}
+| img-lib || includes tools to decompress images || never ||
 |-
-| mdraid || supports rootfs on software RAID || host-only: rootfs ||  || {{package|sys-fs/mdadm}}
+| shutdown || sets up hooks to run on shutdown || always ||
 |-
-| multipath || supports rootfs on multi-path device || host-only: rootfs || || {{package|sys-fs/multipath-tools}}
+| biosdevname || enables BIOS network device renaming  || always || {{package|sys-apps/biosdevname}}, {{package|sys-apps/pciutils}} 
 |-
-| nbd || supports rootfs on a network block device || host-only: rootfs || <code>net</code> || {{package|sys-block/nbd}}
+| btrfs || supports a btrfs rootfs || host-only: rootfs || {{package|sys-fs/btrfs-progs}} 
 |-
-| nfs || supports NFS-mounted rootfs || <code>net</code> || host-only: rootfs || {{package|net-fs/nfs-utils}} {{package|net-nds/rpcbind}}
+| caps || supports dropping capabilities before init || systemd not in use || {{package|sys-libs/libcap}} (also replaces <code>dash</code> with <code>bash</code>) 
 |- 
-| plymouth || includes boot animation || always || <code>libkms</code><sup>3</sup> || {{package|sys-boot/plymouth}}
+| crypt || supports an encrypted rootfs || host-only: rootfs || {{package|sys-fs/cryptsetup}} 
 |-
-| ssh-client || includes ssh and scp clients || never || <code>net</code> || {{package|dev-libs/openssl}}
+| crypt-gpg || use gpg for crypt support (requires <code>crypt</code> module) || never ||  {{package|app-crypt/gnupg}}
 |-
-| syslog || includes remote logging support || never || || {{package|app-admin/syslog-ng}} or [[rsyslog]]
+| dmraid || support rootfs on FakeRAID || host-only: rootfs || {{package|sys-fs/multipath-tools}}, {{package|sys-fs/dmraid}}
+|-
+| dmsquash-live || supports LiveCD rootfs || never (host-only: refused) || 
+|-
+| gensplash || include a static splash screen || never ||  {{package|media-gfx/splashutils}}
+|-
+| iscsi || supports rootfs on iscsi devices || host-only: rootfs || {{package|sys-block/open-iscsi}}
+|- 
+| livenet || retrieve rootfs over HTTP (requires <code>dmsquash-live</code> modules) || never || 
+|-
+| lvm  || supports rootfs on LVM device || host-only: rootfs || {{package|sys-fs/lvm2}}
+|-
+| mdraid || supports rootfs on software RAID || host-only: rootfs ||  {{package|sys-fs/mdadm}}
+|-
+| multipath || supports rootfs on multi-path device || host-only: rootfs ||  {{package|sys-fs/multipath-tools}}
+|-
+| nbd || supports rootfs on a network block device || host-only: rootfs || {{package|sys-block/nbd}}
+|-
+| nfs || supports NFS-mounted rootfs || host-only: rootfs || {{package|net-fs/nfs-utils}} {{package|net-nds/rpcbind}}
+|- 
+| plymouth || includes boot animation || always || {{package|sys-boot/plymouth}}
+|-
+| ssh-client || includes ssh and scp clients || never || {{package|dev-libs/openssl}}
+|-
+| syslog || includes remote logging support || never || {{package|app-admin/syslog-ng}} or [[rsyslog]]
 |-
 | debug || includes useful troubleshooting tools || never || installed when <code>USE=debug</code> ||
 |-
-| dm || includes device-mapper || never || installed when <code>USE=device-mapper</code> || {{package|sys-fs/device-mapper}} ''or'' {{package|sys-fs/lvm2}}
+| dm || includes device-mapper || never || {{package|sys-fs/device-mapper}} ''or'' {{package|sys-fs/lvm2}}
 |-
-| ifcfg || generates network config at runtime || never || installed when <code>USE=net</code> ||
+| ifcfg || generates network config at runtime || never || 
 |-
-| network || brings up network for net booting || always || installed when <code>USE=net</code> || {{package|net-misc/dhcp}}, {{package|sys-apps/iproute2}}
+| network || brings up network for net booting || always || {{package|net-misc/dhcp}}, {{package|sys-apps/iproute2}}
 |-
-| selinux || arranges for the selinux policy to be loaded || never || installed when <code>USE=selinux</code> ||
+| selinux || arranges for the selinux policy to be loaded || installed when <code>USE=selinux</code> ||
 |-
-| url-lib || includes cUrl and SSL certs || never || installed when <code>USE=net</code> || {{package|net-misc/curl}}
+| url-lib || includes cUrl and SSL certs || never || {{package|net-misc/curl}}
 |}
+
+* The Enabled field indicates when a particular module will be included ''by default'' into your initramfs image.
+* Modules with pre-requisite packages cannot be included (even explicitly) if the required software is missing from the host.
 
 # {{package|sys-boot/plymouth}} requires that {{package|x11-libs/libdrm}} be built with the {{highlight|<code>libkms</code>}} flag
 # The additional packages require that one or more dependency libraries be built with the {{highlight|<code>static-libs</code>}} flag
@@ -190,7 +185,15 @@ fw_dir+=":/lib/fw/alt:/lib/fw/alt2"
 * In host-only mode, the running hosts filesystems are always installed, regardless of the <code>filesystems</code> parameter.
 
 ==== Filesystems And Mount Points ====
-The default image will arrange for your rootfs and your {{path|/usr}} partition (if different) to be mounted at boot time. The build process will obtain the device and file system information it needs from   {{path|/proc/self/mountinfo}}. This may not be what you want, or you may need to have other partitions mounted as well. You can alter the behavior of the initramfs with the <code>fstab-sys</code> module, and the following options:
+The default image will arrange for your rootfs and your {{path|/usr}} partition (if different) to be mounted at boot time. The build process will obtain the device and file system information it needs from   {{path|/proc/self/mountinfo}}. This may not be what you want, or you may need to have other partitions mounted as well.
+To just have additional partitions mounted at boot you can add them under 
+
+{{File|/etc/dracut.conf||<pre>
+# Bring up <device> in initramfs, <device> should be the device name
+add_device+=" /dev/mapper/sysvg-home /dev/mapper/sysvg-swap /dev/mapper/hdvg-private "
+</pre>}}
+
+To further alter the behavior of the initramfs one needs the <code>fstab-sys</code> module, and the following options:
 
 * Create a file called {{path|/etc/fstab.sys}}, which will be copied to the initramfs and mounted.
 * Specify <code>use_fstab="yes"</code> (or <code>--use-fstab</code>), which will use your system's {{path|/etc/fstab}} instead of {{path|/proc/self/mountinfo}}
