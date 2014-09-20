@@ -163,12 +163,12 @@ will run '''uptime''' in the shell.
 Okay, we have the networking setup in the host system, but we have to configure it in the emulated machine as well. We'll use the networking to be able to ssh into the install environment, after all typing the commands with a dot in front and the Hercules console isn't very comfortable.
 
 Inside Hercules, type:
-{{GenericCmd|'''Command {{=}}{{=}}>''' .modprobe ctcm
-|'''Command {{=}}{{=}}>''' .echo 0.0.0a00,0.0.0a01 > /sys/bus/ccwgroup/drivers/ctcm/group
-|'''Command {{=}}{{=}}>''' .echo 1 > /sys/devices/ctcm/0.0.0a00/online
-|'''Command {{=}}{{=}}>''' .ifconfig ctc0 10.1.1.2 pointopoint 10.1.1.1 netmask 255.255.255.255
-|'''Command {{=}}{{=}}>''' .route add default gw 10.1.1.1
-|'''Command {{=}}{{=}}>''' .ifconfig lo 127.0.0.1
+{{GenericCmd|prompt='''Command {{=}}{{=}}>'''|.modprobe ctcm
+|.echo 0.0.0a00,0.0.0a01 > /sys/bus/ccwgroup/drivers/ctcm/group
+|.echo 1 > /sys/devices/ctcm/0.0.0a00/online
+|.ifconfig ctc0 10.1.1.2 pointopoint 10.1.1.1 netmask 255.255.255.255
+|.route add default gw 10.1.1.1
+|.ifconfig lo 127.0.0.1
 }}
 
 We also need to setup the DNS.
@@ -439,10 +439,41 @@ And let's power off the machine:
 
 == Boot our installed system ==
 
-How to boot...
+Now, to boot our new installed system, we have to type into Hercules:
 
 {{GenericCmd|'''Command {{=}}{{=}}>''' ipl 120
 }}
+
+If everything went successfully, we should see the kernel booting and after a few minutes, the login prompt.
+
+If we configured SSH properly, we should be able to SSH into it.
+
+{{Warning|Obviously you will get a warning that the SSH host key has changed, since the install environment has one SSH key and our new installation has another different. Delete the old SSH key in your '''.ssh/known_hosts''' file and try to SSH again.
+}}
+
+=== Procedure for booting our VM in a fresh booted system ===
+This would be the procedure for booting the VM in a fresh booted system, with clear iptables rules, etc...
+
+cd into our work directory
+
+Run hercules:
+{{RootCmd|hercules -f s390.cnf
+}}
+
+In another console, setup iptables:
+{{RootCmd|iptables -t nat -A POSTROUTING -o eth0 -s 10.1.1.0/24 -j MASQUERADE
+|iptables -A FORWARD -s 10.1.1.0/24 -j ACCEPT
+|iptables -A FORWARD -d 10.1.1.0/24 -j ACCEPT
+|echo 1 > /proc/sys/net/ipv4/ip_forward
+|echo 1 > /proc/sys/net/ipv4/conf/all/proxy_arp
+}}
+
+Run the VM in hercules:
+
+{{GenericCmd|'''Command {{=}}{{=}}>''' ipl 120
+}}
+
+And that should be it.
 
 == Issues ==
 
@@ -466,8 +497,8 @@ CPU0000: R8=000000003FFFF000 R9=000000000010DAB0
 
 The only way I have found to stop these messages and boot again is with the following commands:
 
-{{GenericCmd|'''Command {{=}}{{=}}>''' stopall
-|'''Command {{=}}{{=}}>''' ipl 120
+{{GenericCmd|prompt='''Command {{=}}{{=}}>'''|stopall
+|ipl 120
 }}
 
 === Unable to boot the install environment after issuing 'ipl 120' ===
@@ -485,7 +516,7 @@ To fix this, you need to reinitialize the card reader, you can do that with:
 {{GenericCmd|'''Command {{=}}{{=}}>''' devinit c
 }}
 
-And then you can run 'ipl c' again.
+And then you can run '''ipl c''' again.
 
 == Tips and tricks ==
 * To power off the machine when you can't login, type '''ssd''' into the hercules command line. It should send a shutdown signal to the machine.
