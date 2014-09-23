@@ -1,4 +1,58 @@
+{{Stub}}
+{{InfoBox stack|{{InfoBox todo|Watch bug #522206|Get ebuild|Testing|Review}}
+}}
 {{Warning|Starting/stopping network dependant services is still in development.<ref>{{Bug|522206}}</ref>}}
+The patches needed<ref>[https://522206.bugs.gentoo.org/attachment.cgi?id=384626  99-openrc dhcpcd hook script] copy this into /lib/dhcpcd/dhcpcd-hooks/<pre># OpenRC hook
+
+: ${RC_SVCNAME:=dhcpcd}
+
+do_rc_service()
+{
+	if [ "$RC_SVCNAME" ]; then
+		IN_BACKGROUND=true /sbin/rc-service "$RC_SVCNAME" -- --quiet $@
+	fi
+}
+
+if $if_oneup && $if_ipwaited; then
+	# runscript needs to grow a --inactive command
+	do_rc_service start
+else
+	do_rc_service --ifstarted stop
+fi</pre></ref><ref>[https://bugs.gentoo.org/attachment.cgi?id=384410 patch for /etc/init.d/dhcpcd], just one line to be added<pre>--- dhcpcd.orig	2014-09-08 21:43:33.969766613 +0100
++++ dhcpcd	2014-09-08 21:39:54.935793632 +0100
+@@ -5,6 +5,7 @@
+ command=/sbin/dhcpcd
+ pidfile=/var/run/dhcpcd.pid
+ command_args=-q
++start_inactive=true
+ name="DHCP Client Daemon"
+ 
+ depend()</pre></ref><ref>[https://bugs.gentoo.org/attachment.cgi?id=384408 patch for /lib64/rc/sh/runscript.sh]<pre>--- runscript.sh.orig	2014-09-08 21:41:13.351207527 +0100
++++ runscript.sh	2014-09-08 21:40:59.345152895 +0100
+@@ -125,6 +125,9 @@
+ # Template start / stop / status functions
+ start()
+ {
++	# Support re-entrant services
++	[ "$IN_BACKGROUND" = true ] && return 0
++
+ 	[ -n "$command" ] || return 0
+ 	local _background=
+ 	ebegin "Starting ${name:-$RC_SVCNAME}"
+@@ -162,6 +165,12 @@
+ 
+ stop()
+ {
++	# Support re-entrant services
++	if [ "$IN_BACKGROUND" = true ]; then
++		mark_service_inactive "$RC_SVCNAME"
++		return 0
++	fi
++
+ 	local startcommand="$(service_get_value "command")"
+ 	local startpidfile="$(service_get_value "pidfile")"
+ 	local startprocname="$(service_get_value "procname")"</pre></ref> to make this work are available in the bug not yet in net-misc/dhcpcd-6.4.5.  You could however patch it for yourself or manually edit the files (works for me), but be careful.
+
 Services having "need net" in their init.d scripts like fetchmail would then start after dhcpcd is started.
 {{File|/etc/init.d/fetchmail||<pre>#!/sbin/runscript
 
