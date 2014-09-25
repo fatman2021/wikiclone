@@ -2,29 +2,99 @@
 |{{InfoBox homepage|http://www.freedesktop.org/wiki/Software/Plymouth/}}
 |{{InfoBox wikipedia|Plymouth_(software)}}
 }}
-'''Plymouth''' is used to show splash screens during system boot and shutdown. It is a more modern alternative to [[fbsplash]] and provides flicker-free animated boot splashes with a progress bar. It also has full [[systemd]] support. However, it does not provide eye-candy for the ttys in the way fbsplash does (meaning it shows no decoration on your consoles while the system is running).
+'''Plymouth''' is used to show splash screens during system boot and shutdown. It is a more modern alternative to [[fbsplash]] and provides flicker-free animated boot splashes with support for progress bars, solar flares, and other nifty things. In addition to [[OpenRC]], it also has full [[systemd]] support. Since it a boot splash tool, Plymouth does not provide background eye-candy for the ttys in the way fbsplash does (meaning it shows no decoration on your consoles while the system after the system has booted).
 
 == Installation ==
 
 {{Package|sys-boot/plymouth}} can be installed using 
 {{Emerge|sys-boot/plymouth}}
 
-When emerging Plymouth number of themes will be pulled in automatically.
+{{USEflag|package=sys-boot/plymouth
+|debug
+|gdm
+|gkt+++Adds support for x11-libs/gtk (The GIMP Toolkit)
+|libkms
+|pango
+|static-libs
+}}
 
-However, [[genkernel]] cannot create an [[initramfs]] with a Plymouth theme included. Therefore either [[dracut]] or {{Package|sys-kernel/genkernel-next}} will be needed. From this point onward this configuration guide will continue with genkernel-next as it is marked stable and is essentially a drop in replacement for genkernel. The "plymouth" use flag needs to be enabled in <code>/etc/portage/package.use</code>.
-{{RootCmd|echo "sys-kernel/genkernel-next plymouth" >> /etc/portage/package.use}}
-{{Emerge|sys-kernel/genkernel-next}}
+== Themes ==
+After emerging Plymouth number of themes will be pulled in automatically, however you can download more Plymouth themes from the internet and install them manually. You can extract new themes to the default Plymouth install directory: {{Path|/usr/share/plymouth/themes}}
 
-== OpenRC Configuration ==
+Make sure each new theme you add is contained in its own folder just like the other themes that are installed.
 
-The first step is to select a Plymouth theme. A list of all themes can be found using
+Once you have extracted any new, additional themes, you can check your work by requesting Plymouth to generate a list of all themes can be found. You do this by using the <code>plymouth-set-default-theme</code> command:
 {{RootCmd|plymouth-set-default-theme --list}}
 
 Assuming you want to select the solar theme as the default theme:
 {{RootCmd|plymouth-set-default-theme solar}}
 
-Additionally, you need to enable this theme in the genkernel-next's configuration file:
-{{File|/etc/genkernel.conf|Note: the SPLASH variable should be set to "no". This variable is to set an option for the fbsplash bootsplash loader (media-gfx/splashutils) and NOT Plymouth.|<pre>
+{{Note|The "solar" theme will be used for the rest of the examples in this article. Simply replace "solar" anywhere it appears with the any of the other themes listed when you used the <code>plymouth-set-default-theme</code> command.}}
+
+{{Important|If using OpenRC you will also need to set the theme in genkernel-next's configuration. This is detailed in the [[#OpenRC Configuration|OpenRC Configuration]] section below.}}
+
+== Kernel Configuration ==
+You will most likely need to recompile your kernel in order to get Plymouth working properly. Use the <code>genkernel --menuconfig all</code> command (or equivalent) in order to modify your kernel configuration.
+
+It’s highly advised that you disable Linux logo. On some systems it seems to cause problems:
+{{Kernel|This example shows the correct setting to disable the Bootup logo|<pre>
+Device Drivers --->
+   Graphics Support --->
+      [ ] Bootup logo  --->
+</pre>
+}}
+
+Be sure you enable kernel modesetting for your respective graphics card.
+
+===For integrated Intel graphic cards===
+{{Kernel|Intel onboard GPUs set to use modesetting:|<pre>
+Device Drivers --->
+   Graphics Support --->
+      <*> Direct Rendering Manager (XFree86 4.1.0 and higher DRI support)  --->
+         <*>   Intel 8xx/9xx/G3x/G4x/HD Graphics
+         [*]     Enable modesetting on intel by default
+</pre>
+}}
+{{Important|If this is your first time setting your onboard Intel GPU, make sure you've read the [[Intel]] article.}}
+
+===For Nvidia graphic cards using the open source nouveau drivers===
+{{Kernel|Nvidia GPU set to use Nouveau:|<pre>
+Device Drivers  --->
+    Graphics support  --->
+        <*> Direct Rendering Manager (XFree86 4.1.0 and higher DRI support) --->
+            <*> Nouveau (nVidia) cards
+</pre>
+}}
+{{Important|If this is your first time setting your nvidia graphics card, make sure you read through the [[nouveau]] article.}}
+
+===For Nvidia graphic cards using the closed source official Nvidia drivers===
+To use the official Nvidia drivers see the wiki's [https://wiki.gentoo.org/wiki/NVidia/nvidia-drivers official Nvidia article].
+{{Note|So far the results of using official Nvidia drivers are untested with Plymouth. Please update this section if you get it working properly.}}
+
+===For Radeon graphic cards===
+
+{{Kernel|Radeon GPU set to use modesetting:|<pre>
+Device Drivers --->
+   [*] Staging drivers  --->
+      [*]     Enable modesetting on radeon by default
+</pre>
+}}
+
+== Boot Loaders==
+=== Genkernel-Next ===
+At this point normal [[genkernel]] cannot create an [[initramfs]] with a Plymouth theme included. Therefore, in order to proceed, you will need to select either [[dracut]] or {{Package|sys-kernel/genkernel-next}} to build your initramfs with a Plymouth theme included. From this point onward this configuration guide will continue presumming you've genkernel-next since it is marked stable in the Portage tree and is essentially a drop in replacement for "normal" genkernel, however plans for dracut  The "plymouth" use flag needs to be enabled in <code>/etc/portage/package.use</code>.
+{{RootCmd|echo "sys-kernel/genkernel-next plymouth" >> /etc/portage/package.use}}
+{{Emerge|sys-kernel/genkernel-next}}
+
+===Dracut===
+The Dracut portion of this article is a work in progress. More information will be added soon.
+
+== Init System Configurations ==
+=== OpenRC Configuration ===
+Use your text editor of choice to enable Plymouth and the Plymouth theme in genkernel-next's configuration file:
+
+{{Note|The "SPLASH" variable listed in the file below should be set to "no". The SPLASH variable configures an option for the fbsplash bootsplash loader (media-gfx/splashutils) NOT Plymouth.}}
+{{File|/etc/genkernel.conf||<pre>
 # Enable splashutils in early space (initrd). Default is "no".
 # SPLASH="no"
 
@@ -36,23 +106,28 @@ PLYMOUTH="yes"
 PLYMOUTH_THEME="solar"
 </pre>}}
 
+Additionally, you will need to edit {{Path|/etc/rc.conf}} to make RC non-interactive:
+{{File|/etc/rc.conf||<pre>
+rc_interactive=”NO”
+</pre>
+}}
 
-Next, you will need to regenerate the initramfs using the <code>genkernel</code> command:
+Regenerate the initramfs using the <code>genkernel</code> command:
 {{RootCmd|genkernel initramfs}}
 
-Next, make an update to your Grub2 configuration to enable the splash screen during early boot. Append the options "quiet splash" on the end of the GRUB_CMDLINE_LINUX_DEFAULT variable, adjust the resolution in the GRUB_GFXMODE variable to match your desired resolution for your primary screen, and set GRUB_GFXPAYLOAD_LINUX to "keep" in order to preserve the graphics mode during boot.
+Make an update to your Grub2 configuration to enable the splash screen during early boot. Append the options "quiet splash" to the GRUB_CMDLINE_LINUX_DEFAULT variable, adjust the resolution in the GRUB_GFXMODE variable to match your desired resolution for your primary screen, and set GRUB_GFXPAYLOAD_LINUX to "keep" in order to preserve the graphics mode during the entire boot.
 {{File|/etc/default/grub||<pre>
 GRUB_CMDLINE_LINUX_DEFAULT='quiet splash'
 GRUB_GFXMODE=1366x768x24
 GRUB_GFXPAYLOAD_LINUX=keep
 </pre>}}
 
-Finally, run the <code>grub2-mkconfig</code> command to update grub2's boot configuration. This will set grub2 to be sure to include the changes you made when you updated <code>/etc/default/grub</code> above.
+Finally, run the <code>grub2-mkconfig</code> command to update Grub2's boot configuration. This will set Grub2 to be sure to include the changes you made when you updated {{Path|/etc/default/grub}} file above.
 {{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg}}
 
-You are done!
+You are done! Congratulations on your new boot splash!
 
-== Systemd Configuration ==
+=== Systemd Configuration ===
 
 Plymouth automatically registers itself with systemd to show a splash screen during shutdown/restart.
 
