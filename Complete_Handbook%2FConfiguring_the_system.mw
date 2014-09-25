@@ -83,11 +83,42 @@ Most groups are self-explanatory, but the ''wheel'' group might need a small int
 The ''wheel'' group contains all users who can run '''su''' to switch from one user to another (including the root user). Only put trusted users in this group. A better alternative to the ''wheel'' access (since it still requires the user to know the passwords of the accounts it wants to switch to) is to use '''sudo''' of which an excellent [[sudo|guide]] exists.
 
 == Networking information ==
+Gentoo provides several tools for managing your network connections.
 
-=== Introduction ===
+=== Manging network with dhcpcd ===
+The easiest to use of them is dhcpcd. It has perfect integration for wpa_supplicant to manage even the wireless connections..
+<!-- Something like <xsl:copy-from /> doesn't seem to work here.
+     so this is just copy/past from [Network_management_using_DHCPCD] -->
+==== Installation ====
+Install dhcpcd, add it to the default runlevel and start it:
+{{RootCmd|emerge  --ask net-misc/dhcpcd|rc-update add dhcpcd default|/etc/init.d/dhcpcd start}}
+All its configuration goes into {{Path|/etc/dhcpcd.conf}} but for most installations nothing needs to be done there.<ref>Presumed that most computers nowadays are behind a router or access point providing dhcp<br />&emsp;http://tools.ietf.org/html/rfc2131<br />&emsp;http://en.wikipedia.org/wiki/DHCP</ref> Though <code>man 5 dhcpcd.conf</code><ref name=manpage>http://roy.marples.name/man/html5/dhcpcd.conf.html</ref> will be helpful in case of advanced configuration demand.
+
+==== Wireless ====
+Dhcpcd comes with a built-in hook for wpa_supplicant, so it's best choice to install this for wireless.  The necessary wireless device drivers<ref>[[Wifi|Setup of a Wifi network device]]</ref> in your kernel need to be installed.  Also note that the older versions (≤6.4.3) of dhcpcd and (≤2.0-r2) of wpa_supplicant need "wireless extensions compatibility" in the kernel.<ref>https://forums.gentoo.org/viewtopic-p-7611394.html#7611394</ref><ref>[[Wifi#WEXT|WEXT Kernel option]]</ref><ref>https://forums.gentoo.org/viewtopic-p-7617004.html#7617004</ref><br />
+Create the configuration file, put the content shown below, install wpa_supplicant and restart dhcpcd:
+{{File|/etc/wpa_supplicant/wpa_supplicant.conf||<pre># Allow users in the 'wheel' group to control wpa_supplicant
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
+
+# Make this file writable for wpa_gui
+update_config=1</pre>}}
+{{RootCmd|echo 'net-wireless/wpa_supplicant qt4 wps' >> /etc/portage/package.use|emerge  --ask net-wireless/wpa_supplicant|/etc/init.d/dhcpcd restart}}{{Important|Don't add wpa_supplicant to any runlevel.}}
+For any questions or problems with wpa_supplicant see the references.<ref>[[Wpa_supplicant#Setup]]</ref><ref>[http://hostap.epitest.fi/wpa_supplicant/ wpa_supplicant homepage]</ref><ref>See also [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=4&chap=4#doc_chap2 Handbook part4 chapter 4.b.]</ref>
+
+==== Static IP address ====
+In case the network interface card should be configured with a static IP address, add their data to the configuration file as shown for the following example.<ref name=manpage>http://roy.marples.name/man/html5/dhcpcd.conf.html</ref>
+{{File|/etc/dhcpcd.conf||<pre>Here is an example which configures a static address, routes and dns.
+
+   interface eth0
+   static ip_address=192.168.0.10/24
+   static routers=192.168.0.1
+   static domain_name_servers=192.168.0.1</pre>}}
+<!-- End of copy -->
+
+=== Manging network with Gentoo net.* scripts ===
 To configure your wired network, Gentoo uses the {{Path|/etc/conf.d/net}} file. Its syntax might seem a bit strange at first - you'll find well-documented examples at  {{Path|/etc/conf.d/net.example}} - but allows you to configure your entire network easily.
 
-=== Automatic IP retrieval ===
+==== Automatic IP retrieval ====
 If your network interface(s) should retrieve their configuration automatically (using DHCP) you don't need to do anything in this file - you can leave it empty. You will find that Gentoo gives a cosmetical warning that it assumes DHCP since you haven't provided anything. If you don't want any warning, explicitly enable DHCP for each interface:
 {{File|/etc/conf.d/net|Default DHCP setting for network configuration|<pre>
 config_eth0="dhcp"
@@ -101,7 +132,7 @@ If you want to pass additional options to the DHCP client (we refer you to the [
 dhcpcd_eth0="-t 10"
 </pre>}}
 
-=== Static IP address ===
+==== Static IP address ====
 If the network interface card should be configured with a static IP address, following
 information is needed:
 * the IP address and network mask
@@ -128,7 +159,7 @@ nameserver 195.130.130.133
 nameserver 195.130.131.10
 </pre>}}
 
-=== The hosts file ===
+==== The hosts file ====
 The {{Path|/etc/hosts}} file is a small table the system uses to make immediate translations between hostnames and IP addresses. This file should at least contain one line:
 {{File|/etc/hosts||<pre>
 127.0.0.1       localhost
@@ -151,7 +182,7 @@ If you use a domainname for your network (like '''boxes''', but it can also be a
 
 Next to the host names assigned to your interfaces, you can also add in the IP address and hostname information for the other hosts on your system if they aren't known to the DNS servers you've specified (in {{Path|/etc/resolv.conf}}, perhaps automatically with DHCP).
 
-=== Automatically starting the network at boot ===
+==== Automatically starting the network at boot ====
 With the configuration in place, your next step would be to assure that the configuration is loaded when you boot your system. Go to {{Path|/etc/init.d}} and make symbolic link from the {{Path|net.lo}} init script to the interfaces you need. For instance, if you have one interface
 (called '''eth0'''):
 {{RootCmd|cd /etc/init.d
@@ -184,5 +215,8 @@ the {{Path|rc.conf}} file.
 
 === Select keyboard language ===
 If you aren't using a US Qwerty keyboard, you'll need to edit the {{Path|/etc/conf.d/keymaps}} file to tell the Gentoo system what keyboard layout it should use.
+
+== References ==
+{{reflist}}
 
 [[Category:Complete Handbook]]
