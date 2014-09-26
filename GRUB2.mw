@@ -671,12 +671,45 @@ And (re)generate {{Path|grub.cfg}} with '''''grub2-mkconfig'''''.
 
 ==== Booting from RAID Array ====
 
-After considerable grief, the following working configuration was obtained. grub2-mkconfig does not appear to work properly, this is the configuration it generated, slightly modified in order to get it to actually boot! Also, at present, it appears to be reading grub.cfg from /dev/sdb2 (an ordinary MBR partition), but it is booting to "root on raid". Next step is to remove /dev/sdb and replace it with /dev/sdd (the GPT raid disk).
+After considerable grief, the following working configuration was obtained. 
+
+The system has three hard drives. sda is the original mbr Windows Vista disk, untouched apart from installing grub2 onto it. sdb and sdc are configured identically.
 
 {{Code||<pre>
-menuentry 'Gentoo GNU/Linux' --class gentoo --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-8bb0e52c-d524-4af8-ac08-f3c9238c6040' {
+GPT fdisk (gdisk) version 0.8.10
+
+Partition table scan:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.
+Disk /dev/sdc: 1953525168 sectors, 931.5 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): CB232664-F98D-45C0-8111-2AC526D5EA61
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 1953525134
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 509918 sectors (249.0 MiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048        67110911   32.0 GiB    8200  Linux swap
+   2        67110912        67127295   8.0 MiB     EF02  BIOS boot partition
+   3        67373056       402917375   160.0 GiB   8300  Linux filesystem
+   4       403179520      1953525134   739.3 GiB   8300  Linux filesystem
+</pre> }}
+
+sdb3/sdc3 are raided together to make the / partition.
+
+sdb4/sdc4 are raided together to make the /home partition.
+
+{{Code||<pre>
+menuentry 'Gentoo GNU/Linux, with Linux x86_64-3.14.14-gentoo' --class gentoo --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-x86_64-3.14.14-gentoo-advanced-8bb0e52c-d524-4af8-ac08-f3c9238c6040' {
 	load_video
+	set gfxpayload=keep
 	insmod gzio
+	insmod part_msdos
 	insmod part_gpt
 	insmod diskfilter
 	insmod mdraid1x
@@ -687,14 +720,31 @@ menuentry 'Gentoo GNU/Linux' --class gentoo --class gnu-linux --class gnu --clas
 	else
 	  search --no-floppy --fs-uuid --set=root 8bb0e52c-d524-4af8-ac08-f3c9238c6040
 	fi
-	echo	'Loading Linux 3.14.14-gentoo ...'
+	echo	'Loading Linux x86_64-3.14.14-gentoo ...'
 	linux	/boot/kernel-3.14.14-gentoo domdadm root=UUID=8bb0e52c-d524-4af8-ac08-f3c9238c6040 ro  
 	echo	'Loading initial ramdisk ...'
 	initrd	/boot/initramfs-genkernel-x86_64-3.14.14-gentoo
 }
-</pre>}}
 
-Remember that while Grub2 may be a mini-os, it is capable, by default, of loading itself and no more. So you need to tell it everything else it needs. You should be able to find all the available modules by default in the directory /boot/grub/i386-pc/
+menuentry 'Gentoo GNU/Linux mirror 2' --class gentoo --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-8bb0e52c-d524-4af8-ac08-f3c9238c6040' {
+        load_video
+        insmod gzio
+        insmod part_msdos
+        insmod part_gpt
+	insmod mdraid1x
+        insmod ext2
+        set root=(mduuid/660afb13:150e817a:0cdd3647:6d5b2c51)
+        if [ x$feature_platform_search_hint = xy ]; then
+	          search --no-floppy --fs-uuid --set=root --hint-bios=hd1,msdos2 --hint-efi=hd1,msdos2 --hint-baremetal=ahci1,msdos2 --hint='hd1,msdos2'  8bb0e52c-d524-4af8-ac08-f3c9238c6040
+          else
+		  search --no-floppy --fs-uuid --set=root 660afb13:150e817a:0cdd3647:6d5b2c51
+        fi
+	echo    'Loading Linux 3.14.14-gentoo ...'
+	linux   /boot/kernel-3.14.14-gentoo domdadm root=/dev/disk/by-id/md-uuid-660afb13:150e817a:0cdd3647:6d5b2c51 ro
+	echo    'Loading initial ramdisk ...'
+	initrd  /boot/initramfs-genkernel-x86_64-3.14.14-gentoo
+}
+</pre>}}
 
 <pre>insmod part_gpt</pre> (or <pre>insmod part_msdos</pre>) is needed otherwise grub2 will not be able to read the partition table
 
@@ -702,25 +752,48 @@ Remember that while Grub2 may be a mini-os, it is capable, by default, of loadin
 
 <pre>insmod ext2</pre> is required for ext partitions. If you have a different file system substitute your appropriate module.
 
-<pre>set root='mduuid/660afb13150e817a0cdd36476d5b2c51'</pre> presumably sets the boot device, from which grub2 reads its config. But I don't understand this catch-22 - how can grub2 read the configuration, if you need the configuration to tell it how to find the config file!
+<pre>set root='mduuid/660afb13150e817a0cdd36476d5b2c51'</pre> tells grub what root device linux will be using.
 
 At this point, grub2 is ready to hand over to linux. Any errors up to this point - can't find modules, can't find boot partition, are problems with grub2. From this point on, errors are likely down to linux.
 
 Linux is now unable to assemble raid assemblies in the kernel. It needs to call out to user-space, so if you want a raid root, you MUST have an initramfs.
 
-{{Note|
-Emerge genkernel and use this. When you get a new gentoo-source, you might as well use genkernel to build and install your new kernel. Copy the kernel .config from the old to the new directory and
+{{Warning|DO NOT use genkernel to generate your kernel.
+}}
+
+Make sure your kernel is configured correctly. Especially make sure that CONFIG_FHANDLE is set (this is why you mustn't use genkernel - it will reset it and play havoc with your raid).
+
+{{Code||<pre>
+cd /usr/src/linux
+make
+make modules_install
+make install
+</pre>
+}}
+
+At this point it is probably a good idea to emerge udev - and make sure all warnings are fixed! This is how I picked up on FHANDLE, before that the raid was randomly losing devices (separate from, but confused with, it losing the root device led to a real puzzle).
+
+Emerge genkernel and use this to generate your initramfs
+
 {{Code||<pre>
 genkernel --mdadm --disklabel all --install initramfs
 </pre>}}
-You need --mdadm to make the initramfs raid-aware, and the --disklabel all to enable to see uuids.
+
+{{Note|
+You need --mdadm to make the initramfs raid-aware, and apparently need --disklabel all to enable to see uuids.
 }}
 
 The linux... and initrd... lines should now load linux. I had to add the "domdadm" command to the linux line because without it, the raid arrays are not assembled and linux won't find a root device.
 
-If this stage fails with "Could not find root block device", try giving it the devicename in the form "/dev/mdnnn". If this works, then your problem is that the initrd cannot resolve uuids. If it doesn't work, then mdadm has failed to assemble your root array.
+Note that the second boot option contains a deliberate error. Linux will be unable to find root device by itself and will drop into the grub shell. YOU NEED THIS!!!
 
-The documentation on this subject is close to null. This is as far as I have currently got, with grub2 installed on /dev/sda, reading its config from an ordinary partition /dev/sdb2, and then booting with root on /dev/md127 (on /dev/sdd). IT IS NOT WORKING PROPERLY. Over the next few days I plan to remove /dev/sdb and /dev/sdc, so my linux install will consist of my current /dev/sdd and a new disk, with a raid root and a raid /home. grub2 will have to read its config from /dev/md127 as that's all there'll be. If anybody else has experience of booting from raid and can add to or complete this section, please do.
+The first boot option correctly assembles the root array at boot time, and boots successfully. Any attempt to access the root device from user space will, however, fail as it "isn't there". This breaks grub2, and when I made the mistake of trying to run grub2-install, it broke grub boot! Make sure you've got a rescue CD handy and a copy of the handbook!
+
+The second option drops you into grub shell. An "ls /dev/md*" will show that initrd has found all the devices, and giving it the device, eg /dev/md127, will boot you into a fully working system WITH USERSPACE ACCESS TO THE BOOT DEVICE.
+
+PUT THESE INTO AN /ETC/GRUB.D SCRIPT AT THE FIRST OPPORTUNITY.
+
+Next step for me is to play with raid names, fix my home drive (converting it from 0.9 to 1.2) and seeing if this fixes any problems. Also try generating an "mdadm.conf" (supposedly optional) and seeing if this helps with why the root device is not available in user space.
 
 The documentation on this subject, along with booting from encrypted physical volumes, is close to null. As I do not boot from a RAID array, anyone who managed to boot from a complex RAID array is welcomed to complete this section.
 
