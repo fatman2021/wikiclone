@@ -11,6 +11,83 @@
 First off, you will need to configure your kernel with netfilter support. If you want to be able to add rules based on IP filtering like black listing IP addresses based on a live feed [https://forums.gentoo.org/viewtopic-t-863121.html], do not forget to add [[IPSet]] support to your kernel and merge {{Package|net-firewall/ipset}} package.
 
 === Kernel ===
+
+==== Kernel for Client ====
+For client computers some basic options need to be activated in the kernel. This configuration does not provide network address translation or any other high sophisticated features. In "Network packet filtering framework" only the tables "filter" are needed with connection tracking support and with REJECT target support.
+{{Kernel||<pre>
+[*] Networking support  --->
+    Networking options  --->
+        ...
+        [*] TCP/IP networking
+        [ ]   IP: multicasting
+        [ ]   IP: advanced router
+        [ ]   IP: kernel level autoconfiguration
+        < >   IP: tunneling
+        < >   IP: GRE demultiplexer
+        [ ]   IP: TCP syncookie support
+        < >   Virtual (secure) IP: tunneling
+        < >   IP: AH transformation
+        < >   IP: ESP transformation
+        < >   IP: IPComp transformation
+        <*>   IP: IPsec transport mode
+        <*>   IP: IPsec tunnel mode
+        < >   IP: IPsec BEET mode
+        < >   Large Receive Offload (ipv4/tcp)
+        <*>   INET: socket monitoring interface
+        < >     UDP: socket monitoring interface
+        [ ]   TCP: advanced congestion control  ----
+        [ ]   TCP: MD5 Signature Option support (RFC2385)
+        <*>   The IPv6 protocol  --->
+        [ ] Security Marking
+        [ ] Timestamping in PHY devices
+        [*] Network packet filtering framework (Netfilter)  --->
+            --- Network packet filtering framework (Netfilter)
+            [ ]   Network packet filtering debugging
+            [ ]   Advanced netfilter configuration
+                  Core Netfilter Configuration  --->
+                      <M> Netfilter LOG over NFNETLINK interface
+                      <*> Netfilter connection tracking support
+                      [ ]   Supply CT list in procfs (OBSOLETE)
+                      < >   FTP protocol support
+                      < >   IRC protocol support
+                      < >   NetBIOS name service protocol support
+                      < >   SIP protocol support
+                      < >   Connection tracking netlink interface
+                      < > Netfilter nf_tables support
+                      -*- Netfilter Xtables support (required for ip_tables)
+                            *** Xtables combined modules ***
+                      < >   nfmark target and match support
+                            *** Xtables targets ***
+                      < >   LOG target support
+                      < >   "NFLOG" target support
+                      < >   "TCPMSS" target support
+                            *** Xtables matches ***
+                      <*>   "conntrack" connection tracking match support
+                      < >   IPsec "policy" match support
+                      < >   "state" match support
+            < >   IP set support  ----
+            < >   IP virtual server support  ----
+                  IP: Netfilter Configuration  --->
+                      <*> IPv4 connection tracking support (required for NAT)
+                      <*> IP tables support (required for filtering/masq/NAT)
+                      <*>   Packet filtering
+                      <*>     REJECT target support
+                      < >   ULOG target support (obsolete)
+                      < >   IPv4 NAT
+                      < >   Packet mangling
+                      < >   raw table support (required for NOTRACK/TRACE)
+                  IPv6: Netfilter Configuration  --->
+                      <*> IPv6 connection tracking support
+                      <*> IP6 tables support (required for filtering)
+                      < >   "ipv6header" IPv6 Extension Headers Match
+                      <*>   Packet filtering
+                      <*>     REJECT target support
+                      < >   Packet mangling
+                      < >   raw table support (required for TRACE)
+</pre>}}
+
+
+==== Kernel for Router ====
 You need to activate the following kernel options:
 {{Kernel||<pre>
 [*] Networking support  --->
@@ -119,6 +196,44 @@ First, we will drop everything like a hot potato, then accept only incoming traf
 This is how a stateful firewall operates to avoid opening unneeded holes and accept in/outbound packets based on the state of the packets.
 
 === Generating firewall rules ===
+==== Generating firewall rules for client ====
+A script as simple as shown here should be sufficient for most client computers. Store it in a save place. You only need it for setting up or for changing the firewall rules. Absolutely no need to run it on boot or shutdown.
+<pre>
+#!/bin/bash
+
+iptables -F
+iptables -X
+iptables -Z
+
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -p icmp --icmp-type 3 -j ACCEPT
+iptables -A INPUT -p icmp --icmp-type 11 -j ACCEPT
+iptables -A INPUT -p icmp --icmp-type 12 -j ACCEPT
+iptables -A INPUT -p tcp --syn --dport 113 -j REJECT --reject-with tcp-reset
+
+ip6tables -F
+ip6tables -X
+ip6tables -Z
+
+ip6tables -P INPUT DROP
+ip6tables -P FORWARD DROP
+ip6tables -P OUTPUT ACCEPT
+
+ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ip6tables -A INPUT -i lo -j ACCEPT
+ip6tables -A INPUT -p icmpv6 --icmpv6-type 3 -j ACCEPT
+ip6tables -A INPUT -p icmpv6 --icmpv6-type 11 -j ACCEPT
+ip6tables -A INPUT -p icmpv6 --icmpv6-type 12 -j ACCEPT
+ip6tables -A INPUT -p tcp --syn --dport 113 -j REJECT --reject-with tcp-reset
+</pre>
+An example of a higher sophisticated rule set with logging is shown in the forum discussion.<ref>[http://forums.gentoo.org/viewtopic-p-7578926.html#7578926 A simple example with logging]</ref>
+
+==== Generating firewall rules for server ====
 This section will try to build up a script that will generate a set of rules with internal and external interfaces.
 
 {{InfoBox todo|finish this section: generating firewall rules with scripts}}<br /><br /><br /><br />
@@ -128,9 +243,6 @@ This section will try to build up a script that will generate a set of rules wit
 {{RootCmd|iptables -L -n}}
 ===ip v6===
 {{RootCmd|ip6tables -L -n}}
-
-== Examples ==
-An example of rules setup is shown in the forum discussion.<ref>[http://forums.gentoo.org/viewtopic-p-7578926.html#7578926 A simple example with logging]</ref>.
 
 == References ==
 {{reflist}}
