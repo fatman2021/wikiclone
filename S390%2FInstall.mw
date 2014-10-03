@@ -1,7 +1,7 @@
 == Overview ==
 Installing Gentoo on a IBM z/VM instance is more or less like on another architecture, except in booting the install environment and the networking setup. Patience is needed to understand how everything works.
 
-I won't go in too much detail because if you have access to a z/VM and want to install Gentoo on it, i understand you know how it works.
+I won't go in too much detail because if you have access to a z/VM and want to install Gentoo on it, you should have some experience.
 
 === Environment ===
 
@@ -11,14 +11,16 @@ This guide supposes you simply got access to a z/VM instance. You can also insta
 To be able to install Gentoo, you'll need the following:
 
 * Access to a z/VM instance
-* A 3270 emulator(i'll be using the graphical part of net-misc/suite3270)
+* A 3270 emulator(We'll be using the graphical part of net-misc/suite3270)
 * A network connection
 
 == Setting up the z/VM environment for installing ==
 
 === Overview ===
 
-For installing Gentoo, we're going to transfer the installation files...
+For installing Gentoo, we're going to need to download some files for the installation environment. Once we boot into the installation environment, we'll be able to install Gentoo.
+
+Keep reading.
 
 === Choosing the userland ===
 
@@ -28,16 +30,34 @@ In Gentoo we provide two userlands: a 31-bit one, which in the Linux on zSeries 
 
 === Downloading the installation images ===
 
-Once you've made up your choice, you can now download the needed files from the mirrors in the experimental directory, blablabla...
+Once you've made up your choice of userland, you can now download the needed files from the mirrors. In the s390 autobuilds directory, this means releases/s390/autobuilds/, inside the directory with the last date, there should be two files: '''netboot-ARCH-kernel-DATE''' and '''netboot-ARCH-initramfs-DATE'''.
+
+'''ARCH''' should be either '''s390''' or '''s390x''', and '''DATE''' should be the date of the build. So choose if you want to download '''s390''' or '''s390x''', select one of them depending in the choice you made in the previous step, whether you want 31bit or 64bit. In the example we'll use s390x. Once you've made your choice, download the files.
+
+Create a file called '''gentoo.parmfile''' with the following content:
 
 
-=== Adjusting boot parameters for the installation image ===
+{{File|gentoo.parmfile|Example|<pre>
+dasd=0150
+</pre>}}
 
-One of the files you've downloadesomething.params''''gentoo.params'''''. You need to edit this file and adjust the '''''dasd=xxx''''' parameter according to your z/VM environment.
+If your DASD has the 0150 ID, then you need to put dasd=0150. If you have more than one DASD you can append the IDs of them to the dasd parameter, like dasd=0150,0151,0152, etc. That will translate, in the Linux environment, the 0150 DASD as /dev/dasda, 0151 as /dev/dasdb and so on...
 
-If your DASD has the 0190 ID, then you need to put dasd=0190. If you have more than one DASD you can append the IDs of them to the dasd parameter, like dasd=0190,0191,0192, etc.
+Create a file called '''gentoo.exec''' with the following content:
 
-That will translate, in the Linux environment, the 0190 DASD as /dev/dasda, 0191 as /dev/dasdb and so on...
+{{File|gentoo.exec|Example|<pre>
+/* REXX EXEC TO IPL GENTOO GNU/LINUX  */
+/* FOR S/390 FROM THE VM READER.      */
+/*                                    */
+'CP CLOSE RDR'
+'PURGE RDR ALL'
+'SPOOL PUNCH * RDR'
+'PUNCH GENTOO KERNEL   * (NOHEADER'
+'PUNCH GENTOO PARMFILE   * (NOHEADER'
+'PUNCH GENTOO INITRD   * (NOHEADER'
+'CHANGE RDR ALL KEEP NOHOLD'
+'CP IPL 000C CLEAR'
+</pre>}}
 
 === Installing a 3270 emulator ===
 
@@ -56,7 +76,7 @@ Once it's clear what is your writeable disk, select File -> File Transfer. Mark 
 First we're going to send the '''gentoo.exec''' and '''gentoo.params''' files. Select '''Transfer ASCII file''' and '''Record Format''' as '''Variable'''. Make sure '''Add/remove CR at end of line''' and '''Remap ASCII characters''' is marked as well.
 In '''Local File Name''' type the full path to the '''gentoo.exec''' file, and in '''Host File Name''' type '''GENTOO EXEC A1''', replacing '''A1''' with the disk you have write access to. Do the same with the '''gentoo.parmfile''' file, adjusting '''Local File Name''' accordingly and '''Host File Name''' to '''GENTOO PARMFILE A1'''.
 
-Next, we're going to send the binary files '''gentoo''', which is the kernel, and '''gentoo.igz''' which is the initramfs. Select '''Transfer binary file''' and '''Record Format''' as '''Fixed''' and type '''80''' in '''LRECL'''.
+Next, we're going to send the binary files '''netboot-ARCH-kernel-DATE''', which is the kernel, and '''netboot-ARCH-initramfs-DATE''' which is the initramfs. Select '''Transfer binary file''' and '''Record Format''' as '''Fixed''' and type '''80''' in '''LRECL'''.
 Same as before, in '''Local File Name''', type the full path to the '''gentoo''' file and in '''Host File Name''' type '''GENTOO KERNEL A1'''. For the '''gentoo.igz''' file, type '''GENTOO INITRD A1'''.
 
 Here's a table of how you should transfer files:
@@ -68,9 +88,9 @@ Here's a table of how you should transfer files:
 |-
 | gentoo.params || GENTOO PARMFILE A1 || ASCII || Variable || Empty
 |-
-| gentoo || GENTOO KERNEL A1 || Binary || Fixed || 80
+| netboot-ARCH-kernel-DATE || GENTOO KERNEL A1 || Binary || Fixed || 80
 |-
-| gentoo.igz || GENTOO INITRD A1 || Binary || Fixed || 80
+| netboot-ARCH-initramfs-DATE || GENTOO INITRD A1 || Binary || Fixed || 80
 |}
 
 === Boot the install environment ===
