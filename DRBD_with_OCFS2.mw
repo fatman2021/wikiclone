@@ -6,15 +6,14 @@ The tough came with found that samba Active Directory (AD) Domain Controller (DC
 Drop the sysvol though, bad idea. without CTDB, files would corrupted with 2 access. But CTDB is not compatible with Samba AD.}}
 
 Q: Why DRBD only is not enough...<br />
-There might be case where there are multiple write access to the sysvol by multiple DC member, thus without cluster files system we might be looking for trouble since the DRBD volume are being mount by 2 or more DC member, so OCFS2 is selected for it performance and also popularity.<br />
+There might be case where there are multiple write access to the block device by multiple server, thus without cluster files system we will have trouble on files locking and etc since the DRBD volume are being mount by 2 or more server, so OCFS2 is selected for it performance and also popularity.<br />
 
 You can use always other Cluster files system.<br />
 
+This guide only 2 node, dual primary configuration. If you required more node, please check on drbd for more information.
+
 {{Warning|
 Samba Team don't suggest to use this solution, so this is '''''purely experimental'''''. But still DRBD + OCFS2 example are everywhere we can make use of that.<br />
-Please wait for Samba official replication solution and don't use this in any production server.<br />
-I wouldn't held any responsible about your lost... But still you are welcome to TRY :)<br />
-This example can only support Max 2 DC + 1 RODC. because of the limitation of DRBD.<br />
 }}
 
 = Prerequisite =
@@ -125,7 +124,7 @@ Please create the files below.<br />
 If you have multiple resource setup, you can do it one resource per files to avoid confusion.<br />
 
 Below files is a 2 Node Resource example.
-Note on the Comment Part, they will need to be uncomment when we want to enable dual primary.
+Note on the Comment Part, they will need to be uncomment at a much later part when we enable dual primary.
 {{File|/etc/drdb.d/r0.res|Resource name r0 DRBD |<pre>
 resource r0 {
         handlers {
@@ -186,18 +185,18 @@ Please change what even which suit your needm
 {{File|/etc/ocfs2/cluster.conf|Create this files|<pre>
 cluster:
         node_count = 2
-        name = sysvol
+        name = ocfs2cluster
 
 node:
         number = 1
-        cluster = sysvol
+        cluster = ocfs2cluster
         ip_port = 7777
         ip_address = 192.168.11.23
         name = serverNode01
 
 node:
         number = 2
-        cluster = sysvol
+        cluster = ocfs2cluster
         ip_port = 7777
         ip_address = 192.168.11.27
         name = serverNode02
@@ -211,14 +210,14 @@ node:
 |-
 | node_count = 2 || How many node do we have in this cluster?
 |-
-| name = sysvol || The ocfs2 cluster name
+| name = ocfs2cluster|| The ocfs2 cluster name
 |-
 | node: || The Node declaration
 |-
 | number = 1<br />number = 2
  || The node number, it must be different on all node 
 |-
-| cluster = sysvol || The name of the cluster
+| cluster = ocfs2cluster|| The name of the cluster
 |-
 | ip_port = 7777 || The ocfs2 node service port, you can change it you want to.
 |-
@@ -232,18 +231,18 @@ There are a lot of configurable parameters there but we will only make one chang
 <code>OCFS2_CLUSTER</code> and change it to ocfs2 cluster name.
 
 {{File|/etc/conf.d/ocfs2|Change OCFS2 Cluster Name|<pre>
-OCFS2_CLUSTER="sysvol"
+OCFS2_CLUSTER="ocfs2cluster"
 </pre>}}
 
 It is also time we add the required mount to {{Path|/etc/fstab}}. Please add the following.
 
 {{File|/etc/fstab|add the following|<pre>
 # Needed by ocfs2
-none                    /sys/kernel/config      configfs        defaults                0 0
-none                    /sys/kernel/dlm         ocfs2_dlmfs     defaults                0 0
+none                    /sys/kernel/config            configfs        defaults                                  0 0
+none                    /sys/kernel/dlm               ocfs2_dlmfs     defaults                                  0 0
 
 # Our DRBD and OCFS2 mount
-/dev/drbd1              /var/lib/samba/sysvol/  ocfs2           user_xattr,acl,noatime  0 0
+/dev/drbd1              /ocfs2cluster/                ocfs2            _netdev,nointr,user_xattr,acl            0 0
 </pre>}}
 
 = DRBD Initialization and Setup =
@@ -354,14 +353,14 @@ You can simple follow the command below.
 We should now start the OCFS2 Cluster
 {{RootCmd|/etc/init.d/ocfs2 start|output=<pre>
  * Starting OCFS2 cluster
- *  - sysvol ...    
+ *  - ocfs2cluster...    
 </pre>}}
 
 Now let us make the DRBD cluster run OCFS2 
-{{RootCmd|mkfs.ocfs2 -N 2 -L "amtbsysvol" /dev/drbd1|output=<pre>
+{{RootCmd|mkfs.ocfs2 -N 2 -L "ocfs2cluster" /dev/drbd1|output=<pre>
 mkfs.ocfs2 1.8.2
 Cluster stack: classic o2cb
-Label: sysvol
+Label: ocfs2cluster
 Features: sparse extended-slotmap backup-super unwritten inline-data strict-journal-super xattr indexed-dirs refcount discontig-bg
 Block size: 4096 (12 bits)
 Cluster size: 4096 (12 bits)
@@ -433,7 +432,7 @@ built-in
 We can now mount it the OCFS2 cluster on both node.
 
 {{RootCmd
-|mount /var/lib/samba/sysvol/
+|mount /ocfs2cluster/
 }}
 
 = Adding both DRBD and OCFS2 on system boot =
