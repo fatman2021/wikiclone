@@ -3,20 +3,20 @@
 |{{InfoBox homepage|https://code.google.com/p/compcache/|header=true}}
 |{{InfoBox wikipedia|zRam}}
 }}
-'''zram''' (previously called '''compcache''') can create RAM based block devices. It is an experimental (staging) module of the Linux kernel since 3.2.
+'''zram''' (previously called '''compcache''') can create RAM based block devices. It is an experimental (staging) module of the Linux kernel since 3.2.  Starting with kernel version 3.15, zram supports multiple compression streams and the ability to change the compression algorithms used.
 
 == Introduction ==
-What it does is create a compressed block device in ram. That block device can then be used for swap or general purpose ram disk. The two most popular uses for it are swap to extend the available amount of ram to processes and /tmp. The ram used for the block device is dynamicaly obtained and released up to it's predefined uncompressed maximum size. The way it extends the amount of available ram to a system is by using a portion of the ram as compressed swap. It can therefore hold more pages of memory in the compressed swap than the amount of actual memory used.  Typically it compresses to a 3:1 ratio.  So, 1G of swap uses only 333MB of ram on average. The compression ratio including memory used for disk overhead varies depending on the % maximum space used.  I found it to vary from 1.5:1 for a 1.5G disk with only 5% space used, to over 3:1 when nearly full. It also is much faster at swapping pages than typical hard disk swap.
+The zram driver creates a compressed block device in ram. That block device can then be used for swap or general purpose ram disk. The two most popular uses for it are swap to extend the available amount of ram to processes and /tmp. The ram used for the block device is dynamicaly obtained and released up to it's predefined uncompressed maximum size. The way it extends the amount of available ram to a system is by using a portion of the ram as compressed swap. It can therefore hold more pages of memory in the compressed swap than the amount of actual memory used.  Typically it compresses to a 3:1 ratio.  So, 1G of swap uses only 333MB of ram on average. The compression ratio including memory used for disk overhead varies depending on the % maximum space used.  I found it to vary from 1.5:1 for a 1.5G disk with only 5% space used, to over 3:1 when nearly full. It also is much faster at swapping pages than typical hard disk swap.
 
 My experience with using it, my system is still fully functional, with only slight slow downs at times. This is for a [[Xfce]]4 desktop with several apps and emerge running with PORTAGE_NICENESS=10. The memory and swap spaces were nearly maxed out. Intel Core2 Quad core 2.6Ghz, 4G ram. I had 4 - 1.5G zram disks for swap, plus 1G partition of hard drive swap as backup. At one point during linking chromium, I saw the system using just over 5G of zram swap, while using about 1.2G of ram, about 100MB of hard disk swap. The desktop was still responsive :)
 
 == Caveats/Cons ==
-Each zram device contains it's own compression buffer, memory pools and other metadata as well as per-device locks. This can become a serious bottleneck for multi-core machines. To work around this problem, zram is capable of initializing multiple devices. The recommended amount of devices for swap is 1 per cpu core.
+Prior to kernel 3.15, each zram device contains it's own compression buffer, memory pools and other metadata as well as per-device locks. This can become a serious bottleneck for multi-core machines. To work around this problem, zram is capable of initializing multiple devices. For this reason, the recommended amount of devices for swap is 1 per cpu core for kernels prior to 3.15.
 
-For systems with limited memory, non swap use can reduce the amount of available memory to run applications.
+Another caveat for systems with limited memory, non swap use can reduce the amount of available memory to run applications.
 
 == Enabling zram ==
-I recommend you enable zram as a loadable module. The reason is the number of devices created are set during the module's loading. If you compile the module into the kernel, it will default to 1 device and size it to 25% of total memory. It is possible to re-configure the size later, but you can only change the number of devices at boot time by using the kernel boot parameter
+It is recommended that zram be built as a loadable module. Parameters specified at the loading of the module become the maximum settings that zram is capable of.  For instance, the number of devices created is limited to 1 and its size set to 25% of total memory. It is possible to re-configure the size later, but you can only change the number of devices at boot time by using the kernel boot parameter
  zram.num_devices=#
 When it is a loadable module, the number of devices can be changed later without a reboot. You will however have to de-activate any existing devices before being able to increase or decrease the number of devices.
 
@@ -31,13 +31,14 @@ Device Drivers  --->
 
 === Installation ===
 By far the easiest method of utilizing zram disk(s) is by using Martin Väth's zram-init script.
-Currently it is available in the main tree:
+Note, that version 2.7 is fully compatible with kernels < 3.15.  If version 3.0 is used, the maxs (maximum concurrent streams) and algo (compression algorithm selection) is only functional for kernels >= 3.15.
+Currently, both versions available in the main tree:
 {{Emerge|zram-init}}
 
 === Configuration ===
 Edit the {{Path|/etc/conf.d/zram-init}} file and create/configure your desired zram devices.  There is lots of comments/instructions in the file.  So, proceed with editing, save it when your done. 
  
-{{Note|1. For multicore systems configure one zram swap per cpu core.
+{{Note|1. For multicore systems configure one zram swap per cpu core for linux < 3.15.  For Linux >= 3.15, set maxs equal to the number of cores.
 2. Set the priority of all zram swap devices to the same value (high).
 3. Set priority of hard drive swap (low).}}
 
@@ -57,21 +58,29 @@ unload_on_stop="yes"
 # It is also passed to the kernel module on modprobe.
 num_devices="2"
 
-# For each device, specify size, type, and flags:
-# size0, size1, ... are the variables for the sizes.
+# For each device, specify type, size, maxs, algo, flags, opts mode, owgr.
+# The last three can be omitted for swap but *must* be specified for others.
+# Specify as empty if unneeded.
 # type0, type1, ... are the variables for the types.
+# size0, size1, ... are the variables for the sizes.
+# maxs0, maxs1, ... are the variables for the maximal (parallel) streams.
+# algo0, algo1, ... are the variables for the compression algorithms.
 # flag0, flag1, ... are the variables for the flags.
+# Except for swap:
+# opts0, opts1, ... are the variables for the mount options.
+# mode0, mode1, ... are the variables for the directory mode.
+# owgr0, owgr1, ... are the variables for the directory owner:group.
 #
 # The size is in megabytes.
 # If the size is 0 (or empty) the device is ignored by the script.
 #
 # Available types:
 # "swap"  The device is initialized as a swap device.
-#         The flags variable specifies the priority (default is 16383)
-#         Use "-" in the flags variable to omit setting the priority
+#         The flags variable specifies the priority (16383 if empty).
+#         Use "-" in the flags variable for the default priority (-1)
 # "/..."  The device is mounted on /...
 #         The flags variable specifies the type (ext2 or ext4, default is ext4)
-# Devices with other types are ignored by the the script
+# Devices with other types are ignored by the script
 #
 # Only variables with numbers  0 ... num_devices-1  are used by the script.
 
@@ -89,9 +98,10 @@ size2="512"
 </pre>}}
 
 === Start ===
-Add the init script to the desired runlevel, usually "default":
-{{RootCmd|rc-config add zram-init default
+Add the init script to the desired runlevel, usually "boot":
+{{RootCmd|rc-config add zram-init boot
 |/etc/init.d/zram-init start}}
+In this case, boot is preferable to default because if your zram is providing a filesystem such as /tmp or /var/tmp, it would need to be mounted prior to any access to it during the default runtime.
 
 === Systemd support ===
 
