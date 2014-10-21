@@ -608,26 +608,45 @@ If the command fails with the message "partition /vicepa does not exist on the s
 
 === Configuring the Top Level of the AFS filespace === <!--T:162-->
 
+At this point the server configuration is complete. You will need a running AFS client to set up the top level directories in AFS and grant access rights to them.  This client does not need to be installed on the OpenAFS server.  You will need to obtain your administrative creditials.  Root access is not required for the commands in this section.
+
+First, obtain your administrative credentials.
+
+{{Cmd|kinit USERNAME/admin|output=<pre>
+Password for USERNAME/admin@REALM: ********
+</pre>}}
+{{Cmd|aklog
+|tokens|output=<pre>
+Tokens held by the Cache Manager:
+
+User's (AFS ID 1) tokens for afs@mycellname.com [Expires Oct 21 20:26]
+   --End of list--
+</pre>}}
+
+
 <!--T:163-->
 First you need to set some ACLs, so that any user can lookup {{Path|/afs}} . 
 
 <!--T:164-->
-{{Note|The default OpenAFS client configuration has '''dynroot''' enabled. This option turns {{Path|/afs}} into a virtual directory composed of the contents of your {{Path|/etc/openafs/CellServDB}} file. As such, the following command will not work, because it requires a real AFS directory. You can temporarily switch dynroot off by setting '''ENABLE_DYNROOT''' to '''no''' in {{Path|/etc/conf.d/openafs-client}} . Don't forget to issue a client restart after changing parameters.}}
+{{Note|The default OpenAFS client configuration has '''dynroot''' enabled. This option turns {{Path|/afs}} into a virtual directory composed of the contents of your {{Path|/etc/openafs/CellServDB}} file. Fortunately, '''dynroot''' provides a way to access volumes by name using the "magic" {{Path|/afs/.:mount/}} directory.  This obviates the need to disable '''dynroot''' and and client restarts.}}
 
 <!--T:165-->
-{{RootCmd|fs setacl /afs system:anyuser rl}}
+{{Cmd|fs setacl /afs/.:mount/CELL_NAME:root.afs/. system:anyuser rl}}
 
 <!--T:166-->
 Then you need to create the root volume, mount it readonly on {{Path|/afs/<cell name>}} and read/write on {{Path|/afs/.<cell name>}} . 
 
 <!--T:167-->
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME root.cell
-|fs mkmount /afs/CELL_NAME root.cell
-|fs setacl /afs/CELL_NAME system:anyuser rl
-|fs mkmount /afs/.CELL_NAME root.cell -rw}}
+{{Cmd|vos create SERVER_NAME PARTITION_NAME root.cell
+|fs mkmount /afs/.:mount/CELL_NAME:root.afs/CELL_NAME root.cell
+|fs setacl /afs/.:mount/CELL_NAME:root.afs/CELL_NAME system:anyuser rl
+|fs mkmount /afs/.:mount/CELL_NAME:root.afs/.CELL_NAME root.cell -rw}}
+
+
+At this point, you can create volumes for your new AFS site and add them to the filespace. Users and groups should be created and directory ACLs setup to allow users to create files and directories. To create and mount a volume:
 
 <!--T:168-->
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
+{{Cmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/MOUNT_POINT VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/.MOUNT_POINT VOLUME_NAME -rw
 |fs setquota /afs/CELL_NAME/.MOUNT_POINT -max QUOTUM}}
