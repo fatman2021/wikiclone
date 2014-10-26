@@ -179,15 +179,23 @@ Vary the debug level (the "-d 1" above) for more info. If all goes well you will
 If there's an error, <code>slaptest</code> will list the line number to which it applies (of the {{Path|slapd.conf}} file).
 
 <!--T:109-->
-Note that OpenLDAP can store its configuration in two places. One in the original {{Path|slapd.conf}} and also in {{Path|slapd.d/}}. The second is the new place and designed not be edited with a text editor but generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. It is not required to convert the configuration and use {{Path|slapd.d/}} for now, but support for the currently documented approach will be removed in future versions of this document.
+Note that in 2.4.23 OpenLDAP upstream default migrated from traditional flat config files ({{Path|slapd.conf}}) to OLC (OnLineConfiguration aka cn=config: configuration directives are stored in LDAP format, traditionally used poor performance, but enough human-readable "ldif" back-end, which's files similiarly traditionally are placed in {{Path|slapd.d/}} directory). One of benefits of using OLC is that dynamic back-end (cn=config) doesn't require restart of server after updating configuration. The current upstream deafult is designed to be edited not with a text editor, but standard ldap client. Initially it can be generated from the {{Path|slapd.conf}} using <code>slaptest</code> in the following manor in {{Path|/etc/openldap/}}. In Gentoo it is still not required to convert the configuration and use {{Path|slapd.d/}} for now (the directory and its contents need to be owned by the ldap service account), but support for the currently documented approach will be removed in future versions of this document. Since 2.4.23 upstream distributes default server configuration as {{Path|slapd.ldif}}, which can be edited in your favourite text editor and imported using <code>slapadd</code> (server must be offline) utility (Note, unlike ordinar LDAP tree you can't use this utility to modify data, for cn=config it can be used only to completely creation of config directory). So, normally you'll need in flat config translation only if you use some custom schemes, distributed in old format.
 
-<!--T:110-->
+To allow a local-user (probably — root) modify OLC you should redefine access to config (this name is hardcoded) database adding to the end of the source {{Path|slapd.conf}}:
+{{Code|/etc/openldap/slapd.conf|<pre>
+database config
+access to *
+        by dn.exact="gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth" manage
+        by * none
+</pre>
+}}
+
+
 {{RootCmd|mkdir /etc/openldap/slapd.d}}
 {{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
 {{RootCmd|chown -R ldap slapd.d}}
 
-<!--T:111-->
-Running this command will transfer and translate the configuration. Once this has been run successfully the command needs to be run every time the {{Path|slapd.conf}} is updated. The directory and its contents need to be owned by the ldap service account. 
+Running this command will transfer and translate the configuration. After that you are expected to update configuration using specially prepared ldif files. And only if you aren't enough familiar with them, you can first edit {{Path|slapd.conf}} and after that re-translate the {{Path|slapd.conf}} into {{Path|slapd.d/}}. Don't forget to check directory's permissions. Probably you'll need either to stop server prior to perform update or will get a crash. So, if migrated to {{Path|slapd.d/}}, use upstream default to handle it.
 
 <!--T:112-->
 For more instructions read the in-line comments of the generated files.
@@ -200,6 +208,34 @@ The below line will enable the {{Path|slapd.d/}} configuration method.
 OPTS="-F /etc/openldap/slapd.d -h 'ldaps:// ldap:// ldapi://%2fvar%2frun%2fopenldap%2fslapd.sock'"
 </pre>
 }}
+
+Some examples of OLC-style update slapd config:
+
+Example of LDIF file for update initial config directory:
+{{Code|fix-configs.ldif|<pre>
+dn: cn=config
+changetype: modify
+delete: olcConfigFile
+
+dn: cn=config
+changetype: modify
+replace: olcConfigDir
+olcConfigDir: /etc/openldap/slapd.d
+</pre>
+}}
+
+LDIF file to set proper loglevel:
+{{Code|loglevel.ldif|<pre>
+dn: cn=config
+changetype: modify
+replace: olcLogLevel
+olcLogLevel: stats sync
+</pre>
+}}
+
+You can apply it just (rememeber: no daemon restart needed):
+{{RootCmd|ldapmodify -Y EXTERNAL -H ldapi:/// -f loglevel.ldif}}
+
 
 <!--T:34-->
 Finally, create the {{Path|/var/lib/openldap-data}} structure: 
