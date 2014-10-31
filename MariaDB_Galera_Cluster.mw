@@ -8,9 +8,25 @@ MariaDB Galera cluster required a mininal of 3 node setup. However in this guide
 {{Note|
 3 Node is always a better approach when you are running HA and avoiding split brain.}}
 
+= Design =
+The Maria Galera Cluster are multi master cluster which have synchronous write across all node.
+Basically each node required an static ip address for it to function 
+
+If you have a local dns server, you can make use of that. else make use of your hosts file.
+This will make your system clear about the other nodes and ip address.
+{{File|/etc/hosts|add you hostname if you don't have it|<pre>
+127.0.0.1   localhost
+192.168.0.10   node01
+192.168.0.11   node02
+</pre>}}
+
+
+<ref name="2nodeMariaDB">[http://www.sebastien-han.fr/blog/2012/04/01/mysql-multi-master-replication-with-galera/]http://www.sebastien-han.fr/blog/2012/04/01/mysql-multi-master-replication-with-galera/</ref>
+<ref name="galeracluster.com">[http://galeracluster.com/documentation-webpages/?id=galera_deployment]http://galeracluster.com/documentation-webpages/?id=galera_deployment</ref>
+
 = Packages =
 Please add the garbd useflah, if you have 3 node, you can skip this useflag.
-{{File|/etc/portage/package.use|add this extra useflag, for example|<pre>
+{{File|/etc/portage/package.use|add this extra useflag|<pre>
 sys-cluster/galera garbd
 </pre>}}
 
@@ -46,10 +62,121 @@ Please emerge the following package
 |tokudb+++Add support for TokuDB storage engine
 |xml++
 }}
-
 {{USEflag
 |package=sys-cluster/galera
 |garbd++Yes+Install Galera Arbitrator - a stateless daemon which acts as a lightweight group member
 |ssl+++
 |test+++
 }}
+= Database Initialization = 
+Run this command and keyin your mariadb root password
+{{RootCmd|emerge --config {{=}}dev-db/mariadb-galera-xx.xx.xx|output=<pre>
+Configuring pkg...
+
+ * Please provide a password for the mysql 'root' user now
+ * or through the /root/.my.cnf file.
+ * Avoid ["'\_%] characters in the password
+    >
+ * Retype the password
+    >
+ * Creating the mysql database and setting proper
+ * permissions on it ...
+ * Command: '/usr/share/mysql/scripts/mysql_install_db'                                                                                                                                  [ ok ]
+ * Setting root password ...                                                                                                                                           [ ok ]
+ * Loading "zoneinfo", this step may require a few seconds ... ...                                                                                                     [ ok ]
+ * Stopping the server ...
+ * Done
+</pre>}}
+
+= Setup Mariadb and Galera =
+== Node01 ==
+{{File|/etc/mysql/my.cnf|Make the change below|<pre>
+bind-address                            = 0.0.0.0  
+#Listen to all interface, note that there are 2 such field, change both
+
+wsrep_provider=/usr/lib/galera/libgalera_smm.so
+# You should change this name to something meaningful
+wsrep_cluster_name="my_mariadb_cluster"
+# List all nodes of the cluster including this one
+wsrep_cluster_address="gcomm://"
+#We will come back to change this again later
+wsrep_sst_method=rsync
+</pre>}}
+== Node02 ==
+{{File|/etc/mysql/my.cnf|Make the change below|<pre>
+bind-address                            = 0.0.0.0  
+#Listen to all interface, note that there are 2 such field, change both
+
+wsrep_provider=/usr/lib/galera/libgalera_smm.so
+# You should change this name to something meaningful
+wsrep_cluster_name="my_mariadb_cluster"
+# List all nodes of the cluster including this one
+wsrep_cluster_address="gcomm://node01"
+wsrep_sst_method=rsync
+</pre>}}
+
+== Start mariadb on Node1 == 
+{{RootCmd|/etc/init.d/mysql start}}
+If everything is running smoothly, start the next node and on.
+
+== Start mariadb on Node2 and other == 
+{{RootCmd|/etc/init.d/mysql start}}
+
+== Checking if all node are join and running correctly ==
+try to run this command from node 1 
+{{RootCmd|mysql -u root -p|output=<pre>
+Enter password:
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 6
+Server version: 10.0.14-MariaDB-wsrep-log Source distribution, wsrep_25.10.r4144
+
+Copyright (c) 2000, 2014, Oracle, SkySQL Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]> SHOW STATUS LIKE 'wsrep%';
+#Focus on the 2 value below.
+| wsrep_cluster_size           | 2                                     |
+| wsrep_ready                  | ON                                    |
+</pre>}}
+If the cluster size is equal to you node size you are good to go.
+And wsrep_ready meant the cluster is ON.
+
+# Garbd Configuration #
+{{Note|
+Not required if you have 3 node or more}}
+
+{{File|/etc/conf.d/garbd|Make the change below|<pre>
+# A space-separated list of node addresses (address[:port]) in the cluster
+GALERA_NODES="192.168.0.10 192.168.0.11"
+
+# Galera cluster name, should be the same as on the rest of the nodes.
+GALERA_GROUP="my_mariadb_cluste"
+</pre>}}
+
+{{RootCmd|/etc/init.d/gardb start}}
+
+
+
+
+ALMOST DONE
+
+
+= Secure mariadb =
+Secure your mariadb for production use 
+{{RootCmd|mysql_secure_installation|output=<pre>
+
+</pre>}}
+
+
+
+
+
+
+
+
+= External Reference =
+<references />
+
+[[Category:Cluster]]
+[[Category:Database]]
