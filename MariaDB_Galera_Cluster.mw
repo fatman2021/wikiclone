@@ -1,12 +1,9 @@
-{{Warning|
-Work in progress}}
-
 = Introduction =
-This is a guide for 2 node MariaDB Galera Cluster.<br />
-MariaDB Galera cluster required a mininal of 3 node setup. However in this guide will only stop at 2 and you can add your new node later.<br />
+This is a guide for 3 node MariaDB Galera Cluster.<br />
+MariaDB Galera cluster required a minimal of 3 node setup. However in this guide will only stop at 2 and you can add your new node later.<br />
 
 {{Note|
-3 Node is always a better approach when you are running HA and avoiding split brain.}}
+Can't get 2 node working with garbd thus change to 3 node guide.}}
 
 = Design =
 The Maria Galera Cluster are multi master cluster which have synchronous write across all node.
@@ -16,8 +13,9 @@ If you have a local dns server, you can make use of that. else make use of your 
 This will make your system clear about the other nodes and ip address.
 {{File|/etc/hosts|add you hostname if you don't have it|<pre>
 127.0.0.1   localhost
-192.168.0.10   node01
-192.168.0.11   node02
+192.168.10.11   node01
+192.168.10.12   node02
+192.168.10.13   node03
 </pre>}}
 
 
@@ -68,6 +66,7 @@ Please emerge the following package
 |ssl+++
 |test+++
 }}
+
 = Database Initialization = 
 Run this command and keyin your mariadb root password
 {{RootCmd|emerge --config {{=}}dev-db/mariadb-galera-xx.xx.xx|output=<pre>
@@ -89,6 +88,7 @@ Configuring pkg...
 </pre>}}
 
 = Setup Mariadb and Galera =
+
 == Node01 ==
 {{File|/etc/mysql/my.cnf|Make the change below|<pre>
 bind-address                            = 0.0.0.0  
@@ -99,9 +99,14 @@ wsrep_provider=/usr/lib/galera/libgalera_smm.so
 wsrep_cluster_name="my_mariadb_cluster"
 # List all nodes of the cluster including this one
 wsrep_cluster_address="gcomm://"
-#We will come back to change this again later
+# We will come back to change this again later
 wsrep_sst_method=rsync
+
+# Galera Node Configuration
+wsrep_node_address="192.168.10.11"
+wsrep_node_name="node01"
 </pre>}}
+
 == Node02 ==
 {{File|/etc/mysql/my.cnf|Make the change below|<pre>
 bind-address                            = 0.0.0.0  
@@ -111,8 +116,31 @@ wsrep_provider=/usr/lib/galera/libgalera_smm.so
 # You should change this name to something meaningful
 wsrep_cluster_name="my_mariadb_cluster"
 # List all nodes of the cluster including this one
-wsrep_cluster_address="gcomm://node01"
+wsrep_cluster_address="gcomm://node01,node02,nodw03"
 wsrep_sst_method=rsync
+
+# Galera Node Configuration
+wsrep_node_address="192.168.10.12"
+wsrep_node_name="node02"
+
+</pre>}}
+
+== Node03 ==
+{{File|/etc/mysql/my.cnf|Make the change below|<pre>
+bind-address                            = 0.0.0.0  
+#Listen to all interface, note that there are 2 such field, change both
+
+wsrep_provider=/usr/lib/galera/libgalera_smm.so
+# You should change this name to something meaningful
+wsrep_cluster_name="my_mariadb_cluster"
+# List all nodes of the cluster including this one
+wsrep_cluster_address="gcomm://node01,node02,nodw03"
+wsrep_sst_method=rsync
+
+# Galera Node Configuration
+wsrep_node_address="192.168.10.13"
+wsrep_node_name="node03"
+
 </pre>}}
 
 == Start mariadb on Node1 == 
@@ -136,13 +164,13 @@ Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
 
 MariaDB [(none)]> SHOW STATUS LIKE 'wsrep%';
 #Focus on the 2 value below.
-| wsrep_cluster_size           | 2                                     |
+| wsrep_cluster_size           | 3                                     |
 | wsrep_ready                  | ON                                    |
 </pre>}}
 If the cluster size is equal to you node size you are good to go.
 And wsrep_ready meant the cluster is ON.
 
-== Garbd Configuration ==
+== Garbd Configuration--Not working yet ==
 {{Note|
 Not required if you have 3 node or more}}
 
@@ -157,26 +185,28 @@ GALERA_GROUP="my_mariadb_cluste"
 {{RootCmd|/etc/init.d/gardb start}}
 
 
+= Finalize configuration =
+The Mariadb cluster is now up.
+We still need to make some final change.
 
+== Node01 ==
+{{File|/etc/mysql/my.cnf|Make the change below|<pre>
+wsrep_cluster_address="gcomm://node01,node02,nodw03"
+# We will come back to change this again later
+</pre>}}
 
-ALMOST DONE
-
+== Add services using rc-update on all node ==
+{{RootCmd|rc-update add mysql default|output=<pre>
+ * service mysql added to runlevel default
+</pre>}}
 
 = Secure mariadb =
 Secure your mariadb for production use 
-{{RootCmd|mysql_secure_installation|output=<pre>
-
-</pre>}}
-
-
-
-
-
-
-
+{{RootCmd|mysql_secure_installation}}
 
 = External Reference =
 <references />
 
 [[Category:Cluster]]
+[[Category:Server]]
 [[Category:Database]]
