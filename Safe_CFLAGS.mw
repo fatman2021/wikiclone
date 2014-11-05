@@ -6,6 +6,81 @@ Once you find this information, you can then match your CPU to one listed on thi
 
 Below you can find a list of [[CFLAGS]] which are to be considered "safe" for the given processors. These are the settings you should use if you are unsure which CFLAGS your processor needs.
 
+== Find cpu-specific options ==
+
+At first, create two files and set language to english for get sed working:
+<pre>
+LANG="en"
+touch native.cc
+touch march.cc
+</pre>
+
+Compile the first file like following:
+
+<pre>
+gcc -fverbose-asm -march=native native.cc -S
+</pre>
+
+Get march, which gcc will choose:
+
+<pre>
+grep march native.s
+# options passed:  -D_GNU_SOURCE native.cc -march=core-avx-i -mcx16 -msahf
+</pre>
+
+Now compile second file:
+
+<pre>
+gcc -fverbose-asm -march=core-avx-i march.cc -S
+</pre>
+
+Now clean the *.s files for easy comparing:
+
+<pre>
+sed -i 1,/options\ enabled/d march.s
+sed -i 1,/options\ enabled/d native.s
+</pre>
+'''When you not set LANG on an localised system, you have now empty files.'''
+
+Compare both *.s files:
+
+<pre>
+diff march.s native.s
+</pre>
+
+Output empty? You found your -march=, use it. In other cases:
+
+<pre>
+20,25c20,23
+< # -maccumulate-outgoing-args -maes -malign-stringops -mavx
+< # -mavx256-split-unaligned-load -mavx256-split-unaligned-store -mcx16
+< # -mf16c -mfancy-math-387 -mfp-ret-in-387 -mfsgsbase -mfxsr -mglibc
+< # -mieee-fp -mlong-double-80 -mmmx -mpclmul -mpopcnt -mpush-args -mrdrnd
+< # -mred-zone -msahf -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2 -mssse3
+< # -mtls-direct-seg-refs -mxsave -mxsaveopt
+---
+> # -maccumulate-outgoing-args -malign-stringops -mcx16 -mfancy-math-387
+> # -mfp-ret-in-387 -mfsgsbase -mfxsr -mglibc -mieee-fp -mlong-double-80
+> # -mmmx -mpclmul -mpopcnt -mpush-args -mred-zone -msahf -msse -msse2 -msse3
+> # -msse4 -msse4.1 -msse4.2 -mssse3 -mtls-direct-seg-refs
+</pre>
+
+Now guess, which switches -march=core-avx-i enable and -march=native not: ''-maes -mavx'' and some more. Now we build march.cc again with this two switches disabled:
+
+<pre>
+gcc -fverbose-asm -march=core-avx-i -mno-aes -mno-avx march.cc -S
+sed -i 1,/options\ enabled/d march.s
+diff march.s native.s
+
+< # -mmmx -mpclmul -mpopcnt -mpush-args -mrdrnd -mred-zone -msahf -msse
+< # -msse2 -msse3 -msse4 -msse4.1 -msse4.2 -mssse3 -mtls-direct-seg-refs
+---
+> # -mmmx -mpclmul -mpopcnt -mpush-args -mred-zone -msahf -msse -msse2 -msse3
+> # -msse4 -msse4.1 -msse4.2 -mssse3 -mtls-direct-seg-refs
+</pre>
+
+One switch we need to disable too: -mrdrnd:
+
 ==x86/amd64==
 
 === Intel ===
