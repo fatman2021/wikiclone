@@ -5,4 +5,103 @@ Work in progress so will not link to any category until it is finished
 = Introduction =
 
 There are changes that you have a high samba share load and you need to have 2 or more samba server to serve the same group of users.
+
 We can do that via CTDB and some cluster files system.
+
+Our guide are focus on version 2.5.4 and above, version 1 is not covered on this guide 
+
+== Topology ==
+
+Below are the minimal requirement for ctdb:
+# 2 node
+# an Extra NIC for ctdb services which have no address (Samba ctdb will take over this nic and assign ip)
+# Each node at least 1 IP address for ctdb services
+# A Shared cluster drive OCFS2, GFS or other
+
+{{Note|
+ CTDB don't run on alias NIC
+ Different cluster files system would required some different setting on samba config
+}}
+
+= Getting CTDB =
+
+== From Poly-C Layman ==
+Let hope when this guide is ready the new ctdb-2.5.4 already in portage. {{Bug|500332}}
+Else you will need to get from layman on poly-c
+
+{{rootCmd|layman -a poly-c}}
+
+
+== Unmaks CTDB ==
+Before this let's unmask ctdb 2.5.4
+{{File|/etc/portage/package.unmask|add this line in|<pre>
+=dev/db-ctdb-2.5.4
+</pre>}}
+
+== Emerge CTDB ==
+
+{{Emerge|{{=}}dev/db-ctdb|params=--ask --newuse --verbose}}
+
+= Configure CTDB = 
+
+A Basical running CTDB are simple with the latest configuration
+
+Assumption:
+ Node 1 eth1 Private IP: 192.168.100.11 (CTDB node IP) 
+ Node 1 eth2 Public IP: 192.168.10.11 (Servicing IP)
+ Node 2 eth1 Private IP: 192.168.100.12 (CTDB node IP)
+ Node 2 eth2 Public IP: 192.168.10.12 (Servicing IP)
+ Both running on eth2
+ Running OCFS2
+
+eth2 will need to start without any ip.
+
+{{File|/etc/conf.d/net|Make some change like below|<pre>
+config_eth2="null"
+</pre>}}
+
+== CTDB Configuration Change ==
+
+We will need to make a few changes.
+{{File|/etc/ctdb/ctdbd.conf|Make some change like below|<pre>
+CTDB_PUBLIC_ADDRESSES=/etc/ctdb/public_addresses
+</pre>}}
+
+{{File|/etc/ctdb/nodes|Make some change like below|<pre>
+192.168.100.11
+192.168.100.12
+</pre>}}
+
+{{File|/etc/ctdb/public_addresses|Make some change like below|<pre>
+192.168.10.11/24        eth2
+192.168.10.12/24        eth2
+</pre>}}
+
+{{Note|Gateway on eth2??}}
+
+
+== Samba Configuration Change ==
+
+Please change this on both samba server
+
+{{File|/etc/samba/smb.conf|Add the following line|<pre>
+[global]
+        #CTDB Cluster
+        netbios name = SambaServerName
+        clustering = yes
+        ctdbd socket = /var/lib/ctdb/ctdb.socket
+
+        #ocfs2 ctdb setting
+        fileid:mapping = fsid
+</pre>}}
+
+We are done on configuration 
+
+= Start and Stop CTDB =
+
+== Start==
+{{RootCmd|ctdbd_wrapper /var/run/ctdb/ctdbd.pid start}}
+== Stop ==
+{{RootCmd|ctdbd_wrapper /var/run/ctdb/ctdbd.pid stop}}
+
+Done
