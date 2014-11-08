@@ -1,5 +1,5 @@
 {{InfoBox stack
-|{{InfoBox todo|[[#Virtual network switch|Virtual network switch]]|[[#Network bridge|Network bridge]]|header=true}}
+|{{InfoBox todo|[[#Network bridge|Network bridge]]|header=true}}
 }}
 This article describes some of the options to configure a [[QEMU]] virtual machine.
 
@@ -49,6 +49,39 @@ QEMU can emulate several graphics cards:
 * ''-vga qxl'' - More powerful graphics card for use with [[Wikipedia:SPICE (protocol)|SPICE]].
 
 To get more performance use the same color depth for your host as you use in the guest.
+
+== PCI Pass-Through ==
+{{Note|This will NOT work for GPUs. It's completely different. Take a look [https://bbs.archlinux.org/viewtopic.php?id=162768 here]}}
+{{Kernel||<pre>
+Device Drivers --->
+    [*] IOMMU Hardware Support  --->
+        If you have an Intel processor:
+        [*]   Support for Intel IOMMU using DMA Remapping Devices
+
+        If you have an AMD processor:
+        [*]   AMD IOMMU support
+
+Bus options (PCI etc.)  --->
+    <M>   PCI Stub driver
+</pre>}}
+
+Find the host PCI device:
+{{RootCmd|lspci -nn|output=<pre>
+[...]
+00:1b.0 Audio device [0403]: Intel Corporation 82801H (ICH8 Family) HD Audio Controller [8086:284b] (rev 02)
+[...]
+</pre>}}
+Note down the device (00:1b.0) and vendor (8086:284b) ID.
+
+Unbind it:
+{{RootCmd
+|echo "8086 284b" > /sys/bus/pci/drivers/pci-stub/new_id
+|echo "0000:00:1b.0" > /sys/bus/pci/devices/0000:00:1b.0/driver/unbind
+|echo "0000:00:1b.0" > /sys/bus/pci/drivers/pci-stub/bind
+}}
+
+And bind it to guest:
+''-device pci-assign,host=00:1b.0''
 
 == Networking ==
 Default - without any ''-net'' option - is '''Pass-through'''.
