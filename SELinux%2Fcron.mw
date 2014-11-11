@@ -1,170 +1,158 @@
-== Structure ==
+= DESCRIPTION =
 
-=== Domains ===
-The cron daemon itself (like vixie-cron) runs in the crond_t domain. Depending on the cron daemon used, this daemon either immediately executes the jobs (hence its ability to transition to various other domains) or does this through an intermediate domain (system_cronjob_t for system cronjobs and cronjob_t for user cronjobs).
+The '''cron''' SELinux module supports various Unix cron daemons, including (but not limited to) vixie-cron, cronie, fcron and anacron.
 
-The crontab_t and admin_crontab_t domains are used by the users (and administrators) for maintaining their crontab files. These files are read in by the cron daemon. 
+The SELinux cron support is somewhat more complex than most other SELinux domains, because the cron daemon is responsible for executing workload in the context of end users as well as the overall system. Most Cron implementations are also SELinux-aware, so having some understanding of how they operate is important.
 
-=== File types/labels ===
-The following table lists the file type/labels defined in the cron module (part of the base policy).
+Most of these cron implementations use the SELinux ownership of the crontab file (the file which contains the execution task definitions) to determine in which context a task is to be executed. For instance, if a crontab file installed in <code>/var/spool/cron/crontabs</code> has a SELinux context whose SELinux owner is ''staff_u'', then the tasks defined in it will be run through either the general cronjob domain (''cronjob_t'') or the end user domain (''staff_t'') depending on the value of the ''cron_userdomain_transition'' boolean.
 
-{| class="wikitable"
-|-
-! Type !! Function !! Description
-|-
-| cronjob_t || Domain || Domain for end user cronjobs
-|-
-| system_cronjob_t || Domain || Domain for system cronjobs
-|-
-| crond_t || Domain || Domain for the cron daemon
-|-
-| admin_crontab_t || Domain || Domain for administrator-started crontab commands
-|-
-| crontab_t || Domain || Domain for user-started crontab commands
-|-
-| crond_exec_t || Entrypoint || Entrypoint for the cron daemon binaries
-|-
-| crontab_exec_t || Entrypoint || Entrypoint for the crontab commands
-|-
-| cron_spool_t || Configuration || Spool files (where the user crontab files are in)
-|-
-| user_cron_spool_t || Configuration || Spool files (for the user crontab files)
-|-
-| system_cron_spool_t || Configuration || Spool files (where the system crontab files are in)
-|-
-| cron_var_lib_t || || Label for cron's /var/lib items
-|-
-| cron_var_run_t || || Label for cron's /var/run items
-|-
-| cron_log_t || || Label for cron's logfiles (/var/log/cron)
-|-
-| crond_tmp_t || || Label for the cron daemon's temporary files
-|-
-| crond_var_run_t || || Label for the cron daemon's /var/run items
-|-
-| system_cronjob_lock_t || || Label for the system cronjobs' lock files
-|-
-| system_cronjob_tmp_t || || Label for the system cronjobs' temporary files
-|-
-| admin_crontab_tmp_t || || Label for temporary files created by a system administrators' crontab command
-|-
-| crontab_tmp_t || || Label for temporary files created by a users' crontab command
-|}
+This boolean, if set to 1 (true), will have the tasks run in the user domain (such as ''staff_t'', ''sysadm_t'', ''unconfined_t'', etc.) whereas, if it is set to 0 (false), will have the tasks run in the general cronjob domain (''cronjob_t'') for end user tasks, or the system cronjob domain (''system_cronjob_t'') for system tasks.
 
-=== Booleans ===
-The cron domain supports the following SELinux booleans, which can be set / unset using the standard setsebool statements.
+The latter is also an important detail - if for some reason packages deploy their tasks as end user cronjobs, then the resulting commands might not be running in the proper domain. As a general rule, system cronjobs are defined in either <code>/etc/crontab</code> or in files in the <code>/etc/cron.d</code> directory. End user cronjobs are defined in files in the <code>/var/spool/cron/crontabs</code> directory.
 
-{| class="wikitable"
-|-
-! Boolean !! Default !! Description
-|-
-| cron_can_relabel || false || Allow jobs running in the system_cronjob_t domain to relabel files and directories. When set, these jobs can also call the setfiles and restorecon commands.
-|-
-| fcron_crond || false || Needed to set more privileges for the cron domains in case fcron is used as a cron daemon. These privileges are not necessary for other cron daemons and as such are "behind" this boolean. 
-|}
+== System administration ==
 
-== Using cron SELinux module ==
+To perform system administration tasks (non-end user tasks) through cron jobs, take the following considerations into account:
 
-=== System administration ===
-If you want to perform system administrative tasks using cronjobs, you will need to take special care that the domain in which the job runs has sufficient privileges.
+* To ensure that the jobs run in the right context (''system_cronjob_t'' for starts), make sure that the cronjob definitions (the crontab files) are inside <code>/etc/crontab</code> or in the <code>/etc/cron.d</code> directories.
+* Have the scripts to be executed labeled properly, and consider using a domain transition for these scripts (through <code>cron_system_entry()</code>).
+* Make sure the <code>HOME</code> directory is set to <code>/</code> so that the target domains do not need any privileges inside end user locations (including <code>/root</code>).
 
-First, make sure that your cronjobs run in the system_cronjob_t domains. This means that the cronjobs must be defined as either
-* scripts in the /etc/cron.hourly, /etc/cron.daily, ... directories
-* crontab entries in the /etc/cron.d directory
-* crontab entries in the /etc/crontab file
+== User cronjobs ==
 
-Also make sure that the <code>HOME</code> variable is kept as <code>HOME=/</code> and not changed to something like <code>HOME=/root</code>. The reason for this is that system cron job policies might not hold any privilege in <code>/root</code> and might fail if the <code>HOME</code> variable is set to that location.
+When working with end user crontabs (those triggered / managed through the '''crontab''' command), take care that this is done as the SELinux user which is associated with the file. This is for two reasons:
 
-Next, verify that the commands you want to run (and thus their target domain in which they will run) are allowed for the system_cronjob_t domain. 
+# If <code>USE=&quot;ubac&quot;</code> is set, then the SELinux User Based Access Control is enabled. This could prevent one SELinux user from editing (or even viewing) the crontab files of another user.
+# The owner of the crontab file is also used by most cron implementations to find out which context the user cronjob should run in. If this ownership is incorrect, then the cronjob might not even launch properly, or run in the wrong context.
 
-For instance, to verify if we can call emerge:
-{{RootCmd|sesearch -s system_cronjob_t -t portage_t -A|output=<pre>
-Found 1 semantic av rules:
-  allow system_cronjob_t portage_t : process transition;</pre>}}
+If this was not done correctly, you will get the following error:
 
-If the domain does not have the necessary privileges, you need to update the policy. More information on maintaining the SELinux policy can be found in the [http://hardened.gentoo.org/selinux/selinux-handbook.xml Gentoo Hardened SELinux Handbook].
+<pre>cron[20642]: (root) ENTRYPOINT FAILED (crontabs/root)</pre>
+If the above error still comes up even though the ownership of the <code>crontab</code> file is correct, then check the state of the ''cron_userdomain_transition'' boolean and the <code>default_contexts</code> file. If the boolean is set to true, then the <code>default_contexts</code> file (or the user-specific files in the <code>users/</code> directory) should target the user domains instead of the cronjob domains:
 
-An example policy file to allow executing dmesg:
+<pre>~# getsebool cron_userdomain_transition
+cron_userdomain_transition --&gt; on
 
-{{RootCmd|cat fixcron.te|output=<pre>
-policy_module(fixcron, 1.0)
+~# grep crond_t /etc/selinux/*/contexts{default_contexts,users/*}
+system_r:crond_t:s0   user_r:user_t staff_r:staff_t sysadm_r:sysadm_t</pre>
+Remember that the default context definitions in the <code>users/</code> directory take priority over the ones defined in the <code>default_contexts</code> files.
 
-require {
-  type system_cronjob_t;
-}
+= BOOLEANS =
 
-dmesg_domtrans(system_cronjob_t)
-</pre>}}
+The following booleans are defined through the '''cron''' SELinux policy module. They can be toggled using <code>setsebool</code>, like so:
 
-In order to find out which specific calls are necessary, it can come in handy to use the privileges assigned to the sysadm_t domain. Take a look at this [http://oss.tresys.com/projects/refpolicy/browser/policy/modules/roles/sysadm.te sysadm.te] file. If you search for "dmesg" you will notice the following in the file: 
+<pre>setsebool -P cron_userdomain_transition on</pre>
+<dl>
+<dt>cron_can_relabel</dt>
+<dd><p>Allow system cron jobs to relabel files on the file system (and restore the context of files). This privilege is assigned to the ''system_cronjob_t'' domain.</p></dd>
+<dt>cron_userdomain_transition</dt>
+<dd><p>If enabled, end user cron jobs run in their default associated user domain (such as ''user_t'' or ''unconfined_t'') instead of the general end user cronjob domain (''cronjob_t'').</p>
+<p>This also requires that the <code>default_contexts</code> file (inside <code>/etc/selinux/*/contexts</code>) is updated accordingly, mentioning that the target contexts are now the user domains rather than the cronjob domains.</p></dd>
+<dt>fcron_crond</dt>
+<dd><p>Enable additional SELinux policy rules needed for the fcron cron implementation.</p></dd></dl>
 
-<pre>
-128 	')
-129 	
-130 	optional_policy(`
-131 	        dmesg_domtrans(sysadm_t)
-132 	')
-133 	
-134 	optional_policy(`
-</pre>
+= DOMAINS =
 
-It is this call - dmesg_domtrans - that we are interested in (and which you can notice in the sample policy mentioned above. It is possible that you notice a _run or _exec instead. Try this one first, but most of the time you'll need a _domtrans method.
+== crond_t ==
 
-For more information or help with managing your policies, do not hesitate to drop by on #gentoo-hardened in irc.freenode.net.
+The main cron domain is ''crond_t'', used by the cron daemon. It is generally responsible for initiating the cronjob tasks, detecting changes on the crontab files and reloading the configuration if that happens.
 
-=== User (including root) cronjobs ===
-{{Note|Part of this is for users which have the ubac USE flag set, but it is pertinent for others as well}}
+Almost all cron implementations are launched through their respective init script.
 
-When working with end user crontabs (those triggered / managed through the crontab command), you must take care that you do this as the SELinux user which is associated with the file (this is a result of the SELinux User Based Access Control, aka UBAC). In other words, if you want to edit the root users' crontab file, you need to be the root SELinux user (and not a staff user that su/sudo'ed into root).
+Some cron implementations which are not SELinux-aware might have the cronjobs themselves also run through the ''crond_t'' domain.
 
-If this was not done correctly, you will get the following error: 
+== cronjob_t ==
 
-<pre>
-cron[20642]: (root) ENTRYPOINT FAILED (crontabs/root)
-</pre>
+The ''cronjob_t'' domain is used for end user generic cronjobs.
 
-Verify that the file's user and SELinux user match:
+== system_cronjob_t ==
 
-{{RootCmd|ls -Z /var/spool/cron/crontabs/root|output=<pre>
-staff_u:object_r:user_cron_spool_t /var/spool/cron/crontabs/root
-</pre>}}
-{{RootCmd|semanage login -l <nowiki>|</nowiki> grep root|output=<pre>
-root              root
-</pre>}}
+The ''system_cronjob_t'' domain is used for system cronjobs.
 
-In the above case, the root Unix account (cfr filename of the crontab file) is mapped to the root SELinux user (cfr second "root" in the semanage login -l output). However, the SELinux user of the crontab file is staff_u instead of root, which is why the failure occurred.
+== crontab_t ==
 
-To fix this, use chcon: 
+The ''crontab_t'' domain is used by end users’ '''crontab''' execution (the command used to manipulate end user crontab files).
 
-{{RootCmd|chcon -u root /var/spool/cron/crontabs/root}}
+== admin_crontab_t ==
 
-Another problem that you might see is immediately at startup: 
+The ''admin_crontab_t'' domain is used by administrators4 '''crontab''' execution (the command used to manipulate crontab files).
 
-<pre>
-cron[26653]: (system_u) ENTRYPOINT FAILED (/etc/crontab)
-</pre>
+= LOCATIONS =
 
-In this case, even if the user of the file is correct, it is most likely due to the /etc/selinux/*/contexts/default_context file containing an incorrect definition. Look at the cron-related line and verify that each mentioned context is valid. For instance: 
+The following list of locations identify file resources that are used by the cron domains. They are by default allocated towards the default locations for cron, so if you use a different location, you will need to properly address this. You can do so through <code>semanage</code>, like so:
 
-{{RootCmd|seinfo -rsystem_r -x <nowiki>|</nowiki> grep cronjob|output=<pre>
-  system_cronjob_t
-</pre>}}
+<pre>semanage fcontext -a -t system_cron_spool_t &quot;/usr/local/etc/cron\.d(/.*)?&quot;</pre>
+The above example marks the ''/usr/local/etc/cron.d'' location as the location where system cronjob definitions are stored.
 
-In the above case, cronjob_t is not valid, but system_cronjob_t is.
+== FUNCTIONAL ==
 
-=== Reporting cron and SELinux issues ===
-If you have an issue with cron and believe that it is related to SELinux, please also give the output of the following commands.
+; cron_spool_t
+: is used for the end user cronjob definition files
+; sysadm_cron_spool_t
+: is used for the administrator cronjob definition files
+; system_cron_spool_t
+: is used for the system cronjob definition files
 
-First, get the domain under which system-level jobs will run:
-{{RootCmd|getseuser system_u system_u:system_r:crond_t|output=<pre>
-seuser:  system_u, level (null)
-Context 0        system_u:system_r:system_cronjob_t</pre>}}
+== EXEUTABLES ==
 
-Next, get the domain under which user-level jobs will run:
-{{RootCmd|getseuser john system_u:system_r:crond_t|output=<pre>
-seuser:  user_u, level (null)
-Context 0        user_u:user_r:cronjob_t</pre>}}
+; anacron_exec_t
+: is used for the '''anacron''' binary
+; crond_exec_t
+: is used for the cron daemon binary
+; crond_initrc_exec_t
+: is used for the cron init script (such as <code>/etc/init.d/crond</code>)
+; crontab_exec_t
+: is used for the '''crontab''' binary
 
-{{Note|The getseuser command usually takes a Unix account name for the first argument, but treats system_u as a special case.}}
+== DAEMON FILES ==
 
-[[Category:SELinux]]
+; cron_log_t
+: is used for the cron log files
+; cron_var_lib_t
+: is used for the variable state information of the cron daemon
+; crond_tmp_t
+: is used for the temporary files created/managed by the cron daemon
+; crond_var_run_t
+: is used for the variable runtime information of the cron daemon
+
+= POLICY =
+
+The following interfaces can be used to enhance the default policy with cron-related provileges. More details on these interfaces can be found in the interface HTML documentation, we will not list all available interfaces here.
+
+== Domain interaction ==
+
+The most interesting definition in the policy is the <code>cron_system_entry</code> interface. It allows for the system cronjob domain (''system_cronjob_t'') to execute a particular type (second argument) and transition to a given domain (first argument).
+
+For instance, to allow a system cronjob to execute any portage commands:
+
+<pre>cron_system_entry(portage_t, portage_exec_t)</pre>
+It is generally preferred to transition a system cron job as fast as possible to a specific domain rather than enhancing the ''system_cronjob_t'' with additional privileges.
+
+== Role interfaces ==
+
+The following role interfaces allow users and roles access to the specified domains. Only to be used for user domains and roles.
+
+<dl>
+<dt>cron_role</dt>
+<dd><p>is used to allow users and roles access to the cron related domains. This one should be used for end users, not administrators.</p>
+<p>For instance:</p>
+<pre>cron_role(myuser_r, myuser_t)</pre></dd>
+<dt>cron_admin_role</dt>
+<dd><p>is used to allow users and roles administrative access to the cron related domains.</p>
+<p>For instance:</p>
+<pre>cron_admin_role(myuser_r, myuser_t)</pre></dd></dl>
+
+= BUGS =
+
+== Munin ==
+The <code>net-analyzer/munin</code> package deploys the munin cronjobs as end user cronjobs inside <code>/var/spool/cron/crontabs</code>. The munin cronjobs are meant to be executed as the munin Linux account, but the jobs themselves are best seen as system cronjobs (as they are not related to a true interactive end user).
+
+The default deployed files do not get the ''system_u'' SELinux ownership assigned. To fix this, execute the following command:
+
+<pre>~# chcon -u system_u /var/spool/cron/crontabs/munin</pre>
+For more information, see bug #526532.
+
+= SEE ALSO =
+
+* Gentoo and SELinux at https://wiki.gentoo.org/wiki/SELinux
+* Gentoo Hardened SELinux Project at https://wiki.gentoo.org/wiki/Project:Hardened
