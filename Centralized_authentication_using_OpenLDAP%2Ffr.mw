@@ -152,11 +152,21 @@ Si une erreur s'est produite, <code>slaptest</code> indiquera  le numéro de lig
 Notez que OpenLDAP peut stocker sa configuration dans deux emplacements. L'un dans le fichier  {{Path|slapd.conf}} original et l'autre dans 
  {{Path|slapd.d/}}. Le deuxième est le nouvel emplacement et n'est pas conçu pour être édité à la main mais pour être généré depuis {{Path|slapd.conf}} en utilisant <code>slaptest</code> de la manière suivante dans {{Path|/etc/openldap/}}. Il n'est pas nécessaire de convertir la configuration et d'utiliser {{Path|slapd.d/}} pour l'instant, mais l'assistance pour l'approche actuellement documentée sera retirée des futures versions de ce document.
 
+To allow a local user (like root) to modify OLC, redefine the access to the ''config'' (this name is hardcoded) database by adding the proper lines and the end of the source {{Path|slapd.conf}}:
+{{Code|/etc/openldap/slapd.conf|<pre>
+database config
+access to *
+        by dn.exact="gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth" manage
+        by * none
+</pre>
+}}
+
+
 {{RootCmd|mkdir /etc/openldap/slapd.d}}
 {{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
 {{RootCmd|chown -R ldap slapd.d}}
 
-Exécuter cette commande transférera et traduira la configuration. Une fois la commande exécutée avec succès, il faut la ré-exécuter à chaque fois que le fichier {{Path|slapd.conf}}  est mis à jour. Le répertoire et son contenu doivent être la propriété du compte  de service ldap. 
+Running this command will transfer and translate the configuration. After that you are expected to update the configuration using specially prepared ldif files. And only if you aren't enough familiar with them, you can first edit {{Path|slapd.conf}} and after that re-translate the {{Path|slapd.conf}} into {{Path|slapd.d/}}. Don't forget to check the directory's permissions.
 
 Pour plus d'instruction, reportez-vous aux commentaires en ligne des fichiers générés.
 
@@ -179,6 +189,38 @@ Start slapd:
 {{RootCmd|/etc/init.d/slapd start}}
 
 Si ça ne démarre pas, augmentez le niveau de journalisation dans {{Path|slapd.conf}} à la valeur 4 ou plus, et regardez dans {{Path|/var/log/messages}} pour plus d'informations.
+
+==== Example OLC-style update LDIFs ====
+
+Some examples of updates on the OLC-style configuration are mentioned below.
+
+For instance, to change the location of the OLC configuration directory:
+
+{{Code|fix-configs.ldif|<pre>
+dn: cn=config
+changetype: modify
+delete: olcConfigFile
+
+dn: cn=config
+changetype: modify
+replace: olcConfigDir
+olcConfigDir: /etc/openldap/slapd.d
+</pre>
+}}
+
+To change the log level used by the OpenLDAP instance:
+
+{{Code|loglevel.ldif|<pre>
+dn: cn=config
+changetype: modify
+replace: olcLogLevel
+olcLogLevel: stats sync
+</pre>
+}}
+
+In order to apply the changes, run the following command:
+
+{{RootCmd|ldapmodify -Y EXTERNAL -H ldapi:/// -f loglevel.ldif}}
 
 == Configurer les outils client d'OpenLDAP == 
 
@@ -491,21 +533,7 @@ Vous pouvez commencer à utiliser l'annuaire pour l'authentification des utilisa
 
 Nous tenons à remercier Matt Heler qui nous a prêté sa machine pour réaliser ce guide. Merci aussi aux gars très compétents de #ldap @ irc.freenode.net. 
 
-==Remerciements ==
-
-Nous tenons à remercier les auteurs et éditeurs suivants pour leur contribution à ce guide :
-
-* Benjamin Coles
-
-* swift
-
-* Brandon Hale
-
-* Benny Chuang
-
-* jokey
-
-* nightmorph
+{{Migrated|originalauthors=Benjamin Coles, swift, Brandon Hale, Benny Chuang, jokey, nightmorph}}
 
 
 [[Category:Server and Security]]
