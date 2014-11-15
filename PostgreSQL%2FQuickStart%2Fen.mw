@@ -21,9 +21,6 @@ The Ebuilds covered by this article are [http://packages.gentoo.org/package/dev-
 
 This article assumes that you will be installing the latest, stable version of PostgreSQL; at the time of this writing, the version was 9.0.3. Adjust the commands in this article as necessary for your specific version. 
 
-{{Important|The 8.4 branch is EOL as of 2014/7/24. <ref>http://www.postgresql.org/about/news/1534/</ref>}}
-
-
 === About the Ebuilds ===
 
 The PostgreSQL ebuilds in Portage feature slotting based on the major version. This allows you to have two major versions of PostgreSQL operating simultaneously; 8.4 and 9.0 libraries and servers can be installed and serve at the same time. This is useful in such circumstances where you need to move data from an older database to a new database, or need to have a production and a testing database on the same machine. Also, this prevents a database, corresponding libraries or executables from being overwritten by an incompatible update. That would require migration which is described in this guide. 
@@ -414,11 +411,13 @@ You may break some packages that were built against those packages, but once you
 
 === Server Lacks Instrumentation Functions ===
 
-This problem is easy to solve, with the solution depending on the version you are using. What is difficult about it is finding the answer. What is required is an import from a file that already exists on the storage drive: {{Path|adminpack.sql}} . To resolve this issue, run the command appropriate to the version you have: 
+This problem is easy to solve, with the solution depending on the version you are using. What is difficult about it is finding the answer. What is required is an import from a file that already exists on the storage drive: {{Path|adminpack.sql}} . To resolve this issue, run the command appropriate to the version you have:
 
 {{Cmd|psql -U postgres --file /usr/share/postgresql-9.0/contrib/adminpack.sql
 |psql -U postgres -c "CREATE EXTENSION adminpack;"}}
 
+For PostgreSQL 9.1 and later:
+{{Cmd|psql -U postgres -c "CREATE EXTENSION adminpack;"}}
 
 === Missing config files in {{Path|/etc/postgresql-9.x}} and {{Path|/var/lib/postgresql/9.x/data}} ===
 
@@ -438,13 +437,41 @@ Then, as the postgres user, run <code>initdb</code> and specify the data directo
 
 This will generate your configuration files and allow you to copy them over to {{Path|/etc/postgresql-9.x/}} as shown in the first command in this section.
 
+=== "ERROR: timezone directory stack overflow" or "FATAL: too many private dirs demanded"===
+
+This is caused by a symlink loop. To fix it, type the following:
+
+{{RootCmd|rm /usr/share/zoneinfo/posix}}
+
+Keep in mind that any update to zoneinfo will recreate this symlink, thus requiring you to remove it again.
+
+=== Systemd ===
+
+Force the service to start on bootup:
+
+{{RootCmd|systemctl enable postresql-9.4}}
+
+To start service immediately:
+
+{{RootCmd|systemctl start postresql-9.4}}
+
+If an error occurs check if the {{Path|/run/postgresql/}} directory is there. If not, then create it like so:
+
+{{RootCmd|systemd-tmpfiles --create}}
+
+Check the config file permissions:
+
+{{RootCmd|ls -l /etc/postgresql-9.*/*}}
+{{RootCmd|chown postgres:postgres /etc/postgresql-9.*/*}}
+{{RootCmd|chmod 600 /etc/postgresql-9.*/*}}
+
 == Acknowledgements ==
 
 We would like to thank the following authors and editors for their contributions to this guide:
 
-
 * Aaron W. Swenson
 * Mikkel A. Clausen
+
 
 == References ==
 
