@@ -95,7 +95,20 @@ If you want to preview a theme in silent mode without reboot, then try
 For more reference please refer to
 {{RootCmd|splash_manager --help}}
 
-=== Genkernel ===
+
+=== Creating and updating an initramfs image ===
+Before you proceed, you must choose the theme and the resolution you want. It seems trivial, however, the point is that not every theme you want might support your desired resolution. More important than this, the resolution that you want might not be supported by the framebuffer device. So there are two steps to be done.
+
+==== Finding the resolutions supported by the framebuffer device ====
+Reveal the supported resolutions by your framebuffer device by issuing the following cammand:
+{{RootCmd|cat /sys/class/graphics/fb0/modes}}
+If you have selected simple frame buffer device support in kernel, you do not need to do this step. Please refer to the troubleshooting section.
+
+==== Finding a theme with the supported resolution ====
+Next, choose a theme that supports the resolution you want. For example, to find out which themes support fullhd resolution:
+{{RootCmd|find /etc/splash/ -name *1080*.cfg}}
+
+==== Genkernel ====
 If the initramfs is created using [[genkernel]], the configuration in {{Path|/etc/genkernel.conf}} should be changed to the theme used.
 {{File|/etc/genkernel.conf||<pre>
 # Enable splashutils in early space (initrd). Default is "no".
@@ -108,16 +121,16 @@ SPLASH_THEME="emerge-world"
 </pre>}}
 
 Alternatively the {{Path|/etc/conf.d/splash}} could be used to configure the theme, which will be loaded after initramfs.
+==== Updating an initramfs image ====
 
-=== Append ===
-If you have an existing initramfs (like one you have created with dracut: https://wiki.gentoo.org/wiki/Dracut) you want to use this feature. To append the theme to an existing initramfs:
+If you have an existing initramfs (like one you have created with [[dracut]]) you want to use this feature. To append the theme to an existing initramfs:
 {{RootCmd|splash_geninitramfs --verbose --res NxN --append /path/to/initramfsimage theme}}
 
-=== Generate ===
+==== Creating an initramfs image ====
+
 To create a new initramfs for our theme:
 {{RootCmd|splash_geninitramfs --verbose --res NxN --generate /boot/initramfs-bootsplash theme}}
 
-=== Copy ===
 To create a new initramfs with the content of an existing one to add our theme:
 {{RootCmd|splash_geninitramfs --verbose --res NxN --copy /path/to/initramfsdir theme}}
 
@@ -129,5 +142,27 @@ This enables the ''verbose'' version of the ''emerge-world'' theme, a full list 
 To make screenshots of the framebuffer console, the tool {{Package|media-gfx/fbgrab}} can be used:
 {{Cmd|fbgrab fbscreen.png}}
 [[File:Bootsplash.png|1024x576px]]
+
+== Troubleshooting ==
+
+=== The theme does not load at boot ===
+
+First, check if you have built the initramfs with the supported resolution. Maybe the device does not support it, or maybe the theme does not have any configuration files for it. Another possibility is that the initramfs is not loaded at boot.
+
+=== The screen stays black until X starts ===
+
+Disable every framebuffer device in kernel and enable only simple framebuffer one.
+
+=== The device does not support the desired resolution ===
+This is a limitation in the device if the reolution you want is not listed among the supported modes. Fortunately, there is a workaround -- simply disable every framebuffer device and enable simple frame buffer device. 
+
+Then, add:  {{File|/etc/default/grub||<pre>
+
+GRUB_GFXMODE=1920x1080
+</pre>}}
+
+and rebuild grub2 configuration file by issuing:
+
+{{RootCmd|grub2-mkconfig -o /boot/grub2/grub.cfg}}
 
 [[Category:Bootloaders]]
