@@ -21,9 +21,6 @@ Ebuild-файлы, охватываемые этой статьей: [http://pac
 
 В этой статье предполагается, что вы будете устанавливать последнюю, стабильную версию PostgreSQL; на время написания, этой версией является 9.0.3. Исправьте команды в этой статье так, как это требуется для вашей определенной версии. 
 
-{{Important|The 8.4 branch is EOL as of 2014/7/24. <ref>http://www.postgresql.org/about/news/1534/</ref>}}
-
-
 === О ebuild-файлах ===
 
 Ebuild-файлы PostgreSQL в портеже отличаются номерами слотов, основанными на главной версии. Это позволяет вам иметь две главных версии PostgreSQL действующих одновременно; библиотеки и сервера версий 8.4 и 9.0 могут устанавливаться и обслуживаться в одно и то же время. Это полезно в тех обстоятельствах, когда вам нужно перенести данные из старой базы данных в новую, или требуется иметь рабочую и тестовую базу данных на одной и той же машине. Также, это предотвращает перезаписывание базы данных, соответствующих библиотек или исполняемых файлов несовместимым обновлением. Это требует миграции, которая описана в данном руководстве. 
@@ -331,8 +328,8 @@ postgresql-9.0 | * Reloading PostgreSQL configuration ...               [ ok ]
 {{RootCmd|su - postgres}}
 
 {{Cmd|pg_upgrade -U postgres \
--d /var/lib/postgresql/8.4/data -D /var/lib/postgresql/9.0/data \
--b /usr/lib/postgresql-8.4/bin -B /usr/lib/postgresql-9.0/bin}}
+-d /var/lib/postgresql/8.4/data -D /var/lib/postgresql/9.3/data \
+-b /usr/lib/postgresql-8.4/bin -B /usr/lib/postgresql-9.3/bin}}
 
 {{Note|PostgreSQL prior to version 9.4 used the <code>-u</code> option instead of <code>-U</code>.}}
 
@@ -414,11 +411,13 @@ postgresql-9.0 | * Reloading PostgreSQL configuration ...               [ ok ]
 
 === Сообщение "Server Lacks Instrumentation Functions" ===
 
-Эту проблему легко решить, с решением, зависящим от версии, которую вы используете. Что сложно, так это найти ответ. То, что потребуется — это импорт из файла, который уже существует на запоминающем устройстве: {{Path|adminpack.sql}}. Чтобы решить эту проблему, запустите команду, соответствующую имеющейся версии: 
+Эту проблему легко решить, с решением, зависящим от версии, которую вы используете. Что сложно, так это найти ответ. То, что потребуется — это импорт из файла, который уже существует на запоминающем устройстве: {{Path|adminpack.sql}}. Чтобы решить эту проблему, запустите команду, соответствующую имеющейся версии:
 
 {{Cmd|psql -U postgres --file /usr/share/postgresql-9.0/contrib/adminpack.sql
 |psql -U postgres -c "CREATE EXTENSION adminpack;"}}
 
+For PostgreSQL 9.1 and later:
+{{Cmd|psql -U postgres -c "CREATE EXTENSION adminpack;"}}
 
 === Missing config files in {{Path|/etc/postgresql-9.x}} and {{Path|/var/lib/postgresql/9.x/data}} ===
 
@@ -438,13 +437,41 @@ Then, as the postgres user, run <code>initdb</code> and specify the data directo
 
 This will generate your configuration files and allow you to copy them over to {{Path|/etc/postgresql-9.x/}} as shown in the first command in this section.
 
+=== "ERROR: timezone directory stack overflow" or "FATAL: too many private dirs demanded"===
+
+This is caused by a symlink loop. To fix it, type the following:
+
+{{RootCmd|rm /usr/share/zoneinfo/posix}}
+
+Keep in mind that any update to zoneinfo will recreate this symlink, thus requiring you to remove it again.
+
+=== Systemd ===
+
+Force the service to start on bootup:
+
+{{RootCmd|systemctl enable postresql-9.4}}
+
+To start service immediately:
+
+{{RootCmd|systemctl start postresql-9.4}}
+
+If an error occurs check if the {{Path|/run/postgresql/}} directory is there. If not, then create it like so:
+
+{{RootCmd|systemd-tmpfiles --create}}
+
+Check the config file permissions:
+
+{{RootCmd|ls -l /etc/postgresql-9.*/*}}
+{{RootCmd|chown postgres:postgres /etc/postgresql-9.*/*}}
+{{RootCmd|chmod 600 /etc/postgresql-9.*/*}}
+
 == Благодарности ==
 
 Мы хотели бы поблагодарить следующих авторов и редакторов за их вклад в это руководство:
 
-
 * Aaron W. Swenson
 * Mikkel A. Clausen
+
 
 == References ==
 
