@@ -30,7 +30,7 @@ Lisez les [http://www.angelfire.com/hi/plutonic/afs-faq.html FAQ AFS] .
 
 La page d'accueil de OpenAFS est à  [http://www.openafs.org www.openafs.org] . 
 
-AFS a été développé à l'origine par Transarc qui est maintenant détenu par IBM. Depuis avril 2005, il a été retiré du catalogue des produits d'IBM. 
+AFS a été développé à l'origine par Transarc qui est maintenant détenu par IBM. Depuis avril 2005, il a été retiré du catalogue des produits d'IBM.
 
 === Comment résoudre les problèmes ? ===
 
@@ -297,6 +297,31 @@ La commande suivante créera les liens appropriés pour démarrer votre client a
 
 == Installation du serveur ==
 
+=== Installing the Kerberos Server ===
+
+OpenAFS requires Kerberos 5 for authentication. The following shows how to
+install the MIT Kerberos server. Alternatively, the Heimdal kerberos
+implementation may be used.
+
+{{Important|Kerberos requires clock synchronization between the Kerberos servers and
+the clients. Be sure to install ntpd the server.}}
+
+Install the MIT Kerberos server binaries with the following command:
+
+{{Emerge|mit-krb5}}
+
+Edit the {{Path|/etc/krb5.conf}} and {{Path|/etc/kdc.conf}} configuration files.
+Replace the EXAMPLE.COM realm name with your realm name, and update the example
+hostnames with your actual hostnames.
+
+{{Note|By convention, your Kerberos realm name should match your internet
+domain name, except the Kerberos realm name is in uppercase letters.}}
+
+Create the Kerberos database like so:
+
+{{RootCmd|mkdir /etc/krb5kdc}}
+{{RootCmd|kdb5_util create -s}}
+
 === Compiler le  serveur ===
 
 {{Note|Toutes les commandes doivent être écrites sur une seule ligne !! Dans ce document elles sont parfois présentées sur deux lignes pour en faciliter la lecture.}}
@@ -305,15 +330,35 @@ Si vous ne l'avez pas encore fait, la commande suivante installera les binaires 
 
 {{Emerge|net-fs/openafs}}
 
+=== Keying the Server ===
+
+As of OpenAFS version 1.6.5, the OpenAFS servers support strong crypto
+(AES, etc.) for the service key, and will read the Kerberos keytab file
+directly.  Create the Kerberos service key for OpenAFS and export it to
+a keytab for the OpenAFS server processes, before starting the OpenAFS
+services.
+
+{{RootCmd|kadmin.local -q "addprinc -randkey afs/<cellname>"}}
+{{RootCmd|kadmin.local -q "ktadd -k /etc/openafs/server/rxkad.keytab afs/<cellname>"}}
+
+{{Important|It is critical to keep the {{Path|rxkad.keytab}} file confidential. The security
+of the files in your AFS cell depends on the service key it contains.}}
+
 === Lancer le serveur AFS ===
 
 Vous devez exécuter la commande  <code>bosserver</code> pour initialiser le serveur superviseur de base (Basic OverSeer ou BOS) qui surveille et contrôle les autres processus serveurs sur sa machine serveur.  Voyez-le comme l'initialisation du système.    Incluez l'option  <code>-noauth</code> pour désactiver la vérification d'autorisation, car vous n'avez pas encore ajouté l'utilisateur admin à ce stade. 
 
-{{Warning|Désactiver la vérification d'autorisation compromet gravement la sécurité de la cellule. Vous devez accomplir toutes les étapes subséquentes en une passe ininterrompue et ne pas laisser la machine sans surveillance avant d'avoir redémarré le serveur BOS avec la vérification d'autorisation activée. C'est ce que dit la documentation AFS.}}
+{{Note|As of OpenAFS 1.6.0, it is no longer neccessary to include the <code>-noauth</code> flag to disable authentication.  This makes the setup more secure, since there is not a window in which the servers are running with authentication disabled. This also has the nice side effect of greatly simplifying the server setup procedure.}}
+
+Start the OpenAFS <code>bosserver</code>.
 
 {{RootCmd|bosserver -noauth &}}
 
-Vérifiez que le serveur BOS a créé {{Path|/etc/openafs/server/CellServDB}} et {{Path|/etc/openafs/server/ThisCell}}  
+Ensure the OpenAFS servers start on reboot:
+
+{{RootCmd|rc-update add openafs-server default}}
+
+Vérifiez que le serveur BOS a créé {{Path|/etc/openafs/server/CellServDB}} et {{Path|/etc/openafs/server/ThisCell}}
 
 {{RootCmd|ls -al /etc/openafs/server/|output=<pre>
 -rw-r--r--    1 root     root           41 Jun  4 22:21 CellServDB
@@ -353,6 +398,8 @@ Utilisez ensuite la commande <code>bos create</code> pour créer des entrées po
 |-
 |}
 
+{{Note|OpenAFS includes an Kerberos 4 server, called <code>kaserver</code>. The <code>kaserver</code> is obsolete and should not be used for new installations.}}
+
 {{RootCmd|bos create SERVER_NAME kaserver simple /usr/libexec/openafs/kaserver -cell CELL_NAME -noauth
 |bos create SERVER_NAME buserver simple /usr/libexec/openafs/buserver -cell CELL_NAME -noauth
 |bos create SERVER_NAME ptserver simple /usr/libexec/openafs/ptserver -cell CELL_NAME -noauth
@@ -367,89 +414,6 @@ Instance ptserver, currently running normally.
 Instance vlserver, currently running normally.
 </pre>
 }}
-
-=== Initialiser la sécurité de la cellule  ===
-
-Initialisons maintenant le mécanisme de sécurité de la cellule. Nous commencerons par créer les deux entrées initiales suivantes dans la base de données d'authentification : le compte administratif principal, appelé '''admin''' par convention et une entrée pour le processus serveur AFS, appelé <code>afs</code>. Aucun utilisateur ne se connecte sous l'identité '''afs''', mais module  service d'allocation de ticket du serveur d'authentification (TGS ou Ticket Granting Service) utilise ce compte pour chiffrer les tickets qu'il alloue aux clients AFS. Ceci ressemble beaucoup à Kerberos. 
-
-Entrez dans le mode interactif <code>kas</code> 
-
-{{RootCmd|kas -cell CELL_NAME -noauth}}
-
-{{RootCmd|create afs|prompt=ka&gt; |output=<pre>
-initial_password:
-Verifying, please re-enter initial_password:
-</pre>}}
-
-{{RootCmd|create admin|prompt=ka&gt; |output=<pre>
-initial_password:
-Verifying, please re-enter initial_password:
-</pre>}}
-
-{{RootCmd|examine afs|prompt=ka&gt; |output=<pre>
-User data for afs
-key (0) cksum is 2651715259, last cpw: Mon Jun  4 20:49:30 2001
-password will never expire.
-An unlimited number of unsuccessful authentications is permitted.
-entry never expires.  Max ticket lifetime 100.00 hours.
-last mod on Mon Jun  4 20:49:30 2001 by <none>
-permit password reuse
-</pre>}}
-
-{{RootCmd|setfields admin -flags admin|prompt=ka&gt; }}
-{{RootCmd|examine admin|prompt=ka&gt; |output=<pre>
-User data for admin (ADMIN)
-key (0) cksum is 2651715259, last cpw: Mon Jun  4 20:49:59 2001
-password will never expire.
-An unlimited number of unsuccessful authentications is permitted.
-entry never expires.  Max ticket lifetime 25.00 hours.
-last mod on Mon Jun  4 20:51:10 2001 by <none>
-permit password reuse
-</pre>
-}}
-
-Exécutez la commande  <code>bos adduser</code>, pour ajouter l'utilisateur '''admin''' à {{Path|/etc/openafs/server/UserList}} 
-
-{{RootCmd|bos adduser SERVER_NAME admin -cell CELL_NAME -noauth}}
-
-Lancez la commande <code>bos addkey</code> pour définir la clé de chiffrage du serveur AFS dans {{Path|/etc/openafs/server/KeyFile}}  
-
-{{Note|Si on vous demande la clé, donnez le mot de passe que vous avez saisi en créant l'entrée AFS avec <code>kas</code>}}
-
-{{RootCmd|bos addkey SERVER_NAME -kvno 0 -cell CELL_NAME -noauth|output=<pre>
-input key:
-Retype input key:
-</pre>
-}}
-
-Exécutez la commande <code>pts createuser</code> pour créer une entrée de  de base de donnée ''protection'' pour l'utilisateur admin. 
-
-{{Note|Par défaut, le serveur de protection assigne AFS UID 1 à l'utilisateur  '''admin''', parce qu'il s'agit de la première entrée utilisateur que vous avez créée. Si le fichier local des mots de passe ( {{Path|/etc/passwd}} ou équivalent) possède déjà une entrée pour '''admin''' qui assigne un  UID différent, utilisez l'argument   <code>-id</code> pour créer des UIDs correspondants.}}
-
-{{RootCmd|pts createuser -name admin -cell CELL_NAME [-id AFS_UID] -noauth}}
-
-Exécutez la commande <code>pts adduser</code>  pour faire de l'utilisateur '''admin''' un membre du groupe des administrateurs système, et la commande <code>pts membership</code>  pour vérifier la nouvelle appartenance au groupe. 
-
-{{RootCmd|pts adduser admin system:administrators -cell CELL_NAME -noauth
-|pts membership admin -cell CELL_NAME -noauth|output=<pre>
-Groups admin (id: 1) is a member of:
-system:administrators
-</pre>
-}}
-
-=== Redémarrer le serveur  AFS correctement ===
-
-À ce stade, un identification correcte est possible, et le serveur OpenAFS peut être démarré d'une façon normale. Notez que l'authentification demande  aussi un client OpenAFS lancé (sa configuration est décrite dans les chapitres précédents). 
-
-{{RootCmd|bos shutdown SERVER_NAME -wait -noauth
-|killall bosserver}}
-
-{{RootCmd|/etc/init.d/openafs-server start
-|/etc/init.d/openafs-client start}}
-
-{{RootCmd|rc-update add openafs-server default}}
-
-{{RootCmd|klog admin}}
 
 === Démarrer le serveur de fichiers, le serveur de volumes et le sauveteur  ===
 
@@ -508,7 +472,58 @@ Si la commande échoue avec le message ''partition /vecepa does not exist on the
 
 {{RootCmd|bos create SERVER_NAME upserver simple "/usr/libexec/openafs/upserver -crypt /etc/openafs/server -clear /usr/libexec/openafs" -cell CELL_NAME -noauth}}
 
+=== Creating the first Administrative Account ===
+
+An administrative account is needed to complete the cell setup and perform on going administration.  The first account must be created directly on the servers. Additional accounts may then be created without direct ssh access to the servers.
+
+{{Note|In the following descriptions and commands, substitute all instances of USERNAME with your actual user name.}}
+
+Four tasks need to be done to create the first administrative account.
+
+* a Kerberos principal, by convention, in the form of USERNAME/admin
+* an AFS user, by convention, the form of USERNAME.admin
+* membership in the built-in AFS system::administrators group
+* membership in the OpenAFS superuser list
+
+{{Note|Any name may be used for the administrator principal, for example, "admin", or "afsadmin". If you create an admin principal that does not follow the USERNAME/admin pattern, be sure to update the kerberos KDC access control list in the {{Path|kadm5.acl}} configuration file.}}
+
+{{Important|The Kerberos principal contains as slash "/" separator, but unfortunately, AFS uses a dot "." separator. Be sure to mind the difference.}}
+
+Create the Kerberos principal. Run this following command on the Kerberos server, as root:
+
+{{RootCmd|kadmin.local -q "addprinc USERNAME/admin"}}
+
+Create the AFS admin user. Run this command on the OpenAFS database server, as root:
+
+{{RootCmd|pts createuser USERNAME.admin -localauth}}
+
+Add the AFS admin user to the built-in admin group. Run this command on the OpenAFS database server, as root:
+
+{{RootCmd|pts adduser USERNAME.admin system:administrators -localauth}}
+
+Add the AFS admin user to the superuser list. Run this command on each OpenAFS server, as root:
+
+{{RootCmd|bos adduser localhost USERNAME.admin -localauth}}
+
+{{Note|If you have issues later, regarding insufficient permission, and your AFS Cell name is different from your Kerberos Realm name, this problem is re-mediated by putting your realm name in the {{Path|/etc/openafs/server/krb.conf}} configuration file.}}
+
 === Configurer le niveau sommet de l'espace de fichies AFS  ===
+
+At this point the server configuration is complete. You will need a running AFS client to set up the top level directories in AFS and grant access rights to them.  This client does not need to be installed on the OpenAFS server.  You will need to obtain your administrative credentials.  Root access is not required for the commands in this section.
+
+First, obtain your administrative credentials:
+
+{{Cmd|kinit USERNAME/admin|output=<pre>
+Password for USERNAME/admin@REALM: ********
+</pre>}}
+
+{{Cmd|aklog
+|tokens|output=<pre>
+Tokens held by the Cache Manager:
+ 
+User's (AFS ID 1) tokens for afs@mycellname.com [Expires Oct 21 20:26]
+   --End of list--
+</pre>}}
 
 Vous devez d'abord définir quelques ACLs, de manière à ce que n'importe quel utilisateur puisse inspecter {{Path|/afs}}. 
 
@@ -522,6 +537,9 @@ Ensuite, vous devez créer le volume root, le monter en lecture seule sur {{Path
 |fs mkmount /afs/CELL_NAME root.cell
 |fs setacl /afs/CELL_NAME system:anyuser rl
 |fs mkmount /afs/.CELL_NAME root.cell -rw}}
+
+
+At this point, you can create volumes for your new AFS site and add them to the filespace. Users and groups should be created and directory ACLs setup to allow users to create files and directories. To create and mount a volume:
 
 {{RootCmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/MOUNT_POINT VOLUME_NAME
@@ -541,6 +559,8 @@ OpenAFS est une technologie extensive. Lisez la documentation AFS pour plus d'in
 === Configurer PAM pour obtenir un jeton AFS à la connexion ===
 
 Pour utilise AFS vous devez vous identifier auprès du serveur KA si vous utilisez une mise en œuvre AFS Kerberos 5, ou auprès d'un Kerberos 5 KDC si vous utilisez MIT, Heimdal ou ShiShi kerberos 5. Néanmoins, pour vous connecter à une machine, vous devez avoir un un compte utilisateur, qui peut être local dans {{Path|/etc/passwd}} , NIS, LDAP (OpenLDAP) ou une base de données Hesiod. PAM autorise Gentoo à lier l'authentification auprès de AFS et à se connecter au compte utilisateur. 
+
+{{Note|This section is out of date. See [http://docs.openafs.org/QuickStartUnix/HDRWQ41.html Enabling AFS Login on Linux Systems] }}
 
 Vous devrez mettre {{Path|/etc/pam.d/system-auth}} à jour ; il est utilisé par d'autes configurations.  "use_first_pass" indique que  la connexion utilisateur sera vérifiée en premier, et "ignore_root" stoppe  la vérification du super-utilisateur local de manière  à autoriser la connexion si AFS ou le réseau tombe. . 
 
@@ -615,3 +635,5 @@ Nous tenons à remercier les auteurs et éditeurs suivants pour leur contributio
 * Tiemo Kieft
 * Steven McCoy
 * Shyam Mani
+
+[[Category:Filesystems]]
