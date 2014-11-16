@@ -1,0 +1,186 @@
+{{OutdatedInstallGuide}}
+
+= Installing RT in Gentoo =
+
+== Intro ==
+
+Latest version available through Portage: '''<code>rt-4.0.5</code>'''
+
+Tested on a new basic hardened install on amd64 March 12, 2012.
+
+This guide uses virtual hosting. Virtual [http://www.uk2.net/web-hosting/ hosting] means that you can give the appearance of running several servers while using only one machine. If your machine is going to be used only for RT, then you may use this guide as is; the fact that you are using virtual hosting will not be a conflict. However, if your machine is going to be used for other things in addition to RT, and you are not familiar with virtual hosting, you should probably check out Apache's documentation on [http://httpd.apache.org/docs/vhosts/ Virtual Hosts].
+
+'''Note''': This version of the guide assumes that you have updated your Apache installation per [http://www.gentoo.org/doc/en/apache-upgrading.xml this document]. This is not needed on a brand new install of apache.
+==Installation==
+
+Turn on the <code>vhosts</code> flag for <code>rt</code>. If the <code>vhosts</code> flag is disabled, <code>webapp-config</code> will be run automatically.
+
+ # echo "www-apps/rt vhosts" &gt;&gt; /etc/portage/package.use
+You also need either MySQL or PostgreSQL, so add that to the package use if not already a global use flag.
+ # echo "www-apps/rt mysql" >> /etc/portage/package.use
+or
+
+ # echo "www-apps/rt postgres" >> /etc/portage/package.use
+The above can be combined into one line.
+
+To install, enter
+
+ # emerge -av --autounmask-write=y --backtrack=30 rt
+It will give a huge list of needed keyword, mask, and USE changes necessary. Verify the USE flags you want are set. Press enter to accept and then
+ # <code>etc-update</code>
+Then run the emerge command again. This will pull in MySQL or PostgreSQL and Apache if not already installed.
+
+Don't forget to run <code>etc-update</code> or <code>dispatch-conf</code>
+
+Since we are installing RT into a virtual host, we will need to symlink/copy our installation into our <code>/var</code> folder. This guide will use '''myrt''' as the hostname.
+
+ # webapp-config -I -h myrt -d rt rt 4.0.5
+
+== Database Setup ==
+
+RT provides a script called <code>rt-setup-database</code> which creates the initial database for you. Please note that <code>rt-setup-database</code> does '''not''' create a database ''user'' for you. If you have not already created a database user for RT, please consult the appropriate documentation, such as [[ConfigureMysqlOnGentoo]].
+
+====MySQL:====
+
+If you did not previously have mysql installed, you will need to [[ConfigureMysqlOnGentoo]].
+
+====PostgreSQL (untested in current update of this document):====
+
+ # /var/www/myrt/rt-4.0.5/sbin/rt-setup-database --action init --dba postgres --prompt-for-dba-password
+
+For this to work, [[PostgreSQL]] may need to listen on TCP 5432. In your <code>postgresql.conf</code>, set
+
+ listen_addresses = 'localhost', port = 5432
+
+== Configure RT ==
+
+After installing RT into the virtual host, you will need to configure RT. RT uses an overlay system for configuration. On Gentoo, the default configuration will be at <code>/var/www/myrt/rt-4.0.5/etc/[[RT Config|RT_Config]].pm</code>, and the site-specific configuration will be at <code>/var/www/myrt/rt-4.0.5/etc/[[RT SiteConfig|RT_SiteConfig]].pm</code>. I would recommend copying <code>RT_Config.pm</code> over to <code>RT_SiteConfig.pm (which does not get installed)</code>, and modifying all of the settings in <code>RT_SiteConfig.pm</code>.
+
+ # cd /var/www/myrt/rt-4.0.5/etc
+ # cp RT_Config.pm RT_SiteConfig.pm
+ # $EDITOR RT_SiteConfig.pm
+
+You should set [[WebSessionClass]] to Apache::Session::File if you plan to use internal authentication.
+
+Now you need to set up your database connection, web location, email gateway, etc. Please consult section 7. Configuration of [[ManualInstallation]].
+
+== Configure Webserver ==
+
+=== Apache2 ===
+Note: Additional information may be found in [[ManualApacheConfig]].
+
+
+====mod_perl====
+
+As of rt-3.4.4, mod_perl2 is supported.
+
+Save the following to "/etc/apache2/vhosts.d/rt_apache2.conf", replacing MY_RT_DOMAIN and MY_EMAIL_ADDRESS.
+
+ <VirtualHost MY_RT_DOMAIN:80>
+     ServerAdmin MY_EMAIL_ADDRESS
+     # the following line might need to be uncommented:
+     #LoadModule perl_module modules/mod_perl.so
+     ### Optional apache logs for RT
+     #ErrorLog /var/www/myrt/rt-4.0.5/var/log/apache2.error
+     #TransferLog /var/www/myrt/rt-4.0.5/var/log/apache2.access
+     #LogLevel debug
+ 
+     AddDefaultCharset UTF-8
+ 
+     DocumentRoot "/var/www/myrt/htdocs/rt"
+     <Location />
+         Order allow,deny
+         Allow from all
+         SetHandler modperl
+         PerlResponseHandler Plack::Handler::Apache2
+         PerlSetVar psgi_app /var/www/myrt/rt-4.0.5/sbin/rt-server
+     </Location>
+     <Perl>
+         use Plack::Handler::Apache2;
+         Plack::Handler::Apache2->preload("/var/www/myrt/rt-4.0.5/sbin/rt-server");
+     </Perl>
+ </VirtualHost>
+
+Edit <code>/etc/conf.d/apache2</code> to instruct <code>apache</code> to start with <code>PERL</code> enabled.
+
+ APACHE2_OPTS="[other options] -D PERL"
+
+NOTE: you may need to
+
+ chown -R apache:apache /var/www/myrt/rt-4.0.5/var
+
+==== mod_fastcgi (outdated instructions) ====
+
+NOTE: If you wish to use <code>mod_fastcgi</code>, you need to instruct <code>webapp-config</code> to install <code>rt</code> with appropriate permissions. Edit <code>/etc/vhosts/webapp-config</code>:
+
+ VHOST_DEFAULT_UID="rt"
+ VHOST_DEFAULT_GID="rt"
+
+RT comes with a Gentoo-specific Apache2 configuration file. It can be found in <code>/var/www/myrt/rt-3.6.1/etc/rt_apache2_fcgi.conf</code>
+
+Copy it to the Apache vhosts directory and edit to set <code>MY_RT_DOMAIN</code> and [=[[ServerAdmin]]]:
+
+ cp /var/www/myrt/rt-3.6.1/etc/rt_apache2_fcgi.conf /etc/apache2/vhosts.d/
+ vim /etc/apache2/vhosts.d/rt_apache2_fcgi.conf
+
+Edit <code>/etc/conf.d/apache2</code> to instruct <code>apache2</code> to start with <code>FASTCGI</code> and enabled.
+
+ APACHE2_OPTS="-D FASTCGI"
+
+If this is your first time installing apache, you will want it to start on bootup.
+
+ rc-update add apache2 default
+
+Restart apache so that all changes made so far will take effect.
+
+ /etc/init.d/apache2 restart
+
+=== lighttpd (untested) ===
+
+You can run RT on <code>lighttpd</code> + <code>fastcgi</code>. The ebuild will install an initscript <code>/etc/init.d/rt</code> and a config file <code>/etc/conf.d/rt</code>.
+
+NOTE: If you wish to use <code>mod_fastcgi</code>, you need to instruct <code>webapp-config</code> to install <code>rt</code> with appropriate permissions. Edit <code>/etc/vhosts/webapp-config</code>:
+
+ VHOST_DEFAULT_UID="rt"
+ VHOST_DEFAULT_GID="rt"
+
+You will need to edit <code>/etc/conf.d/rt</code> to set [[RTPATH]] to the root of your installation. You shouldn't need to edit anything else in that file.
+
+Also note that, under the default configuration, the socket in <code>$FCGI_SOCKET_PATH</code> is owned by rt:lighttpd, and is chmod-ded to g+rwx. This means that user <code>lighttpd</code> needs to be in the <code>rt</code> group. One way to do that is to use <code>vigr</code>. If you don't like that, edit <code>/etc/init.d/rt</code> to suit your needs.
+
+You will also need to edit <code>/etc/lighttpd.conf</code> to enable <code>mod_fastcgi</code>.
+
+* Uncomment <code>mod_fastcgi</code> under <code>server.modules</code>
+* set <code>server.document-root</code>
+* set <code>fastcgi.server</code> to something like this:
+
+ fastcgi.server = ( "/rt" =&gt;
+ ( "rt" =&gt;
+ (
+ "socket" =&gt; "/var/www/localhost/rt-3.6.1/var/appSocket",
+ "check-local" =&gt; "disable"
+ )
+ )
+ )
+
+Be sure to set the correct path to socket (same as <code>$FCGI_SOCKET_PATH</code> in <code>/etc/conf.d/rt</code>).
+
+Now, start <code>rt</code> and <code>lighttpd</code>:
+
+ /etc/init.d/rt start
+ /etc/init.d/lighttpd start
+
+If things don't seem to be working, check the <code>lighttpd</code> logs in <code>/var/log/lighttpd</code> and edit <code>/etc/init.d/rt</code> as per the comments in the file to make the <code>rt</code> daemon more verbose.
+
+Note: you should be able to use this initscript with any <code>fastcgi</code>-enabled webserver. Please send me an email if you get <code>rt</code> to work with any other webserver.
+
+== Log in ==
+
+Use your browser to log into RT. Username is <code>root</code>, and password is <code>password</code>. Change your password.
+
+= Comments, questions, problems =
+Upgrades (old but likley still relevant)
+
+3.6.1 is out in portage! Can anyone provide some advice on how to upgrade from 3.6.0 to 3.6.1 in gentoo?
+
+''Normally'' this should just be as easy as webapp-config -U -h rt.domain.foo rt 3.6.1. However, the problem here is that none of the ebuilds follow a common structure. eg, some of them install the RT html data into the htdocs, some install into the default hostroot/rt/share/html. It also looks like somewhere along the line someone's changed the default install prefix from hostroot/rt to hostroot/rt-version, so 3.6.1 will install to hostroot/rt-3.6.1 -- [[TomLanyon]]
