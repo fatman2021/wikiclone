@@ -94,59 +94,52 @@ You can copy just certain sections from {{Path|RT_Config.pm}} to {{Path|RT_SiteC
 
 The configuration file is well documented, but you may want to consult the [https://www.bestpractical.com/docs/ official documentation].
 
-=== Configure Webserver ===
+=== Configuring the Web Server ===
 
-==== Apache2 ====
-Note: Additional information may be found in [[ManualApacheConfig]].
+==== Apache ====
 
+Only information pertinent to RT will be covered. Additional information about [[Apache]] is covered elsewhere.
 
-=====mod_perl=====
+There's little information about which method works better for RT on Apache, and benchmarks have shown mod_perl and FastCGI to be nearly equal.
 
-As of rt-3.4.4, mod_perl2 is supported.
+===== mod_perl =====
 
-Save the following to "/etc/apache2/vhosts.d/rt_apache2.conf", replacing MY_RT_DOMAIN and MY_EMAIL_ADDRESS.
+Save the following snippet within the individual <code>VirtualHost</code> tags you installed RT to or {{Path|/etc/apache2/vhosts.d/default_vhost.include}}.
 
- <VirtualHost MY_RT_DOMAIN:80>
-     ServerAdmin MY_EMAIL_ADDRESS
-     # the following line might need to be uncommented:
-     #LoadModule perl_module modules/mod_perl.so
-     ### Optional apache logs for RT
-     #ErrorLog /var/www/myrt/rt-4.0.5/var/log/apache2.error
-     #TransferLog /var/www/myrt/rt-4.0.5/var/log/apache2.access
-     #LogLevel debug
- 
-     AddDefaultCharset UTF-8
- 
-     DocumentRoot "/var/www/myrt/htdocs/rt"
-     <Location />
-         Order allow,deny
-         Allow from all
-         SetHandler modperl
-         PerlResponseHandler Plack::Handler::Apache2
-         PerlSetVar psgi_app /var/www/myrt/rt-4.0.5/sbin/rt-server
-     </Location>
-     <Perl>
-         use Plack::Handler::Apache2;
-         Plack::Handler::Apache2->preload("/var/www/myrt/rt-4.0.5/sbin/rt-server");
-     </Perl>
- </VirtualHost>
+{{Code||<pre>
+# Replace /rt with the proper URL path after the domain name
+<Location /rt>
+    SetHandler modperl
+    PerlResponseHandler Plack::Handler::Apache2
+    # Correct this path
+    PerlSetVar psgi_app /var/www/my.virtualhost.name/rt-4.2.9/sbin/rt-server
+</Location>
 
-Edit <code>/etc/conf.d/apache2</code> to instruct <code>apache</code> to start with <code>PERL</code> enabled.
+<Perl>
+    use Plack::Handler::Apache2;
+    # Correct this one, too
+    Plack::Handler::Apache2->preload("/var/www/my.virtualhost.name/rt-4.2.9/sbin/rt-server");
+</Perl>
+</pre>}}
 
- APACHE2_OPTS="[other options] -D PERL"
+In case you haven't done so already, instruct Apache to start with mod_perl enabled.
 
-NOTE: you may need to
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="... -D PERL"
+</pre>}}
 
- chown -R apache:apache /var/www/myrt/rt-4.0.5/var
+You may need to change the owner and group of RT's Mason data directory.
 
-===== mod_fastcgi (outdated instructions) =====
+{{RootCmd|chown -R apache:apache /usr/share/webapps/rt/4.2.9/hostroot/rt-4.2.9/var/mason_data/}}
+
+===== mod_fastcgi =====
 
 NOTE: If you wish to use <code>mod_fastcgi</code>, you need to instruct <code>webapp-config</code> to install <code>rt</code> with appropriate permissions. Edit <code>/etc/vhosts/webapp-config</code>:
 
  VHOST_DEFAULT_UID="rt"
  VHOST_DEFAULT_GID="rt"
 
-RT comes with a Gentoo-specific Apache2 configuration file. It can be found in <code>/var/www/myrt/rt-3.6.1/etc/rt_apache2_fcgi.conf</code>
+RT comes with a Gentoo-specific Apache configuration file. It can be found in <code>/var/www/myrt/rt-3.6.1/etc/rt_apache2_fcgi.conf</code>
 
 Copy it to the Apache vhosts directory and edit to set <code>MY_RT_DOMAIN</code> and [=[[ServerAdmin]]]:
 
