@@ -1,0 +1,84 @@
+== Introduction ==
+Do you have a UPS? Do you want to have you system gracefully shutdown in case of a power outage? This guide will show how you can make the most out of your UPS by using NUT from the [http://www.networkupstools.org/ Network UPS Tools] project
+
+== Install NUT ==
+
+If you are connecting your UPS via USB, make sure to set the usb USE flag
+
+{{USEflag
+|avahi++no
+|cgi++no
+|snmp++no
+|ssl++no
+|tcpd++yes
+|usb++yes
+|xml++no
+}}
+
+{{Emerge|sys-power/nut}}
+
+== Configure nut.conf ==
+
+Set mode to standalone if your machine is connected to the UPS directly and you want to run NUT on this machine.
+
+{{RootCmd|nano -w /etc/nut/nut.conf}}
+
+{{File|/etc/nut/nut.conf|Desired settings|<pre>
+MODE=standalone
+</pre>
+}}
+
+== Configure /etc/nut/ups.conf ==
+This is where you set up your UPS configuration. Make sure that your UPS name (the text in the brackets) doesn't have any spaces. For configuration specific to your UPS you need to look it up here: [http://www.networkupstools.org/stable-hcl.html NUT Hardware Compatibility Lookup]
+
+{{RootCmd|nano -w /etc/nut/ups.conf}}
+
+{{File|/etc/nut/ups.conf|Example configuration|<pre>
+[APCSMC1500]
+    driver = usbhid-ups
+    port = auto
+    desc = "APC SMC1500 UPS"
+</pre>
+}}
+
+== Configure /etc/nut/upsd.users ==
+You need to configure at least one user so that upsmon can be launched later. upsd will create a tcp connection that upsmon will use to check on the status of your UPS. 
+
+{{RootCmd|nano -w /etc/nut/upsd.users}}
+
+{{File|/etc/nut/upsd.users|Example configuration|<pre>
+[ups]
+    password = mypassword
+    upsmod master</pre>
+}}
+
+== Test your upsd configuration ==
+
+Start upsd: 
+{{RootCmd|/etc/init.d/upsdrv start}}
+{{RootCmd|/etc/init.d/upsd start}}
+
+Check the status of your ups manually. Note that you might have to adjust your UPS name for this work. 
+{{RootCmd|upsc APCSMC1500@127.0.0.1 ups.status|output=<pre>
+OL
+</pre>}}
+
+OL means that your UPS is "online" and not drawing from the battery. It also means that you configured the above files correctly. 
+
+== Setup upsmon ==
+
+Create a MONITOR configuration in /etc/nut/upsmon.conf:
+
+{{RootCmd|nano -w /etc/nut/upsmon.conf}}
+
+{{File|/etc/nut/upsmon.conf|Example configuration|<pre>
+MONITOR APCSMC1500@127.0.0.1 1 ups mypassword master
+</pre>}}
+
+{{RootCmd|/etc/init.d/upsmon start}}
+
+== Start on system boot ==
+
+{{RootCmd|rc-update add upsdrv default}}
+{{RootCmd|rc-update add upsd default}}
+{{RootCmd|rc-update add upsmon default}}
