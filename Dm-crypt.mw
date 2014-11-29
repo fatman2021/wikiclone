@@ -113,6 +113,99 @@ Of course, make sure that the device is no longer in use.
 
 == Manipulating LUKS keys ==
 
+LUKS keys are used to access the real encryption key. They are stored in slots in the header of the (encrypted) partition, disk or file.
+
+=== Listing the slots ===
+
+With the ''luksDump'' command, information about the encrypted partition, disk or file can be shown. This includes the slots:
+
+{{RootCmd|cryptsetup luksDump /dev/vdb2|output=<pre>
+LUKS header information for /dev/vdb2
+  
+Version:        1
+Cipher name:    aes
+Cipher mode:    xts-plain64
+Hash spec:      sha1
+Payload offset: 4096
+MK bits:        512
+MK digest:      34 3b ec ac 10 af 19 e7 e2 d4 c8 90 eb a8 da 3c e4 4f 2e ce
+MK salt:        ff 7c 7f 53 db 53 48 02 a4 32 dc e0 22 fc a3 51
+                06 ba b3 48 b3 28 13 a8 7a 68 43 d6 46 79 14 fe
+MK iterations:  59375
+UUID:           2921a7c9-7ccb-4300-92f4-38160804e08c
+  
+Key Slot 0: ENABLED
+        Iterations:             241053
+        Salt:                   90 0f 0f db cf 66 ea a9 6c 7c 0c 0d b0 28 05 2f
+                                8a 5c 14 54 98 62 1a 29 f3 08 25 0c ec c2 b1 68
+        Key material offset:    8
+        AF stripes:             4000
+Key Slot 1: ENABLED
+        Iterations:             273211
+        Salt:                   01 4c 26 ed ff 18 75 31 b9 89 5d a6 e0 b5 f4 14
+                                48 d0 23 47 a9 85 78 fb 76 c4 a9 d0 cd 63 fb d7
+        Key material offset:    512
+        AF stripes:             4000
+Key Slot 2: DISABLED
+Key Slot 3: DISABLED
+Key Slot 4: DISABLED
+Key Slot 5: DISABLED
+Key Slot 6: DISABLED
+Key Slot 7: DISABLED
+</pre>}}
+
+In the above example, two slots are used. Note that ''luksDump'' does not give away anything sensitive - it is merely displaying the LUKS header content. No decryption key has to be provided in order to call ''luksDump''.
+
+=== Adding a keyfile or passphrase ===
+
+In order to add an additional keyfile or passphrase to access the encrypted storage, use the ''luksAddKey'' option:
+
+{{RootCmd|cryptsetup luksAddKey /dev/vdb2|output=<pre>
+Enter any passphrase: (Enter a valid, previously used passphrase to unlock the key)
+Enter new passphrase for key slot: ... 
+Verify passphrase: ...
+</pre>}}
+
+To use a keyfile to unlock the key (but still add in a passphrase):
+
+{{RootCmd|cryptsetup luksAddKey -d /etc/keys/enc.key /dev/vdb2|output=<pre>
+Enter new passphrase for key slot: ...
+Verify passphrase: '''
+</pre>}}
+
+If a keyfile is to be added (say {{Path|/etc/keys/backup.key}}:
+
+{{RootCmd|cryptsetup luksAddKey /dev/vdb2 /etc/keys/backup.key}}
+
+Or, to use the first keyfile to unlock the main key:
+
+{{RootCmd|cryptsetup luksAddKey -d /etc/keys/enc.key /dev/vdb2 /etc/keys/backup.key}}
+
+=== Removing a keyfile or passphrase ===
+
+With the ''luksRemoveKey'' a keyfile or passphrase can be removed (so they can no longer be used to decrypt the storage):
+
+{{RootCmd|cryptsetup luksRemoveKey /dev/vdb2|output=<pre>
+Enter LUKS passphrase to be deleted: ...
+</pre>}}
+
+Or to remove a keyfile:
+
+{{RootCmd|cryptsetup luksRemoveKey -d /etc/keys/backup.key /dev/vdb2}}
+
+Make sure that at least one method for accessing the data is still available. Once a passphrase or keyfile is removed for use, this cannot be recovered again.
+
+=== Emptying a slot ===
+
+Suppose the passphrase or keyfile is no longer known, then the slot can be freed. Of course, this does require prior knowledge of which slot that the passphrase or keyfile was stored in.
+
+For instance, to empty out slot 2 (which is the third slot as slots are numbered starting from 0):
+
+{{RootCmd|cryptsetup luksKillSlot /dev/vdb2 2}}
+
+This command will ask for a valid passphrase before continuing. Or one can pass on the keyfile to use:
+
+{{RootCmd|cryptsetup luksKillSlot -d /etc/keys/enc.key /dev/vdb2 2}}
 
 == Configuring Encrypted Volume ==
 
