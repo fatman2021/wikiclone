@@ -1,35 +1,87 @@
 {{Lowercase title}}
-{{Stub}}
+{{WIP|author=SwifT}}
 {{InfoBox stack
 |{{InfoBox homepage|http://code.google.com/p/cryptsetup/wiki/DMCrypt|header=true}}
 |{{InfoBox wikipedia}}
 }}
-'''dm-crypt''' is a disk encryption system using the kernels crypto API framework and device mapper. dm-crypt is cappable of encrypting whole disks, logical volumes, single files and RAID volumes.
 
-== Kernel Configuration ==
-To use dm-crypt the certain kernel options must be built-in such as any hashing functions or stream ciphers that are to be used to encrypt the volume, a [[filesystem]] that is to be applied to the encrypted volume such as [[ext4]], loopback device support and [[initramfs]] support. For a basic configuration SHA256 and MD5 hashes are generally built into the kernel by default along with the AES cipher, if different alogrithms are required these can be found under the Cryptographic API section. This is an example of a basic kernel configuration.
+'''dm-crypt''' is a disk encryption system using the kernels crypto API framework and device mapper subsystem. With dm-crypt, administrators can encrypt entire disks, logical volumes, partitions, but also single files.
 
-{{Kernel||<pre>
-General setup  --->
-    [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
+The dm-crypt subsystem supports the ''Linux Unified Key Setup (LUKS)'' structure, which allows for multiple keys to access the encrypted data, as well as manipulate the keys (such as changing the keys, adding additional passphrazes, etc.)
+
+== Configuration ==
+
+There are two prerequisites before one can start using dm-crypt:
+
+# Configuration of the Linux kernel
+# Installation of the {{Package|sys-fs/cryptsetup}} package
+
+=== Kernel Configuration ===
+
+To use dm-crypt there are a number of configuration entries that are necessary.
+
+First of all, support for the ''device mapper'' infrastructure as well as the ''crypt target'' must be included:
+
+{{Kernel|Enabling device mapper and crypt target|<pre>
 [*] Enable loadable module support
     Device Drivers --->
         [*] Multiple devices driver support (RAID and LVM) --->
             <*> Device mapper support
             <*> Crypt target support
-        [*] Block Devices --->
-            <*>  Loopback device support
-[*] Cryptographic API --->
-    <*> SHA224 and SHA256 digest algorithm
 </pre>}}
 
-Most of the Gentoo install media will have the basic modules built in by default, however more custom modules such as Whirlpool hashes are not included, but can easily be built then loaded.
+Next, the Linux kernel needs to support the set of cryptographic APIs that the administrator wants to use for encryption. These can be found under the ''Cryptographic API'' section:
 
-== Emerging cryptsetup ==
-In order to handle the encrypted partitions, you will need to emerge sys-fs/cryptsetup if it is not yet installed:
-: {{RootCmd|emerge sys-fs/cryptsetup }}
+{{Kernel|Enabling cryptographic API functions|<pre>
+[*] Cryptographic API --->
+    <*> SHA224 and SHA256 digest algorithm
+</pre>
+}}
+
+If the root file system will be encrypted as well, then an initial ram file system needs to be created in which the root filesystem is decrypted before it is mounted. Thus this requires initramfs support as well:
+
+{{Kernel|Enabling initramfs support|<pre>
+General setup  --->
+    [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
+</pre>}}
+
+=== Cryptsetup installation ===
+
+The {{Package|sys-fs/cryptsetup}} package provides the <code>cryptsetyp</code> command, which is used to open or close the encrypted storage as well as manage the passphrazes or keys associated with it.
+
+{{Emerge|sys-fs/cryptsetup}}
+
+== Encrypted storage ==
+
+=== Keyfile or passphrase ===
+
+In order to start with encrypted storage, the administrator will need to decide which method to use for the encryption key. With <code>cryptsetup</code> the choice is either a passphrase or a keyfile. In case of a keyfile, this can be any file, but it is recommended to use a file with random data which is properly protected (considering that access to this keyfile will mean access to the encrypted data).
+
+To create a keyfile, one can use the <code>dd</code> command:
+
+{{RootCmd|dd if{{=}}/dev/urandom of{{=}}/etc/keys/enc.key bs{{=}}1 count{{=}}4096}}
+
+In the next sections, we will show every command for both situations - passphrase and keyfile. Of course, only one method is necessary.
+
+=== Creating an encrypted storage platform ===
+
+In order to create an encrypted storage platform (which can be a disk, partition, file, ...) use the <code>cryptsetup</code> command with the ''luksFormat'' option.
+
+For instance, to have {{Path|/dev/vdb2}} as the storage medium for the encrypted data:
+
+{{RootCmd|cryptsetup -s 512 luksFormat /dev/vdb2|output=<pre>
+This will overwrite data on /dev/vdb2 irrevocably.
+
+Are you sure? (Type uppercase yes): YES
+Enter LUKS passphrase: ...
+Verify passphrase: ...
+</pre>}}
+
+== Manipulating LUKS keys ==
+
 
 == Configuring Encrypted Volume ==
+
 For this example the volume will be  a plain partition ({{Path|/dev/sda1}}).
 
 * Load kernel modules appropriate to your setup
