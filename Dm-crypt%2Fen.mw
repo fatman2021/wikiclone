@@ -1,0 +1,220 @@
+{{Lowercase title}}
+
+<languages />
+
+
+{{Metadata|abstract=DM-Crypt is a disk encryption system using the Linux kernel crypto API framework and device mapper subsystem.}}
+
+{{InfoBox stack
+|{{InfoBox homepage|http://code.google.com/p/cryptsetup/wiki/DMCrypt|header=true}}
+|{{InfoBox wikipedia}}
+}}
+
+'''dm-crypt''' is a disk encryption system using the kernels crypto API framework and device mapper subsystem. With dm-crypt, administrators can encrypt entire disks, logical volumes, partitions, but also single files.
+
+The dm-crypt subsystem supports the ''Linux Unified Key Setup (LUKS)'' structure, which allows for multiple keys to access the encrypted data, as well as manipulate the keys (such as changing the keys, adding additional passphrazes, etc.) Although dm-crypt supports non-LUKS setups as well, this article will focus on the LUKS functionality mostly due to its flexibility, manageability as well as broad support in the community.
+
+== Configuration ==
+
+There are two prerequisites before one can start using dm-crypt:
+
+# Configuration of the Linux kernel
+# Installation of the {{Package|sys-fs/cryptsetup}} package
+
+=== Kernel Configuration ===
+
+To use dm-crypt there are a number of configuration entries that are necessary.
+
+First of all, support for the ''device mapper'' infrastructure as well as the ''crypt target'' must be included:
+
+{{Kernel|Enabling device mapper and crypt target|<pre>
+[*] Enable loadable module support
+    Device Drivers --->
+        [*] Multiple devices driver support (RAID and LVM) --->
+            <*> Device mapper support
+            <*> Crypt target support
+</pre>}}
+
+Next, the Linux kernel needs to support the set of cryptographic APIs that the administrator wants to use for encryption. These can be found under the ''Cryptographic API'' section:
+
+{{Kernel|Enabling cryptographic API functions|<pre>
+[*] Cryptographic API --->
+    <*> SHA224 and SHA256 digest algorithm
+</pre>
+}}
+
+If the root file system will be encrypted as well, then an initial ram file system needs to be created in which the root filesystem is decrypted before it is mounted. Thus this requires initramfs support as well:
+
+{{Kernel|Enabling initramfs support|<pre>
+General setup  --->
+    [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
+</pre>}}
+
+=== Cryptsetup installation ===
+
+The {{Package|sys-fs/cryptsetup}} package provides the <code>cryptsetyp</code> command, which is used to open or close the encrypted storage as well as manage the passphrazes or keys associated with it.
+
+{{Emerge|sys-fs/cryptsetup}}
+
+== Encrypted storage ==
+
+=== Keyfile or passphrase ===
+
+In order to start with encrypted storage, the administrator will need to decide which method to use for the encryption key. With <code>cryptsetup</code> the choice is either a passphrase or a keyfile. In case of a keyfile, this can be any file, but it is recommended to use a file with random data which is properly protected (considering that access to this keyfile will mean access to the encrypted data).
+
+To create a keyfile, one can use the <code>dd</code> command:
+
+{{RootCmd|dd if{{=}}/dev/urandom of{{=}}/etc/keys/enc.key bs{{=}}1 count{{=}}4096}}
+
+In the next sections, we will show every command for both situations - passphrase and keyfile. Of course, only one method is necessary.
+
+=== Creating an encrypted storage platform ===
+
+In order to create an encrypted storage platform (which can be a disk, partition, file, ...) use the <code>cryptsetup</code> command with the ''luksFormat'' option.
+
+For instance, to have {{Path|/dev/vdb2}} as the storage medium for the encrypted data:
+
+{{RootCmd|cryptsetup -s 512 luksFormat /dev/vdb2|output=<pre>
+This will overwrite data on /dev/vdb2 irrevocably.
+  
+Are you sure? (Type uppercase yes): YES
+Enter LUKS passphrase: ...
+Verify passphrase: ...
+</pre>}}
+
+To use a keyfile instead of a passphrase:
+
+{{RootCmd|cryptsetup -s 512 luksFormat /dev/vdb2 /etc/keys/enc.key|output=<pre>
+This will overwrite data on /dev/vdb2 irrevocably.
+  
+Are you sure? (Type uppercase yes): YES
+</pre>}}
+
+The <code>-s 512</code> tells <code>cryptsetup</code> which keylength to use for the real encryption key (unlike the passphrase or keyfile, which are used to access this real encryption key).
+
+=== Opening the encrypted storage ===
+
+In order to open up the encrypted storage (i.e. make the real data accessible through transparent decryption), use the ''luksOpen'' command.
+
+{{RootCmd|cryptsetup luksOpen /dev/vdb2 myname|output=<pre>
+Enter passphrase for /dev/vdb2: ...
+</pre>}}
+
+If a keyfile is used, then the command would look like so:
+
+{{RootCmd|cryptsetup luksOpen -d /etc/keys/enc.key /dev/vdb2 myname}}
+
+When the command finishes succesfully, then a new device file called {{/dev/mapper/myname}} will be made available. This device file can then be mounted as a regular storage location:
+
+{{RootCmd|mount /dev/mapper/myname /home}}
+
+=== Closing the encrypted storage ===
+
+In order to close the encrypted storage (i.e. ensure that the real data is no longer accessible through transparent decryption), use the ''luksClose'' command:
+
+{{RootCmd|cryptsetup luksClose myname}}
+
+Of course, make sure that the device is no longer in use.
+
+== Manipulating LUKS keys ==
+
+LUKS keys are used to access the real encryption key. They are stored in slots in the header of the (encrypted) partition, disk or file.
+
+=== Listing the slots ===
+
+With the ''luksDump'' command, information about the encrypted partition, disk or file can be shown. This includes the slots:
+
+{{RootCmd|cryptsetup luksDump /dev/vdb2|output=<pre>
+LUKS header information for /dev/vdb2
+  
+Version:        1
+Cipher name:    aes
+Cipher mode:    xts-plain64
+Hash spec:      sha1
+Payload offset: 4096
+MK bits:        512
+MK digest:      34 3b ec ac 10 af 19 e7 e2 d4 c8 90 eb a8 da 3c e4 4f 2e ce
+MK salt:        ff 7c 7f 53 db 53 48 02 a4 32 dc e0 22 fc a3 51
+                06 ba b3 48 b3 28 13 a8 7a 68 43 d6 46 79 14 fe
+MK iterations:  59375
+UUID:           2921a7c9-7ccb-4300-92f4-38160804e08c
+  
+Key Slot 0: ENABLED
+        Iterations:             241053
+        Salt:                   90 0f 0f db cf 66 ea a9 6c 7c 0c 0d b0 28 05 2f
+                                8a 5c 14 54 98 62 1a 29 f3 08 25 0c ec c2 b1 68
+        Key material offset:    8
+        AF stripes:             4000
+Key Slot 1: ENABLED
+        Iterations:             273211
+        Salt:                   01 4c 26 ed ff 18 75 31 b9 89 5d a6 e0 b5 f4 14
+                                48 d0 23 47 a9 85 78 fb 76 c4 a9 d0 cd 63 fb d7
+        Key material offset:    512
+        AF stripes:             4000
+Key Slot 2: DISABLED
+Key Slot 3: DISABLED
+Key Slot 4: DISABLED
+Key Slot 5: DISABLED
+Key Slot 6: DISABLED
+Key Slot 7: DISABLED
+</pre>}}
+
+In the above example, two slots are used. Note that ''luksDump'' does not give away anything sensitive - it is merely displaying the LUKS header content. No decryption key has to be provided in order to call ''luksDump''.
+
+=== Adding a keyfile or passphrase ===
+
+In order to add an additional keyfile or passphrase to access the encrypted storage, use the ''luksAddKey'' option:
+
+{{RootCmd|cryptsetup luksAddKey /dev/vdb2|output=<pre>
+Enter any passphrase: (Enter a valid, previously used passphrase to unlock the key)
+Enter new passphrase for key slot: ... 
+Verify passphrase: ...
+</pre>}}
+
+To use a keyfile to unlock the key (but still add in a passphrase):
+
+{{RootCmd|cryptsetup luksAddKey -d /etc/keys/enc.key /dev/vdb2|output=<pre>
+Enter new passphrase for key slot: ...
+Verify passphrase: '''
+</pre>}}
+
+If a keyfile is to be added (say {{Path|/etc/keys/backup.key}}:
+
+{{RootCmd|cryptsetup luksAddKey /dev/vdb2 /etc/keys/backup.key}}
+
+Or, to use the first keyfile to unlock the main key:
+
+{{RootCmd|cryptsetup luksAddKey -d /etc/keys/enc.key /dev/vdb2 /etc/keys/backup.key}}
+
+=== Removing a keyfile or passphrase ===
+
+With the ''luksRemoveKey'' a keyfile or passphrase can be removed (so they can no longer be used to decrypt the storage):
+
+{{RootCmd|cryptsetup luksRemoveKey /dev/vdb2|output=<pre>
+Enter LUKS passphrase to be deleted: ...
+</pre>}}
+
+Or to remove a keyfile:
+
+{{RootCmd|cryptsetup luksRemoveKey -d /etc/keys/backup.key /dev/vdb2}}
+
+Make sure that at least one method for accessing the data is still available. Once a passphrase or keyfile is removed for use, this cannot be recovered again.
+
+=== Emptying a slot ===
+
+Suppose the passphrase or keyfile is no longer known, then the slot can be freed. Of course, this does require prior knowledge of which slot that the passphrase or keyfile was stored in.
+
+For instance, to empty out slot 2 (which is the third slot as slots are numbered starting from 0):
+
+{{RootCmd|cryptsetup luksKillSlot /dev/vdb2 2}}
+
+This command will ask for a valid passphrase before continuing. Or one can pass on the keyfile to use:
+
+{{RootCmd|cryptsetup luksKillSlot -d /etc/keys/enc.key /dev/vdb2 2}}
+
+== Additional resources ==
+
+* [[DM-Crypt LUKS]] on the Gentoo Wiki provides a more elaborate approach on using encrypted file systems for Gentoo Linux installations
+
+
+[[Category:Core system]]
