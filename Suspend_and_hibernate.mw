@@ -2,11 +2,14 @@
 
 === Software ===
 
+The following software can be used for in-kernel default suspend/hibernate implementation, namely, ''swsusp''.
+
 {{RootCmd
 |emerge --ask sys-power/suspend
 |prompt=root <span style{{=}}"color:blue;">linux #</span>
 }}
 
+Another alternative is {{Package|sys-power/hibernate-script}} which can be used with swsusp and TuxOnIce patched kernels.
 
 === Kernel ===
 Make sure the following variables are set to 'yes':
@@ -19,7 +22,18 @@ To see available suspend modes use
 |cat /sys/power/state
 |prompt=root <span style{{=}}"color:blue;">linux #</span>
 }}
+for swsusp, default implementation.
 
+Or else, probe `/sys/power/tuxonice/powerdown_method' sysfs file for ToI.
+
+Those two file will list at least [[ACPI]] S2/4 power down methods on modern hardware.
+New hardware would also support S5 method which is a rough S4 method.
+ACPI S2 correspond to suspend to ram (''ram'' method is swsusp terms and ''3'' in ToI terms);
+S4 hibernation to disk (''disk'' in swsusp temrs and ''4'' in ToI terms; S5 hibernation to disk (''5'' in ToI terms).
+
+Swsusp users can choose between ''platfom'', meaning ACPI, or *shutdown* methods which can be echo-ed to `/sys/power/disk' sysfs file.
+
+{{Note|TuxOnIce can be configured to take over swsusp syspend/hibernation methods. So any command echo-ed to either file will triger the same result.}}
 
 == Suspend to RAM ==
 
@@ -33,15 +47,53 @@ or
 |s2ram
 |prompt=root <span style{{=}}"color:blue;">linux #</span>
 }}
+or
+{{RootCmd
+|hibernate-ram
+}}
+for suspend (to ram) for hibernate-script users;
+or
+{{RootCmd
+|hibernate
+|prompt=root <span style{{=}}"color:blue;">linux #</span>
+}}
+to hibernate (to disk.)
 
 A more raw method is to 
 {{RootCmd
 |echo mem > /sys/power/state
 |prompt=root <span style{{=}}"color:blue;">linux #</span>
 }}
+or
+{{RootCmd
+|echo 3 > /sys/power/tuxonice/powerdown_method
+}}
+for TuxOnIce users. An then
+{{RootCmd
+|echo > /sys/power/tuxonice/do_hibernate
+}}
+is necessary to trigger a suspend/hibernation.
 
 == Suspend to disk ==
 for suspend to disk make sure you have a swap partition or swap file
+The swap file should be active beforehand obviously and should be echo-ed on the appropriate file before any atempt to suspend/hibernate.
+
+{{RootCmd
+|echo /dev/sda1 > /sys/power/resume
+}}
+or
+{{RootCmd
+|echo /dev/sda1 > /sys/power/tuxonice/swap/swapfile
+}}
+for ToI users.
+
+Do not forget to probe
+{{RootCmd
+|cat /sys/power/tuxonice/swap/headerlocations
+}}
+before issueing an actual command and append the result to kernel command line argument prepended with `resume='.
+This will suffice to resume from a block device or swap file for ToI.
+However, it's more complicated for a swapfile with swsusp. 
 
 == Troubleshooting ==
 
@@ -50,3 +102,4 @@ In case resuming from suspend does not work, disable the security chip in BIOS/U
 
 == Related links ==
 https://wiki.gentoo.org/wiki/Power_management/HOWTO
+[http://tuxonice.nigelcunningham.com.au TuxOnIce]
