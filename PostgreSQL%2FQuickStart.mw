@@ -24,7 +24,7 @@ Visit the [http://www.postgresql.org/about/ About] page on postgresql.org for mo
 This article will guide you through the Gentoo specific steps to install the PostgreSQL RDBMS. 
 
 <!--T:8-->
-The Ebuilds covered by this article are [http://packages.gentoo.org/package/dev-db/postgresql-docs dev-db/postgresql-docs] , [http://packages.gentoo.org/package/dev-db/postgresql-base dev-db/postgresql-base] and [http://packages.gentoo.org/package/dev-db/postgresql-server dev-db/postgresql-server] . 
+The Ebuild covered by this article is [http://packages.gentoo.org/package/dev-db/postgresql dev-db/postgresql]. 
 
 <!--T:9-->
 This article assumes that you will be installing the latest, stable version of PostgreSQL; at the time of this writing, the version was 9.3.5. Adjust the commands in this article as necessary for your specific version. 
@@ -50,7 +50,9 @@ There is quite a bit that will not be covered. The [http://www.postgresql.org/do
 === The Obsolete Ebuilds === <!--T:18-->
 
 <!--T:19-->
-If you have any of the following ebuilds installed, then you have an older, obsolete Gentoo installation of PostgreSQL and should migrate now: dev-db/postgresql-libs, dev-db/postgresql-client, dev-db/libpq and/or dev-db/postgresql. 
+If you have any of the following ebuilds installed, then you have an older, obsolete Gentoo installation of PostgreSQL and should migrate now: dev-db/postgresql-libs, dev-db/postgresql-client, dev-db/libpq, and dev-db/postgresql older than 9.0.
+
+The split ebuilds dev-db/postgresql-docs, dev-db/postgresql-base, and/or dev-db/postgresql-server have been unified into a single package: dev-db/postgresql. Nothing is required for you to move from the split ebuilds to the unified ebuild other than to emerge the unified ebuild.
 
 <!--T:20-->
 This article does cover migrating from the old ebuilds to the new ones. 
@@ -119,24 +121,21 @@ This article does cover migrating from the old ebuilds to the new ones.
 === Start Emerging === <!--T:24-->
 
 <!--T:25-->
-{{Emerge|dev-db/postgresql-server|output=<pre>
-[ebuild N ] dev-db/postgresql-docs-9.3.5 0 kB
-[ebuild N ]dev-db/postgresql-base-9.3.5 USE="doc nls pam readline ssl zlib
-  -kerberos -ldap -pg_legacytimestamp -threads" LINGUAS="-af -cs -de -es -fa -fr
-  -hr -hu -it -ko -nb -pl -pt_BR -ro -ru -sk -sl -sv -tr -zh_CN -zh_TW" 0 kB
-[ebuild N ] dev-db/postgresql-server-9.3.5 USE="doc nls perl python
-  -pg_legacytimestamp (-selinux) -tcl -uuid -xml" LINGUAS="-af -cs -de -es -fa
-  -fr -hr -hu -it -ko -nb -pl -pt_BR -ro -ru -sk -sl -sv -tr -zh_CN -zh_TW" 0 kB
+{{Emerge|dev-db/postgresql|output=<pre>
+[ebuild N ] dev-db/postgresql-9.3.5 USE="doc -kerberos -ldap -pg_legacytimestamp
+  nls perl python -pg_legacytimestamp (-selinux) readline ssl -tcl -threads
+  -uuid -xml zlib" LINGUAS="-af -cs -de -es -fa -fr -hr -hu -it -ko -nb -pl
+  -pt_BR -ro -ru -sk -sl -sv -tr -zh_CN -zh_TW" 0 kB
 </pre>
 }}
 
 <!--T:26-->
-You may receive a notice regarding that any of the above packages are blocked by any or all of the following packages: dev-db/postgresql-libs, dev-db/postgresql-client, dev-db/libpq or dev-db/postgresql. These packages are '''not maintained''' and obsoleted. Refer to the section on migration from the previous ebuilds to the new ones to know how to handle this situation. 
+You may receive a notice regarding that any of the above packages are blocked by any or all of the following packages: dev-db/postgresql-libs, dev-db/postgresql-client, or dev-db/libpq. These packages are '''not maintained''' and obsoleted. Refer to the section on migration from the previous ebuilds to the new ones to know how to handle this situation. 
 
 === Preparing to Initialize the Database Cluster === <!--T:27-->
 
 <!--T:28-->
-Once the packages have finished emerging, you may want to edit {{Path|/etc/conf.d/postgresql-9.3}} . There are three lines that effect the defaults of the server and '''cannot''' be changed later without deleting the directory that contains the database cluster and reinitializing. 
+Once the packages have finished emerging, you may want to edit {{Path|/etc/conf.d/postgresql-9.3}}. There are three lines that effect the defaults of the server and '''cannot''' be changed later without deleting the directory that contains the database cluster and reinitializing. 
 
 <!--T:29-->
 ''PGDATA'' defines where to place the configuration files. ''DATA_DIR'' defines where to create the database cluster and related files. ''PG_INITDB_OPTS'' may contain any[http://www.postgresql.org/docs/current/static/app-initdb.html extra options] you would care to set. The extra options are'''not''' required as the reasonable defaults are, ahem, reasonable. 
@@ -207,7 +206,7 @@ A complete list of language and character encodings supported by the server can 
 You can change your locale and encoding selections at database [http://www.postgresql.org/docs/current/static/sql-createdatabase.html creation time.] In order to change the locale for a database after you have created it, you must drop the database and start over again. 
 
 <!--T:39-->
-{{RootCmd|emerge --config dev-db/postgresql-server:9.3}}
+{{RootCmd|emerge --config dev-db/postgresql:9.3}}
 
 <!--T:40-->
 This will create the database cluster and store all the related server files into ''PGDATA'' and ''DATA_DIR'' . 
@@ -249,10 +248,7 @@ host    all         all         ::1/128               trust
 }}
 
 <!--T:51-->
-As has been mentioned before, by default the server is secure. Kind of. There is only one database role that is available for log in by default: ''postgres'' . And, the only way to initiate a connection to the database is through the {{Path|/var/run/postgresql/.s.PGSQL.5432}} Unix socket, which is owned by the ''postgres'' system user and system group, or via localhost. Now for the "kind of" bit: Any user on the system can make a connection to the database through the localhost. Even as the ''postgres'' database superuser. 
-
-<!--T:52-->
-To make a connection through the Unix socket, however, the users including the users for other services such as ''apache'' must be in the ''postgres'' system group. Use <code>gpasswd -a ''user'' postgres</code> to add ''user'' to the ''postgres'' group. Users not in the ''postgres'' group will be rejected with "Permission denied". 
+As has been mentioned before, by default the server is secure. Kind of. There is only one database role that is available for log in by default: ''postgres'' . And, the only way to initiate a connection to the database is through the {{Path|/run/postgresql/.s.PGSQL.5432}} Unix socket, which is owned by the ''postgres'' system user and system group, or via localhost. Now for the "kind of" bit: Any user on the system can make a connection to the database through the localhost. Even as the ''postgres'' database superuser. 
 
 <!--T:53-->
 {{Warning|Never disable the Unix socket entirely. The initscripts require access to it in order to operate properly. The method can be changed freely.}}
@@ -355,20 +351,18 @@ At this point you are ready to continue on with the official [http://www.postgre
 There are only two reasons you would need to perform a migration: When moving from one major version to another, ''e.g.'' , from PostgreSQL 8.4.7 to 9.0.3, but not from 9.0.2 to 9.0.3; or when switching from the deprecated floating-point timestamp format to the new 64-bit integer timestamp format. 
 
 <!--T:80-->
-{{Note|You will need to migrate your database when you move from the obsolete ebuilds dev-db/libpq, dev-db/postgresql, dev-db/postgresql-libs, and dev-db/postgresql-client to the new ebuilds dev-db/postgresql-docs, dev-db/postgresql-base and dev-db/postgresql-server.}}
+{{Note|You will need to migrate your database when you move from the obsolete ebuilds dev-db/libpq, dev-db/postgresql-libs, and dev-db/postgresql-client or dev-db/postgresql older than 9.0 to the new dev-db/postgresql ebuild.}}
 
 
 === Post-9.0 Migration === <!--T:81-->
 
+When upgrading from a previous version of the recent ebuilds, which is any version after 8.4, follow the beginning of this guide before proceeding with this migration.
+
 <!--T:82-->
-''pg_upgrade'' , a new utility that comes along with 9.0 and later, simplifies the migration process rather drastically. 
+''pg_upgrade'', a new utility that comes along with 9.0 and later, simplifies the migration process rather drastically. 
 
 <!--T:83-->
 However, there are two caveats with using pg_upgrade. Firstly, it does not support configuration files being in a different directory than where the data is stored. This can be resolved by using symbolic links. Lastly, you can only use it to migrate from a database from 8.3 or newer. If you have an older database you will need to follow the instructions to migrate from pre-9.0 deployments.
-
-<!--T:84-->
-Don't forget to initialize the new database:
-{{RootCmd|emerge --config {{=}}dev-db/postgresql-server-9.3}}
 
 <!--T:132-->
 Stop the servers you're going to migrate from and to:
@@ -488,7 +482,7 @@ Before starting, you will need to deny access to the server, so that no changes 
 <!--T:118-->
 {{RootCmd|pg_dumpall -U postgres > backup_file
 |/etc/init.d/postgresql stop
-|emerge -C dev-db/postgresql dev-db/libpq dev-db/postgresql-client dev-db/postgresql-libs}}
+|emerge -C dev-db/libpq dev-db/postgresql-client dev-db/postgresql-libs}}
 
 <!--T:119-->
 Follow the steps detailed in this article for installing and configuring the server.
@@ -498,7 +492,7 @@ Follow the steps detailed in this article for installing and configuring the ser
 |psql -f backup_file postgres}}
 
 <!--T:121-->
-You may break some packages that were built against those packages, but once you have installed dev-db/postgresql-base and/or dev-db/postgresql-server you can run <code>revdep-rebuild</code> to reemerge any packages that may have been broken.
+You may break some packages that were built against those packages, but once you have installed dev-db/postgresql you can run <code>revdep-rebuild</code> to reemerge any packages that may have been broken.
 
 == Utilities == <!--T:122-->
 
