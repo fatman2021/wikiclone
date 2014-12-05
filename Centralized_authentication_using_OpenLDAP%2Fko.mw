@@ -68,6 +68,10 @@ LDAP는 다양한곳에 사용할 수 있습니다. 이 문서는 사용자 관�
 
 OpenLDAP의 주 사용자는 ''rootdn''(Root Distinguished Name) 이며, 암호는 아래 명령으로 만들고, 이 정보는 다음에 언급할 {{Path|slapd.conf}}에 넣어야 합니다.
 
+User passwords (regardless if it is for rootdn users or others) for verification purposes can be stored as cleartext or hashed. Multiple different hash algorithms are available, but usage of weak algorythms (up to MD5) is not recommended. SHA is currently considered sufficiently cryptographically secure.
+
+In the below command, a hashed value is created for a given password; the result of this command can be used in the {{Path|slapd.conf}} configuration file, or in the internal directory definition of a user:
+
 {{RootCmd|slappasswd|output=<pre>
 New password: my-password
 Re-enter new password: my-password
@@ -146,20 +150,26 @@ syncprov-checkpoint 100 10
 
 {{Cmd|slaptest -v -d 1 -f /etc/openldap/slapd.conf}}
 
+Or, if you decide to use OLC:
+
+{{Cmd|slaptest -v -d 1 -F /etc/openldap/slapd.d}}
+
 더 많은 내용을 확인하려면 디버그 레벨("-d 1" 이상)을 바꿔보십시오. 모든 동작이 잘 된다면 "config file testing succeedded"가 보입니다.
 오류가 있다면, <code>slaptest</code>에서 ({{Path|slapd.conf}} 파일에서) 오류가 난 부분의 줄 번호를 표시합니다
 
-참고로, OpenLDAP는 설정 파일을 두 곳에 저장할 수 있습니다. 하나는 {{Path|slapd.conf}}이고, {{Path|slapd.d/}}에도 저장합니다. 후자는 텍스트 편집기가 아닌 <code>slaptest</code>로 {{Path|slapd.conf}} 파일을 활용하여 설정 파일을 만들도록 설계한 새로운 위치입니다.
+Note that since version 2.4.23, OpenLDAP moved from traditional flat config files ({{Path|slapd.conf}}) to OLC (OnLineConfiguration, also known through its <code>cn=config</code> structure) as default configuration method. One of benefits of using OLC is that the dynamic back-end (cn=config) doesn't require restart of server after updating the configuration. Existing users can migrate to the new configuration method by invoking <code>slaptest</code> setting both -f and -F options. Traditionally OLC is stored in ldif back-end (which keep benefits of human-readability) in the {{Path|/etc/openldap/slapd.d}} directory. In Gentoo it is not required to convert the configuration yet, but support for the currently documented approach will be removed in future versions of this document.
 
-To allow a local user (like root) to modify OLC, redefine the access to the ''config'' (this name is hardcoded) database by adding the proper lines and the end of the source {{Path|slapd.conf}}:
-{{Code|/etc/openldap/slapd.conf|<pre>
+If you want to be able to change OpenLDAP server's configuration, you must define at least write (or normally manage) access to <code>cn=config</code>.
+
+The example below shows how to grant manage access to OLC (''cn=config'' database) to the system administrator (root user) by adding the proper lines at the end of the {{Path|slapd.conf}} file:
+
+{{File|/etc/openldap/slapd.conf|Granting root Linux account manage rights to cn{{=}}config|<pre>
 database config
 access to *
         by dn.exact="gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth" manage
         by * none
 </pre>
 }}
-
 
 {{RootCmd|mkdir /etc/openldap/slapd.d}}
 {{RootCmd|slaptest -f /etc/openldap/slapd.conf -F slapd.d}}
