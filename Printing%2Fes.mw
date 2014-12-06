@@ -17,13 +17,13 @@ En este documento mostraremos como usar CUPS para configurar una impresora local
 
 === Introducción ===
 
-Cuando quiera instalar una impresora en su sistema, necesitará saber cómo se conectará la impresora a su sistema. ¿Lo hace a través de un puerto local como LPT o USB, o está en red?. Y si lo está, ¿Utiliza el protocolo de impresión de Internet (IPP) o a través del protocolo SMB-CIFS de Microsoft Windows (Compartir recursos en Microsoft Windows)? 
+Cuando quiera instalar una impresora en su sistema, necesitará saber cómo se conectará la impresora a su sistema. ¿Lo hace a través de un puerto local como LPT o USB, o está en red?. Y si lo está, ¿Utiliza el protocolo de impresión de Internet (IPP) o a través del protocolo CIFS de Microsoft Windows (Compartir recursos en Microsoft Windows)? 
 
 La siguientes secciones indican la configuración mínima de núcleo que necesita. Por supuesto, esto depende de cómo va a conectar la impresora a su sistema, por lo que para su comodidad hemos separado las indicaciones.
 
-Por tanto, vaya a {{Path|/usr/src/linux}} y lance <code>make menuconfig</code> para entrar en la configuración del núcleo. Si utilizó <code>genkernel</code> para configurar su núcleo, entonces debería realizar estos pasos para asegurarse de que no ha olvidado nada.
+So navigate to {{Path|/usr/src/linux}} and run <code>make menuconfig</code> to enter the kernel configuration. If you used <code>genkernel</code> to configure your kernel, you should still perform these steps just to make sure nothing was missed. You cannot rely on <code>genkernel</code> alone to configure everything in your system; printing is an area whose configuration settings are hard to automatically set right, if they are configured at all.
 
-En los siguientes ejemplos de configuración hemos añadido el soporte necesario ''en'' el núcleo, no como módulos. Esto no es obligatorio. Si así lo desea, puede fácilmente utilizar soporte modular. No olvide cargar los módulos apropiados a continuación. 
+In the next configuration examples, we will add the necessary support ''into'' the kernel, not as modules. Building the kernel this way is not mandatory; if you want you can easily use modular support, just be sure to remember to load the appropriate modules afterward! 
 
 Ahora vaya a la sección apropiada para configurar (o comprobar) su núcleo.
 
@@ -31,21 +31,19 @@ Ahora vaya a la sección apropiada para configurar (o comprobar) su núcleo.
 
 El puerto LPT se usa normalmente para identificar el puerto paralelo de la impresora. Es necesario activar previamente el soporte para el puerto paralelo, exactamente "PC-style parallel port support" (a menos que sea usuario de SPARC), después de ésto, habilitaremos el soporte para una impresora a través del puerto paralelo. 
 
-{{Kernel|Configuración para una impresora conectada al puerto paralelo|<pre>
+{{Kernel|Parallel Port Printer Configuration|<pre>
 Device Drivers -->
   <*> Parallel port support
   <*> PC-style hardware
-
-Device Drivers -->
+  [*] IEEE 1284 transfer modes
   Character Devices -->
     <*> Parallel printer support
-     [*] IEEE 1284 transfer modes
 </pre>
 }}
 
 {{Note/es|Algunos usuarios necesitarán activar otras opciones en la sección <code>Parallel port support</code>. Hay que comprobar la opción de ayuda <code>(Help)</code> en la configuración del núcleo para más información.}}
 
-Eso es todo. Salga de la configuración del núcleo y reconstrúyalo. No hay que olvidar copiar la imagen del núcleo a la localización {{Path|/boot}} (y no olvidar montar {{Path|/boot}} si es necesario) así como actualizar el cargador de arranque antes de reiniciar su sistema.
+That's it; quit the kernel configuration and rebuild your kernel:
 
 {{RootCmd|make && make modules_install}}
 
@@ -73,7 +71,7 @@ Device Drivers -->
 </pre>
 }}
 
-Eso es todo. Salga de la configuración del núcleo y reconstrúyalo. No hay que olvidar copiar la imagen del núcleo a la localización {{Path|/boot}} (y no olvidar montar {{Path|/boot}} si es necesario) así como actualizar el cargador de arranque antes de reiniciar su sistema.
+That's it; quit the kernel configuration and rebuild your kernel. Don't forget to copy the new kernel image to the {{Path|/boot}} location (and don't forget to mount {{Path|/boot}} if needed) and update your boot loader configuration prior to rebooting your system. Note the root commands in the '''USB Port Printer Configuration''' step above if you're unsure how to perform these two steps.
 
 Ahora continúe con CUPS. 
 
@@ -82,19 +80,18 @@ Ahora continúe con CUPS.
 Para poder conectar a una impresora remota a través del protocolo de impresión de Internet (Internet Printing Protocol) el núcleo solo
 necesita soporte de red. Asumiendo que el núcleo ya lo tiene, continuamos con CUPS. 
 
-=== Impresora remota (SMB-CIFS) ===
+=== Remotely Attached Printer (CIFS) ===
 
-Su núcleo debe ofrecer soporte para SMB CIFS: 
+Your kernel must support CIFS: 
 
-{{Kernel|Configuración de impresora SMB-CIFS|<pre>
+{{Kernel|CIFS Printer Configuration|<pre>
 File systems -->
- Network File Systems -->
-  <*> SMB file system support (to mount Windows shares etc.)
-  <*> CIFS support (advanced network file system for Samba, Windows and other CIFS compliant servers)
+  Network File Systems -->
+    <*> CIFS support (advanced network filesystem, SMBFS successor) 
 </pre>
 }}
 
-Eso es todo. Salga de la configuración del núcleo y reconstrúyalo. No hay que olvidar copiar la imagen del núcleo a la localización {{Path|/boot}} (y no olvidar montar {{Path|/boot}} si es necesario) así como actualizar el cargador de arranque antes de reiniciar su sistema.
+That's it; quit the kernel configuration and rebuild your kernel. Don't forget to copy the new kernel image to the {{Path|/boot}} location (and don't forget to mount {{Path|/boot}} if needed) and update your boot loader configuration prior to rebooting your system. Note the root commands in the '''USB Port Printer Configuration''' step above if you're unsure how to perform these two steps.
 
 Ahora continúe con CUPS.
 
@@ -105,32 +102,15 @@ Ahora continúe con CUPS.
 Instalar CUPS con Gentoo es muy sencillo. CUPS dispone de algunas características opcionales que le pueden interesar. Para activar o desactivar estas características, usaremos los ajustes USE
 asociados a las mismas. 
 
-{| class="wikitable" style="text-align: left;"
-|-
-! Parámetro USE
-! Impacto en CUPS
-|-
-| X
-| Le permite utilizar el menú de escritorio para cargar la
-página web de configuración de CUPS con su navegador favorito.
-|-
-| dbus
-| Añade soporte para el bus de mensajes del sistema <code>dbus</code>.
-|-
-| pam
-| Si necesita autenticación para los trabajos de impresión a través de los
-Módulos Enchufables de Autenticación (PAM), esto activará soporte PAM para CUPS.
-|-
-| ssl
-| Si quiere autenticación o privacidad remota, necesita soporta para la capa segura de los zócalos (Secure Socket Layer) permitiendo
-sesiones de impresión cifradas. El soporte para SSL debe estar disponible en todos los sistemas que participan en su red.
-|-
-| usb
-| Soporte para trabajar con impresoras conectadas a través de USB.
-|-
-|}
+{{USEflag|package=net-print/cups
+|X+++Allows you to use your desktop menu to load the CUPS configuration webpage into your preferred browser.
+|dbus+++Adds support for the <code>dbus</code> system message bus.
+|pam+++If you need print job authentication through the Pluggable Authentication Modules, this will activate PAM support for CUPS.
+|ssl+++If you want remote authentication and/or privacy, you need support for the Secure Socket Layer, allowing for encrypted printing sessions. Support for SSL must be available on all participating systems in your network.
+|usb+++Support for working with printers connected via USB.
+}}
 
-Compruebe los ajustes USE actuales. Si quiere modificar alguno de ellos tan solo para CUPS, añádalos a {{Path|/etc/portage/package.use}}. 
+Check the current USE settings. If you want to deviate from your current USE settings for CUPS alone, add the appropriate USE flags to {{Path|/etc/portage/package.use}}. 
 
 {{RootCmd|emerge -pv cups|output=<pre>
 [ebuild N ] net-print/cups-1.7.3 USE="X acl dbus pam ssl threads usb -debug -gnutls -java -kerberos -lprng-compat -python (-selinux) -static-libs -systemd -xinetd -zeroconf" ABI_X86="(64) (-32) (-x32)" LINGUAS="ca es fr it ja pt_BR ru"
@@ -144,7 +124,7 @@ Si está satisfecho con el resultado, haga que portage instale CUPS.
 
 Para habilitar el soporte para SAMBA, se necesita instalar {{Package|net-fs/samba}} con soporte para CUPS. Actualice el fichero o directorio {{Path|/etc/portage/package.use}} para habilitar el ajuste USE <code>cups</code>:
 
-{{File|/etc/portage/package.use||
+{{File|/etc/portage/package.use|Enabling cups USE flag for samba|
 <pre>net-fs/samba cups</pre>
 }}
 
@@ -152,36 +132,35 @@ A continuación (re)instale Samba:
 
 {{Emerge|net-fs/samba}}
 
-{{Important/es|Cualquier usuario que necesite imprimir, debería añadirse al grupo <code>lp</code>:
-
+{{Important|Any user that needs to print should be added to the <code>lp</code> group:
 {{RootCmd|gpasswd -a username lp}}
-
-Para poder añadir impresora y poder editarlas a través de la interfaz web de cups, los usuarios deben añadirse al grupo <code>lpadmin</code>: 
-
+  
+In order to be able to add printers and edit them via CUPS's web interface, any system user that is allowed to edit these settings should be in the <code>lpadmin</code> group:
+  
 {{RootCmd|gpasswd -a username lpadmin}}
 }}
 
-Si la impresora es local en nuestro sistema, necesitará cargar CUPS de forma automática en el inicio. Asegúrese de que su impresora está conectada antes de iniciar CUPS. 
+If the printer is attached to your system locally, and you want your printer to be available each time you boot you will need to load the CUPS daemon automatically on start-up. Make sure your printer is attached and powered on before you start the CUPS daemon. 
 
 {{RootCmd|/etc/init.d/cupsd start
 |rc-update add cupsd default}}
 
 === Configuración ===
 
-La configuración por defecto del servidor CUPS en {{Path|/etc/cups/cupsd.conf}} es suficiente para la mayoría de los usuarios. Sin embargo, algunos usuarios pueden necesitar cambios a la configuraicón de CUPS.
+The default CUPS server configuration in {{Path|/etc/cups/cupsd.conf}} is sufficient for most users. However, some users might need to make changes to the CUPS configuration.
 
-En las siguientes secciones cubrimos algunos cambios que se necesitan a menudo: 
+In the next section we cover a few changes that are often needed: 
 
-* Permitimos a otros sistemas que utilicen la impresora conectada a esta estación de trabajo Linux.
-* Concedemos acceso a la administración de CUPS desde sistemas remotos.
-* Configuramos CUPS para que ofrezca soporte a los controladores PCL de Windows. Esto se recomienda si quiere que los sistemas Windows puedan utilizar una impresora compartida con Samba ya que la mayoría de los controladores Windows son PCL.
-* Configuramos este sistema para que utilice una impresora conectada a otro sistema (no a través de un recurso Windows compartido).
+* Allow other systems to use the printer attached to this Linux workstation.
+* Grant access to the CUPS administration from remote systems
+* Configure CUPS to support Windows PCL drivers. This is advised if you want Windows systems to be able to use a SAMBA-shared printer as most Windows drivers are PCL drivers.
+* Configure this system to use a printer attached to another system (not Windows share).
 
 === Acceso a impresoras remotas ===
 
 Si quiere que otros sistemas utilice su impresora a través de IPP necesitará permitir explícitamente el acceso a la impresora en {{Path|/etc/cups/cupsd.conf}}. si quiere compartir su impresora utilizando SAMBA, no necesitará realizar este cambio. 
 
-Abra el fichero {{Path|/etc/cups/cupsd.conf}} con su editor favorito y añada una línea <code>Allow</code> para el sistema o los sistemas que deberían acceder a su impresora. En el ejemplo de abajo, concedemos acceso a la impresora desde localhost y desde cualquier sistema cuya dirección IP comience por <code>192.168.0</code>. 
+Open up {{Path|/etc/cups/cupsd.conf}} in your favorite editor and add in an <code>Allow</code> line for the system(s) that should be able to reach to your printer. In the next example, you can grant access to the printer from localhost and from any system whose IP address starts with <code>192.168.0</code> . 
 
 {{File|/etc/cups/cupsd.conf|Permitir acceso remote a la impresora|<pre>
 <Location />
@@ -191,14 +170,14 @@ Abra el fichero {{Path|/etc/cups/cupsd.conf}} con su editor favorito y añada un
 </Location>
 </pre>}}
 
-Esto difunde información de navegación a los clientes de la red. Esto es así para que sepan que la impresora está disponible.
+This broadcasts browsing information to the clients on the network; it will let network users know when the printer is available:
 
 {{File|/etc/cups/cupsd.conf|Información de difusión|<pre>
 BrowseAddress 192.168.0.*:631
 </pre>
 }}
 
-También necesitará especificar en qué puerto escucha CUPS de modo que responderá a las peticiones desde otras máquinas de su red.
+Also, you will need to specify which port CUPS listens to, so that it will respond to printing requests from other machines on your network:
 
 {{File|/etc/cups/cupsd.conf|Configuración del puerto|<pre>
 Listen *:631
@@ -231,7 +210,7 @@ Si quiere realizar una administración remota, necesitará proporcionar acceso a
 </pre>
 }}
 
-No olvide reiniciar CUPS después de realizar los cambios a {{Path|/etc/cups/cupsd.conf}}. Para ello lance <code>/etc/init.d/cupsd restart</code> . 
+Do not forget to restart the CUPS daemon after making changes to {{Path|/etc/cups/cupsd.conf}} by running <code>/etc/init.d/cupsd restart</code> . 
 
 === Habilitar soporte para los controladores PCL de Windows ===
 
@@ -248,7 +227,7 @@ application/octet-stream application/vnd.cups-raw 0 -
 </pre>
 }}
 
-No olvide reiniciar CUPS después de aplicar estos cambios. Para ello, lance <code>/etc/init.d/cupsd restart</code>. 
+Do not forget to restart the CUPS daemon after making these changes by running <code>/etc/init.d/cupsd restart</code> . 
 
 === Configurar una impresora remota ===
 
@@ -280,8 +259,7 @@ Defina la impresora HP LaserJet 5P como impresora por defecto:
 
 === Introducción ===
 
-Si la impresora que quiere configurar está disponible de forma remota a través de un servidor de impresión distinto (pero que está corriendo CUPS), no necesita seguir estas instrucciones. En su lugar, lea cómo 
-[[#Configurar_una_impresora_remota|Configurar una impresora remota]] . 
+If the printer you want to configure is remotely available through a different print server (running CUPS) you do not need to follow these instructions. Instead, read [[#Setting_Up_a_Remote_Printer|Setting Up a Remote Printer]]. 
 
 === Detectar la impresora ===
 
@@ -347,9 +325,7 @@ Si está instalando una impresora remota, se le pedirá la URI de la impresora:
 * Un servidor de impresión HP JetDirect necesita una sintaxis <code>socket://nombredeservidor</code>
 * Una impresora IPP necesita una sintaxis <code>ipp://nombredeservidor/printers/nombredeimpresora</code> o <code>http://nombredeservidor:631/printers/nombredeimpresora</code>.
 
-A continuación seleccione el fabricante de la impresora y en la pantalla siguiente, y el modelo y el número en la subsiguiente. Para muchas impresoras puede encontrar múltiples controladores. Puede seleccionar uno en
-ese momento o bien buscar en la
-[http://www.linuxprinting.org/printer_list.cgi Lista de impresoras de LinuxPrinting.org] uno más adecuado. Los controladores se pueden cambiar fácilmente más adelante. 
+Next, select the printer manufacturer in the adjoining screen and the model type and number in the subsequent one. For many printers you will find multiple drivers. You can either select one now or search on [http://www.openprinting.org/printer_list.cgi OpenPrinting Printer List] for a good driver. You can change drivers easily later on. 
 
 Una vez haya seleccionado el controlador, CUPS le informará de que la impresora se ha añadido satisfactoriamente al sistema. Ahora puede dirigirse a la página de administración de la impresora y seleccionar <code>Configurar impresora</code> para modificar los ajustes
 de la misma (resolución, formato de página, ...).
@@ -372,9 +348,7 @@ E [11/Jun/2005:10:23:28 +0200] [Job 102] Unable to get printer status (client-er
 
 === Instalar el mejor controlador ===
 
-Existen muchos controladores de impresoras. Para encontrar cuál de ellos ofrece el mayor rendimiento para su impresora, visite la
-[http://www.linuxprinting.org/printer_list.cgi lista de impresoras en LinuxPrinting]. Seleccione la marca y el tipo para encontrar el controlador que recomiendan en este sitio. Por ejemplo, para la HP LaserJet 5P nos recomiendan el controlador
-<code>ljet4</code>. 
+Many printer drivers exist; to find out which one has the best performance for your printer, visit the [http://www.openprinting.org/printer_list.cgi OpenPrinting Printer List]. Select your brand and type to find out what driver the site recommends. For instance, for the HP LaserJet 5P, the site recommends the <code>ljet4</code> driver. 
 
 Descargue el archivo PPD y colóquelo en {{Path|/usr/share/cups/model}}, luego lance <code>/etc/init.d/cupsd restart</code> como root.  Esto proporcionará el controlador a través de la interfaz web de CUPS. Ahora reconfigure su impresora como se ha descrito anteriormente.
 
@@ -389,7 +363,7 @@ Algunas impresoras requieren controladores específicos u ofrecen característic
 Los controladores [http://gutenprint.sourceforge.net gutenprint] son controladores de código abierto de gran calidad para varias impresoras Canon, Epson, HP, Lexmark, Sony, Olympus y PCL que soportan CUPS, ghostscript,
 El Gimp y otras aplicaciones. 
 
-El árbol portage de Gentoo contiene un ebuild para los controladores gutenprint. Tan solo hay que hacer <code>emerge</code> para instalarlos. Observe que este ebuild dispone de varios ajustes USE (como <code>cups</code> y <code>ppds</code>). ¡Es necesario activar como mínimo esos dos ajustes! 
+Gentoo's Portage Tree contains an ebuild for the gutenprint drivers. Just use <code>emerge gutenprint</code> to install them. Note that the ebuild listens to quite a few USE flags (such as <code>cups</code> and <code>ppds</code> ). You must have enabled at least these two flags! 
 
 {{Emerge|gutenprint}}
 
@@ -403,11 +377,11 @@ Lea el artículo sobre el [[HPLIP|Controlador HPLIP]]
 
 PPA es una tecnología de HP orientada a enviar todo el procesamiento de bajo nivel al sistema, en lugar de a la impresora. Con lo cual las impresoras son más baratas, pero consumen más recursos. 
 
-Si el sitio [http://www.linuxprinting.org/printer_list.cgi LinuxPrinting] le informa de que el controlador [http://pnm2ppa.sourceforge.net/ pnm2ppa] es su mejor opción, necesitará instalar el filtro <code>pnm2ppa</code> en su sistema: 
+If the [http://www.openprinting.org/printer_list.cgi OpenPrinting] site informs you that the [http://pnm2ppa.sourceforge.net/ pnm2ppa] driver is your best option, you need to install the <code>pnm2ppa</code> filter on your system: 
 
 {{Emerge|pnm2ppa}}
 
-Una vez instalado, descargue el fichero PPD de su impresora desde el sitio [http://www.linuxprinting.org/printer_list.cgi LinuxPrinting] y colóquelo en {{Path|/usr/share/cups/model}}. A continuación configure su impresora siguiendo los pasos explicados arriba.
+Once installed, download the PPD file for your printer from the [http://www.openprinting.org/printer_list.cgi OpenPrinting] site and put it in {{Path|/usr/share/cups/model}} . Next, configure your printer using the steps explained above.
 
 == Imprimir desde y hacia Microsoft Windows ==
 
@@ -420,7 +394,7 @@ para <code>Agregar Impresora</code> y seleccione <code>Impresora de Red</code>. 
 
 === Configurar un cliente Windows para una impresora compartida a través de Samba ===
 
-Para compartir la impresora en la red SMB-CIFS, debe instalar y configurar correctamente SAMBA. Los pasos para realizar esto están fuera del alcance de este documento, pero trataremos brevemente la configuración de impresoras compartidas a través de SAMBA. 
+To share the printer on the CIFS network, you must have SAMBA installed and configured correctly. How to do this is beyond the scope of this document, but we will quickly deal with the configuration of SAMBA for shared printers. 
 
 Abra {{Path|/etc/samba/smb.conf}} con su editor favorito y añada la sección <code>[printers]</code>: 
 
