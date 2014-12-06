@@ -1,41 +1,53 @@
-== Cgroups Overview ==
-OpenRC cgroup implementation follows [http://www.freedesktop.org/wiki/Software/systemd/PaxControlGroups FDO recommendations]. 
-Openrc creates it's own named controller (openrc) and creates hierarchy for each service names 'openrc_$servicename', if service setting require additional cgroup controller openrc creates same hierarchy in that controller.
+== Cgroups overview ==
 
-=== Turning cgroup support on ===
-Cgroups is available only on Linux. To use cgroups in OpenRC you should turn then in kernel, this switch controls whether or not group for each controller is mounter under {{Path|/sys/fs/cgroup}}.
+General info about Linux cgroups: [https://en.wikipedia.org/wiki/Cgroups Wikipedia]
 
-All other features will work only if you will set
-{{File|/etc/rc.conf|Add cgroups features|<pre>
+OpenRC's cgroup implementation follows the [http://www.freedesktop.org/wiki/Software/systemd/PaxControlGroups FDO recommendations].
+
+OpenRC creates it's own cgroup controller named ''openrc'' in which the service processes are put. If set in the service's options a new cgroup controller named ''openrc_${service_name}'' is created to hold it's process inclusive all it's child services' processes. The result is a hierarchical tree of cgroups containing the service processes. 
+
+=== Turning the cgroup feature support on ===
+
+The cgroup feature is only available on Linux.
+
+To use cgroups in OpenRC turn on the following option in the main rc configuration file:
+
+{{File|/etc/rc.conf|Turn on the cgroup feature support|<pre>
 rc_controller_cgroups="YES"
 </pre>}}
 
-=== Setting limits ===
-For each cgroup controller one can create special variables of the form:
-<pre>
-rc_cgroup_${CONTROLLER_NAME}="
-${CONTROLLER_NAME}.${OPTION_NAME} ${OPTION VALUE}
-</pre>
+Each cgroup controller is mounted at: {{Path|/sys/fs/cgroup}}
 
-This options can be added in {{Path|rc.conf}} file then they will be applied to all services, however, if you will set it in service.conf file that option will be applied only to that service.
+All other features described in this wiki page will work only if you have set this option to "YES".
+
+=== Setting limits ===
+For each cgroup controller one can set options in the form of:
+
+{{File|/etc/rc.conf|Set cgroup controller option globally for all services|<pre>
+rc_cgroup_${CONTROLLER_NAME}="${CONTROLLER_NAME}.${OPTION_NAME} ${OPTION VALUE}"
+</pre>}}
+
+or
+
+{{File|/etc/conf.d/${service_name}.conf|Set cgroup controller option for one service|<pre>
+rc_cgroup_${CONTROLLER_NAME}="${CONTROLLER_NAME}.${OPTION_NAME} ${OPTION VALUE}"
+</pre>}}
 
 For example, you would use this to set the cpu.shares setting in the cpu controller to 512 for your service.
-<pre>
-rc_cgroup_cpu="
-cpu.shares 512
-"
-</pre>
+{{File|/etc/conf.d/${service_name}.conf||<pre>
+rc_cgroup_cpu="cpu.shares 512"
+</pre>}}
 
 For more information about the adjustments that can be made with cgroups, see {{Path|Documentation/cgroups/*}} in the linux kernel source tree.
 
+=== Service cleanup ===
 
-=== Service Cleanup ===
-It's possible to trigger killing all service process tree (in process cgroup) when services is stopped or restarted. By setting 
-{{File|/etc/conf.d/<service>|an example of triggering cgroup cleanup|<pre>
+It is possible to trigger the killing of the whole service's process tree inside the same process cgroup if the service gets stopped or restarted. This is achieved by setting the following option in the service's rc script: 
+{{File|/etc/conf.d/${service_name}.conf|an example of triggering cgroup cleanup|<pre>
 rc_cgroup_cleanup="yes" 
 </pre>}}
 
-This option should not be set globally as it will kill all service's child processes e.g. SSH connections or apache workers, as OpenRC doesn't support automatic process cgroup-relocation as it done in logind services.
+This option should not be set globally as it will kill all service's child processes e.g. SSH connections or apache workers, as OpenRC doesn't support automatic process cgroup-relocation as it is done in logind services.
 
 === Service death notification ===
 
@@ -46,7 +58,7 @@ TBD
 * grouping cgroups subsystems together
 * support for userlevel cgroups
 
-== Openrc cgroup architecture ==
+== OpenRC cgroup architecture ==
 TODO: shortly describe architecture
 
 [[Category:OpenRC]]
