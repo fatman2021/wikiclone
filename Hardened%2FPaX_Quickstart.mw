@@ -5,12 +5,19 @@ This document focuses on '''PaX''' which adds security enhancement to that area 
 == What is PaX? ==
 
 PaX is a patch to the Linux kernel that provides hardening in three ways. 
+# Judicious enforcement of non-executable memory
+# Address Space Layout Randomization (ASLR)
+# Miscellaneous hardening on stack- and memory handling
 
-'''1.''' The first protection provided by PaX is a judicious enforcement of non-executable memory. This prevents a common form of attack where executable code is inserted into the address space of a process by an attacker and then triggered, thus hijacking the process and possibly escalating privileges. The typical vector for the insertion is via user provided data that finds its way into executable memory. By ensuring that "data" only lives in memory which is non-executable, and that only "text" is found in memory which is executable, PaX pre-emptively protects against this class of attacks. 
+These hardening measures are explained in more detail next.
+
+=== Judicious enforcement of non-executable memory ===
+
+Judicious enforcement of non-executable memory prevents a common form of attack where executable code is inserted into the address space of a process by an attacker and then triggered, thus hijacking the process and possibly escalating privileges. The typical vector for the insertion is via user provided data that finds its way into executable memory. By ensuring that "data" only lives in memory which is non-executable, and that only "text" is found in memory which is executable, PaX pre-emptively protects against this class of attacks. 
 
 Try running the following with PaX's MPROTECT enforced and then not enforced to see this feature in action: 
 
-{{Code|mmap-rwx.c: violate MPROTECT with RWX mmap|<pre>
+{{File|mmap-rwx.c|Violate MPROTECT with RWX mmap|<pre>
 /*
  * Contrast compiling with:
  *   gcc -UBAD -o mmap-rw mmap-rwx.c
@@ -23,8 +30,7 @@ Try running the following with PaX's MPROTECT enforced and then not enforced to 
 #include <errno.h>
 #include <string.h>
   
-int main()
-{
+int main() {
 	size_t *m;
   
 #ifdef BAD
@@ -45,7 +51,7 @@ int main()
 
 Similarly, try running the following with EMULTRAMP both enabled and disabled. This convoluted code forces gcc to set up a trampoline for the nested function f2(). The trampoline is executable code which lives on the stack and could allow the user to inject their own code via the variable i. 
 
-{{Code|trampoline.c: force gcc to generate a trampoline|<pre>
+{{File|trampoline.c|Force gcc to generate a trampoline|<pre>
 /*
  * Contrast compiling with:
  *   gcc -DTRAMPOLINE -o trampoline trampoline.c
@@ -57,19 +63,16 @@ Similarly, try running the following with EMULTRAMP both enabled and disabled. T
   
 typedef void (*fptr)(void) ;
   
-void f0(fptr f)
-{
+void f0(fptr f) {
         (*f)();
 }
   
-void f1()
-{
+void f1() {
 	int i ;
 	printf("Enter an integer: ");
 	scanf("%d", &i);
   	
-        void f2()
-	{
+        void f2() 	{
 		printf("%d: Bouncey bouncey bounce!\n", i);  
         }
   
@@ -78,17 +81,18 @@ void f1()
 #endif
 }
   
-int main ()
-{
+int main () {
 	f1() ;
 	return 0;
 }
 </pre>
 }}
 
-'''2.''' The second is Address Space Layout Randomization (ASLR). This provides a randomization of the memory map of a process (as reported, for example, by pmap) and thus makes it harder for an attacker to find the exploitable code within that space. Each time a process is spawned from a particular ELF executable, its memory map is different. Thus exploitable code which may live at 0x00007fff5f281000 for one running instance of an executable may find itself at 0x00007f4246b5b000 for another. While the vanilla kernel does provide some ASLR, a PaX patched kernel increases that. Furthermore, when an application is built as a Position Independent Executable (<code>PIE</code>), even the base address is randomized. Try repeatedly running the following on both a vanilla and PaX kernel, with and without PIE: 
+=== Address Space Layout Randomization (ASLR) ====
 
-{{Code|aslr-test.c: randomize base addess for PIE|<pre>
+With Address Space Layout Randomization (ASLR), a randomization of the memory map of a process (as reported, for example, by pmap) is provided and thus makes it harder for an attacker to find the exploitable code within that space. Each time a process is spawned from a particular ELF executable, its memory map is different. Thus exploitable code which may live at 0x00007fff5f281000 for one running instance of an executable may find itself at 0x00007f4246b5b000 for another. While the vanilla kernel does provide some ASLR, a PaX patched kernel increases that. Furthermore, when an application is built as a Position Independent Executable (<code>PIE</code>), even the base address is randomized. Try repeatedly running the following on both a vanilla and PaX kernel, with and without PIE: 
+
+{{File|aslr-test.c|Randomize base addess for PIE|<pre>
 /*
  * Contrast compiling with:
  *   gcc -o aslr-test-withpie -fPIC -pie aslr-test.c
@@ -98,14 +102,12 @@ int main ()
   
 #include <stdio.h>
   
-void doit()
-{
+void doit() {
         ;
         return ;
 }
   
-int main()
-{
+int main() {
         printf("main @ %p\n", main);
         printf("doit @ %p\n", doit);
         return 0;
@@ -115,7 +117,9 @@ int main()
 
 For more information on PIE, see our documentation on the [[Hardened/Toolchain]]. 
 
-'''3.''' Finally, the PaX patches provide some miscellaneous hardening: erasing the stack frame when returning form a system call, refusing to dereference user-land pointers in some contexts, detecting overflows of certain reference counters, correcting overflows of some integer counters, enforcing the size on copies between kernel and user land, and providing extra entropy. 
+=== Miscellaneous hardening ===
+
+Finally, the PaX patches provide some miscellaneous hardening: erasing the stack frame when returning form a system call, refusing to dereference user-land pointers in some contexts, detecting overflows of certain reference counters, correcting overflows of some integer counters, enforcing the size on copies between kernel and user land, and providing extra entropy.
 
 More information on PaX can be found on its [http://pax.grsecurity.net official homepage].
 
