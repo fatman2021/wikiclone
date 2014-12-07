@@ -188,11 +188,28 @@ The Hardened Gentoo team maintains and supports the {{Package|sys-kernel/hardene
 
 {{Emerge|sys-kernel/hardened-sources}}
 
-Emerging a hardened-sources kernel places the kernel source tree at {{Path|/usr/src}}, but it does not configure it for you. It is now up to you to make sure PaX is configured so that it enforces or relaxes what you want. Below we will concentrate on recommended configurations, but feel free to deviate. The previous section should have given you some idea as to what each of the options provide so you can make intelligent choices. We recommend tarting off with as much hardening as possible and relaxing only when there is no other workaround. 
+Emerging a {{Package|sys-kernel/hardened-sources}} kernel places the kernel source tree at {{Path|/usr/src/}}, but it does not configure it for you. It is now up to you to make sure PaX is configured so that it enforces or relaxes what you want. Below we will concentrate on recommended configurations, but feel free to deviate. The previous section should have given you some idea as to what each of the options provide so you can make intelligent choices. We recommend tarting off with as much hardening as possible and relaxing only when there is no other workaround. 
 
-As stated, the PaX patches are bundled with Grsecurity, so the PaX configuration options are found under that menu in <code>Security Options -> Grsecurity -> Customize Configuration -> PaX</code>. You also have the option of selecting one of Grsecurity's preconfigured profiles at <code>Security Options -> Grsecurity -> Configuration Method</code>. These will give you a meaningful starting point configuration for PaX. 
+As stated, the PaX patches are bundled with Grsecurity, so the PaX configuration options are found under that menu.
 
-If configuring for only PT_PAX, the following should be sufficient. Note that since we are trying to show the configuration options for both x86 and amd64, we've marked where the differences lie with a <code>></code> in the left most column. 
+{{Kernel|Location of the PaX configuration options|<pre>
+Security Options ->
+  Grsecurity ->
+    Customize Configuration ->
+      [*] PaX
+</pre>}}
+
+You also have the option of selecting one of Grsecurity's preconfigured profiles.
+
+{{Kernel|Location of the Grsecurity preconfigured profiles|<pre>
+Security Options ->
+  Grsecurity ->
+    Configuration Method ()
+</pre>}}
+
+These will give you a meaningful starting point configuration for PaX. 
+
+If configuring for only <code>PT_PAX</code>, the following should be sufficient.
 
 {{Kernel|Kernel configuration for PT_PAX|<pre>
 [*] Enable various PaX features
@@ -209,14 +226,14 @@ Non-executable page ->
   
  [*] Enforce non-executable pages
  [*]   Paging based non-executable pages
- [*]   Segmentation based non-executable pages                       <--- Not available on amd64.
- [*] Emulate trampolines                                             <--- CRITICAL for python
+ [*]   Segmentation based non-executable pages               <--- Not available on amd64.
+ [*] Emulate trampolines                                     <--- CRITICAL for python
  [*] Restrict mprotect()
  [ ]   Use legacy/compat protection demoting (read help)
  [ ]   Allow ELF text relocations (read help)
  [*] Enforce non-executable kernel pages
-     Return Address Instrumentation Method (or)  --->                <--- Not available on x86.
-     (4) Minimum amount of memory reserved for module code           <--- Not available on amd64.
+     Return Address Instrumentation Method (or)  --->        <--- Not available on x86.
+     (4) Minimum amount of memory reserved for module code   <--- Not available on amd64.
   
 Address Space Layout Randomization ->
   
@@ -237,9 +254,9 @@ Miscellaneous hardening features  --->
 </pre>
 }}
 
-Please note that these are recommended settings and you can deviate from them, but be careful when doing so.  On a play box, you can and should try new features to see what they might do or break.  But on a production box, do not turn on or off some feature without knowing what you are doing.  This is particularly true for EMUTRAMP (Emulate trampolines) which is turn on by default, and turning it off can break python and therfore your system!  The reason is that python and libffi write code on the fly, either by RWX mmap-ings which PaX's MPROTECT will kill, or by falling back on trying to write little code snippets to files which other features in Grsecurity will kill, like Trused Path Execution. (See [https://bugs.gentoo.org/show_bug.cgi?id=484472 bug #484472].)  In Gentoo, we've opted to patch python and libffi to use trampolines that can be safely handled by emulation in a PaX kernel. (See [https://bugs.gentoo.org/show_bug.cgi?id=329499 bug #329499].)  We then PaX mark the python executable with 'E' to enable emulation of trampolines.  Without EMUTRAMP on in the kernel, python will fail in trying to generate its RWX mmap-ings and die every time.  (As a ''temporary'' workaround if you get into this situaiton, you can disable MPROTECT on python with `paxctl -m` and then restore the original markings once you have booted back into a PaX kernel with EMUTRAMP.)
+Please note that these are recommended settings and you can deviate from them, but be careful when doing so.  On a play box, you can and should try new features to see what they might do or break.  But on a production box, do not turn on or off some feature without knowing what you are doing.  This is particularly true for <code>EMUTRAMP</code> (Emulate trampolines) which is turn on by default, and turning it off can break python and therfore your system! The reason is that python and libffi write code on the fly, either by RWX mmap-ings which PaX's <code>MPROTECT</code> will kill, or by falling back on trying to write little code snippets to files which other features in Grsecurity will kill, like Trused Path Execution. (See [https://bugs.gentoo.org/show_bug.cgi?id=484472 bug #484472].)  In Gentoo, we've opted to patch python and libffi to use trampolines that can be safely handled by emulation in a PaX kernel. (See [https://bugs.gentoo.org/show_bug.cgi?id=329499 bug #329499].)  We then PaX mark the python executable with 'E' to enable emulation of trampolines.  Without EMUTRAMP on in the kernel, python will fail in trying to generate its RWX mmap-ings and die every time.  (As a ''temporary'' workaround if you get into this situaiton, you can disable MPROTECT on python with `paxctl -m` and then restore the original markings once you have booted back into a PaX kernel with EMUTRAMP.)
 
-Also, we should prefer XATTR_PAX flags over PT_PAX. In that case, all of the above can remain in place, but we would change the PaX Control configuration: 
+Also, we should prefer <code>XATTR_PAX</code> flags over <code>PT_PAX</code>. In that case, all of the above can remain in place, but we would change the PaX Control configuration: 
 
 {{Kernel|Kernel configuration with XATTR_PAX flags|<pre>
 PaX Control ->
