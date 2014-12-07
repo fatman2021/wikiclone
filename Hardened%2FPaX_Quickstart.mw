@@ -285,23 +285,20 @@ Here <code>Ext4 extended attributes</code> was automatically selected by <code>P
 
 If you decide on PaX marking method, you should adjust <code>PAX_MARKINGS</code> variable in your <code>/etc/portage/make.conf</code> with either <code>XT</code> (for extended attributes) or <code>PT</code> (for program header marking). You can set both <code>XT PT</code> if you wish. Default is <code>PT</code>.
 
-== PaX Control ==
+== Controlling PaX ==
 
 As we mentioned above, there are five PaX protections that can be enforced (in SOFTMODE) or relaxed (in non-SOFTMODE) on a per ELF object basis: PAGEEXEC, EMULTRAP, MPROTECT, RANDMMAP and SEGMEXEC. The later, SEGMEXEC, is only available on x86 CPUs which support segmentation, unlike paging which is supported on all CPUs, even x86. Since some programs break for one reason or another under full PaX enforcement, we are faced with the choice of either fixing the code to work with PaX or relaxing one or more of these protections. In practice, "fixing the code" may be very difficult and we resort to the latter. The general approach should be to try full enforcement, and if something breaks, use dmesg to obtain a report from the kernel regarding why and then relax that particular protection. Even this is not generally needed on a Gentoo system because the ebuilds should set the correct flags for you via the pax-util.eclass. If you find that you have to set your own flags, we would ask that you file a bug report. 
 
 Generally setting the PaX flags is straightforward, but the user should keep a few things in mind: 
-
-1) One can set either PT_PAX and/or XATTR_PAX flags on the ELF object independently of one another. Similarly, the kernel can be configured to read either, both or neither fields. It is up to you to make sure that you set the flags in the field being used by the kernel to get the desired results. For example, if you have PT_PAX="Pe---" while XATTR_PAX missing on the object, but the kernel is configured only to use XATTR_PAX, you may not get the desired result! 
-
-2) The recommended approach is to mark both PT_PAX and XATTR_PAX fields identically on the objects whenever possible, and set the kernel to read only XATTR_PAX. The "whenever possible" is where things get complicated and the two fields may not wind up containing the same flags. If the ELF does not contain a PAX_FLAGS program header, PT_PAX marking will fail. However, the absence of this program header will not affect XATTR_PAX markings. If the ELF is busy (i.e. there is a running process making use of the ELF's text), then one can read the PT_PAX flags but not set them. Again, this does not affect setting or getting XATTR_PAX flags. On the other hand, if you are using any file systems which do not support extended attributes, then XATTR_PAX marking will fail on those file systems while PT_PAX marking is uneffected, except as already stated. This can be fairly subtle because copying a file from a file system with xattrs to one without, and then back again will drop the XATTR_PAX flags. Or tarring with an older version of tar which does not preserve xattrs will again drop our flags. 
-
-3) The PaX flags are only enforced when a process is loaded from an ELF executable. This executable in turn usually links dynamically against shared objects in memory. Using `cat /proc/<pid>/status | grep PaX` gives you the resulting PaX enforcement on the running process with PID=<pid>. But since the executable and shared objects can have different flags, the question arises, which ones are used to determine the final running PaX enforcements? The answer is the executable for reasons of control and security. If the libraries were to set the runtime PaX enforcement, then which of the libraries would "win" if an executable linked against many? And one overly relaxed library could relax the privileges on many executables that link against it. E.g. Relaxing all PaX protection on glibc would effectively turn PaX off on one's system. Nonetheless, it may be the code in the library itself that needs the relaxation of some PaX enforcement. In that case, one has to "back port" the flags from the library to the executable that uses it. 
+# One can set either PT_PAX and/or XATTR_PAX flags on the ELF object independently of one another. Similarly, the kernel can be configured to read either, both or neither fields. It is up to you to make sure that you set the flags in the field being used by the kernel to get the desired results. For example, if you have PT_PAX="Pe---" while XATTR_PAX missing on the object, but the kernel is configured only to use XATTR_PAX, you may not get the desired result! 
+# The recommended approach is to mark both PT_PAX and XATTR_PAX fields identically on the objects whenever possible, and set the kernel to read only XATTR_PAX. The "whenever possible" is where things get complicated and the two fields may not wind up containing the same flags. If the ELF does not contain a PAX_FLAGS program header, PT_PAX marking will fail. However, the absence of this program header will not affect XATTR_PAX markings. If the ELF is busy (i.e. there is a running process making use of the ELF's text), then one can read the PT_PAX flags but not set them. Again, this does not affect setting or getting XATTR_PAX flags. On the other hand, if you are using any file systems which do not support extended attributes, then XATTR_PAX marking will fail on those file systems while PT_PAX marking is uneffected, except as already stated. This can be fairly subtle because copying a file from a file system with xattrs to one without, and then back again will drop the XATTR_PAX flags. Or tarring with an older version of tar which does not preserve xattrs will again drop our flags. 
+# The PaX flags are only enforced when a process is loaded from an ELF executable. This executable in turn usually links dynamically against shared objects in memory. Using `cat /proc/<pid>/status | grep PaX` gives you the resulting PaX enforcement on the running process with PID=<pid>. But since the executable and shared objects can have different flags, the question arises, which ones are used to determine the final running PaX enforcements? The answer is the executable for reasons of control and security. If the libraries were to set the runtime PaX enforcement, then which of the libraries would "win" if an executable linked against many? And one overly relaxed library could relax the privileges on many executables that link against it. E.g. Relaxing all PaX protection on glibc would effectively turn PaX off on one's system. Nonetheless, it may be the code in the library itself that needs the relaxation of some PaX enforcement. In that case, one has to "back port" the flags from the library to the executable that uses it. 
 
 Below we describe the utilities provided on a Gentoo system for working PaX markings. There are several since as PaX evolved, new features were needed. Each one emphasizes a different need with respect to the above caveats. 
 
-'''1. paxctl''' 
+=== paxctl ===
 
-This is the traditional upstream package for setting PaX flags. It is limited only in that it sets PT_PAX only, not XATTR_PAX. It is provided by emerging sys-apps/paxctl. It does have one functionality that no other utility has: it can either create a PAX_FLAGS program header or convert a GNU_STACK to PAX_FLAGS. Both of these are not recommended since they can break the ELF under certain circumstances. However, in the extreme case that you cannot use XATTR_PAX (e.g. you can't use file systems that support extended attributes) and you are dealing with an ELF object that wasn't build with a PAX_FLAGS program header, then these options are available to you via this utility. 
+This is the traditional upstream package for setting PaX flags. It is limited only in that it sets PT_PAX only, not XATTR_PAX. It is provided by emerging {{Package|sys-apps/paxctl}}. It does have one functionality that no other utility has: it can either create a PAX_FLAGS program header or convert a GNU_STACK to PAX_FLAGS. Both of these are not recommended since they can break the ELF under certain circumstances. However, in the extreme case that you cannot use XATTR_PAX (e.g. you can't use file systems that support extended attributes) and you are dealing with an ELF object that wasn't build with a PAX_FLAGS program header, then these options are available to you via this utility. 
 
 Here is a synopsis of its usage: 
 
@@ -326,7 +323,9 @@ options:
 </pre>
 }}
 
-Note that paxctl also reports on an older PaX protection called RANDEXEC. This is now deprecated --- the randomization of the base address of a processes now simply part of ASLR on all executables build ET_DYN rather than EX_EXEC. Here is paxctl in action: 
+Note that <code>paxctl</code> also reports on an older PaX protection called RANDEXEC. This is now deprecated -- the randomization of the base address of a processes now simply part of ASLR on all executables build ET_DYN rather than EX_EXEC.
+
+Here is paxctl in action: 
 
 {{RootCmd|paxctl -v /usr/bin/python3.2|output=<pre>
 PaX control v0.7
@@ -350,7 +349,7 @@ Copyright 2004,2005,2006,2007,2009,2010,2011,2012 PaX Team <pageexec@freemail.hu
 </pre>
 }}
 
-'''2. getfattr setfattr''' 
+=== getfattr setfattr ===
 
 These are not PaX specific utilities but are general utilities to set a file's extended attributes. On Gentoo, they are provided by emerging sys-apps/attr. Since XATTR_PAX uses the user.* namespace, specifically it uses "user.pax.flags", you can use set/getfattr to work with this field. However, keep in mind that setfattr and getfattr know nothing about PaX, so they will not perform any sanity checking of what you are putting into that field. Only if you set user.pax.flags to some meaningful combination of the chars PpEeMmRr will the kernel respect your choice, else it falls back on the default. The following listing gives examples. 
 
@@ -366,18 +365,20 @@ user.pax.flags="em"
 |getfattr -n user.pax.flags /usr/bin/python3.2|output=<pre>
 getfattr: Removing leading '/' from absolute path names
 # file: usr/bin/python3.2
-user.pax.flags="P"						<--- Note: this overwrote the earlier flags, it didn't add to them.
+user.pax.flags="P" 
 </pre>}}
+{{Note|This overwrote the earlier flags, it didn't add to them.}}
 
 {{RootCmd|setfattr -n user.pax.flags -v "Hi Mom, wish you were here."  /usr/bin/python3.2
 |getfattr -n user.pax.flags /usr/bin/python3.2|output=<pre>
 getfattr: Removing leading '/' from absolute path names
 # file: usr/bin/python3.2
-user.pax.flags="Hi Mom, wish you were here."			<--- Mom appreciates it, but PaX does not.  There is no sanity checking.
+user.pax.flags="Hi Mom, wish you were here."
 </pre>
 }}
+{{Note|Mom appreciates it, but PaX does not.  There is no sanity checking.}}
 
-'''3. paxctl-ng''' 
+=== paxctl-ng ===
 
 paxctl-ng is the new swiss army knife of working with PT_PAX an XATTR_PAX markings. It can be built with support for just one or the other or both types of markings. When built with support for both, it can copy PT_PAX to XATTRP_PAX fields or vice versa, to make sure you have consistency. In sum, it can do everything paxctl and set/getfattr can do, except it will not try to create or convert a PAX_FLAGS program header. This is discouraged and should only be use in the corner case mentioned above. Here is a synopsis of its usage: 
 
@@ -414,9 +415,9 @@ Note         :  If both enabling and disabling flags are set, the default - is u
 </pre>
 }}
 
-The following is an example of paxctl-ng in action: 
+The following is an example of paxctl-ng in action.
 
-View both PT_PAX and XATTR_PAX fields (-v):
+First view both PT_PAX and XATTR_PAX fields (-v):
 
 {{RootCmd|paxctl-ng -v /usr/bin/python3.2|output=<pre>
 /usr/bin/python3.2:
@@ -469,27 +470,24 @@ View both PT_PAX and XATTR_PAX fields (-v):
 </pre>
 }}
 
-'''4.''' Python module, '''pax.so''' , and a simple Python frontend, '''pypaxctl'''. 
+=== The pax.so Python module and the pypaxctl Python frontend ===
 
-We also provide bindings to python via a module, pax.so, which is installed by emerging {{Package|dev-python/pypax}}. This package is a dependency of {{Package|sys-apps/elfix}} since the both revdep-pax and migrate-pax import it. It can be compiled with either PT_PAX and/or XATTR_PAX support, like paxctl-ng, but it is not as featureful since its scope is limited to just the needs of revdep-pax and migrate-pax. This may change in the future if there is a need to better integrate PaX marking with portage which is written in python. 
+We also provide bindings to python via a module, {{Path|pax.so}}, which is installed by emerging {{Package|dev-python/pypax}}. This package is a dependency of {{Package|sys-apps/elfix}} since the both revdep-pax and migrate-pax import it. It can be compiled with either PT_PAX and/or XATTR_PAX support, like paxctl-ng, but it is not as featureful since its scope is limited to just the needs of revdep-pax and migrate-pax. This may change in the future if there is a need to better integrate PaX marking with portage which is written in python. 
 
 Currently pax.so publicly exports the following: 
 
-{| class="wikitable" style="text-align: left;"
-! '''pax.setstrflags(str_flags):'''
-| This function will set both PT_PAX and XATTR_PAX flags to the same value, whenever possible. The flags are specified as a string of the following chars: PpEeMmRrSs. If both the enable and disable flags are given for a particular protection, then the default '-' is used.
-! '''pax.setbinflags(bin_flags):'''
-| This function is the same as pax.setstrflags but it takes the flags as a bitwise OR of the binary representation of the flags. The PT_PAX field is stored as this way, while XATTR_PAX is stored as a string of chars PpEeMmRrSs.
-! '''pax.getflags(elf):'''
-| This function returns the PaX flags as a tuple of both forms (str_flags, bin_flags), i.e., both as a string and its equivalent binary representation are returned. If both PT_PAX and XATTR_PAX are set, then the XATTR_PAX flags will override the PT_PAX flags.
-! '''pax.deletextpax(elf):'''
-| This function will delete the XATTR_PAX field completely. It does not touch the PT_PAX field, which cannot be deleted (easily!).
-! '''pax.PaxError:'''
-| This exception is thrown whenever getting or setting the flags fails, or when deleting the XATTR_PAX field fails.
-|-
-|}
+; '''pax.setstrflags(str_flags):'''
+: This function will set both PT_PAX and XATTR_PAX flags to the same value, whenever possible. The flags are specified as a string of the following chars: PpEeMmRrSs. If both the enable and disable flags are given for a particular protection, then the default '-' is used.
+; '''pax.setbinflags(bin_flags):'''
+: This function is the same as pax.setstrflags but it takes the flags as a bitwise OR of the binary representation of the flags. The PT_PAX field is stored as this way, while XATTR_PAX is stored as a string of chars PpEeMmRrSs.
+; '''pax.getflags(elf):'''
+: This function returns the PaX flags as a tuple of both forms (str_flags, bin_flags), i.e., both as a string and its equivalent binary representation are returned. If both PT_PAX and XATTR_PAX are set, then the XATTR_PAX flags will override the PT_PAX flags.
+; '''pax.deletextpax(elf):'''
+: This function will delete the XATTR_PAX field completely. It does not touch the PT_PAX field, which cannot be deleted (easily!).
+; '''pax.PaxError:'''
+: This exception is thrown whenever getting or setting the flags fails, or when deleting the XATTR_PAX field fails.
 
-pypaxctl is a simple front end to pax.so which just gets and sets the PaX flags using the same logic. When getting the flags, if both PT_PAX and XATTR_PAX are present, the latter will override the former. When setting, it will set both fields whenever possible. Here it is in action: 
+<code>pypaxctl</code> is a simple front end to pax.so which just gets and sets the PaX flags using the same logic. When getting the flags, if both PT_PAX and XATTR_PAX are present, the latter will override the former. When setting, it will set both fields whenever possible. Here it is in action: 
 
 Retrieve either PT_PAX or XATTR_PAX.  The latter has priority if it exists. The canonical order is PEMRS.
 
@@ -564,7 +562,7 @@ If the logic of XATTR_PAX taking precedence over PT_PAX is not what you want, it
 </pre>
 }}
 
-'''5. revdep-pax''' 
+=== revdep-pax ===
 
 This utility is used to map out the linkings between all the ELF objects on your system and their shared objects in both directions. It can then search for PaX flag markings that are mismatched between the shared objects than the executables; and optionally, allows the user to migrate the markings forwards or backwards on a per ELF object basis. Here's a synopsis of its usage: 
 
@@ -657,7 +655,7 @@ libpython3.2.so.1.0	/usr/lib64/libpython3.2.so.1.0 (-e---)
 </pre>
 }}
 
-'''6. migrate-pax''' 
+=== migrate-pax ===
 
 At this point you're probably fed up with dealing with both PT_PAX and XATTR_PAX fields and their relationship to the kernel's configuration, and you just want to drop the older PT_PAX and get on with life! migrate-pax does only that ... it will go through all ELF objects on your system and migrate the PT_PAX field to XATTR_PAX. For more details on how to migrate, see our guide on [[Hardened/PaX_flag_migration_from_PT_PAX_to_XATTR_PAX|migrating PaX flags from PT_PAX to XATTR_PAX]]. 
 
