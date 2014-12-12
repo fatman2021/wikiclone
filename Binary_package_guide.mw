@@ -181,63 +181,71 @@ If for some reason binary packages are simply deleted or copied into the package
 
 {{RootCmd|emaint binhost --fix}}
 
-== Installing binary packages ==
-
-=== Other configuration variables ===
+== Using binary packages ==
 
 For binary packages to be usable on other systems they must fulfill some requirements.
-* First, architecture and [[CHOST]] must match.
-* Second, the C(XX)FLAGS have to be chosen in a way that both the binary package server and the client systems can run the binaries.
-* Third, USE flags for processor specific features like MMX, SSE,... have to be chosen in a way that all systems have the enabled features, or the packages using these features have to be rebuilt on the client systems from source.
+* The client and server architecture and [[CHOST]] must match.
+* The <code>CFLAGS</code> and <code>CXXFLAGS</code> that were used to build the binary packages must be compatible with all clients.
+* USE flags for processor specific features (like MMX, SSE,...) have to be carefully selected; all clients need to support them.
 
+{{Important|Portage can not validate if these requirements match. It is the responsibility of the administrator to guard over these settings.}}
 
-==== PKGDIR ====
-The PKGDIR (set in {{Path|make.conf}}) variable decides where binary packages are stored. This directory is always required when using binary packages as the binary packages downloaded from the binary package server will be stored there too.
+Next to these, portage ''will'' check if the binary package is built using the same USE flags as expected on the client. If a package is built with a different USE flag combination, portage will either ignore the binary package (and use source-based build) or fail, depending on the options passed on to <code>emerge</code> (see [[#Installing binary packages|Installing binary packages]]).
 
-==== PORTAGE_BINHOST ====
-The PORTAGE_BINHOST (set in {{Path|make.conf}}) is a space separated URI list. This way it is possible to use several binary package servers simultaneously. The URI must always point to the place where the Packages file resides on the binary package server.
+On clients, a few configuration changes are needed in order for the binary packages to be used.
 
-{{File|/etc/portage/make.conf|PORTAGE_BINHOST example|<pre>
-PORTAGE_BINHOST="http://some-server.xy/"
-# or
-PORTAGE_BINHOST="ssh://user@some-server.xy/usr/portage/packages"
+=== Installing binary packages ===
+
+There are a few options that can be passed on to the <code>emerge</code> command that inform portage about using binary packages.
+
+; <code>---usepkg (-k)</code>
+: Try to use the binary package(s) in the locally available packages directory. Useful when using NFS-mounted binary package hosts. If the binary package is not found, a regular (source-based) installation will be done.
+; <code>--usepkgonly (-K)</code>
+: Similar to <code>--usepkg (-k)</code> but fail if the binary package cannot be found.
+; <code>--getbinpkg (-g)</code>
+: Download the binary package from a remote binary package host. If the binary package is not found, a regular (source-based) installation will be done.
+; <code>--getbinpkgonly (-G)</code>
+: Similar to <code>--getbinpkg (-g)</code> but fail if the binary package cannot be downloaded.
+
+In order to automatically use binary package installations, the appropriate option can be added to the <code>EMERGE_DEFAULT_OPTS</code> variable:
+
+{{File|/etc/portage/make.conf|Automatically fetching binary packages and fail if not available|<pre>
+EMERGE_DEFAULT_OPTS="${EMERGE_DEFAULT_OPTS} --getbinpkgonly"
 </pre>}}
 
-The support for multiple binary package servers is somewhat incomplete. If several servers serve a binary package for the same package version, then only the first one will be considered. This can be problematic when these binary packages differ in their USE configuration and the USE configuration of a later binary package would match the systems configuration.
+There is a portage feature that automatically implements the equivalent of <code>--getbinpkg (-g)</code> without the need for updating the <code>EMERGE_DEFAULT_OPTS</code> variable: ''getbinpkg''.
 
-==== FEATURES ====
-The 'getbinpkg' feature tells portage to always use the configured binary package server. Enabling this feature is equivalent to the emerge option -g (see below).
+{{File|/etc/portage/make.conf|Enabling getbinpkg as portage feature|<pre>
+FEATURES="${FEATURES} getbinpkg"
+</pre>}}
 
-The 'binpkg-logs' controls if log files for successful binary package installs should be kept. It is only relevant if PORT_LOGDIR is set. It is enabled by default.
+=== Pulling packages from a binary package host ===
 
-=== emerge options ===
-There are four options that tell portage to use binary packages. Some restrict portage to local binary packages already present in PKGDIR, some also allow fetching them from binary package servers. They also decide if only binary packages should be considered or both ebuilds and binary packages should be used.
+When using a binary package host, clients need to have the <code>PORTAGE_BINHOST</code> variable set. Otherwise the client will not know where the binary packages are stored (and how to retrieve them).
 
-For local binary packages located in $PKGDIR and ebuilds use:
---usepkg (-k)
+{{File|/etc/portage/make.conf|Setting PORTAGE_BINHOST|<pre>
+PORTAGE_BINHOST="http://binhost.genfic.com/packages"
+</pre>}}
 
-For local binary packages located in $PKGDIR only (the emerge will not proceed if one binary package is missing):
---usepkgonly (-K)
+The <code>PORTAGE_BINHOST</code> variable uses a space-separated list of URIs. This allows administrators to use several binary package servers simultaneously. The URI must always point to the directory in which the {{Path|Packages}} file resides.
 
-For local binary packages located in $PKGDIR, remote binary packages at $BINHOST and ebuilds:
---getbinpkg (-g)
+{{Note|The support for multiple binary package servers is somewhat incomplete. If several servers serve a binary package for the same package version, then only the first one will be considered. This can be problematic when these binary packages differ in their USE configuration and the USE configuration of a later binary package would match the systems configuration.}}
 
-For local and remote binary packages only:
---getbinpkgonly (-G)
+=== Reinstalling modified binary packages ===
 
-The options ignoring ebuilds require binary packages to be present for every needed package or 'emerge' will report an error. These options are useful to sync a system against a binary package server while avoiding any compilation on the client system.
+The <code>--rebuilt-binaries</code> option to <code>emerge</code> will reinstall every binary that has been rebuild since the package was installed. This is useful in case rebuilding tools like <code>revdep-rebuild</code> or <code>python-updater</code> are run on the binary package server.
 
+A related option is <code>--rebuilt-binaries-timestamp</code>. It causes emerge not to consider binary packages for a re-install if those binary packages have been built before the given time stamp. This is useful to avoid re-installing all packages, if the binary package server had to be rebuild from scratch but <code>--rebuilt-binaries</code> is used otherwise.
 
-==== Excluding binary packages ====
-Sometimes (when using -k or -g) it is desirable to use an ebuild over a binary package. This can be accomplished with the --usepkg-exclude option. All binary packages given with this option will be ignored.
+=== Additional client settings ===
 
-Example:
+Next to the ''getbinpkg'' feature, portage also listens to the ''binpkg-logs'' feature. This one controls if log files for successful binary package installations should be kept. It is only relevant if <code>PORT_LOGDIR</code> is set and is enabled by default.
+
+Similar to excluding binary packages for a certain set of packages or categories, clients can be configured to exclude binary package installations for a certain set of packages or categories.
+
+To accomplish this, use the <code>--usepkg-exclude</code> option:
+
 {{RootCmd|emerge -uDNg @world --usepkg-exclude "sys-kernel/gentoo-sources virtual/*"}}
-
-==== Reinstalling changed binary packages ====
-The --rebuilt-binaries option will reinstall every binary that has been rebuild since the package was installed. This is useful in case rebuilding tools like revdep-rebuild or python-updater are run on the binary package server.
-
-A related option is --rebuilt-binaries-timestamp. It causes emerge not to consider binary packages for a re-install if those binary packages have been built before the given time stamp. This is useful to avoid re-installing all packages, if the binary package server had to be rebuild from scratch.
 
 == Advanced topics==
 
