@@ -51,37 +51,57 @@ Having them around either on a binary package server or locally can be of great 
 The task of updating very old systems can be greatly eased using binary packages. It is usually easier to install binary packages as those don't require the build time dependencies to be installed / updated and the failures in the build process for them can be avoided.
 
 == Creating binary packages ==
-Depending on what you want to use the binary packages for, there are several ways to configure emerge.
 
-The most common way is to create binary packages whenever a package is installed using an ebuild.
-To do so, enable the FEATURE 'buildpkg' (see man make.conf).
+There are three main methods for creating binary packages:
+# After a regular installation, using <code>quickpkg</code>
+# Explicitly during an emerge operation by using the <code>--buildpkg (-b)</code> option
+# Automatically through the use of the <code>buildpkg</code> portage feature
 
-To create binary packages on demand use the --buildpkg (-b) option for emerge. All packages installed from ebuilds with this command will have a binary package created. There also exists the --buildpkgonly (-B) which only create binary packages, but doesn't install the package. This option is not recommended, because it requires that all build time dependencies are already installed. If this requirement is not met, packages will fail to build.
+All three methods will create a binary package in the directory pointed to by the <code>PKGDIR</code> variable (which defaults to {{Path|/usr/portage/packages}}).
 
-A third option is to create binary packages from already installed packages using 'quickpkg'. 'quickpkg' takes one or more dependency atoms or package set (for portage versions supporting this) as argument and creates binary packages for all installed packages matching these atoms. 
+=== Using quickpkg ===
 
-{{RootCmd|quickpkg "sys-devel/gcc" # creates binary packages for all installed gcc versions
-|quickpkg "*/*" # creates binary packages for all installed packages
-|quickpkg "kde-base/*" # creates binary packages for all installed packages in the kde-base category}}
+The <code>quickpkg</code> application takes one or more dependency atoms (or package sets) and creates binary packages for all ''installed'' packages that match the atom.
 
-One caveat with this method is that it relies on the installed files, which is especially a problem for config files, which frequently are modified compared to what the package originally installed. Files which are protected by CONFIG_PROTECT (see man portage) aren't included by default. To include them use the --include-config or --include-unmodified-config option (see man quickpkg).
+For instance, to create binary packages of all installed GCC versions:
 
-=== How to exclude creating some packages ===
-Sometimes it is desirable not to build binary packages for some packages. The most common reason being that the package doesn't perform noticeable amounts of work during building, like kernel sources or packages that only install an upstream provided binary package. The --buildpkg-exclude option does exactly this.
+{{RootCmd|quickpkg sys-devel/gcc}}
 
-Example:
+To create binary packages of all installed packages, use the <code>*</code> glob:
+
+{{RootCmd|quickpkg "*/*"}}
+
+There is a caveat with this method though: it relies on the installed files, which can be a problem in case of configuration files. Administrators often change configuration files after installing software. Because this could leak out important or perhaps even confidential data into the packages, <code>quickpkg</code> by default does ''not'' include configuration files that are protected through the CONFIG_PROTECT method. To include those as well, use the <code>--include-config</code> or <code>--include-unmodified-config</code> options.
+
+=== Using the --buildpkg emerge option ===
+
+When installing software using <code>emerge</code>, portage can be asked to create binary packages as well by using <code>--buildpkg (-b)</code>:
+
+{{Emerge|params+=--buildpkg|sys-devel/gcc}}
+
+It is also possible to ask portage to ''only'' create a binary package but ''not'' to install the software on the live system. For this, the <code>--buildpkgonly (-B)</code> option can be used:
+
+{{Emerge|params+=--buildpkgonly|sys-devel/gcc}}
+
+The latter approach however requires that all build time dependencies are already installed.
+
+=== Automatically using buildpkg feature ===
+
+The most common way is to automatically create binary packages whenever a package is installed by <code>emerge</code>. This is done through the ''buildpkg'' feature, which can be set in {{Path|/etc/portage/make.conf}} like so:
+
+{{File|/etc/portage/make.conf|Enabling buildpkg feature|<pre>
+FEATURES="${FEATURES} buildpkg"
+</pre>}}
+
+Every time portage installs software, it will create a binary package as well.
+
+=== Excluding creation of some packages ===
+
+It is possible to tell portage not to create binary packages for a select few packages or categories. This is done through the <code>--buildpkg-exclude</code> option to emerge:
+
 {{RootCmd|emerge -uDN @world --buildpkg --buildpkg-exclude "virtual/* sys-kernel/*-sources"}}
 
-This works independently of how building of binary packages was enabled.
-
-=== Configuring paths ===
-By default binary packages are stored in the path defined as PKGDIR in {{Path|/etc/portage/make.conf}}. It defaults to PORTDIR/packages, which itself defaults to {{Path|/usr/portage/packages}}.
-
-=== Other configuration variables ===
-For binary packages to be usable on other systems they must fulfill some requirements.
-* First, architecture and [[CHOST]] must match.
-* Second, the C(XX)FLAGS have to be chosen in a way that both the binary package server and the client systems can run the binaries.
-* Third, USE flags for processor specific features like MMX, SSE,... have to be chosen in a way that all systems have the enabled features, or the packages using these features have to be rebuilt on the client systems from source.
+This could be used for packages that have little to no benefit in having a binary package available. Examples would be the Linux kernel source packages or upstream binary packages (those ending with ''-bin'' like {{Package|www-client/firefox-bin}}).
 
 == Setting up a binary package host ==
 Portage supports the following protocols for downloading binary packages:
