@@ -104,34 +104,54 @@ It is possible to tell portage not to create binary packages for a select few pa
 This could be used for packages that have little to no benefit in having a binary package available. Examples would be the Linux kernel source packages or upstream binary packages (those ending with ''-bin'' like {{Package|www-client/firefox-bin}}).
 
 == Setting up a binary package host ==
-Portage supports the following protocols for downloading binary packages:
-* ftp
-* ftps
-* http
-* https
-* ssh
 
-Portage itself does not act as server that redistributes the binary packages. Instead you have to install a server that provides one of the protocols above.
+Portage supports a number of protocols for downloading binary packages: FTP, FTPS, HTTP, HTTPS and SSH. This leaves room for many possible binary package host implementations.
 
-Example using {{Package|www-servers/lighttpd}} to setup an http server.
+There is, however, no out-of-the-box method provided by portage for distributing binary packages. Depending on the requested setup, additional software will need to be installed.
 
-{{RootCmd|emerge www-servers/lighttpd
-|### Open /etc/lighttpd/lighttpd.conf and change server.document-root to PKGDIR
-|/etc/init.d/lighttpd start}}
+=== Web based binary package host ===
 
-Pointing your browser to http://127.0.0.1/Packages should download the Packages file in PKGDIR (assuming you already have binary packages).
+A common approach for distributing binary packages is to create a web based binary package host.
 
-Example using {{Package|net-misc/openssh}} to setup an ssh server.
-(There may be a better way to do this, but the process of using SSH for this is a little hairy.)
-{{RootCmd|emerge net-misc/openssh
-|useradd -m -r -G portage -s /bin/bash binpkguser
-|cat clientA-root.id_rsa.pub >> /home/binpkguser/.ssh/authorized_keys
-|/etc/init.d/sshd start}}
+Use a web server (such as {{Package|www-servers/lighttpd}}) and configure it to provide read access to the <code>PKGDIR</code> location.
 
-{{File|/etc/portage/make.conf|PORTAGE_BINHOST for this configuration|<pre>
+Then, on the clients, configure the <code>PORTAGE_BINHOST</code> variable accordingly:
+
+{{File|/etc/portage/make.conf|Using a web based binary package host|<pre>
+PORTAGE_BINHOST="http://binhost.genfic.com/Packages"
+</pre>}}
+
+=== SSH binary package host ===
+
+To provide a more authenticated approach for binary packages, one can consider using SSH.
+
+When using SSH, it is possible to use the portage Linux user's SSH key (without passphraze as the installations need to happen in the background) to connect to a remote binary package host.
+
+To accomplish this, make sure that the portage user's SSH key is allowed on the server:
+
+{{RootCmd|cat portage.id_rsa.pub >> /home/binpkguser/.ssh/authorized_keys}}
+
+The <code>PORTAGE_BINHOST</code> could then look like so:
+
+{{File|/etc/portage/make.conf|Setting up PORTAGE_BINHOST for SSH access|<pre>
 PORTAGE_BINHOST="ssh://binpkguser@yourbinhostserver/usr/portage/packages"
 </pre>}}
 
+=== NFS exported ===
+
+When using binary packages on an internal network, it might be easier to just export the packages through NFS and mount it on the clients.
+
+The {{Path|/etc/exports}} file could look like so:
+
+{{File|/etc/exports|Exporting the packages directory|<pre>
+/usr/portage/packages                            2001:db8:81:e2::/48(ro,no_subtree_check,root_squash) 192.168.100.1/24(ro,no_subtree_check,root_squash)
+</pre>}}
+
+On the clients, the location can then be mounted. An example {{Path|/etc/fstab}} entry would look like so:
+
+{{File|/etc/fstab|Entry for mounting the packages folder|<pre>
+binhost:/usr/portage/packages      /usr/portage/packages    nfs    defaults    0 0
+</pre>}}
 
 == Maintaining a binary package server ==
 This chapter covers issues beyond keeping the server updated.
