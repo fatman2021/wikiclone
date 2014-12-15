@@ -71,53 +71,28 @@ epatch_user() {
 
 == Calling <code>epatch_user</code> with a hook in Portage's bashrc ==
 
-If an ebuild does not call <code>epatch_user</code>, and you still wish to apply user patches; this can be accomplished using bashrc hooks provided by Portage, provided the ebuild inherits {{Path|1=eutils.eclass}}.
+If an ebuild does not call <code>epatch_user</code>, and you still wish to apply user patches; this can be accomplished using bashrc hooks provided by Portage. Candidates are <code>post_src_unpack</code>, <code>pre_src_prepare</code> or <code>post_src_prepare</code>. The first two have the advantage of being run before
+any <code>eautoreconf</code> and the last two have the advantage of being run in the right directory, so only <code>pre_src_prepare</code> shares those advantages.
 
-Typically, one might use the <code>post_src_unpack</code> or <code>post_src_prepare</code> hooks.
-However, the latter is run <i>after</i> the ebuild's <code>src_prepare</code> phase, which causes issues if for example <code>eautoreconf</code> should be run after patches are applied.
+Normally only ebuilds inheriting <code>eutils</code> can access <code>epatch_user</code>, so you would need to test for its presence and non-eutils ebuilds wouldn't get patched at all. There's a trick of pulling in only the necessary bits from <code>eutils.eclass</code>, running <code>epatch_user</code> and dropping them.
 
-{{file|1=/etc/portage/bashrc|2=Example use of <code>epatch_user</code> in post_src_unpack hook|3=<nowiki>
-post_src_unpack() {
-    if [[ $(type -t epatch_user) == function ]]; then
-        if pushd -- "$S" 2>&3; then
-            epatch_user
-            popd 2>&3
-        else
-            epatch_user
-        fi 3>/dev/null
-    fi
-}</nowiki>}}
-
-There's an ugly trick to also make it work with ebuilds that don't inherit eutils.
+With <code>pre_src_prepare</code> and the above trick, you don't need to play with changing directories, you can support all ebuilds whether they import <code>eutils</code> or not, and you get your patches applied as soon as possible in the chain. While it might still be better to have this feature as
+part of portage, the following snippet should cover everyday needs pretty well.
 
 {{File|/etc/portage/bashrc||<pre>
-post_src_unpack() {
-    # import epatch_user if not available
+pre_src_prepare() {
     if ! type epatch_user > /dev/null 2>&1; then
         local names="epatch_user epatch evar_push evar_push_set evar_pop estack_push estack_pop"
-        local pattern="(${names// /|})"
-        awk \
-            "/^# @FUNCTION: / { p = 0 } /^# @FUNCTION: $pattern\$/ { p = 1; } p { print  }" \
-            /usr/portage/eclass/eutils.eclass > eutils-epatch-user.sh || die
-        source eutils-epatch-user.sh
+        source <(awk "/^# @FUNCTION: / { p = 0 } /^# @FUNCTION: (${names// /|})\$/ { p = 1; } p { print  }" /usr/portage/eclass/eutils.eclass)
     fi
 
-    # do the patching in the right directory
-    if pushd -- "$S"; then
-        epatch_user || die
-        popd
-    else
-        epatch_user || die
-    fi
+    epatch_user || die
 
-    # clean up any imported names
     for name in $names; do
         unset $name
     done
 }
 </pre>}}
-
-It would be much nicer if this feature was included into portage.
 
 == See Also ==
 * [http://www.funtoo.org/Localpatch_%28Tutorial%29 Localpatch tutorial] (from Funtoo wiki)
