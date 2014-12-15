@@ -88,6 +88,37 @@ post_src_unpack() {
     fi
 }</nowiki>}}
 
+There's an ugly trick to also make it work with ebuilds that don't inherit eutils.
+
+{{File|/etc/portage/bashrc||<pre>
+post_src_unpack() {
+    # import epatch_user if not available
+    if ! type epatch_user > /dev/null 2>&1; then
+        local names="epatch_user epatch evar_push evar_push_set evar_pop estack_push estack_pop"
+        local pattern="(${names// /|})"
+        awk \
+            "/^# @FUNCTION: / { p = 0 } /^# @FUNCTION: $pattern\$/ { p = 1; } p { print  }" \
+            /usr/portage/eclass/eutils.eclass > eutils-epatch-user.sh || die
+        source eutils-epatch-user.sh
+    fi
+
+    # do the patching in the right directory
+    if pushd -- "$S"; then
+        epatch_user || die
+        popd
+    else
+        epatch_user || die
+    fi
+
+    # clean up any imported names
+    for name in $names; do
+        unset $name
+    done
+}
+</pre>}}
+
+It would be much nicer if this feature was included into portage.
+
 == See Also ==
 * [http://www.funtoo.org/Localpatch_%28Tutorial%29 Localpatch tutorial] (from Funtoo wiki)
 * [http://dilfridge.blogspot.com/2012/04/neat-trick-for-testing-patches-in.html A neat trick for testing patches in Gentoo] (from dilfridge's blog)
