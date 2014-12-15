@@ -1,78 +1,9 @@
-User patches provides users with an integrated method of applying site-specific patches.
-This is often preferable to forking the ebuild in a local overlay, since the latter will require ongoing maintenance to keep up with the Gentoo tree.
+User patches provide a way for users to apply patches to ebuilds. This is useful for the rare cases of site-specific patches, but also for testing patches before sending them to upstream or to the Gentoo bug tracker. The feature is provided by many ebuilds, either by calling <code>epatch_user</code> explicitly or by inheriting an eclass and relying on its default implementation of <code>src_prepare</code>. Current Gentoo policy does not require ebuilds to use <code>epatch_user</code>, its usage is at the package maintainer's discretion. There is also a way to enable it for all ebuilds.
 
-To apply user patches to an ebuild that supports them, save the patch in {{Path|1=/etc/portage/patches/$CATEGORY/$PN/}} (for example {{Path|1=/etc/portage/patches/app-emulation/wine/}}.
-Note that the patch file's name <i>must</i> end with in <code>.patch</code>.
-A few other folders will also be checked for user patches, see the snippet from {{Path|1=eclass/eutils.eclass}} below for full details.
-
-== <code>epatch_user</code> ==
-
-User patches is not a feature provided by the package manager directly, but is implemented by calling the <code>epatch_user</code> function (from {{Path|1=eutils.eclass}}) in many individual ebuilds, often through eclass-defined <code>src_prepare</code> functions.
-This has the advantage of letting the maintainer of a package determine the most appropriate place for applying user patches, for example prior to calling <code>eautoreconf</code>.
-Current Gentoo policy does not require ebuilds to use <code>epatch_user</code>, its usage is at the package maintainer's discretion.
-
-Different ebuilds and eclasses have their own conventions, for example, {{Path|1=qt4-build.eclass}} calls <code>epatch_user</code> after applying other patches in the eclass' <code>src_prepare</code>.
-<code>epatch_user</code> can be called multiple times without causing issues, it creates a file {{Path|1=${T}/epatch_user.log}} and exits early if this file already exists.
-
-{{File|1=eclass/eutils.eclass|2=epatch_user documentation and code as of 2014-06-02|3=<nowiki>
-# @FUNCTION: epatch_user
-# @USAGE:
-# @DESCRIPTION:
-# Applies user-provided patches to the source tree. The patches are
-# taken from /etc/portage/patches/<CATEGORY>/<P-PR|P|PN>[:SLOT]/, where the first
-# of these three directories to exist will be the one to use, ignoring
-# any more general directories which might exist as well. They must end
-# in ".patch" to be applied.
-#
-# User patches are intended for quick testing of patches without ebuild
-# modifications, as well as for permanent customizations a user might
-# desire. Obviously, there can be no official support for arbitrarily
-# patched ebuilds. So whenever a build log in a bug report mentions that
-# user patches were applied, the user should be asked to reproduce the
-# problem without these.
-#
-# Not all ebuilds do call this function, so placing patches in the
-# stated directory might or might not work, depending on the package and
-# the eclasses it inherits and uses. It is safe to call the function
-# repeatedly, so it is always possible to add a call at the ebuild
-# level. The first call is the time when the patches will be
-# applied.
-#
-# Ideally, this function should be called after gentoo-specific patches
-# have been applied, so that their code can be modified as well, but
-# before calls to e.g. eautoreconf, as the user patches might affect
-# autotool input files as well.
-epatch_user() {
-    [[ $# -ne 0 ]] && die "epatch_user takes no options"
-
-    # Allow multiple calls to this function; ignore all but the first
-    local applied="${T}/epatch_user.log"
-    [[ -e ${applied} ]] && return 2
-
-    # don't clobber any EPATCH vars that the parent might want
-    local EPATCH_SOURCE check base=${PORTAGE_CONFIGROOT%/}/etc/portage/patches
-    for check in ${CATEGORY}/{${P}-${PR},${P},${PN}}{,:${SLOT}}; do
-        EPATCH_SOURCE=${base}/${CTARGET}/${check}
-        [[ -r ${EPATCH_SOURCE} ]] || EPATCH_SOURCE=${base}/${CHOST}/${check}
-        [[ -r ${EPATCH_SOURCE} ]] || EPATCH_SOURCE=${base}/${check}
-        if [[ -d ${EPATCH_SOURCE} ]] ; then
-            EPATCH_SOURCE=${EPATCH_SOURCE} \
-            EPATCH_SUFFIX="patch" \
-            EPATCH_FORCE="yes" \
-            EPATCH_MULTI_MSG="Applying user patches from ${EPATCH_SOURCE} ..." \
-            epatch
-            echo "${EPATCH_SOURCE}" > "${applied}"
-            return 0
-        fi
-    done
-    echo "none" > "${applied}"
-    return 1
-}</nowiki>}}
-
-== Calling epatch_user with a hook in /etc/portage/bashrc ==
+== Enabling /etc/portage/patches for all ebuilds ==
 
 If an ebuild does not call <code>epatch_user</code>, and you still wish to apply user patches; this can be accomplished using bashrc hooks provided by Portage. Candidates are <code>post_src_unpack</code>, <code>pre_src_prepare</code> or <code>post_src_prepare</code>. The first two have the advantage of being run before
-any <code>eautoreconf</code> and the last two have the advantage of being run in the right directory, so only <code>pre_src_prepare</code> shares those advantages.
+<code>eautoreconf</code> (or similar) and the last two have the advantage of being run in the right directory, so only <code>pre_src_prepare</code> shares those advantages.
 
 Normally only ebuilds inheriting <code>eutils</code> can access <code>epatch_user</code>, so you would need to test for its presence and non-eutils ebuilds wouldn't get patched at all. There's a trick of pulling in only the necessary bits from <code>eutils.eclass</code>, running <code>epatch_user</code> and dropping them.
 
@@ -93,6 +24,55 @@ pre_src_prepare() {
     done
 }
 </pre>}}
+
+== Adding user patches ==
+
+First you need to choose the location for your patch, depending on the package name and the versions it is intended for. You can use the following locations plus you can optionally append <code>:${SLOT}</code> to any of them.
+
+* <code>/etc/portage/patches/${CATEGORY}/${P}</code>
+* <code>/etc/portage/patches/${CATEGORY}/${PN}</code>
+* <code>/etc/portage/patches/${CATEGORY}/${P}-${PR}</code>
+
+Examples:
+
+* <code>/etc/portage/patches/dev-lang/python</code>
+* <code>/etc/portage/patches/dev-lang/python:3.4</code>
+* <code>/etc/portage/patches/dev-lang/python-3.4.2</code>
+* <code>/etc/portage/patches/dev-lang/python-3.3.5-r1</code>
+
+First you need to create the directory.
+
+{{RootCmd|mkdir -p /etc/portage/patches/dev-lang/python-3.3.5-r1}}
+
+Now you have your directory ready and you can drop the patches
+there. Only files with <code>.patch</code> suffix are considered
+and they are applied in the order determined by their name.
+
+Note that <code>epatch_user</code> attempts to apply them repeatedly
+with a prefix stripped up to a different number of slashes.
+
+== Using a git directory as a source of patches ==
+
+Instead of creating the directory, you can create a symlink to a git
+directory in your system.
+
+{{RootCmd|mkdir -p /etc/portage/patches/sys-libs && ln -s /home/user/projects/glibc /etc/portage/patches/sys-libs/glibc}}
+
+Now, in the git directory, you can do your usual work and when you're
+finished, just remove all the patches from the previous run and use <code>git format-patch</code> to create
+a patchset from your branch based on another known branch.
+
+{{Cmd|rm -f *.patch && git format-patch origin/master}}
+
+This solution relies on the fact that only files ending with <code>.patch</code> are processed in the patch directory.
+
+== Adding support for user patches to your ebuilds ==
+
+It's up to the maintainer of the ebuild to decide when exactly is <code>epatch_user</code> called. It would typically be in <code>src_prepare</code> together with patches specified in the ebuild itself and the build system actions like <code>eautoreconf</code>. To best accomodate user patches that would later be suitable for submitting upstream, it should be the very first action. Note that without changing the ebuild, the user can only force it to be called earlier, not later.
+
+As a maintainer, you often get <code>epatch_user</code> for free by inheriting an eclass. Then it's you who can either force it to be run earlier or rely on the eclass to do that. For example, <code>qt4-build.eclass</code> calls <code>epatch_user</code> after applying other patches in its implementation of <code>src_prepare</code>.
+
+When the ebuild ends up calling <code>epatch_user</code> multiple times (e.g. because the maintainer called it explicitly but also used an eclass that calls it), the first call creates {{Path|${T}/epatch_user.log}} and subsequent calls have no effect.
 
 == See Also ==
 * [http://www.funtoo.org/Localpatch_%28Tutorial%29 Localpatch tutorial] (from Funtoo wiki)
