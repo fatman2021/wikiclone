@@ -1,50 +1,110 @@
-{{Stub}}
-ZoneMinder is a system to provide monitoring, logging and a browser based interface to security cameras. As of this writing, there is no ebuild (there used to be one). It can support multiple V4L and network connected devices with a clear uncluttered interface in any browser.
-
-{{Warning|It can be tricky to get working to your satisfaction. This is a blow by blow summary of an install from source on my system, you will probably need to get some more sources of information.}}
-
-{{Note|See the talk page for some additional hints. I'll transfer them in when I get time. [[User:Gerdesj|Gerdesj]] 08:00, 9 May 2012 (UTC)}}
-
-{{Note|Check out the '''zugaina''' [[overlay]] for package <nowiki>www-misc/zoneminder</nowiki> - this may simplify your compilation.}}
-
-== Get the source ==
-{{RootCmd|cd /usr/src
-|wget http://www2.zoneminder.com/downloads/ZoneMinder-1.25.0.tar.gz
-|tar xzvf ZoneMinder-1.25.0.tar.gz
+{{InfoBox stack
+|{{InfoBox homepage|http://www.zoneminder.com|header="true"}}
+|{{InfoBox wikipedia}}
 }}
 
-{{Note|A patched version that compiles without problems may be obtained through subversion.}}
+'''ZoneMinder''' Capture, analyse, record and monitor any cameras attached to your system.
 
-{{RootCmd|svn co https://svn.unixmedia.net/public/zum/trunk/zum}}
-
-== Build LibAV (with network support) ==
-Add network use flag to build file /etc/portage/package.use
-<pre>
-...
-media-video/libav network
-</pre>
-Then compile libav with network support
-{{RootCmd|emerge -av libav}}
-
-== Configure ==
-{{RootCmd|./configure --with-webdir{{=}}/var/www/localhost/htdocs/zm --with-cgidir{{=}}/var/www/localhost/cgi-bin CPPFLAGS{{=}}-D__STDC_CONSTANT_MACROS --enable-mmap{{=}}no
-|make
-|make install
+== Installation ==
+=== Dependicies ===
+{{Warning|'''The following required servers must be configured properly for ZoneMinder to work.'''}}
+*Apache2 [[Apache2|www-servers/apache]]
+*MySQL [[MySQL|dev-db/mariadb]]
+*PHP [[PHP|dev-lang/php]]
+Enable the following USE flags for dev-lang/php:
+{{USEflag|package=dev-lang/php
+|apache2++Yes
+|cgi++Yes
+|curl++Yes
+|inifile++Yes
+|pdo++Yes
+|mysql++Yes
+|mysqli++Yes
+|sockets++Yes
+}}
+Enable the following USE flags for app-admin/eselect-php:
+{{USEflag|package=app-admin/eselect-php
+|apache2++Yes
 }}
 
-{{Note|''--prefix{{=}}/usr/local'' by default - probably best to leave as is to avoid conflicting with Portage controlled stuff.}}
-{{Note|No Sys::Mmap in Portage hence ''--use-mmap{{=}}no}}
-{{Note|CPPFLAGS needed to compile ffmpeg modules}}
+{{RootCmd
+|echo "dev-lang/php apache2 cgi curl inifile pdo mysql mysqli sockets" >> /etc/portage/package.use
+|echo "app-admin/eselect-php apache2" >> /etc/portage/package.use
+}}
 
-== MySQL ==
-* Create a database
+
+=== Install ZoneMinder ===
+{{RootCmd|emerge -pv zoneminder}}
+
+
+== Configuration ==
+=== Apache ===
+
+* Select correct version of PHP
+{{RootCmd|eselect php list apache2|output=<pre>
+  [1]   php5.6 *
+</pre>}}
+
+* Edit /etc/php/apache2-php5.6/php.ini to reflect:
+{{File|/etc/php/apache2-php5.6/php.ini||<pre>
+short_open_tag = On
+date.timezone = "YOUR ZONE INFO"
+</pre>}}
+
+* Edit /etc/conf.d/apache2 and add "'''-D PHP5 -D PROXY'''" to APACHE2_OPTS
+{{File|/etc/conf.d/apache2||<pre>
+APACHE2_OPTS="-D DEFAULT_VHOST -D INFO -D SSL -D SSL_DEFAULT_VHOST -D LANGUAGE -D PHP5 -D PROXY"
+</pre>}}
+
+* Remove Apache startup warning: "...fully qualified domain name..."
+{{RootCmd|echo ServerName localhost >> /etc/apache2/httpd.conf}}
+
+* Create /etc/apache2/vhost.d/10_zoneminder.conf and add the following:
+{{File|/etc/apache2/vhost.d/10_zoneminder.conf||<pre>
+# security issue in the default install.
+#
+# When using Zoneminder's own authentication, recorded CCTV images are
+# accessible from the web directly without passing the authentication. This
+# means any attacker could see your CCTV images without a password. In order
+# to avoid this you can disable Zoneminder's authentication and configure
+# standard Apache authentication (see the Apache documentation for details on
+# this).
+#
+# If you still wish to use Zoneminder's own authentication, or have an
+# internal site which needs no authentication, you need to delete the line
+# marked below and restart Apache.
+
+Alias /zm "/usr/share/zoneminder/www"
+<Directory "/usr/share/zoneminder/www">
+    Options -Indexes +MultiViews +FollowSymLinks
+    AllowOverride All
+    <IfModule mod_authz_core.c>
+       # Apache 2.4
+       Require all granted
+    </IfModule>
+</Directory>
+
+ScriptAlias /cgi-bin/zms "/usr/libexec/zoneminder/cgi-bin"
+ScriptAlias /cgi-bin/nph-zms "/usr/libexec/zoneminder/cgi-bin/nph-zms"
+<Directory "/usr/libexec/zoneminder/cgi-bin">
+    AllowOverride All
+    Options ExecCGI
+    <IfModule mod_authz_core.c>
+       # Apache 2.4
+       Require all granted
+    </IfModule>
+</Directory>
+</pre>}}
+
+=== MySQL ===
+* Create ZoneMinder's database, '''zm''', as a standard user
 {{Cmd|mysql -p|output=<pre>
 mysql> create database zm;
 mysql> exit;
 </pre>}}
 
 * Import the database schema and base data, the .sql script is created by the configure phase above, so make sure you do that first.
-{{Cmd|mysql -p zm < /usr/src/Zoneminder-<version>/db/zm_create.sql}}
+{{Cmd|mysql -p zm < /usr/share/zoneminder/db/zm_create.sql}}
 
 * Create a MySQL user for ZM to use. If you change the user and/or password from the defaults here, then make sure you set those in the source configure phase.
 {{Cmd|mysql -p|output=<pre>
@@ -53,60 +113,64 @@ Reading table information for completion of table and column names
 You can turn off this feature to get a quicker startup with -A
 
 Database changed
-mysql> grant select,insert,update,delete on zm.* to 'zmuser'@localhost identified by 'zmpass';Query OK, 0 rows affected (0.00 sec)
+mysql> grant select,insert,update,delete on zm.* to 'zmuser'@localhost identified by 'zmpass';
+Query OK, 0 rows affected (0.00 sec)
 
 mysql> flush privileges;
 Query OK, 0 rows affected (0.00 sec)
+
+mysql> exit;
 </pre>}}
 
-== Dependencies ==
-This is the Perl module checking from configure.  You'll have to add any missing ones yourself.
-<pre>
-checking for perl... perl
-checking for perl version greater than or equal to 5.6.0... ok
-checking for perl module Sys::Syslog... ok
-checking for perl module DBI... ok
-checking for perl module DBD::mysql... ok
-checking for perl module Getopt::Long... ok
-checking for perl module Time::HiRes... ok
-checking for perl module Date::Manip... ok
-checking for perl module LWP::UserAgent... ok
-checking for perl module ExtUtils::MakeMaker... ok
-checking for perl module Module::Load... ok
-checking for perl module Device::SerialPort... ok
-checking for perl module Net::FTP... ok
-checking for perl module Net::SFTP::Foreign... no
-configure: WARNING: Net::SFTP::Foreign is required for automatic event uploading using sftp
-checking for perl module Expect... ok
-checking for perl module Archive::Tar... ok
-checking for perl module Archive::Zip... ok
-checking for perl module Net::SMTP... ok
-checking for perl module MIME::Lite... ok
-checking for perl module MIME::Entity... ok
-checking for perl module X10::ActiveHome... no
-configure: WARNING: X10::ActiveHome is required for X.10 support
-</pre>
+=== ZoneMinder ===
+* Edit /etc/zm.conf and add the above MySQL database username and password:
 
-{{Note|dev-perl/net-sftp has quite a few deps and does not seem to include Net::SFTP::Foreign.}}
-{{Note|There are no X10 modules in Portage.}}
+{{File|/etc/zm.conf||<pre>
+# ZoneMinder database user
+ZM_DB_USER=zmuser
 
-== Apache ==
-* Enable PHP short tags if you get the following errors in Apache's error log and in the browser output
-<pre>
-PHP Parse error:  syntax error, unexpected $end in /var/www/localhost/htdocs/zm/includes/functions.php on line 2437
-</pre>
-
-* Set date.timezone in {{Path|php.ini}} if the output is full of timezone errors to e.g. "Europe\London"
-
-{{RootCmd|eselect php list apache2|output=<pre>
-  [1]   php5.3 *
-  [2]   php5.4
+# ZoneMinder database password
+ZM_DB_PASS=zmpass
 </pre>}}
 
-{{File|/etc/php/apache2-php5.3/php.ini|Snippet from php.ini for Apache|<pre>
-short_open_tag = On
-date.timezone = "Europe/London"
-</pre>}}
+== Init ==
+=== OpenRC ===
+Start the Apache server:
+{{RootCmd|/etc/init.d/apache2 start}}
+Add Apache to the default runlevel:
+{{RootCmd|rc-update add apache2 default}}
+Reload the Apache configuration files:
+{{RootCmd|/etc/init.d/apache2 reload}}
+Start PHP server:
+{{RootCmd|/etc/init.d/php-fpm start}}
+Add PHP to the default runlevel:
+{{RootCmd|rc-update add php-fpm default}}
+Start MySQL server:
+{{RootCmd|/etc/init.d/mysql start}}
+Add MySQL to the default runlevel:
+{{RootCmd|rc-update add mysql default}}
+Start ZoneMinder server:
+{{RootCmd|/etc/init.d/zoneminder start}}
+Add ZoneMinder to the default runlevel:
+{{RootCmd|rc-update add zoneminder default}}
+
+=== systemd ===
+Start the Apache server:
+{{RootCmd|systemctl start apache2}}
+Add Apache to startup:
+{{RootCmd|systemctl enable apache2}}
+Start the PHP server:
+{{RootCmd|systemctl start php-fpm}}
+Add PHP to startup:
+{{RootCmd|systemctl enable php-fpm}}
+Start the MySQL server:
+{{RootCmd|systemctl start mysql}}
+Add MySQL to startup:
+{{RootCmd|systemctl enable mysql}}
+Start the ZoneMinder server:
+{{RootCmd|systemctl start zoneminder}}
+Add ZoneMinder to startup:
+{{RootCmd|systemctl enable zoneminder}}
 
 == Selinux ==
 If you are using selinux you must create a policy. Hopefully later when the ebuild comes back this will be done automatically.
