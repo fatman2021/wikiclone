@@ -8,232 +8,247 @@ These instructions are specifically for the Beaglebone Black Rev. C.  I found in
 *Create the udev rules mentioned [http://beagleboard.org/getting-started beagleboard.org].  These work for eudev as well.
 
 === Emerge the toolchain ===
-<code>emerge dev-vcs/git sys-devel/crossdev sys-fs/dosfstools app-arch/lzop</code><br>
+{{RootCmd
+|emerge dev-vcs/git sys-devel/crossdev sys-fs/dosfstools app-arch/lzop
+}}
 Do not merge u-boot-tools as we will be using a version of u-boot configured specifically for the BBB (Beaglebone Black).
 
 === Create an overlay for crossdev ===
-<code>
-mkdir -p /usr/local/portage/{metadata,profiles}<br>
-echo "local_overlay" > /usr/local/portage/profiles/repo_name<br>
-echo "masters = gentoo" > /usr/local/portage/metadata/layout.conf<br>
-chown -R portage:portage /usr/local/portage<br>
-edit /etc/make.conf: <code>PORTDIR_OVERLAY="/usr/local/portage"
-</code><br>
+{{RootCmd
+|mkdir -p /usr/local/portage/{metadata,profiles}
+|echo "local_overlay" > /usr/local/portage/profiles/repo_name
+|echo "masters {{=}} gentoo" > /usr/local/portage/metadata/layout.conf
+|chown -R portage:portage /usr/local/portage
+}}
+edit /etc/portage/make.conf:
+{{FileBox|filename=/etc/portage/make.conf|lang=bash|1=
+PORTDIR_OVERLAY="/usr/local/portage"
+}}
+
 More info: [http://wiki.gentoo.org/wiki/Overlay/Local_overlay wiki.gentoo.org]
 
 === Setup portage for crossdev ===
-<code>
-mv -i package.use use && mkdir package.use && mv use package.use<br>
-mv -i package.accept_keywords accept_keywords && mkdir package.accept_keywords && mv accept_keywords package.accept_keywords<br>
-mv -i package.license license && mkdir package.license && mv license package.license<br>
-mv -i package.mask mask && mkdir package.mask && mv mask package.mask<br>
-mv -i package.keywords keywords && mkdir package.keywords && mv keywords package.keywords
-</code><br>
+{{RootCmd
+|mv -i package.use use && mkdir package.use && mv use package.use
+|mv -i package.accept_keywords accept_keywords && mkdir package.accept_keywords && mv accept_keywords package.accept_keywords
+|mv -i package.license license && mkdir package.license && mv license package.license
+|mv -i package.mask mask && mkdir package.mask && mv mask package.mask
+|mv -i package.keywords keywords && mkdir package.keywords && mv keywords package.keywords
+}}
+
 More info: [https://forums.gentoo.org/viewtopic-t-959774-start-0.html forums.gentoo.org] and [https://wiki.gentoo.org/wiki/Raspberry_Pi_Cross_building#crossdev wiki.gentoo.org].
 
 === Run Crossdev and let it setup a build environment ===
 *I settled on the tuple: "armv7a-hardfloat-linux-gnueabihf."  TI recommends "arm-linux-gnueabihf." [http://processors.wiki.ti.com/index.php/Linux_Core_U-Boot_User%27s_Guide wiki.ti.com]
-*<code>crossdev -S -P -v -t armv7a-hardfloat-linux-gnueabihf</code>
-*Test with:
-:<code>armv7a-hardfloat-linux-gnueabihf-gcc --version</code><br>
+*{{Cmd|crossdev -S -P -v -t armv7a-hardfloat-linux-gnueabihf}}
+*Test with: {{Cmd|armv7a-hardfloat-linux-gnueabihf-gcc --version}}
 :You should see binutils, gcc, glibc, linux-headers, and gdb under /usr/local/portage/cross-armv7a-hardfloat-linux-gnueabihf and stuff under /usr/armv7a-hardfloat-linux-gnueabihf.
-*If you change your mind on the tuple, to uninstall the existing target run: <code>crossdev -C armv7a-hardfloat-linux-gnueabihf</code>.
+*If you change your mind on the tuple, to uninstall the existing target run: {{Cmd|crossdev -C armv7a-hardfloat-linux-gnueabihf}}
 
 === Configure U-Boot for the BBB ===
 *Note: [https://github.com/beagleboard/u-boot] is out-of-date, last commit is 3 years old.
-*make a build directory: <code>mkdir ~/bbb</code>
+*make a build directory: {{Cmd|mkdir ~/bbb}}
 *grab latest stable from [ftp://ftp.denx.de/pub/u-boot/u-boot-2014.07.tar.bz2 denx.de] and extract.
-*<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- am335x_boneblack_config</code>.<br>
+*{{RootCmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- am335x_boneblack_config}}
 :This article helped me find the correct make target: [http://www.crashcourse.ca/wiki/index.php/U-Boot_on_the_BBB crashcourse.ca].
-*<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf-</code>
-*install mkimage so it's in your path.  (As root) <code>install tools/mkimage /usr/local/bin</code>.
+*{{Cmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf-}}
+*install mkimage so it's in your path.  (As root) {{RootCmd|install tools/mkimage /usr/local/bin}}
 *to test: <code>mkimage -V</code> should say 2014.07.
 
 === Grab kernel configured specifically for the Beaglebone ===
 *Note: [https://github.com/beagleboard/kernel.git] is deprecated.
 *This one from beaglebone.org will build the firmware into the kernel under linux/firmware and includes patched sources.  The older versions required you to run patch.sh, download the firmware manually, and drop it in the firmware folder.
 *Go to [https://github.com/beagleboard/linux.git github.com] and decide which branch you want to check out.  I settled on the latest long-term release kernel, 3.14.17.
-*<code>git clone -b 3.14 --single-branch https://github.com/beagleboard/linux.git</code>.<br>
-:If you get any GIT errors about not having user.name or user.email, try this:<br>
-:<code>
-:git config --global user.email "asdf@gmail.com"<br>
-:git config --global user.name "Username"
-:</code>
-*check that you got the right kernel version.<br>
-:<code>cd linux; cat Makefile | head</code><br>
-:and look at the top lines in Makefile:<br>
-:<code>
-:VERSION = 3<br>
-:PATCHLEVEL = 14<br>
-:SUBLEVEL = 17
-:</code>
-*copy bb.org config to .config by running the bb.org target:<br>
-:<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- bb.org_defconfig</code>
-*If there's anything you want to tweak in the kernel, do so now with:<br>
-:<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- menuconfig</code>
-*Compile the kernel:<br>
-:<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- -j8</code>
-*Generate a uImage:<br>
-:<code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- -j8 uImage dtbs LOADADDR=0x82000000</code><br>
+*{{Cmd|git clone -b 3.14 --single-branch https://github.com/beagleboard/linux.git}}
+:If you get any GIT errors about not having user.name or user.email, try this:
+{{Cmd
+|git config --global user.email "asdf@gmail.com"
+|git config --global user.name "Username"
+}}
+*check that you got the right kernel version. {{Cmd|<nowiki>cd linux; cat Makefile | head</nowiki>}}
+:and look at the top lines in Makefile:
+{{FileBox|filename=Makefile|lang=make|1=
+VERSION {{=}} 3
+PATCHLEVEL {{=}} 14
+SUBLEVEL {{=}} 17
+}}
+
+*copy bb.org config to .config by running the bb.org target: {{Cmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- bb.org_defconfig}}
+*If there's anything you want to tweak in the kernel, do so now with: {{Cmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- menuconfig}}
+*Compile the kernel: {{Cmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- -j8}}
+*Generate a uImage: {{Cmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- -j8 uImage dtbs LOADADDR{{=}}0x82000000}}
 :I have no idea why the LOADADDR is set to this, just following instructions from TI here: [http://processors.wiki.ti.com/index.php/AM335x_U-Boot_User%27s_Guide wiki.ti.com].  If you omit the LOADADDR you'll get a build error.
-*Compile kernel modules: <code>make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- -j8 modules</code>
-*make a directory for the kernel modules and install them:<br>
-:<code>
-:mkdir ~/bbb/linux_modules<br>
-:make ARCH=arm CROSS_COMPILE=armv7a-hardfloat-linux-gnueabihf- INSTALL_MOD_PATH=../linux_modules modules_install
-:</code>
+*Compile kernel modules: {{Cmd|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- -j8 modules}}
+*make a directory for the kernel modules and install them: {{Cmd|mkdir ~/bbb/linux_modules|make ARCH{{=}}arm CROSS_COMPILE{{=}}armv7a-hardfloat-linux-gnueabihf- INSTALL_MOD_PATH{{=}}../linux_modules modules_install
+}}
 
 === Create the root filesystem for the SD card ===
-*grab the latest Gentoo source from your mirror<br>
-:releases/arm/autobuilds/20140819/stage3-armv7a_hardfp-20140819.tar.bz2
-:snapshots/portage-latest.tar.bz2.
-*extract the tarballs:<br>
-:<code>mkdir ~/bbb/deploy</code>
-:As root, extract the stage3 since it will execute mknod: <code>tar xjpf stage3-armv7a_hardfp-20121006.tar.bz2 -C ~/bbb/deploy</code><br>
-:As root, extract the portage snapshot: <code>tar xjpf portage-latest.tar.bz2 -C ~/bbb/deploy/usr/</code><br>
+
+*grab the latest Gentoo source from your mirror
+
+{{CodeBox|1=
+releases/arm/autobuilds/20140819/stage3-armv7a_hardfp-20140819.tar.bz2
+snapshots/portage-latest.tar.bz2
+}}
+*extract the tarballs:
+
+:{{Cmd|mkdir ~/bbb/deploy}}
+:As root, extract the stage3 since it will execute mknod: {{RootCmd|tar xjpf stage3-armv7a_hardfp-20121006.tar.bz2 -C ~/bbb/deploy}}
+:As root, extract the portage snapshot: {{RootCmd|tar xjpf portage-latest.tar.bz2 -C ~/bbb/deploy/usr/}}
 *Manually add files to root partition so u-boot will find them and boot your kernel.<br>
-:<code>cp ~/bbb/linux/arch/arm/boot/uImage ~/bbb/deploy/boot</code><br>
-:IMPORTANT: <code>cp ~/bbb/linux/arch/arm/boot/zImage ~/bbb/deploy/boot</code>.  BBB will not boot without this file!<br>
-:Copy the device tree blob: <code>cp ~/bbb/linux/arch/arm/boot/dts/am335x-boneblack.dtb ~/bbb/deploy/boot</code><br>
-:Copy the kernel modules:<code>cp -r ~/bbb/linux_modules/lib/modules ~/bbb/deploy/lib</code><br>
-*Make a directory where I can mount the boot partition under /<br>
-:<code>mkdir ~/bbb/deploy/boot/uboot</code><br>
-:edit ~/bbb/deploy/etc/fstab:<br>
-:<code>
-:/dev/mmcblk0p2		/		ext4		noatime,errors=remount-ro	0 1<br>
-:/dev/mmcblk0p1		/boot/uboot	auto		noatime				1 2
-:</code>
-*edit ~/bbb/deploy/etc/shadow so root can login:
-:<code>openssl passwd -1</code><br>
-:grab hash output, edit deploy/etc/shadow, and put here: <code>root:<hash_output>:10770:0:::::</code><br>
+:{{Cmd|cp ~/bbb/linux/arch/arm/boot/uImage ~/bbb/deploy/boot</code>}}
+:IMPORTANT:  BBB will not boot without this file: {{Cmd|cp ~/bbb/linux/arch/arm/boot/zImage ~/bbb/deploy/boot</code>}}
+:Copy the device tree blob: {{Cmd|cp ~/bbb/linux/arch/arm/boot/dts/am335x-boneblack.dtb ~/bbb/deploy/boot}}
+:Copy the kernel modules: {{Cmd|cp -r ~/bbb/linux_modules/lib/modules ~/bbb/deploy/lib}}
+*Make a directory where I can mount the boot partition under / {{Cmd|mkdir ~/bbb/deploy/boot/uboot}}
+:edit <code>~/bbb/deploy/etc/fstab</code>:
+{{FileBox|filename=~/bbb/deploy/etc/fstab|lang=text|1=
+/dev/mmcblk0p2		/		ext4		noatime,errors=remount-ro	0 1
+/dev/mmcblk0p1		/boot/uboot	auto		noatime				1 2
+}}
+*edit <code>~/bbb/deploy/etc/shadow</code> so root can login: {{RootCmd|openssl passwd -1}}
+:grab hash output, edit deploy/etc/shadow, and put here:
+{{FileBox|filename=~/bbb/deploy/etc/shadow|lang=text|1=
+root:<hash_output>:10770:0:::::}}
 *edit ~/bbb/deploy/etc/inittab since everyone expects serial port to run at 115200 and have the name ttyO0<br>
-:<code>s0:12345:respawn:/sbin/agetty -L 115200 ttyO0 vt100</code>
+{{FileBox|filename=~/bbb/deploy/etc/inittab|1=
+s0:12345:respawn:/sbin/agetty -L 115200 ttyO0 vt100
+}}
 
 ==== Optional ====
-*setup a static IP on your BBB first, since we don't have dhcpcd installed: edit ~/bbb/deploy/etc/conf.d/net.<br>
-:<code>
-:config_eth0="<your IP> netmask <your netmask> brd <network broadcast IP>"<br>
-:routes_eth0="default via <your router IP>"<br>
-:dns_servers_eth0="<nameserver IP> <another nameserver IP>"
-:</code>
+*setup a static IP on your BBB first, since we don't have dhcpcd installed: edit ~/bbb/deploy/etc/conf.d/net.
+{{FileBox|filename=~/bbb/deploy/etc/conf.d/net|lang=bash|1=
+config_eth0="<your IP> netmask <your netmask> brd <network broadcast IP>"
+routes_eth0="default via <your router IP>"
+dns_servers_eth0="<nameserver IP> <another nameserver IP>"
+}}
 *edit ~/bbb/deploy/etc/conf.d/hostname:<br>
-:<code>hostname="beaglebone"</code>
-*add net.eth0 to startup:<br>
-:<code>
-:cd ~/bbb/deploy/etc/init.d; ln -s net.lo net.eth0<br>
-:cd ~/bbb/deploy/etc/runlevels/default; ln -s /etc/init.d/net.eth0<br>
-:</code>
-*replace hwclock with swclock.  BBB does not have a built-in hardware clock so setting based on last modified date is the next best thing.<br>
-:<code>
-:cd deploy/etc/runlevels/boot<br>
-:unlink hwclock<br>
-:ln -s /etc/init.d/swclock .<br>
-:</code>
-*Set timezone (can't finish until system is up and running).<br>
-:<code>
-:ls /usr/share/zoneinfo<br>
-:echo "America/YOUR_TIMEZONE" > deploy/etc/timezone<br>
-:</code>
+{{FileBox|filename=~/bbb/deploy/etc/conf.d/hostname|lang=bash|1=
+hostname="beaglebone"
+}}
+*add net.eth0 to startup:
+{{RootCmd
+|cd ~/bbb/deploy/etc/init.d; ln -s net.lo net.eth0
+|cd ~/bbb/deploy/etc/runlevels/default; ln -s /etc/init.d/net.eth0
+}}
+*replace hwclock with swclock.  BBB does not have a built-in hardware clock so setting based on last modified date is the next best thing.
+
+{{RootCmd
+|cd deploy/etc/runlevels/boot
+|unlink hwclock
+|ln -s /etc/init.d/swclock .
+}}
+*Set timezone (can't finish until system is up and running).
+{{RootCmd
+|ls /usr/share/zoneinfo
+|echo "America/YOUR_TIMEZONE" > deploy/etc/timezone
+}}
 
 === Finish creating the root filesystem for the SD card ===
 *tar it all up:
-:<code>
-:cd ~/bbb/deploy<br>
-:tar cvzpf ../deploy.tar.gz .
-:</code>
+{{RootCmd
+|cd ~/bbb/deploy
+|tar cvzpf ../deploy.tar.gz .
+}}
 
 === Format the MicroSD card the way BeagleBoard wants it ===
 *Similar scripts: [https://github.com/beagleboard/image-builder/blob/master/tools/setup_sdcard.sh github.com/beagleboard], [http://dev.gentoo.org/~armin76/arm/beaglebone/mkcard.sh dev.gentoo.org], [http://omappedia.org/wiki/Minimal-FS_SD_Configuration omappedia.org].
-*I chose a modified version of TI's from here: [http://downloads.ti.com/dsps/dsps_public_sw/psp/LinuxPSP/AM335x_04_06/04_06_00_08/index_FDS.html downloads.ti.com].  Original is under host-tools/mksd-am335x.sh.<br>
- #!/bin/bash
- if [[ -z $1 || -z $2 || -z $3 || -z $4 ]]
- then
- 	echo "mksd-am335x Usage:"
- 	echo "	mksd-am335x <device> <MLO> <u-boot.img> <uImage> <rootfs tar.gz >"
- 	echo "	Example: mksd-am335x /dev/sdc MLO u-boot.img uImage nfs.tar.gz"
- 	exit
- fi
- if ! [[ -e $2 ]]
- then
- 	echo "Incorrect MLO location!"
- 	exit
- fi
- if ! [[ -e $3 ]]
- then
- 	echo "Incorrect u-boot.img location!"
- 	exit
- fi
- if ! [[ -e $4 ]]
- then
- 	echo "Incorrect uImage location!"
- 	exithttp://elinux.org/Beagleboard:BeagleBoneBlack#BeagleBone_Black_Connector_and_Switch_Locations
- fi
- if ! [[ -e $5 ]]
- then
- 	echo "Incorrect rootfs location!"
- 	exit
- fi
- 
- echo "All data on "$1" now will be destroyed! Continue? [y/n]"
- read ans
- if ! [ $ans == 'y' ]
- then
- 	exit
- fi
- 
- echo "[Partitioning $1...]"
- 
- DRIVE=$1
- dd if=/dev/zero of=$DRIVE bs=1024 count=1024
- 	 
- SIZE=`fdisk -l $DRIVE | grep Disk | awk '{print $5}'`
- 	 
- echo DISK SIZE - $SIZE bytes
- 
- CYLINDERS=`echo $SIZE/255/63/512 | bc`
- 
- echo CYLINDERS - $CYLINDERS
- {
- echo ,9,0x0C,*
- echo ,,,-
- } | sfdisk -D -H 255 -S 63 -C $CYLINDERS $DRIVE
- 
- echo "[Making filesystems...]"
- 
- mkfs.vfat -F 32 -n boot "$1"1 &> /dev/null
- # the "-T small" is so I have enough inodes for portage
- mkfs.ext4 -L rootfs -T small "$1"2 &> /dev/null
- 
- echo "[Copying files...]"
- 
- mount "$1"1 /mnt/sdcard
- cp $2 /mnt/sdcard/MLO
- cp $3 /mnt/sdcard/u-boot.img
- umount "$1"1
- 
- mount "$1"2 /mnt/sdcard
- tar zxvf $5 -C /mnt/sdcard
- chmod 755 /mnt/sdcard
- umount "$1"2
- 
- echo "[Done]"
+*I chose a modified version of TI's from here: [http://downloads.ti.com/dsps/dsps_public_sw/psp/LinuxPSP/AM335x_04_06/04_06_00_08/index_FDS.html downloads.ti.com].  Original is under host-tools/mksd-am335x.sh.
+
+{{FileBox|filename=host-tools/mksd-am335x.sh|lang=bash|1=
+#!/bin/bash
+if [[ -z $1 <nowiki>||</nowiki> -z $2 <nowiki>||</nowiki> -z $3 <nowiki>||</nowiki> -z $4 ]]
+then
+	echo "mksd-am335x Usage:"
+	echo "	mksd-am335x <device> <MLO> <u-boot.img> <uImage> <rootfs tar.gz >"
+	echo "	Example: mksd-am335x /dev/sdc MLO u-boot.img uImage nfs.tar.gz"
+	exit
+fi
+if ! [[ -e $2 ]]
+then
+	echo "Incorrect MLO location!"
+	exit
+fi
+if ! [[ -e $3 ]]
+then
+	echo "Incorrect u-boot.img location!"
+	exit
+fi
+if ! [[ -e $4 ]]
+then
+	echo "Incorrect uImage location!"
+	exit
+fi
+if ! [[ -e $5 ]]
+then
+	echo "Incorrect rootfs location!"
+	exit
+fi
+
+echo "All data on "$1" now will be destroyed! Continue? [y/n]"
+read ans
+if ! [ $ans == 'y' ]
+then
+	exit
+fi
+
+echo "[Partitioning $1...]"
+
+DRIVE=$1
+dd if=/dev/zero of=$DRIVE bs=1024 count=1024
+	 
+SIZE=`fdisk -l $DRIVE <nowiki>|</nowiki> grep Disk <nowiki>|</nowiki> awk '{print $5}'`
+	 
+echo DISK SIZE - $SIZE bytes
+
+CYLINDERS=`echo $SIZE/255/63/512 <nowiki>|</nowiki> bc`
+
+echo CYLINDERS - $CYLINDERS
+{
+echo ,9,0x0C,*
+echo ,,,-
+} <nowiki>|</nowiki> sfdisk -D -H 255 -S 63 -C $CYLINDERS $DRIVE
+
+echo "[Making filesystems...]"
+
+mkfs.vfat -F 32 -n boot "$1"1 &> /dev/null
+# the "-T small" is so I have enough inodes for portage
+mkfs.ext4 -L rootfs -T small "$1"2 &> /dev/null
+
+echo "[Copying files...]"
+
+mount "$1"1 /mnt/sdcard
+cp $2 /mnt/sdcard/MLO
+cp $3 /mnt/sdcard/u-boot.img
+umount "$1"1
+
+mount "$1"2 /mnt/sdcard
+tar zxvf $5 -C /mnt/sdcard
+chmod 755 /mnt/sdcard
+umount "$1"2
+
+echo "[Done]"
+}}
+
 *Run the script to format the SD card.  All data will be lost on it.<br>
-:<code>mkdir /mnt/sdcard</code><br>
-:plugin your SD card and check dmesg for the name of your SD card: mine was /dev/sdf.<br>
-:You will probably have to manually umount the sdcard if Linux automounts it.  The script will complain if the SD card is mounted.<br>
+{{RootCmd|mkdir /mnt/sdcard}}
+:plugin your SD card and check dmesg for the name of your SD card: mine was <pre>/dev/sdf</pre>.
+:You will probably have to manually umount the sdcard if Linux automounts it.  The script will complain if the SD card is mounted.
 :(as root)<br>
-:<code>cd ~/bbb; ./mksd-am335x.sh /dev/sdf u-boot-2014.07/MLO u-boot-2014.07/u-boot.img linux/arch/arm/boot/uImage deploy.tar.gz</code>
-*Don't pull out the card until the light on the SD-Card reader stops flashing, even if the script has stopped.  I guess it takes awhile for the journal to catch up.  Check df -kh (and watch it go down in size, weird) and dmesg for more info and possible errors.  I have seen <code>INFO: task umount:2515 blocked for more than 120 seconds.</code> messages before and it will still be blinking.  When it's done the reader light should stay illuminated.
+{{RootCmd|cd ~/bbb; ./mksd-am335x.sh /dev/sdf u-boot-2014.07/MLO u-boot-2014.07/u-boot.img linux/arch/arm/boot/uImage deploy.tar.gz}}
+*Don't pull out the card until the light on the SD-Card reader stops flashing, even if the script has stopped.  I guess it takes awhile for the journal to catch up.  Check <code>df -kh</code> (and watch it go down in size, weird) and <code>dmesg</code> for more info and possible errors.  I have seen <code>INFO: task umount:2515 blocked for more than 120 seconds.</code> messages before and it will still be blinking.  When it's done the reader light should stay illuminated.
 
 === Almost ready ===
 *Emerge a serial terminal emulator like PuTTY, etc.
 *Create a profile with these settings:<br>
- /dev/ttyUSB0
- speed(baud):  115200
- data bits:    8
- stop bits:    1
- parity:       none
- flow control: none
+{{CodeBox|title=Terminal Profile Settings|lang=text|1=
+/dev/ttyUSB0
+speed(baud):  115200
+data bits:    8
+stop bits:    1
+parity:       none
+flow control: none
+}}
 *Open your serial terminal window with this profile.
 *Connect your serial debug cable to the BBB as described here: [http://elinux.org/Beagleboard:BeagleBone_Black_Serial elinux.org].
 *Insert your SD card into the BBB.
@@ -243,30 +258,25 @@ More info: [https://forums.gentoo.org/viewtopic-t-959774-start-0.html forums.gen
 *You should see a Gentoo prompt!  Thank God!
 
 ==== Optional follow-on ====
-*you should now have a running system and network connectivity<br>
-:<code>
-:date MMDDhhmmYYYY<br>
-:emerge --config sys-libs/timezone-data<br>
-:</code>
-*Time will start from this point on next time you boot: <code>touch /sbin/rc</code>
-*emerge --sync
+*you should now have a running system and network connectivity {{RootCmd|date MMDDhhmmYYYY|emerge --config sys-libs/timezone-data}}
+*Time will start from this point on next time you boot: {{RootCmd|touch /sbin/rc|emerge --sync}}
 
 === Tips and tricks ===
-*If you want to override boot options without messing with uEnv.txt, make sure you compile your kernel with Boot options->Kernel command line type: "Always use the default kernel command string," or CONFIG_CMDLINE_FORCE=y.  Then edit the Default kernel command string as desired.
-*You can create a /boot/uEnv.txt and override u-boot settings if you want.  I couldn't figure this out so please add this info if you can.
+*If you want to override boot options without messing with uEnv.txt, make sure you compile your kernel with Boot options->Kernel command line type: "Always use the default kernel command string," or <code>CONFIG_CMDLINE_FORCE=y</code>.  Then edit the Default kernel command string as desired.
+*You can create a <code/boot/uEnv.txt</code> and override u-boot settings if you want. I couldn't figure this out so please add this info if you can.
 *If you just need to tweak u-boot or kernel files:
-:<code>
-:mount /dev/sdf1 /mnt/p1; mount /dev/sdf2 /mnt/p2;<br>
-:cp ~/bbb/u-boot-2014.07/{MLO,u-boot.img} /mnt/p1<br>
-:cp ~/bbb/linux/arch/arm/boot/{uImage,zImage,/dts/am335x-boneblack.dtb} /mnt/p2<br>
-:</code>
-*If you need to dump a new root file structure to the SD card.  Be very careful here, don't want to replace your root filesystem with ARM junk.<br>
+{{RootCmd
+|mount /dev/sdf1 /mnt/p1; mount /dev/sdf2 /mnt/p2;
+|cp ~/bbb/u-boot-2014.07/{MLO,u-boot.img} /mnt/p1
+|cp ~/bbb/linux/arch/arm/boot/{uImage,zImage,/dts/am335x-boneblack.dtb} /mnt/p2
+}}
+*If you need to dump a new root file structure to the SD card.  Be very careful here, don't want to replace your root filesystem with ARM junk.
 :As root:
-:<code>
-:mount /dev/sdf2 /mnt/sdcard<br>
-:rm -rf /mnt/sdcard/*<br>
-:cd ~/bbb<br>
-:tar xzvpf deploy.tar.gz -C /mnt/sdcard<br>
-:</code>
+{{RootCmd
+|mount /dev/sdf2 /mnt/sdcard
+|rm -rf /mnt/sdcard/*
+|cd ~/bbb
+|tar xzvpf deploy.tar.gz -C /mnt/sdcard
+}}
 [[Category:Embedded systems]]
 [[Category:Hardware]]
