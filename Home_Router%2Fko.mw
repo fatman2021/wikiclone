@@ -11,15 +11,15 @@
 
 이 안내서에선 네트워크 주소 변환(NAT) 기능을 라우터(커널 및 iptables)에서 설정하는 방법, 일반적인 서비스(dnsmasq를 통한 도메인 이름 체계(DNS)설정, dhcpcd를 통한 dhcp 사용, ppp를 통한 ADSL연결)를 추가하고 설정하는 방법을 안내하며, 해낼 수 있는 보다 정교한 재미거리(포트 포워딩, 트래픽 셰이핑, 프록시/캐싱, 등...)로 마무리 하겠습니다. 
 
-시작하기 전에, 몇가지 알아야 할 기본 요구사항이 있습니다. 먼저 여러분의 카드에 적어도 두 개 이상의 네트워크 인터페이스 카드(NICs)가 있어야 합니다. 그 다음 인터넷 연결을 설정해야 합니다(아마 IP/DNS/게이트웨이/사용자 이름/암호가 포함될지도 모릅니다). 마지막으로 약간의 여유 시간과 젠투에 대한 애정이 필요합니다.
+Before getting started, there's a few basic requirements you must meet. First, you'll need a computer that has at least 2 Network Interface Cards (NICs) in it. Next, you'll need the configuration settings for your internet connection (may include things like IP/DNS/Gateway/username/password). You optionally need a wifi card which supports master mode. It is recommended to avoid NICs with a bypass feature as some of them require proprietary drivers. If you don't have access to that driver, the card will remain in bypass mode permanently and will not be usable. Finally, you'll need a bit of spare time and some Gentoo loving in order to succesfully follow this guide and implement a well functioning home router.
 
 이 안내서에서 따를 관례는 다음과 같습니다: 
 
-* eth0 - 지역 네트워크(LAN)에 연결한 NIC
-* eth1 - 광역 네트워크(WAN)에 연결한 NIC
-* LAN은 192.168.0.xxx 네트워크로 동작함
-* 라우터는 표준 192.168.0.1 IP로 고정함
-* 라우터는 Linux 2.4또는 2.6커널에서 동작합니다. 2.0/2.2 커널을 사용중이라고 (가정) 합니다
+* eth0 - NIC connected to the Local Area Network (LAN) or network bridge consisting of multiple NICs
+* eth1 - NIC connected to the Wide Area Network (WAN)
+* LAN utilizes the private 192.168.0.xxx network
+* router is hardcoded to the standard 192.168.0.1 IP
+* router is running Linux 2.4 or 2.6; you're on your own with 2.0/2.2
 
 {{Important/ko|보안상 미리 경고하건대, 방화벽을 제대로 굴리기 전까진 라우터에서 필요없는 서비스를 내리는 것이 좋습니다. 현재 실행중인 서비스를 보려면 <code>rc-status</code>만 실행하십시오.}}
 
@@ -159,7 +159,7 @@ nameserver 123.123.123.123
 
 == (일부 친구를 데려오는)LAN을 내 것으로 만들기 ==
 
-이 과정은 앞의 과정보다는 좀 더 수월합니다. 
+This step is a breeze compared to the previous one. However, if you want to use more than two devices (one for LAN and one for WAN), you will have to set up a [[Network bridge]] between all NICs you plan to use on a LAN. This will allow multiple NICs to be reached by the same IP address. 
 
 If you decide to do so, follow instructions to set up [[Network bridge]]. The name of your bridge (default br0) will then replace eth0 for the LAN device in the steps in this wiki. If you have a large number of network devices in your router, you may consider renaming them via udev to make administration easier. Setting up a bridge and renaming devices is completely optional but recommended for larger home networks. 
 
@@ -180,7 +180,7 @@ config_eth0="192.168.0.1/24 brd 192.168.0.255"
 
 DHCP는 정확하게 말하자면 이 이름이 함축하는 그대로입니다. 모든 호스트를 동적으로 자동으로 설정하게끔 하는 프로토콜입니다. DHCP 서버를 라우터에서 실행하면 네트워크의 모든 정보(유효 IP, DNS 서버, 게이트웨이, 등...)를 제공하고, 다른호스트가 시작하면 DHCP 클라이언트를 자체적으로 자동으로 설정하게끔합니다. 난리날 일도 없고, 혼란스러워질 일도 없습니다! DHCP에 대한 더 많은 이야기를 알아보시려 한다면 언제든 [[Wikipedia:DHCP|Wikipedia]]를 찾아보실 수 있습니다. 
 
-DHCP와 DNS 서비스를 제공하는 dnsmasq 패키지를 활용하겠습니다. 이제 DHCP의 양상에 집중하겠습니다. 다른 DHCP 서버를 실행하시려 한다면 재미 거리 장에서 다른 예제를 찾아보시면 됩니다. 또한 DHCP 서버 설정에 손을 대보려 한다면 {{Path|/etc/dnsmasq.conf}}의 주석만을 읽어보세요. 모든 기본 설정은 있는 그대로 동작합니다. 
+We'll use a package called dnsmasq which provides both DHCP and DNS services. For now lets just focus on the DHCP aspect. Note that if you want to run a different DHCP server, you can find another example in the Fun Things chapter. Also, if you wish to tinker with the DHCP server settings, just read the comments in {{Path|/etc/dnsmasq.conf}}. 
 
 {{Emerge|dnsmasq}}
 
@@ -192,9 +192,9 @@ interface=eth0
 {{RootCmd|rc-update add dnsmasq default
 |/etc/init.d/dnsmasq start}}
 
-이제 조그만 라우터는 제대로 동작하는 DHCP 서버가 되었습니다! 저기 있는 컴퓨터를 붙여서 동작하는걸 확인해보세요! 윈도우 시스템에서는 TCP/IP 속성에서 'IP 주소 자동으로 가져오기'와 'DNS 서버 주소 자동으로 가져오기'를 선택하시면 됩니다. 때로는 바뀐 내용이 바로 적용 안될 수 있기에, 명령 프롬프트를 열어서 <code>ipconfig /release</code>와 <code>ipconfig /renew</code>명령을 실행해야 합니다. 암튼, 윈도우에 대해서는 이쯤이면 충분하니, 관심있는 펭귄에게로 돌아가도록 하겠습니다.
+Setting the interface is very important. Using default dnsmasq settings will open up your router to DNS amplification attacks, and you may get a scary email from your ISP. You can check to make sure your router is not allowing for DNS amplification attacks by using [http://openresolver.com].
 
-Now your little router is a bona-fide DHCP server! Plugin those computers and watch them work! With Windows systems you should go into the TCP/IP Properties and select the 'Obtain an IP address automatically' and 'Obtain DNS server address automatically' options. Sometimes the changes aren't instantaneous, so you may have to open a command prompt and run <code>ipconfig /release</code> and <code>ipconfig /renew</code>. But enough about Windows, let's get back to our favorite penguin.
+이제 조그만 라우터는 제대로 동작하는 DHCP 서버가 되었습니다! 저기 있는 컴퓨터를 붙여서 동작하는걸 확인해보세요! 윈도우 시스템에서는 TCP/IP 속성에서 'IP 주소 자동으로 가져오기'와 'DNS 서버 주소 자동으로 가져오기'를 선택하시면 됩니다. 때로는 바뀐 내용이 바로 적용 안될 수 있기에, 명령 프롬프트를 열어서 <code>ipconfig /release</code>와 <code>ipconfig /renew</code>명령을 실행해야 합니다. 암튼, 윈도우에 대해서는 이쯤이면 충분하니, 관심있는 펭귄에게로 돌아가도록 하겠습니다.
 
 === DNS 서버 ===
 
