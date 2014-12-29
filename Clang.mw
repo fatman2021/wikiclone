@@ -45,17 +45,17 @@ Please note, however, that many of Gentoo packages still don't build with clang 
 
 In order to do that, first create a new environment override to use:
 
-{{File|/etc/portage/env/clang|Environment override named ''clang''|<pre>
+{{FileBox|filename=/etc/portage/env/clang|title=Environment override named ''clang''|<pre>
 CC=clang
 CXX=clang++
 </pre>}}
 
 Then you can enable use of clang for packages using ''[[:/etc/portage/env|/etc/portage/package.env]]'' file:
 
-{{File|/etc/portage/package.env|Enabling ''clang'' for ''app-foo/bar'' and ''app-bar/baz''|<pre>
+{{FileBox|filename=/etc/portage/package.env|title=Enabling ''clang'' for ''app-foo/bar'' and ''app-bar/baz''|
 app-foo/bar clang
 app-bar/baz clang
-</pre>}}
+}}
 
 If you have {{Package|app-portage/flaggie}} installed, the {{Path|/etc/portage/package.env}} file could be modified using:
 
@@ -69,17 +69,20 @@ When using LTO, clang compiles units into LLVM byte-code rather than machine cod
 
 Similarly, ''ar'' needs plugin support as well. Sadly, binutils ar doesn't support passing ''--plugin'' option before the actual command. Thus, we need to create a wrapper for it:
 
-{{File|/usr/local/bin/clang-ar|ar wrapper for LLVM plugin|<pre>
+{{FileBox|filename=/usr/local/bin/clang-ar|title=ar wrapper for LLVM plugin|
+<nowiki>
 #!/bin/sh
 firstarg=${1}
 shift
 
 exec /usr/bin/ar "${firstarg}" --plugin /usr/lib/llvm/LLVMgold.so "${@}"
-</pre>}}
+</nowiki>
+}}
 
 If that's done, you can create a new environment override profile for LTO-enabled clang:
 
-{{File|/etc/portage/env/clang-lto|Environment override named ''clang-lto''|<pre>
+{{FileBox|filename=/etc/portage/env/clang-lto|title=Environment override named ''clang-lto''|
+<nowiki>
 CC='clang'
 CXX='clang++'
 CFLAGS="${CFLAGS} -O4"
@@ -88,7 +91,8 @@ LDFLAGS="${LDFLAGS} -O4 -Wl,-plugin,/usr/lib/llvm/LLVMgold.so"
 AR='/usr/local/bin/clang-ar'
 RANLIB=':'
 NM='nm --plugin /usr/lib64/llvm/LLVMgold.so'
-</pre>}}
+</nowiki>
+}}
 
 Note that the link-time optimizations were indirectly enabled here via ''-O4''. If you don't want to enable other optimizations enforced by ''-O3'', please use ''-flto'' instead. You need to also pass optimization flags when linking because that's where clang needs them.
 
