@@ -70,7 +70,7 @@ The file structure of your ''initramfs'' is almost complete. The only thing that
 
 The following example realizes this executable as a minimalistic shell script, based on the busybox shell:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=minimalistic /init example|lang=bash|1=
 #!/bin/busybox sh
 
 # Mount the /proc and /sys filesystems.
@@ -89,7 +89,7 @@ umount /sys
 
 # Boot the real thing.
 exec switch_root /mnt/root /sbin/init
-</pre>}}
+}}
 
 This example needs some device nodes to work, mainly the root block device. Change the script and copy the the corresponding {{Path|/dev/}} node to fit your needs.
 
@@ -105,7 +105,7 @@ Your ''initramfs'' now has to be made available to your kernel at boot time. Thi
 
 With either method, you need to enable support for Initial RAM filesystem and RAM disk (initramfs/initrd) support for the ''initramfs'' functionality.
 
-{{Kernel|<nowiki>CONFIG_BLK_DEV_INITRD=y</nowiki>|<pre>
+{{KernelBox|title=<nowiki>CONFIG_BLK_DEV_INITRD=y</nowiki>|1=<pre>
 General setup  --->
     [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
 </pre>}}
@@ -116,7 +116,7 @@ Also enable all drivers, filesystems, and other settings that are required for b
 
 If you want the ''initramfs'' to be embedded into the kernel image, edit your kernel config and set ''Initramfs source file(s)'' to the root of your ''initramfs'', (e.g {{Path|/usr/src/initramfs}}):
 
-{{Kernel|<nowiki>CONFIG_INITRAMFS_SOURCE="/usr/src/initramfs"</nowiki>|<pre>
+{{KernelBox|title=<nowiki>CONFIG_INITRAMFS_SOURCE="/usr/src/initramfs"</nowiki>|1=<pre>
 General setup  --->
     (/usr/src/initramfs) Initramfs source file(s)
 </pre>}}
@@ -133,10 +133,10 @@ You can create a standalone archive file by running the following commands:
 
 This will create a file called {{Path|my-custom-initramfs.cpio.gz}} in your {{Path|/boot}} directory. You now need to instruct grub to load this file at boot time, you do this with the '''initrd''' line.
 
-{{File|grub.cfg||<pre>
+{{FileBox|filename=grub.cfg|title=Grub initrd example||1=
 linux 3.12.6-gentoo
 initrd my-custom-initramfs.cpio.gz
-</pre>}}
+}}
 
 {{Note|If you are unfamiliar with bootloader configuration, please refer to [[GRUB2]] or [[GRUB]].}}
 
@@ -152,19 +152,19 @@ Now that you've covered the ''initramfs'' basics, in this section you will learn
 
 If you want to be dropped to a rescue shell if an error occurs, you can add the following function to your {{Highlight|color=darkgreen|'''/init'''}} and call it when something goes wrong.
 
-{{File|/usr/src/initramfs/init|Rescue Shell|<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=rescue shell|lang=bash|1=
 rescue_shell() {
     echo "Something went wrong. Dropping you to a shell."
     busybox --install -s
     exec /bin/sh
 }
-</pre>}}
+}}
 
 In the example below, the {{Highlight|rescue_shell}} will be executed if the root partition fails to mount:
 
-{{File|/usr/src/initramfs/init||<pre>
-mount -o ro /dev/sda1 /mnt/root || rescue_shell
-</pre>}}
+{{FileBox|filename=/usr/src/initramfs/init|title=invoking the rescue shell|lang=bash|1=
+<nowiki>mount -o ro /dev/sda1 /mnt/root || rescue_shell</nowiki>
+}}
 
 === Dynamic Devices ===
 
@@ -174,7 +174,7 @@ For populating {{Path|/dev}} dynamically, you can use either devtmpfs or mdev. P
 
 Provided by the kernel, devtmpfs is designed to offer device nodes early at bootup.
 
-{{Kernel|<nowiki>CONFIG_DEVTMPFS=y</nowiki>|<pre>
+{{KernelBox|title=<nowiki>CONFIG_DEVTMPFS=y</nowiki>|1=<pre>
 Device Drivers  --->
     Generic Driver Options  --->
         [*] Maintain a devtmpfs filesystem to mount at /dev
@@ -182,21 +182,21 @@ Device Drivers  --->
 
 You can include the following snippet in your {{Highlight|color=darkgreen|'''/init'''}} script to have it mount at boot:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=mount devtmpfs|lang=bash|1=
 mount -t devtmpfs none /dev
-</pre>}}
+}}
 
 Don't forget to unmount it again in the cleanup phase of the script:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=umount devtmpfs|lang=bash|1=
 umount /dev
-</pre>}}
+}}
 
 ==== mdev ====
 
 Although devtmpfs is the preferred solution today, you can alternatively use mdev, the udev replacement of busybox.
 
-{{Kernel|<nowiki>CONFIG_UEVENT_HELPER=y</nowiki>|<pre>
+{{KernelBox|title=<nowiki>CONFIG_UEVENT_HELPER=y</nowiki>|1=<pre>
 Device Drivers  --->
     Generic Driver Options  --->
         [*] Support for uevent helper
@@ -208,20 +208,20 @@ For mdev to work, you have to make {{Path|/sbin/mdev}} a symlink to {{Path|/bin/
 
 Then add the following snippet to your {{Highlight|color=darkgreen|'''/init'''}}, after mounting {{Path|/proc}} and {{Path|/sys}}:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=mdev|lang=bash|1=
 echo /sbin/mdev > /proc/sys/kernel/hotplug
 mdev -s
-</pre>}}
+}}
 
 === Mount by UUID or LABEL ===
 
 With [[#Dynamic_Devices|Dynamic Devices]] enabled, you might prefer to use UUID or LABEL to mount the root partition instead of using a static device name. For that purpose, Busybox comes with {{Highlight|'''findfs'''}}.
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=mount using findfs|lang=bash|1=
 mount -o ro $(findfs UUID=845b2454-42a3-19ef-6ec5-238a358c365b) /mnt/root
 # or
 mount -o ro $(findfs LABEL=myroot) /mnt/root
-</pre>}}
+}}
 
 Doing it this way is simple, but it means that your UUID or LABEL is hardcoded in {{Highlight|color=darkgreen|'''/init'''}}. Alternatively, you can also use [[#Kernel_Parameters|Kernel Parameters]].
 
@@ -229,7 +229,7 @@ Doing it this way is simple, but it means that your UUID or LABEL is hardcoded i
 
 If you want to use kernel parameters instead of hardcoding device names or UUIDs, you will have to parse {{Path|/proc/cmdline}}. There are many ways to do so, the following method is just an example to give you the general idea. It uses string manipulation of the shell and only supports <code>key=value</code> parameters. Add the following function to your {{Highlight|color=darkgreen|'''/init'''}} and call it whenever you need a kernel parameter.
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=simple cmdline parser|lang=bash|1=
 cmdline() {
     local value
     value=" $(cat /proc/cmdline) "
@@ -237,13 +237,13 @@ cmdline() {
     value="${value%% *}"
     [ "$value" != "" ] && echo "$value"
 }
-</pre>}}
+}}
 
 The function is called with the name of the kernel parameter you are interested in. In the example below, it uses the root parameter to mount the root partition.
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=mount by cmdline|lang=bash|1=
 mount -o ro $(findfs $(cmdline root)) /mnt/root
-</pre>}}
+}}
 
 It works for both <code>root=/dev/sda1</code> and <code>root=UUID=845b2454</code> but fails when the parameter is missing.
 
@@ -257,11 +257,11 @@ If your root partition is located on a logical volume, you need to include the L
 
 Now you can enable your LVM root partition in {{Highlight|color=darkgreen|'''/init'''}}. This example assumes that your volume group is called '''VG''', and your root volume is called '''root'''. Replace them with the names you chose when creating the volume.
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=setting up the Root volume|lang=bash|1=
 lvm vgscan --mknodes # creates /dev/mapper/control
 lvm lvchange -a ly VG/root
 lvm vgscan --mknodes # creates /dev/mapper/VG-root and /dev/VG/root
-</pre>}}
+}}
 
 Your root partition may then be called {{Path|/dev/VG/root}} or {{Path|/dev/mapper/VG-root}}.
 
@@ -273,22 +273,22 @@ Recent versions of {{Package|sys-fs/lvm2}} rely on {{Package|sys-fs/udev}} to cr
 * [[#Mount_by_UUID_or_LABEL|Mount by UUID or LABEL]] instead of using {{Path|/dev/VG/root}}. It works because {{Highlight|'''findfs'''}} is happy with just {{Path|/dev/dm-42}}
 * build a LVM binary with the '''-udev''' USE-Flag (specifically for your ''initramfs'' only!)
 * disable udev dependency by including a minimal {{Path|/etc/lvm/lvm.conf}} in your ''initramfs'':
-  {{File|/usr/src/initramfs/etc/lvm/lvm.conf||<pre>
+  {{FileBox|filename=/usr/src/initramfs/etc/lvm/lvm.conf|title=disable udev in lvm.conf|lang=bash|1=
 activation {
     # Set to 0 to disable udev synchronisation (if compiled into the binaries).
     udev_sync = 0
     # Set to 0 to disable the udev rules installed by LVM2
     udev_rules = 0
 }
-</pre>}}
+}}
 
 === Software RAID ===
 
 Normally the Linux kernel will automatically scan for any "Linux raid autodetect" partitions and start as many software RAIDs as it can find. But if you use an ''initramfs'', the kernel will not automatically scan for RAIDs until it is told to. In the following example instructs the kernel to scan for software RAIDs and start as many as it can find. This will actually start all autodetected arrays, not just {{Path|/dev/md0}}:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=raid autodetect|lang=bash|1=
 raidautorun /dev/md0
-</pre>}}
+}}
 
 {{Note|[https://raid.wiki.kernel.org/index.php/RAID_superblock_formats#A_Note_about_kernel_autodetection_of_different_superblock_formats "Linux raid autodetect"] won't work for any recent setups, unless you specifically set up your system with partitions of type "fd" and used 0.90 metadata for your Software RAID.}}
 
@@ -307,10 +307,10 @@ Copy the binary {{Path|/sbin/mdadm}} and your {{Path|/etc/mdadm.conf}} into your
 
 Edit the {{Path|mdadm.conf}} in your ''initramfs'' to your liking. An example {{Path|mdadm.conf}} follows:
 
-{{File|/usr/src/initramfs/etc/mdadm.conf||<pre>
+{{FileBox|filename=/usr/src/initramfs/etc/mdadm.conf|title=mdadm.conf example|lang=bash|1=
 DEVICE /dev/sd?*
 ARRAY /dev/md0 UUID=627125a5:abce6b82:6c738e49:50adadae
-</pre>}}
+}}
 
 This {{Path|mdadm.conf}} will scan all {{Path|/dev/sd?*}} devices and assemble the RAID device fitting the UUID 627125a5:abce6b82:6c738e49:50adadae.
 
@@ -318,9 +318,9 @@ This {{Path|mdadm.conf}} will scan all {{Path|/dev/sd?*}} devices and assemble t
 
 Now you can initialize your Software RAID in {{Highlight|color=darkgreen|'''/init'''}}:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=assemble mdadm RAID|lang=bash|1=
 mdadm --assemble --scan
-</pre>}}
+}}
 
 With this, you should be able to mount your root partition {{Path|/dev/md0}}.
 
@@ -334,9 +334,9 @@ If your root partition is LUKS encrypted, you need to include the cryptsetup bin
 
 Now you can unlock your encrypted root partition in {{Highlight|color=darkgreen|'''/init'''}}:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=setting up LUKS encryption|lang=bash|1=
 cryptsetup -T 5 luksOpen /dev/sda1 luksroot
-</pre>}}
+}}
 
 Once you entered your passphrase, your root partition will be available as {{Path|/dev/mapper/luksroot}}.
 
@@ -358,7 +358,7 @@ The following example creates a random 512 byte key, encrypted with LUKS, and ad
 
 Unlocking the root device using this key in your {{Highlight|color=darkgreen|'''/init'''}} can then be done like this:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=LUKS encryption with keyfiles|lang=bash|1=
 # Obtain the key
 cryptsetup -T 5 luksOpen /root/key.luks lukskey
 
@@ -367,7 +367,7 @@ cryptsetup --key-file /dev/mapper/lukskey luksOpen /dev/sda1 luksroot
 
 # Clean up the key
 cryptsetup luksClose lukskey
-</pre>}}
+}}
 
 As before, your root partition should then be available as {{Path|/dev/mapper/luksroot}}.
 
@@ -379,10 +379,10 @@ If you need networking in your ''initramfs'', all required network related drive
 
 If your network situation allows you to use a static network IP, you can set it up using the {{Highlight|ifconfig}} and {{Highlight|route}} commands, which are included in Busybox. This is by far the easiest solution, so if it's at all possible, go for it.
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=network setup|lang=bash|1=
 ifconfig eth0 10.0.2.15
 route add default gw 10.0.2.2
-</pre>}}
+}}
 
 ==== DHCP ====
 
@@ -400,10 +400,10 @@ Edit the script's first line to read {{Highlight|color=darkred|#!/bin/busybox sh
 
 Now, you can obtain a dynamic IP address for eth0 using DHCP:
 
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|title=network setup using DHCP|lang=bash|1=
 ifconfig eth0 up
 udhcpc -t 5 -q -s /bin/simple.script
-</pre>}}
+}}
 
 ==== DNS ====
 
