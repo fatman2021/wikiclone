@@ -21,7 +21,7 @@ It is recommended that zram be built as a loadable module. Parameters specified 
 When it is a loadable module, the number of devices can be changed later without a reboot. You will however have to de-activate any existing devices before being able to increase or decrease the number of devices.
 
 === Kernel configuration ===
-{{Kernel||<pre>
+{{KernelBox|<pre>
 Device Drivers  --->
     [*] Block devices --->
         <M> Compressed RAM block device support
@@ -38,15 +38,17 @@ Currently, both versions available in the main tree:
 === Configuration ===
 Edit the {{Path|/etc/conf.d/zram-init}} file and create/configure your desired zram devices.  There is lots of comments/instructions in the file.  So, proceed with editing, save it when your done. 
  
-{{Note|1. For multicore systems configure one zram swap per cpu core for linux < 3.15.  For Linux >= 3.15, set maxs equal to the number of cores.
-2. Set the priority of all zram swap devices to the same value (high).
-3. Set priority of hard drive swap (low).}}
+{{Note|
+# For multicore systems configure one zram swap per cpu core for linux < 3.15.  For Linux >{{=}} 3.15, set maxs equal to the number of cores.
+# Set the priority of all zram swap devices to the same value (high).
+# Set priority of hard drive swap (low).
+}}
 
 An example:
 * Specs: Dual core cpu, 2G total ram
 * Configure total 1G of swap, 512Mb of /tmp
 
-{{File|/etc/conf.d/zram-init||<pre>
+{{FileBox|filename=/etc/conf.d/zram-init|lang=bash|1=
 # zram settings...
 # load zram kernel module on start?
 load_on_start="yes"
@@ -95,7 +97,7 @@ size1="512"
 type2="/tmp"
 flag2="ext4"
 size2="512"
-</pre>}}
+}}
 
 === Start ===
 Add the init script to the desired runlevel, usually "boot":
@@ -118,7 +120,7 @@ An example:
 * Specs: 4 cpu cores, 4G ram total
 * Configure 4 1.5G zram swap and activate.
 * Estimated maximum ram used 2G @ 3:1 compression 
-{{File|/etc/local.d/zram.start||<pre>
+{{FileBox|filename=/etc/local.d/zram.start|lang=bash|1=
 #!/bin/bash
 
 modprobe zram num_devices=4
@@ -138,9 +140,9 @@ swapon /dev/zram0 -p 10
 swapon /dev/zram1 -p 10
 swapon /dev/zram2 -p 10
 swapon /dev/zram3 -p 10
-</pre>}}
+}}
 
-{{File|/etc/local.d/zram.stop||<pre>
+{{FileBox|filename=/etc/local.d/zram.stop|lang=bash|1=
 #!/bin/bash
 
 swapoff /dev/zram0
@@ -154,31 +156,31 @@ echo 1 > /sys/block/zram2/reset
 echo 1 > /sys/block/zram3/reset
 
 modprobe -r zram
-</pre>}}
+}}
 {{Note|Disksize may also be specified using mem suffixes (K, M, G): echo 1536M > /sys/block/zram0/disksize}}
 
 == Using existing tools ==
 Other possibility is to use existing configuration files - this option works on vanilla Gentoo without need to install additional software, also useful if you are using systemd instead of OpenRC. The first example can be implemented using:
 
-{{File|/etc/udev/rules.d/10-zram.rules||<pre>
+{{FileBox|filename=/etc/udev/rules.d/10-zram.rules|lang=bash|1=
 KERNEL=="zram0", SUBSYSTEM=="block", DRIVER=="", ACTION=="add", ATTR{disksize}=="0", ATTR{disksize}="512M", RUN+="/sbin/mkswap $env{DEVNAME}"
 KERNEL=="zram1", SUBSYSTEM=="block", DRIVER=="", ACTION=="add", ATTR{disksize}=="0", ATTR{disksize}="512M", RUN+="/sbin/mkswap $env{DEVNAME}"
 KERNEL=="zram2", SUBSYSTEM=="block", DRIVER=="", ACTION=="add", ATTR{disksize}=="0", ATTR{disksize}="512M", RUN+="/sbin/mkfs.ext4 $env{DEVNAME}"
 # if you want lz4 support (since kernel 3.15) and without ext4 journaling 
 # KERNEL=="zram2", SUBSYSTEM=="block", DRIVER=="", ACTION=="add", ATTR{initstate}=="0", ATTR{comp_algorithm}="lz4", ATTR{disksize}="512M", RUN+="/sbin/mkfs.ext4 -O ^has_journal -L $name $env{DEVNAME}"
-</pre>}}
+}}
 
-{{File|/etc/fstab||<pre>
+{{FileBox|filename=/etc/fstab|lang=text|1=
 /dev/zram0              swap                    swap            pri=16383                                                       0 0
 /dev/zram1              swap                    swap            pri=16383                                                       0 0
 /dev/zram2              /tmp                    ext4            defaults                                                        0 0
-</pre>}}
+}}
 
-{{File|/etc/modprobe.d/zram.conf||<pre>
+{{FileBox|filename=/etc/modprobe.d/zram.conf|lang=properties|1=
 options zram num_devices=3
-</pre>}}
+}}
 
-== Usage with a SSD ==
+== Usage with an SSD ==
 When using this with a really fast SSD (e.g. Samsung 840 Pro), avoid setting 'rc_parallel=YES' in /etc/rc.conf.
 Depending on the size of the zram partitions and the speed of your RAM, some swap partitions and filesystems might not be ready when the '''swap''' and '''localmount''' services are started.
 In such case, if you absolutely have to use parallel, consider removing these services from runlevel '''boot''' and adding them to '''default''' instead.
