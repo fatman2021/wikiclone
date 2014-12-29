@@ -87,7 +87,7 @@ button/screenlock SCRNLCK 00000080 00000000 K
 Collect those names.
 
 By default, system store key assignment in 
-{{File|/lib/udev/hwdb.d/60-keyboard.hwdb||<pre>
+{{FileBox|filename=/lib/udev/hwdb.d/60-keyboard.hwdb|lang=bash|1=
 ...
 # ThinkPad Keyboard with TrackPoint
 keyboard:usb:v17EFp6009*
@@ -104,60 +104,60 @@ keyboard:usb:v17EFp6009*
  KEYBOARD_KEY_090015=camera                             # Fn+F6 headset/camera VoIP key  ??
  KEYBOARD_KEY_090010=f20                                # Microphone mute button; should be micmute
 ...
-</pre>}}
+}}
 
 By default some buttons are mapped to keycodes that X can't handle or has no keysym for. So the following might be useful. It modifies the udev defaults slightly to fix the key combinations that otherwise wouldn't work in X: 
 
-{{File|/etc/udev/hwdb.d/thinkpad_keyboard.hwdb||<pre>
+{{FileBox|filename=/etc/udev/hwdb.d/thinkpad_keyboard.hwdb|lang=xorg_conf|1=
 # To debug key presses and access scan code mapping data of 
- # an input device use the commonly available tool: evtest(1). 
+# an input device use the commonly available tool: evtest(1). 
 
- # A list of possible keycodes is available under 
- # https://github.com/torvalds/linux/blob/master/include/uapi/linux/input.h 
+# A list of possible keycodes is available under 
+# https://github.com/torvalds/linux/blob/master/include/uapi/linux/input.h 
 
- ### common 
- keyboard:name:ThinkPad Extra Buttons:dmi:bvn*:bvr*:bd*:svnLENOVO*:pn* 
-  KEYBOARD_KEY_00=prog2          # Fn+F1 
-  KEYBOARD_KEY_08=media          # Fn+F9; should be undock, but X has no keysym 
-  KEYBOARD_KEY_0a=prog3          # Fn+F11 
-  KEYBOARD_KEY_13=search         # Fn+Space; should be zoom, but X can't handle keycode 
- # KEYBOARD_KEY_18=              # Fn+1 (might need hotkey unmasking) 
- # KEYBOARD_KEY_19=              # Fn+2 (same) 
+### common 
+keyboard:name:ThinkPad Extra Buttons:dmi:bvn*:bvr*:bd*:svnLENOVO*:pn* 
+ KEYBOARD_KEY_00=prog2          # Fn+F1 
+ KEYBOARD_KEY_08=media          # Fn+F9; should be undock, but X has no keysym 
+ KEYBOARD_KEY_0a=prog3          # Fn+F11 
+ KEYBOARD_KEY_13=search         # Fn+Space; should be zoom, but X can't handle keycode 
+# KEYBOARD_KEY_18=              # Fn+1 (might need hotkey unmasking) 
+# KEYBOARD_KEY_19=              # Fn+2 (same) 
 
- ### X61t display buttons 
- keyboard:dmi:bvn*:bvr*:bd*:svnLENOVO*:pnThinkPad*X6*:pvr* 
-  KEYBOARD_KEY_67=screenlock     # small unlabelled button 
-  KEYBOARD_KEY_6C=f21            # rotate button (f21 = XF86TouchpadToggle) 
-  KEYBOARD_KEY_68=config         # rectangle thing button (config = XF86Tools; was:screenlock)
-</pre>}}
+### X61t display buttons 
+keyboard:dmi:bvn*:bvr*:bd*:svnLENOVO*:pnThinkPad*X6*:pvr* 
+ KEYBOARD_KEY_67=screenlock     # small unlabelled button 
+ KEYBOARD_KEY_6C=f21            # rotate button (f21 = XF86TouchpadToggle) 
+ KEYBOARD_KEY_68=config         # rectangle thing button (config = XF86Tools; was:screenlock)
+}}
 
 Now create an event for each button in {{Path|/etc/acpi/events/}}, I named them by the location-function, but it's up to you.
 than create corresponding action for the event in {{Path|/etc/acpi/actions/}}. See examples below.
 
-==Recepies==
+==Recipes==
 ===Screen Lock button ===
-{{File|/etc/acpi/events/FnF2-screenlock||<pre>
+{{FileBox|filename=/etc/acpi/events/FnF2-screenlock|lang=bash|1=
 #Fn+F2 button/screenlock SCRNLCK 00000080 00000000 K
 event=button/screenlock
 action=/etc/acpi/actions/FnF2-screenlock.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnF2-screenlock.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnF2-screenlock.sh|lang=bash|1=
 #!/bin/sh
 logger "[ACPI] Fn+F2 pressed, start Slimlock for logged-in user"
-XUSER=$(ps aux | grep xinit | awk '{print $1}' | head -n1)
+XUSER=$(ps aux <nowiki>|</nowiki> grep xinit <nowiki>|</nowiki> awk '{print $1}' <nowiki>|</nowiki> head -n1)
 sudo -u $XUSER /usr/bin/slimlock&
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnF2-screenlock.sh}}
 
 ===Battery button===
-{{File|/etc/acpi/events/FnF3-battery||<pre>
+{{FileBox|filename=/etc/acpi/events/FnF3-battery|lang=bash|1=
 #Fn+F3 button/battery BAT 00000080 00000000 K
 event=button/battery
 action=/etc/acpi/actions/FnF3-battery.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnF3-battery.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnF3-battery.sh|lang=bash|1=
 #!/bin/sh
 # Tried on Gentoo
 # cpu throttling is in here it is the cpufreq-set lines
@@ -205,35 +205,35 @@ else
 	/sbin/hdparm -B $ACAD_PM /dev/hda > /dev/null 2>&1
 	/usr/bin/cpufreq-set -g ondemand
 fi
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnF3-battery.sh}}
 Source: [http://www.thinkwiki.org/wiki/ACPI_action_script_for_battery_events ThinkWiki.org]
 
 ===Sleep button===
-{{File|/etc/acpi/events/FnF4-sleep||<pre>
+{{FileBox|filename=/etc/acpi/events/FnF4-sleep|lang=bash|1=
 #Fn+F4 button/sleep SBTN 00000080 00000000 K
 event=button/sleep
 action=/etc/acpi/actions/FnF4-sleep.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnF4-sleep.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnF4-sleep.sh||lang=bash|1=
 #!/bin/sh
 logger "[ACPI] Fn+F4 pressed, start Slimlock for current user and suspend to ram"
-XUSER=$(ps aux | grep xinit | awk '{print $1}' | head -n1)
+XUSER=$(ps aux <nowiki>|</nowiki> grep xinit <nowiki>|</nowiki> awk '{print $1}' <nowiki>|</nowiki> head -n1)
 sudo -u $XUSER /usr/bin/slimlock&
 echo -n mem >/sys/power/state
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnF4-sleep.sh}}
 
 
 ===WiFi button===
-{{File|/etc/acpi/events/FnF5-wifi||<pre>
+{{FileBox|filename=/etc/acpi/events/FnF5-wifi|lang=bash|1=
 #Fn+F5 button/wlan WLAN 00000080 00000000 K
 event=button/wlan
 action=/etc/acpi/actions/FnF5-wlan.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnF5-wifi.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnF5-wifi.sh|lang=bash|1=
 #!/bin/sh
 logger "[ACPI] Fn+F5 pressed, WiFi rfkill state toggled"
 rf=/sys/class/rfkill/rfkill0
@@ -241,20 +241,20 @@ case $(< $rf/state) in
     0) echo 1 >$rf/state;;
     1) echo 0 >$rf/state;;
 esac
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnF5-wifi.sh}}
 
 
 ===Backlight control===
 
 =====Brightness Up=====
-{{File|/etc/acpi/events/FnHome-brightnessup||<pre>
+{{FileBox|filename=/etc/acpi/events/FnHome-brightnessup|lang=bash|1=
 #FnHome video/brightnessup BRTUP 00000086 00000000
 event=video/brightnessup
 action=/etc/acpi/actions/FnHome-brightnessup.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnHome-brightnessup||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnHome-brightnessup|lang=bash|1=
 #!/bin/bash 
 
 # Set the static increment value.  Keep in mind that this will 
@@ -280,20 +280,20 @@ echo $ThresholdVal
 # Set the new value directly. 
 echo -n $ThresholdVal > /sys/class/backlight/intel_backlight/brightness 
 
-logger "[ACPI] brightnessup |$CurrVal| |$NewVal| |$ThresholdVal|"
-</pre>}}
+logger "[ACPI] brightnessup <nowiki>|</nowiki>$CurrVal<nowiki>| |</nowiki>$NewVal<nowiki>| |</nowiki>$ThresholdVal<nowiki>|</nowiki>"
+}}
 
 {{RootCmd|chmod +x /etc/acpi/actions/FnHome-brightnessup.sh}}
 
 
 =====Brightness Down=====
-{{File|/etc/acpi/events/FnEnd-brightnessdown||<pre>
+{{FileBox|filename=/etc/acpi/events/FnEnd-brightnessdown|lang=bash|1=
 #FnEnd video/brightnessdown BRTDN 00000087 00000000
 event=video/brightnessdown
 action=/etc/acpi/actions/FnEnd-brightnessdown.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnEnd-brightnessdown||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnEnd-brightnessdown|lang=bash|1=
 #!/bin/bash 
 
 # Set the static decrement value.  Keep in mind that this will 
@@ -318,8 +318,8 @@ echo $ThresholdVal
 # Set the new value directly. 
 echo -n $ThresholdVal > /sys/class/backlight/intel_backlight/brightness 
 
-logger "[ACPI] brightnessdown |$CurrVal| |$NewVal| |$ThresholdVal|"
-</pre>}}
+logger "[ACPI] brightnessdown <nowiki>|</nowiki>$CurrVal<nowiki><nowiki>| |</nowiki></nowiki>$NewVal<nowiki>| |</nowiki>$ThresholdVal<nowiki>|</nowiki>"
+}}
 
 {{RootCmd|chmod +x /etc/acpi/actions/FnEnd-brightnessdown.sh}}
 
@@ -331,64 +331,64 @@ Instead of CD I would like to control {{Package|media-sound/moc}}.
 Initially I start mocp manually to populate playlist, quit qui and than use special keys to control mocp.
 
 =====Stop=====
-{{File|/etc/acpi/events/FnArrowUp-stop||<pre>
+{{FileBox|filename=/etc/acpi/events/FnArrowUp-stop|lang=bash|1=
 #Fn+ArrowUp cd/stop CDSTOP 00000080 00000000 K
 event=cd/stop
 action=/etc/acpi/actions/FnArrowUp-stop.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnArrowUp-stop.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnArrowUp-stop.sh|lang=bash|1=
 #!/bin/sh
-XUSER=$(ps -eo uname,args --sort start_time | grep mocp | awk '{print $1}' | head -n1)
+XUSER=$(ps -eo uname,args --sort start_time <nowiki>|</nowiki> grep mocp <nowiki>|</nowiki> awk '{print $1}' <nowiki>|</nowiki> head -n1)
 sudo -u $XUSER /usr/bin/mocp -s
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnArrowUp-stop.sh}}
 
 =====Prev track=====
-{{File|/etc/acpi/events/FnArrowLeft-prev||<pre>
+{{FileBox|filename=/etc/acpi/events/FnArrowLeft-prev|lang=bash|1=
 #Fn+ArrowUp cd/prev CDPREV 00000080 00000000 K
 event=cd/prev
 action=/etc/acpi/actions/FnArrowLeft-prev.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnArrowLeft-prev.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnArrowLeft-prev.sh|lang=bash|1=
 #!/bin/sh
-XUSER=$(ps -eo uname,args --sort start_time | grep mocp | awk '{print $1}' | head -n1)
+XUSER=$(ps -eo uname,args --sort start_time <nowiki>|</nowiki> grep mocp <nowiki>|</nowiki> awk '{print $1}' <nowiki>|</nowiki> head -n1)
 sudo -u $XUSER /usr/bin/mocp -r
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnArrowLeft-prev.sh}}
 
 =====Next track=====
-{{File|/etc/acpi/events/FnArrowRight-next||<pre>
+{{FileBox|filename=/etc/acpi/events/FnArrowRight-next|lang=bash|1=
 #Fn+ArrowUp cd/next CDNEXT 00000080 00000000 K
 event=cd/next
 action=/etc/acpi/actions/FnArrowRight-next.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnArrowRight-next.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnArrowRight-next.sh|lang=bash|1=
 #!/bin/sh
-XUSER=$(ps -eo uname,args --sort start_time | grep mocp | awk '{print $1}' | head -n1)
+XUSER=$(ps -eo uname,args --sort start_time <nowiki>|</nowiki> grep mocp <nowiki>|</nowiki> awk '{print $1}' <nowiki>|</nowiki> head -n1)
 sudo -u $XUSER /usr/bin/mocp -f
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnArrowRight-next.sh}}
 
 =====Play/Pause toggle=====
-{{File|/etc/acpi/events/FnArrowDown-play||<pre>
+{{FileBox|filename=/etc/acpi/events/FnArrowDown-play|lang=bash|1=
 #Fn+ArrowUp cd/play CDPLAY 00000080 00000000 K
 event=cd/play
 action=/etc/acpi/actions/FnArrowDown-play.sh
-</pre>}}
+}}
 
-{{File|/etc/acpi/actions/FnArrowDown-play.sh||<pre>
+{{FileBox|filename=/etc/acpi/actions/FnArrowDown-play.sh|lang=bash|1=
 #!/bin/sh
-XUSER=$(ps -eo uname,args --sort start_time | grep mocp | awk '{print $1}' | head -n1)
+XUSER=$(ps -eo uname,args --sort start_time <nowiki>|</nowiki> grep mocp <nowiki>|</nowiki> awk '{print $1}' <nowiki>|</nowiki> head -n1)
 sudo -u $XUSER /usr/bin/mocp -G
-</pre>}}
+}}
 {{RootCmd|chmod +x /etc/acpi/actions/FnArrowDown-play.sh}}
 
 ==Troubleshooting==
 To see output when you press a key
-{{RootCmd|<pre>acpid -c /etc/acpi/events/ -s /var/run/acpid.socket -f -d -l | tee tmp</pre>}}
+{{RootCmd|acpid -c /etc/acpi/events/ -s /var/run/acpid.socket -f -d -l <nowiki>|</nowiki> tee tmp}}
 
 *[https://bugzilla.kernel.org/show_bug.cgi?id=79541 bug report on bugzilla.kernel.org]
 *[https://bugs.freedesktop.org/show_bug.cgi?id=80987 bug report on bugs.freedesktop.org]
