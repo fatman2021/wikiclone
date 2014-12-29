@@ -11,15 +11,24 @@ Portage は、変数 <code>PORTDIR_OVERLAY</code> を読み出して、システ
 
 === 手作業でオーバーレイの場所を設定する ===
 
-自分でオーバーレイを作成したいときはまず、 Portage に検出させたいパッケージを置く場所を作成します。そして、例えば <code>/home/user/overlay</code> を作成したならば、 {{Path|/etc/portage/make.conf}} 内に <code>PORTDIR_OVERLAY="/home/user/overlay"</code> と書き加えます。
+When you want to create an overlay yourself, create a location (say {{Path|/usr/local/myportage}}) in which you will put the packages you want Portage to look into as well. Then add <code>PORTDIR_OVERLAY="/usr/local/myportage"</code> to your {{Path|/etc/portage/make.conf}} file:
 
-{{File|/etc/portage/make.conf|手作業でオーバーレイを追加|<pre>
-PORTDIR_OVERLAY="/home/user/overlay"
-</pre>}}
+{{FileBox|filename=/etc/portage/make.conf|title=Adding an overlay manually|lang=bash|1=
+PORTDIR_OVERLAY="/usr/local/myportage" 
+PORTDIR_OVERLAY="/home/user/overlay" # requires /home is readable for portage
+}}
+
+=== Add User to Portage group ===
+
+To add a user to the <code>portage</code> group, use the <code>gpasswd</code> command like so:
+
+{{RootCmd|gpasswd -a alice portage}}
+
+See also [[Knowledge_Base:Adding_a_user_to_a_group|adding a user to a group]].
 
 === crossdevを使う ===
 
-[[crossdev]] は自動的に、<code>PORTDIR_OVERLAY</code> で設定されている最初のオーバーレイの中に ebuild と categories を生成します。[[crossdev]]が、 [[layman]] のオーバーレイや自分のマシン固有のオーバーレイ (通常は <code>/usr/local/portage</code> に作成される) を妨害するのを防ぎたいかもしれません。そのためには、 [[crossdev]] 専用のオーバーレイを作成するとよいでしょう:
+[[crossdev]] will automatically place the ebuilds/categories it generates into the first overlay found in <code>PORTDIR_OVERLAY</code>. You might want to prevent [[crossdev]] from disturbing [[layman]]'s overlays or your personal per-machine overlay (normally created at {{Path|/usr/local/portage}}). You can create an overlay specifically for [[crossdev]]'s use:
 
 {{RootCmd|mkdir -p /usr/local/portage-crossdev/profiles
 |echo local-crossdev > /usr/local/portage-crossdev/profiles/repo_name}}
@@ -59,7 +68,7 @@ PORTDIR_OVERLAY="/usr/local/portage-crossdev /usr/local/portage"
 
 オーバーレイの優先度は、<code>PORTDIR_OVERLAY</code> 変数内での項目記載順で算出されます。portage は、変数内を左から右へ''歩き''、優先度を増やしていきます。最も左の項目が優先度 1 で始まり、その次の項目が 2 、以下同様です。
 
-{{Note|以前には <code>/etc/portage/repos.conf</code> 内でオーバーレイの優先度を設定していたことがありました。これはもはや機能しません。}}
+{{Note|Some time ago the overlay priority could be set in {{Path|/etc/portage/repos.conf}}. This does not work anymore}}
 
 <code>PORTDIR_OVERLAY</code> 変数に portage ツリーの項目がないかぎりは、portage ツリーは常に優先度 -1000 に設定されます。
 この優先度は、 <code>PORTDIR_OVERLAY</code> 変数内に <code>PORTDIR</code> を記載することで容易に変更することができます :
@@ -76,9 +85,9 @@ PORTDIR_OVERLAY="/home/user/overlay ${PORTDIR}"
 
 巨大なオーバーレイや、よく知らない・低品質なオーバーレイを利用するなら、そのオーバレイ全体に対してハードマスクをかけるのが最善でしょう。
 
-{{File|/etc/portage/package.mask|オーバーレイ内の全てのパッケージをマスクする|<pre>
+{{FileBox|filename=/etc/portage/package.mask|title=Mask all packages in an overlay|lang=bash|1=
 */*::overlay-name
-</pre>}}
+}}
 
 その後に、emerge したい特定のパッケージだけのマスクを外します。
 
@@ -94,7 +103,7 @@ foo/bar::overlay-name
 
 portage は、オーバーレイが多量にインストールされている場合には、パッケージの前提関係を解決するような処理に長い時間を要するかもしれません。これは、オーバーレイには一般的に、メタデータキャッシュが含まれていないためです。
 
-ローカルのメタデータキャッシュを生成するには、オーバーレイとの同期後に emerge --regen を実行してください。
+You may generate a local metadata cache by running <code>emerge --regen</code> after syncing your overlays.
 
 {{RootCmd|layman -S
 |emerge --regen}}
