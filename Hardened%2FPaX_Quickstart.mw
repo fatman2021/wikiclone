@@ -46,7 +46,6 @@ int main() {
   	
         return 0;
 }
-</pre>
 }}
 
 Similarly, try running the following with EMULTRAMP both enabled and disabled. This convoluted code forces gcc to set up a trampoline for the nested function f2(). The trampoline is executable code which lives on the stack and could allow the user to inject their own code via the variable i. 
@@ -85,7 +84,6 @@ int main () {
 	f1() ;
 	return 0;
 }
-</pre>
 }}
 
 === Address Space Layout Randomization (ASLR) ===
@@ -112,7 +110,6 @@ int main() {
         printf("doit @ %p\n", doit);
         return 0;
 }
-</pre>
 }}
 
 For more information on PIE, see our documentation on the [[Hardened/Toolchain]].
@@ -221,26 +218,26 @@ Emerging a {{Package|sys-kernel/hardened-sources}} kernel places the kernel sour
 
 As stated, the PaX patches are bundled with Grsecurity, so the PaX configuration options are found under that menu.
 
-{{Kernel|Location of the PaX configuration options|<pre>
+{{KernelBox|title=Location of the PaX configuration options|1=
 Security Options ->
   Grsecurity ->
     Customize Configuration ->
       [*] PaX
-</pre>}}
+}}
 
 You also have the option of selecting one of Grsecurity's preconfigured profiles.
 
-{{Kernel|Location of the Grsecurity preconfigured profiles|<pre>
+{{KernelBox|title=Location of the Grsecurity preconfigured profiles|1=
 Security Options ->
   Grsecurity ->
     Configuration Method ()
-</pre>}}
+}}
 
 These will give you a meaningful starting point configuration for PaX. 
 
 If configuring for only <code>PT_PAX</code>, the following should be sufficient.
 
-{{Kernel|Kernel configuration for PT_PAX|<pre>
+{{KernelBox|title=Kernel configuration for PT_PAX|1=
 [*] Enable various PaX features
   
 PaX Control ->
@@ -280,14 +277,13 @@ Miscellaneous hardening features  --->
  [*] Harden heap object copies between kernel and userland
  [*] Prevent various integer overflows in function size parameters
  [*] Generate some entropy during boot
-</pre>
 }}
 
 Please note that these are recommended settings and you can deviate from them, but be careful when doing so.  On a play box, you can and should try new features to see what they might do or break.  But on a production box, do not turn on or off some feature without knowing what you are doing.  This is particularly true for <code>EMUTRAMP</code> (Emulate trampolines) which is turn on by default, and turning it off can break python and therfore your system! The reason is that python and libffi write code on the fly, either by RWX mmap-ings which PaX's <code>MPROTECT</code> will kill, or by falling back on trying to write little code snippets to files which other features in Grsecurity will kill, like Trused Path Execution. (See [https://bugs.gentoo.org/show_bug.cgi?id=484472 bug #484472].)  In Gentoo, we've opted to patch python and libffi to use trampolines that can be safely handled by emulation in a PaX kernel. (See [https://bugs.gentoo.org/show_bug.cgi?id=329499 bug #329499].)  We then PaX mark the python executable with 'E' to enable emulation of trampolines.  Without EMUTRAMP on in the kernel, python will fail in trying to generate its RWX mmap-ings and die every time.  (As a ''temporary'' workaround if you get into this situaiton, you can disable MPROTECT on python with `paxctl -m` and then restore the original markings once you have booted back into a PaX kernel with EMUTRAMP.)
 
 Also, we should prefer <code>XATTR_PAX</code> flags over <code>PT_PAX</code>. In that case, all of the above can remain in place, but we would change the PaX Control configuration: 
 
-{{Kernel|Kernel configuration with XATTR_PAX flags|<pre>
+{{KernelBox|title=Kernel configuration with XATTR_PAX flags|1=
 PaX Control ->
   
  [ ] Support soft mode
@@ -295,19 +291,17 @@ PaX Control ->
  [ ] Use ELF program header marking
  [*] Use filesystem extended attributes marking
      MAC system integration (none)  --->
-</pre>
 }}
 
 Since the PaX flags will now live on the extended attributions of your filesystems, you would need to enable xattr on those filesystems, but the PaX team has already set up a dependency. E.g. for Ext4 we have 
 
-{{Kernel|Automatic selection of EXT4_FS_XATTR by XATTR_PAX_FLAGS|<pre>
+{{KernelBox|title=Automatic selection of EXT4_FS_XATTR by XATTR_PAX_FLAGS|1=
 File systems  --->
  <*> The Extended 4 (ext4) filesystem
  -*-   Ext4 extended attributes
  [ ]     Ext4 POSIX Access Control Lists
  [ ]     Ext4 Security Labels
  [ ]   EXT4 debugging support      
-</pre>
 }}
 
 Here <code>Ext4 extended attributes</code> was automatically selected by <code>PAX_XATTR_PAX_FLAGS [=y] && GRKERNSEC [=y] && PAX [=y] && EXT4_FS [=y]</code>. Nonetheless, in case you are using some exotic filesystem which doesn't have this selection dependency, you may want to check and then file a bug report to have your filesystem better supported with respect to PaX.
@@ -411,17 +405,17 @@ user.pax.flags="Hi Mom, wish you were here."
 
 paxctl-ng is the new swiss army knife of working with PT_PAX an XATTR_PAX markings. It can be built with support for just one or the other or both types of markings. When built with support for both, it can copy PT_PAX to XATTRP_PAX fields or vice versa, to make sure you have consistency. In sum, it can do everything paxctl and set/getfattr can do, except it will not try to create or convert a PAX_FLAGS program header. This is discouraged and should only be use in the corner case mentioned above. Here is a synopsis of its usage: 
 
-{{Code|paxctl-ng -h|<pre>
+{{Cmd|paxctl-ng -h|output=<pre>
 Package Name : elfix 0.7.1
 Bug Reports  : http://bugs.gentoo.org/
 Program Name : paxctl-ng
 Description  : Get or set pax flags on an ELF object
   
-Usage        : paxctl-ng -PpEeMmRrSsv ELF | -Zv ELF | -zv ELF
-             : paxctl-ng -Cv ELF | -cv ELF | -dv ELF
-             : paxctl-ng -Fv ELF | -fv ELF
-             : paxctl-ng -Lv ELF | -lv ELF
-             : paxctl-ng -v ELF | -h
+Usage        : paxctl-ng -PpEeMmRrSsv ELF {{!}} -Zv ELF {{!}} -zv ELF
+             : paxctl-ng -Cv ELF {{!}} -cv ELF {{!}} -dv ELF
+             : paxctl-ng -Fv ELF {{!}} -fv ELF
+             : paxctl-ng -Lv ELF {{!}} -lv ELF
+             : paxctl-ng -v ELF {{!}} -h
   
 Options      : -P enable PAGEEXEC	-p disable  PAGEEXEC
              : -E enable EMUTRAMP	-e disable  EMUTRAMP
