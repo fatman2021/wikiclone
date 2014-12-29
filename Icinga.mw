@@ -28,11 +28,10 @@ This Howto assumes the following are up and running.  Here I use a single vhost 
 }}
 
 * Amend the CGI configuration as required. Replace all occurrences of "icingaadmin" in the permission settings with a valid user that the web server authenticates or * which means any authenticated user.
-{{File|/etc/icinga/cgi.cfg|Icinga CGI settings changed from defaults|<pre>
+{{FileBox|filename=/etc/icinga/cgi.cfg|title=Icinga CGI settings changed from defaults|lang=bash|1=
 lowercase_user_name=1
 first_day_of_week=1
 date_format=euro
-</pre>
 }}
 
 * Start the daemon
@@ -64,7 +63,8 @@ date_format=euro
 {{RootCmd|/etc/init.d/icinga restart}}
 * Check {{Path|/var/log/icinga.log}} that IDO is happy
 * Add to default run level
-{{RootCmd|rc-update add ido2db
+{{RootCmd
+|rc-update add ido2db
 |rc-update add icinga
 }}
 
@@ -73,28 +73,26 @@ date_format=euro
 * rrdtool may need {{Package|media-fonts/dejavu}} installing
 
 * Create Database
-{{RootCmd|echo "CREATE DATABASE icinga_web;" | mysql -p 
-|<nowiki>echo "GRANT SELECT,UPDATE,INSERT,DELETE ON icinga_web.* TO 'icinga_web'@'localhost' IDENTIFIED BY 'icinga_web';" | mysql -p</nowiki>
-|<nowiki>echo "FLUSH PRIVILEGES;" | mysql -p</nowiki>
-|<nowiki>cat /usr/share/icinga/icinga-web/contrib/mysql.sql | mysql icinga_web -p</nowiki>
+{{RootCmd
+|echo "CREATE DATABASE icinga_web;" {{!}} mysql -p 
+|echo "GRANT SELECT,UPDATE,INSERT,DELETE ON icinga_web.* TO 'icinga_web'@'localhost' IDENTIFIED BY 'icinga_web';" {{!}} mysql -p
+|echo "FLUSH PRIVILEGES;" {{!}} mysql -p
+|cat /usr/share/icinga/icinga-web/contrib/mysql.sql {{!}} mysql icinga_web -p
 }}
 
 * Change {{Path|/etc/apache2/modules.d/00_default_settings.conf}} and set servertokens to Minimal and restart Apache
 
 * Here we are using the web server to authenticate, so add this section to auth.xml.  I put it after the default section.  It seems to work fine but more research needed to find out exactly how it works.
-{{File|/etc/icinga-web/auth.xml|Icinga-web auth config - Use web server auth|<pre>
-       <setting name="provider">
-
-            <ae:parameter name="http-basic-authentication">
-                 <ae:parameter name="auth_create">true</ae:parameter>
-                 <ae:parameter name="auth_update">true</ae:parameter>
-            </ae:parameter>
-            
-        </setting>
-</pre>
+{{FileBox|filename=/etc/icinga-web/auth.xml|title=Icinga-web auth config - Use web server auth|lang=xml|1=
+<setting name="provider">
+    <ae:parameter name="http-basic-authentication">
+         <ae:parameter name="auth_create">true</ae:parameter>
+         <ae:parameter name="auth_update">true</ae:parameter>
+    </ae:parameter>        
+</setting>
 }}
 
-* At this point you should be able to point your browser at: https://monitor.example.co.uk/icinga-web, connect and see localhost being monitored.  If there is no data in Icinga-Web then ensure that the ido2db service is running
+* At this point you should be able to point your browser at: [https://monitor.example.co.uk/icinga-web https://monitor.example.co.uk/icinga-web], connect and see localhost being monitored.  If there is no data in Icinga-Web then ensure that the ido2db service is running
 
 ===Admin users ===
 As we are using web server auth, then the root user becomes unavailable.  Edit the database directly to enable another admin user:
@@ -109,48 +107,47 @@ The pnp USE flag for icinga-web pulls in PNP4nagios
 Bulk Mode with npcdmod - this means minimal extra configuration within Icinga.  A module is loaded and that grads the process data and passes it to a daemon called npcd. npcd then proceesses that data and puts it into the rrds for the web interface
 
 * Create rra config, no need to edit this, defaults are fine
-{{RootCmd|cd /etc/pnp/
+{{RootCmd
+|cd /etc/pnp/
 |cp rra.cfg-sample rra.cfg
 }}
 
 * Edit npcd config
-{{File|/etc/pnp/npcd.cfg|NPCD config changes|<pre>
+{{FileBox|filename=/etc/pnp/npcd.cfg|title=NPCD config changes|lang=ini|1=
 # Changed from default (/var/lib/perfdata.dump) - JG 13 Aug 2013
 perfdata_file = /var/spool/npcdmod/prefdata.dump
-</pre>
 }}
 
 * Create a directory for npcdmod which runs from within Icinga to dump its data file into, npcd then gets data from there and processes it
-{{RootCmd|mkdir /var/spool/npcdmod/
+{{RootCmd
+|mkdir /var/spool/npcdmod/
 |chown icinga:icinga /var/spool/npcdmod/
 }}
 
 * Site local changes are made in {{Path|config_local.php}}, leave all the other config files alone.  On upgrades diff against them for any new parameters and add to the local config as needed.  The ebuild correctly sets icinga perfdata but does not set nagios_base correctly
-{{File|/etc/pnp/config_local.php|PNP config file changes|<pre>
+{{FileBox|filename=/etc/pnp/config_local.php|title=PNP config file changes|lang=ini|1=
 # Default was for Nagios JG 13 Aug 2013
 $conf['nagios_base'] = "/icinga/cgi-bin";
-</pre>
 }}
 
 * Create the PNP module configuration
-{{File|/etc/icinga/modules/pnp.cfg|PNP broker module configuration|<pre>
+{{FileBox|filename=/etc/icinga/modules/pnp.cfg|title=PNP broker module configuration|1=
 define module{                                                                                                                                                                   
         module_name     npcdmod                                                                                                                                                  
         module_type     neb                                                                                                                                                      
         path            /usr/lib/npcdmod.o                                                                                                                                       
         args            config_file=/etc/pnp/npcd.cfg                                                                                                                            
-    }
-</pre>
+}
 }}
 
 * Amend icinga config to process prefdata
-{{File|/etc/icinga/icinga.cfg|Icinga config file changes|<pre>
+{{FileBox|filename=/etc/icinga/icinga.cfg|title=Icinga config file changes|lang=bash|1=
 process_performance_data=1
-</pre>
 }}
 
 * Setup the npcd service
-{{RootCmd|rc-update add npcd default
+{{RootCmd
+|rc-update add npcd default
 |/etc/init.d/npcd start
 }}
 
@@ -165,10 +162,9 @@ process_performance_data=1
 
 A reboot, as previously mentioned, does not quite fix this (ie. the problem will return once you manually restart your webserver).
 
-{{File|/etc/conf.d/apache2|Workaround: Add this line to the apache2 config file|<pre>
+{{FileBox|filename=/etc/conf.d/apache2|title=Workaround: Add this line to the apache2 config file|lang=bash|1=
 # use the fitting path as configured in /etc/passwd below:
 export HOME="/var/www/"
-</pre>
 }}
 
 Restart the webserver after updating the file and pnp4nagios should run reliably from now on.
@@ -180,25 +176,24 @@ TODO - fix in webserver init-script may be needed
 
 === Debugging PNP ===
 Debugging pnp can be hard.  A script is available to help:
-<pre>
-cd /usr/src 
-wget http://verify.pnp4nagios.org/verify_pnp_config
-perl verify_pnp_config -c /etc/icinga/icinga.cfg -m npcdmod -p /etc/pnp/
-</pre>
+{{RootCmd
+|cd /usr/src 
+|wget http://verify.pnp4nagios.org/verify_pnp_config
+|perl verify_pnp_config -c /etc/icinga/icinga.cfg -m npcdmod -p /etc/pnp/
+}}
 I think that the script requires you to explicitly state the module using the broker_module parameter within the {{Path|icinga.cfg}}, so you may have to convert back to that temporarily to run this test.
 
 == mk-livestatus ==
 The Nagvis developers have deprecated using the ndomy driver and only recommend using mk-livestatus
 
 * Create this module config file
-{{File|/etc/icinga/modules/mk-livestatus.cfg|mk-livestatus module config for icinga|<pre>
+{{FileBox|filename=/etc/icinga/modules/mk-livestatus.cfg|title=mk-livestatus module config for icinga|1=
 define module{
-        module_name    mklivestatus
-        path           /usr/lib/mk-livestatus/livestatus.o
-        module_type    neb
-        args           /var/lib/icinga/rw/live
-        }
-</pre>
+    module_name    mklivestatus
+    path           /usr/lib/mk-livestatus/livestatus.o
+    module_type    neb
+    args           /var/lib/icinga/rw/live
+}
 }}
 
 * Restart Icinga
@@ -219,7 +214,7 @@ Nagviz in Portage lags upstream quite badly - its the only package used here tha
 }}
 
 * Edit config
-{{File|/etc/nagvis/nagvis.ini.php| Snippets from Nagvis config|<pre>
+{{FileBox|filename=/etc/nagvis/nagvis.ini.php|title=Snippets from Nagvis config|lang=ini|1=
 ; This will make new users into admins by default.  Login with each user you want to be a manager and then revert it to Guests
 ; After that a manager can maintain the permissions from within the application
 ; See http://docs.nagvis.org/1.7/en_US/index.html
@@ -245,14 +240,13 @@ showrotations=0
 [backend_live_1]
 backendtype="mklivestatus"
 socket="unix:/var/lib/icinga/rw/live"
-</pre>
 }}
 
 * Remove demo data (put them somewhere for reference)
 {{RootCmd|mv /etc/nagvis/maps/*.cfg /tmp/}}
 
 * Create a simple map - as you add systems to Icinga, this map will grow with it.
-{{File|/etc/nagvis/maps|Example map|<pre>
+{{FileBox|filename=/etc/nagvis/maps|title=Example map|1=
 define global {
 object_id=0
 sources=automap
@@ -261,7 +255,6 @@ height=950
 iconset=std_medium
 render_mode=radial
 }
-</pre>
 }}
 
 * Set permissions
@@ -270,23 +263,22 @@ render_mode=radial
 * Test it - https://monitor.example.co.uk/nagvis.  You should go straight though using web server authentication and become an admin.  To reset the permissions, you can delete /etc/nagvis/auth.db - it will be recreated from scratch for you. Change logonenvcreaterole in {{Path|nagvis.ini.cfg}} to change how future users will be created.
 
 * Add a cronk to display Nagviz in icinga-web
-{{File|/etc/icinga-web/cronks.xml|Icinga-web cronk snippet for Nagvis in an iFrame|<pre>
-             <cronk name="iFrameViewNagvis">
-                <ae:parameter name="module">Cronks</ae:parameter>
-                <ae:parameter name="action">System.IframeView</ae:parameter>
-                <ae:parameter name="hide">false</ae:parameter>
-                <ae:parameter name="description">Nagvis Maps views</ae:parameter>
-                <ae:parameter name="name">Nagvis Display</ae:parameter>
-                <ae:parameter name="image">cronks.Info2</ae:parameter>
-                <ae:parameter name="categories">data</ae:parameter>
-                <ae:parameter name="position">310</ae:parameter>
-                <ae:parameter name="ae:parameter">
-                    <ae:parameter name="url"><![CDATA[/nagvis/frontend/nagvis-js/]]></ae:parameter>
-                    <ae:parameter name="user">admin</ae:parameter>
-                    <ae:parameter name="password">admin</ae:parameter>
-                </ae:parameter>
-            </cronk>
- </pre>
+{{FileBox|filename=/etc/icinga-web/cronks.xml|title=Icinga-web cronk snippet for Nagvis in an iFrame|lang=xml|1=
+<cronk name="iFrameViewNagvis">
+   <ae:parameter name="module">Cronks</ae:parameter>
+   <ae:parameter name="action">System.IframeView</ae:parameter>
+   <ae:parameter name="hide">false</ae:parameter>
+   <ae:parameter name="description">Nagvis Maps views</ae:parameter>
+   <ae:parameter name="name">Nagvis Display</ae:parameter>
+   <ae:parameter name="image">cronks.Info2</ae:parameter>
+   <ae:parameter name="categories">data</ae:parameter>
+   <ae:parameter name="position">310</ae:parameter>
+   <ae:parameter name="ae:parameter">
+       <ae:parameter name="url"><![CDATA[/nagvis/frontend/nagvis-js/]]></ae:parameter>
+       <ae:parameter name="user">admin</ae:parameter>
+       <ae:parameter name="password">admin</ae:parameter>
+   </ae:parameter>
+</cronk>
 }}
 * Clear the cache to enable the new cronk
 {{RootCmd|<nowiki>/usr/share/icinga/icinga-web/bin/clearcache.sh</nowiki>}}
@@ -297,7 +289,6 @@ render_mode=radial
 ''' Work in progress '''
 * Install a JVM first e.g. {{Package|dev-java/oracle-jdk-bin}}
 * Homepage: https://www.icinga.org/about/icinga-mobile/
-(Broken - FIXME: https://icinga.org/display/howtos/Setting+up+Icinga+Mobile)
 
 {{RootCmd
 |cd icinga-mobile
@@ -306,14 +297,7 @@ render_mode=radial
 
 * Generate an API key in Icinga web 
 * Edit {{Path|lib/Model/IcingaConfiguration.js}} and set the apikey
-* Install the web app
-{{RootCmd
-|./configure --with-web-user=apache --with-web-group=apache --with-web-apache-path=/etc/apache2/modules.d --prefix=/usr/local/icinga-mobile
-|make
-|make install
-|make install-apache-config
-|/usr/bin/install -c -b -m 664 -o apache -g apache etc/apache/icinga-mobile.conf /etc/apache2/modules.d/icinga-mobile.conf
-}}
+* Install the web app {{RootCmd|./configure --with-web-user{{=}}apache --with-web-group{{=}}apache --with-web-apache-path{{=}}/etc/apache2/modules.d --prefix{{=}}/usr/local/icinga-mobile|make|make install|make install-apache-config|/usr/bin/install -c -b -m 664 -o apache -g apache etc/apache/icinga-mobile.conf /etc/apache2/modules.d/icinga-mobile.conf}}
 
 * Point your browser at https://monitor.example.co.uk/m
 
@@ -322,10 +306,9 @@ render_mode=radial
 * Move to {{Path|/var/www/localhost/htdocs}}
 * Symlink to {{Path|./nagiosql}}
 * Set <code>date.timezone</code> in {{Path|php.ini}}
-{{File|/etc/php/apache2/php.ini|Snippet from php.ini|<pre>
+{{FileBox|filename=/etc/php/apache2/php.ini|title=Snippet from php.ini|lang=ini|1=
 [Date]
 date.timezone = Europe/London
-</pre>
 }}
 * Create {{Path|/etc/icinga/nagiosql}} and chown icinga:icinga and chmod g+s
 * Temporary: <code>chown apache:apache /var/www/localhost/htdocs/nagiosql/config</code>
@@ -335,26 +318,27 @@ date.timezone = Europe/London
 * Remove the install directory
 * Temp disable the http -> https redirection so that you can login and amend the config, reload apache.  You will need to amend the browser URL to set https: Administration -> Settings -> Server protocol -> https
 * Put the redirector back and reload apache
-* NagiosQL needs to write to this directory - this may need to be fixed every time Icinga is upgraded:
-{{RootCmd|<nowiki>chmod g+w /var/lib/icinga/spool/checkresults</nowiki>}}
+* NagiosQL needs to write to this directory - this may need to be fixed every time Icinga is upgraded: {{RootCmd|chmod g+w /var/lib/icinga/spool/checkresults}}
 * Change Icinga over to using the objects defined in NagiosQL in {{Path|/etc/icinga/icinga.conf}}.  Set this from within the web GUI itself: Administration -> Config Targets -> localhost
 
 == Notes ==
-* Snags with Pango seemingly needing to access /root/? - reboot fixes it!  This manifests itself as graph errors when accessing PNP4Ngios pages 
+* Snags with Pango seemingly needing to access {{Path|/root}}? - reboot fixes it!  This manifests itself as graph errors when accessing PNP4Ngios pages 
 * Handy SQL - use in phpmyadmin:
 ** Find/Replace:
-<pre>UPDATE  `tbl_host` SET  `alias` = REPLACE(  `alias` ,  'A string',  'Another string' )</pre>
+{{CodeBox|lang=sql|1=
+UPDATE  `tbl_host` SET  `alias` = REPLACE(  `alias` ,  'A string',  'Another string' )
+}}
 * Embedded Perl (ePN).  If you enable this note that Icinga prefers this to disable it (rather than nagios):
 <pre># icinga: -epn</pre>
 
 === Sample Apache configuration ===
 The following sample Apache vhost configuration includes settings for mod_auth_kerb and SSL.  Replace monitor and example.co.uk and make sure the SSLCert lines correspond to your environment.  Note use of SetEnvIf to automatically "login" certain systems with a username where Kerberos fails - handy for automated systems to access this web server without having to be Kerberized.  Replace the authentication settings in the Location / section for your environment.  
 
-{{File|/etc/conf.d/apache2|Snippet from Apache startup configuration file|<pre>
+{{FileBox|filename=/etc/conf.d/apache2|title=Snippet from Apache startup configuration file|lang=apache|1=
 APACHE2_OPTS="-D INFO -D SSL -D LANGUAGE -D PHP5 -D AUTH_KERB"
-</pre>}}
+}}
 
-{{File|/etc/apache2/vhosts.d/10_mon.conf|Sample Icinga and addons Apache vhost definition|<pre>
+{{FileBox|filename=/etc/apache2/vhosts.d/10_mon.conf|title=Sample Icinga and addons Apache vhost definition|lang=apache|1=
 # Monitoring
 # JG 9 Aug 2013
 
@@ -431,7 +415,7 @@ Listen 443
 #### icinga-Web - taken from the module
 # Matching for module stylesheet and images
 AliasMatch "^/icinga-web/modules/([A-Za-z0-9]+)/resources/styles/([A-Za-z0-9]+\.css)$" "/usr/share/icinga/icinga-web/app/modules/$1/pub/styles/$2"
-AliasMatch "^/icinga-web/modules/([A-Za-z0-9]+)/resources/images/([A-Za-z_\-0-9]+\.(?:png|gif|jpg))$" "/usr/share/icinga/icinga-web/app/modules/$1/pub/images/$2"
+AliasMatch "^/icinga-web/modules/([A-Za-z0-9]+)/resources/images/([A-Za-z_\-0-9]+\.(?:png{{!}}gif{{!}}jpg))$" "/usr/share/icinga/icinga-web/app/modules/$1/pub/images/$2"
 
 # Matching for Icinga Web and the ext3 framework
 Alias /icinga-web/js/ext3/ /usr/share/icinga/icinga-web/lib/ext3/
@@ -495,7 +479,7 @@ RedirectMatch "^/icinga-web$" /icinga-web/
         BrowserMatch \bMSIE !no-gzip !gzip-only-text/html
         # Don't compress images
         SetEnvIfNoCase Request_URI \
-        \.(?:gif|jpe?g|png)$ no-gzip dont-vary
+        \.(?:gif{{!}}jpe?g{{!}}png)$ no-gzip dont-vary
 
         # Make sure proxies don't deliver the wrong content
         <IfModule mod_headers.c>
@@ -529,7 +513,7 @@ RedirectMatch "^/icinga-web$" /icinga-web/
         RewriteBase /pnp4nagios
 
         # Protect application and system files from being viewed
-        RewriteRule ^(application|modules|system) - [F,L]
+        RewriteRule ^(application{{!}}modules{{!}}system) - [F,L]
         # Allow any files or directories that exist to be displayed directly
         RewriteCond %{REQUEST_FILENAME} !-f
         RewriteCond %{REQUEST_FILENAME} !-d
@@ -565,7 +549,6 @@ Alias /m /usr/local/icinga-mobile/
 # /Icinga Mobile
 
 </VirtualHost>
-</pre>
 }}
 
 === Local ebuild for Nagvis ===
@@ -577,17 +560,16 @@ I cobbled this together from the existing ebuild and it works OK for me.
 |mkdir /usr/local/portage/profiles
 }}
 * Name the repo
-{{File|/usr/local/portage/profiles/repo-name|Overlay name|<pre>
+{{FileBox|filename=/usr/local/portage/profiles/repo-name|title=Overlay name|1=
 local-repo
-</pre>}}
+}}
 * Set layout
-{{File|/usr/local/portage/metadata/layout.conf|Overlay layout file|<pre>
+{{FileBox|filename=/usr/local/portage/metadata/layout.conf|title=Overlay layout file|lang=bash|1=
 masters=gentoo
-</pre>
 }}
 
 * Ebuild files
-{{File|/usr/local/portage/net-analyzer/nagvis/nagvis-1.7.10.ebuild|Ebuild|<pre>
+{{FileBox|filename=/usr/local/portage/net-analyzer/nagvis/nagvis-1.7.10.ebuild|title=Ebuild|lang=python|1=
 # Copyright 1999-2009 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 # $Header: $
@@ -606,7 +588,7 @@ KEYWORDS="~amd64 ~ppc ~x86"
 IUSE="apache2"
 
 DEPEND=""
-RDEPEND="|| ( net-analyzer/nagios net-analyzer/icinga )
+RDEPEND="{{!}}{{!}} ( net-analyzer/nagios net-analyzer/icinga )
         apache2? ( dev-lang/php[apache2] )
         >=media-gfx/graphviz-2.14
         net-analyzer/mk-livestatus
@@ -623,10 +605,10 @@ pkg_setup() {
 src_prepare() {
         epatch "${FILESDIR}"/${P}-base-path.patch
         epatch "${FILESDIR}"/${P}-global-definitions.patch
-        grep -Rl "/usr/local" "${S}"/* | xargs sed -i s:/usr/local:/usr:g ||die
-        sed -i s:@NAGVIS_WEB@:/nagvis:g "${S}"/etc/apache2-nagvis.conf-sample ||die
-        sed -i s:@NAGVIS_PATH@:/usr/share/nagvis/:g "${S}"/etc/apache2-nagvis.conf-sample ||die
-        sed -i s:/usr/nagios/var/rw/live:/var/nagios/rw/live:g "${S}"/etc/nagvis.ini.php-sample ||die
+        grep -Rl "/usr/local" "${S}"/* {{!}} xargs sed -i s:/usr/local:/usr:g {{!}}{{!}}die
+        sed -i s:@NAGVIS_WEB@:/nagvis:g "${S}"/etc/apache2-nagvis.conf-sample {{!}}{{!}}die
+        sed -i s:@NAGVIS_PATH@:/usr/share/nagvis/:g "${S}"/etc/apache2-nagvis.conf-sample {{!}}{{!}}die
+        sed -i s:/usr/nagios/var/rw/live:/var/nagios/rw/live:g "${S}"/etc/nagvis.ini.php-sample {{!}}{{!}}die
 }
 
 src_install() {
@@ -660,7 +642,7 @@ src_install() {
 
         # move image maps dir from usr to var and symlink it back
         dodir /var/nagvis/userfiles/images
-        mv "${D}"/usr/share/nagvis/userfiles/images/maps "${D}"/var/nagvis/userfiles/images/ ||die
+        mv "${D}"/usr/share/nagvis/userfiles/images/maps "${D}"/var/nagvis/userfiles/images/ {{!}}{{!}}die
         fowners apache:root /var/nagvis/userfiles/images/maps
         dosym /var/nagvis/userfiles/images/maps /usr/share/nagvis/userfiles/images/maps
 }
@@ -680,10 +662,9 @@ pkg_postinst() {
         elog "Default user/password are: nagiosadmin/nagiosadmin"
         elog "                                 guest/guest"
 }
-</pre>
 }}
 
-{{File|/usr/local/portage/net-analyzer/nagvis/files/nagvis-1.7.10-global-definitions.patch|patch 1|<pre>
+{{FileBox|filename=/usr/local/portage/net-analyzer/nagvis/files/nagvis-1.7.10-global-definitions.patch|title=patch 1|lang=diff|1=
 --- a/share/server/core/defines/global.php      2013-07-17 14:40:39.768577131 +0200
 +++ b/share/server/core/defines/global.php      2013-07-17 14:41:44.492006012 +0200
 @@ -65,7 +65,7 @@
@@ -714,10 +695,9 @@ pkg_postinst() {
  
  // Needed minimal PHP version
  define('CONST_NEEDED_PHP_VERSION', '5.0');
-</pre>
 }}
 
-{{File|/usr/local/portage/net-analyzer/nagvis/files/nagvis-1.7.10-base-path.patch|Patch 2|<pre>
+{{FileBox|filename=/usr/local/portage/net-analyzer/nagvis/files/nagvis-1.7.10-base-path.patch|title=Patch 2|lang=diff|1=
 --- a/share/server/core/classes/GlobalMainCfg.php       2013-07-17 14:37:00.475733872 +0200
 +++ b/share/server/core/classes/GlobalMainCfg.php       2013-07-17 14:37:46.745756044 +0200
 @@ -1391,8 +1391,8 @@
@@ -732,16 +712,14 @@ pkg_postinst() {
          // return realpath(dirname(dirname(dirname($_SERVER['SCRIPT_FILENAME'])))).'/';
      }
 
-</pre>
 }}
 
 * Digest the ebuild
 {{RootCmd|ebuild /usr/local/portage/net-analyzer/nagvis/nagvis-1.7.10.ebuild digest}}
 
 * Add the repo to Portage
-{{File|/etc/portage/make.conf|Standard Gentoo make.conf snippet|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=Standard Gentoo make.conf snippet|lang=bash|1=
 PORTDIR_OVERLAY="/usr/local/portage"
-</pre>
 }}
 
 * If you use eix then update its database
@@ -762,7 +740,7 @@ Would you like to merge these packages? [Yes/No]
 
 === USE flags ===
 These are the flags I generally use and will provide a good starting point
-{{File|/etc/portage/package.use|USE flags|<pre>
+{{FileBox|filename=/etc/portage/package.use|title=USE flags|1=
 dev-libs/libxml2            python
 media-gfx/graphviz          cairo nls -X -devil -doc -examples -gtk gts -java -lasi -perl -postscript perl -python -qt4 -ruby -static-libs -svg -tcl
 net-analyzer/rrdtool        perl python
@@ -773,7 +751,6 @@ dev-libs/libpcre            -recursion-limit
 net-analyzer/icinga         apache2 idoutils mysql plugins ssl -vim-syntax web -contrib eventhandler -lighttpd perl -postgres
 net-analyzer/icinga-web     apache2 mysql pnp -postgres
 net-analyzer/nagios-plugins ipv6 ldap mysql -postgres samba snmp ssl nagios-dns -nagios-game nagios-ntp nagios-ping nagios-ssh radius -ups
-</pre>
 }}
 
 == References ==
