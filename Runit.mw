@@ -21,24 +21,23 @@
 
 Runit can be used as the system init. To do this, simply add <tt>init=/sbin/runit-init</tt> to your bootloader's command line and reboot. You can leave sysvinit installed and go back to it at any time by reverting the change.
 
-Out of the box, runit-init has a very minimal configuration which will only get you to a console login. All of your configured OpenRC services are still accessible though, and they can be automatically started on boot with a simple edit:
+Out of the box, runit-init has a very minimal configuration which will only get you to a console login. Although it would be optimal to have all your daemons started up in a single consistent way, you're free to mix and match between runit and OpenRC as you like. Your initscripts can be found in the "default" runlevel, which can be started  automatically on boot with the existing "local" service:
 
-{{File|/etc/runit/1|Example runit startup script|<pre>
+{{FileBox|filename=/etc/local.d/rc-default.start|title=Start up the default runlevel after boot|1=
 #!/bin/sh
-# system one time tasks
+rc default}}
+{{RootCmd|chmod u+x /etc/local.d/rc-default.start}}
+{{RootCmd|rc-update add local boot}}
 
-PATH=/sbin:/usr/sbin:/bin:/usr/bin
+If you prefer to do it manually:
 
-RUNLEVEL=S /sbin/rc sysinit
-RUNLEVEL=S /sbin/rc boot
-rc default                  # <-- Add this line
+{{RootCmd|rc default}}
 
-touch /etc/runit/stopit
-chmod 0 /etc/runit/stopit
-</pre>}}
-(If you're making the above change after the first reboot, there's no need to reboot twice for it to take effect - just run "rc default" manually.)
+==== Reboot and Shutdown ====
 
-Runit isn't directly compatible with sysvinit's "telinit", "halt", "poweroff", "reboot" and "shutdown" commands, however, it's possible to emulate the interface they need [https://forums.gentoo.org/viewtopic-p-7610342.html#7610342 with a simple script].
+Runit isn't directly compatible with sysvinit's "telinit", "halt", "poweroff", "reboot" and "shutdown" commands, however many programs (e.g. desktop environments) expect to be able to call some of these. It's possible to emulate the interface they need [https://forums.gentoo.org/viewtopic-p-7610342.html#7610342 with a simple script].
+
+If all else fails, use <tt>runit-init 0</tt> to shut down or <tt>runit-init 6</tt> to reboot.
 
 === As a system service ===
 
@@ -50,21 +49,22 @@ Runit can supervise processes without running as init, or even necessarily as ro
 
 OpenRC can start this for you using <tt>/etc/init.d/local</tt> (see <tt>/etc/local.d/README</tt> for more details):
 
-{{File|/etc/local.d/runsvdir.start||<pre>
+{{FileBox|filename=/etc/local.d/runsvdir.start|1=
 #!/bin/sh
 # Remember to add --user if you don't want to run as root!
 start-stop-daemon --start --background --make-pidfile \
     --pidfile /run/runsvdir.pid \
     --exec /usr/bin/runsvdir -- /path/to/service-dir/
-</pre>}}
-{{File|/etc/local.d/runsvdir.stop||<pre>
+}}
+{{FileBox|filename=/etc/local.d/runsvdir.stop|1=
 #!/bin/sh
 start-stop-daemon --stop --pidfile /run/runsvdir.pid
-</pre>}}
+}}
 
 == External Resources ==
 * [https://wiki.archlinux.org/index.php/runit Arch Linux Wiki]
 * [https://forums.gentoo.org/viewtopic-p-7605220.html Gentoo Forums]
+* [https://bitbucket.org/avery_payne/supervision-scripts/ supervision-scripts]: a large, modular collection of scripts that can be used with runit.
 
 [[Category:Init_systems]]
 [[Category:Monitoring]]
