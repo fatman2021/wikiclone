@@ -29,39 +29,38 @@ Eens in de zoveel tijd veranderd een nieuw uitgebrachte kernel zijn interne driv
 
 Wanneer een nieuwe, niet compatibele kernel versie word vrijgegeven, is het mogelijk het beste om met de laatst ondersteunde kernel versie te blijven werken. Het duurt voor Nvidia enkele weken om een nieuwe particuliere versie vrij te geven waarvan ze denken dat deze klaar is voor algemeen gebruik. Wacht het gewoon even af. Als je desondanks toch tegen alle waarschuwingen in wil gaan, dan bieden de nvidia-drivers ebuilds ondersteuning voor het epatch_user commando van eutils.eclass: Dit staat toe om  nvidia-drivers te patchen en op de een of andere manier toch te doen werken met de laatste, niet compatibele kernel versie die je zo graag wil draaien. Let hier wel mee op want de nvidia-drivers onderhouders en Nvidia zullen geen support bieden wanneer je problemen oploopt. De garantie van je hardware verloopt mogelijk, Gentoo's onderhouders gaan zich niet bezig houden met het oplossen van zulke problemen omdat enkel Nvidia over de mogelijkheden beschikt om de particuliere driver te debuggen, en de kernel onderheuders (zowel die van Gentoo als die van Linux) zullen zeker geen ondersteuning willen bieden aan particuliere drivers, of eender welk "bedorven" systeem dat hierdoor problemen heeft opgedaan.
 
-Als je '''genkernel all' hebt gebruikt om de kernel te configureren, dan ben je al klaar. Zoniet, kijk dan zeker je kernel configuratie na zodat deze ondersteuning actief is:
-
-{{Kernel||<pre>
-Loadable module support --->
-  [*] Enable loadable module support
-</pre>
+=== Required kernel options ===
+If you used '''genkernel all''' to configure the kernel for you, then you're all set. If not, double check your kernel configuration so that this support is enabled:
+{{KernelBox|1=
+[*] Enable loadable module support --->
 }}
 
-Je moet tevens ''Memory Type Range Register'' in je kernel activeren:
-
-{{Kernel||<pre>
-Processor and Features --->
-  [*] MTRR (Memory Type Range Register) support
-</pre>
+You also need to enable ''Memory Type Range Register'' in your kernel:
+{{KernelBox|1=
+Processor type and features --->
+    [*] MTRR (Memory Type Range Register) support
 }}
 
-Als je een AGP gebaseerde grafische kaart bezit, dan kan je optioneel '''agpgart''' ondersteuning aanzetten in de configuratie van de kernel; oftewel compileer je het dan in de kernel of maak je er een module van. Als je agpgart niet in de kernel compileert, dan zullen de drivers hun eigen '''agpgart''' implementatie gebruiken, genaamd '''NvAGP'''.  Op sommige systemen zal je merken dat dit meer performant is dan de agpgart in de kernel; terwijl op andere systemen, het minder performant zal werken. Je zal dit voor jouw eigen systeem moeten evalueren om zelf de implementatie te kiezen die de beste performantie biedt voor jou. Als je niet zeker bent wat te doen, gebruik dan de implementatie in de kernel:
-{{Kernel||<pre>
+Also, if you have an AGP graphics card, you can optionally enable '''agpgart''' support to your kernel, either compiled in or as a module. If
+you do not use the in-kernel agpgart, then the drivers will use their own '''agpgart''' implementation, called '''NvAGP'''.  On certain systems, this
+performs better than the in-kernel agpgart, and on others, it performs worse. You will need to evaluate this on your own system to get the best performance. If you are unsure what to do, use the in-kernel agpgart:
+{{KernelBox|1=
 Device Drivers --->
-    Graphics Support --->
+    Graphics support --->
         -*- /dev/agpgart (AGP Support) --->
-</pre>}}
+}}
 
 {{Note/nl|Op een amd64 systeem zal de IOMMU de keuze van de agpgart optie bepalen.}}
 
-{{Important/nl|Voor x86 en AMD64 processoren, kan de [[framebuffer]] driver in de kernel conflicteren met de beschikbare binaire driver van nVidia. Als je de kernel wil compileren voor deze processoren, zal je volledig de ondersteuning voor nVidia framebuffers uit de kernel moeten verwijderen zoals hier getoond:
-{{Kernel||<pre>
+{{Important|For x86 and AMD64 processors, the in-kernel [[framebuffer]] driver conflicts with the binary driver provided by nVidia. If you will be compiling your kernel for these CPUs,you must completely remove support for the in-kernel driver as shown:
+{{KernelBox|1=
 Device Drivers --->
-    Graphics Support --->
-        <*> Support for frame buffer devices --->
+    Graphics support --->
+        Frame buffer Devices --->
+            <*> Support for frame buffer devices --->
             < >   nVidia Framebuffer Support
             < >   nVidia Riva support
-</pre>}}
+}}
 }}
 
 Een alternatieve framebuffer is [[uvesafb]], dewelke gelijktijdig kan geïnstalleerd worden met de nvidia-drivers.
@@ -150,7 +149,7 @@ MSI interrupts can be disabled via the NVIDIA kernel module parameter <code>NVre
 
 For instance:
 
-{{File|/etc/modprobe.d/nvidia.conf|Setting nvidia NVreg_EnableMSI|<pre>
+{{FileBox|filename=/etc/modprobe.d/nvidia.conf|title=Setting nvidia NVreg_EnableMSI|1=<nowiki>
 # Nvidia drivers support
 alias char-major-195 nvidia
 alias /dev/nvidiactl char-major-195
@@ -165,7 +164,7 @@ alias /dev/nvidiactl char-major-195
 # ONLY ADD TRUSTED USERS TO THE VIDEO GROUP, THESE USERS MAY BE ABLE TO CRASH,
 # COMPROMISE, OR IRREPARABLY DAMAGE THE MACHINE.
 options nvidia NVreg_DeviceFileMode=432 NVreg_DeviceFileUID=0 NVreg_DeviceFileGID=27 NVreg_ModifyDeviceFiles=1 NVreg_EnableMSI=0
-</pre>}}
+</nowiki>}}
 
 === 2D werkend krijgen op machines met 4 GB of meer geheugen ===
 Als je problemen hebt met de nVidia 2D acceleratie dan is dat mogelijk omdat je geen schrijf-combinerend bereik (EN: write-combining range) met MTRR hebt opgezet. Om dit na te gaan, controleer je de inhoud van {{Path|/proc/mtrr}}:
@@ -194,7 +193,7 @@ It should be enough to run the following command before rebooting:
 But if that doesn't work, run lspci and you'll find your video card starts off like this:
 01:00.0 VGA compatible controller: make and model of videocard <br />
 Take the first bit, ''01.00.0'' and put it in your /etc/X11/xorg.conf with the BusID option:
-{{File|/etc/X11/xorg.conf||<pre>
+{{FileBox|filename=/etc/X11/xorg.conf|lang=xorg_conf|1=
 # this is not the whole file, only the part that needs edited
 # the file should already exist after running nvidia-xconfig
 
@@ -211,11 +210,10 @@ If Direct rendering does not work, it may be because you have Direct Rendering M
 
 First, disable Direct Rendering Manager (CONFIG_DRM) in the kernel :
 
-{{Kernel||<pre>
+{{KernelBox|
 Device drivers --->
     Graphics support --->
         < > Direct Rendering Manager (XFree86 4.1.0 and higher DRI support)
-</pre>
 }}
 
 And rebuild '''x11-drivers/nvidia-drivers''' since the driver may have built against the kernel DRM symbols. It should fix your problem.
@@ -256,12 +254,11 @@ Section "Device"
 EndSection
 </pre>}}
 
-== Bedankt ==
-We zouden graag de volgende auteurs en redacteurs willen bedanken voor hun contributies aan deze handleiding: Sven Vermeulen, Joshua Saddler, M Curtis Napier en Chris Gianelloni.
-
 == See also ==
 * [[nouveau & nvidia-drivers switching]]
 * [[NVIDIA Driver with Optimus Laptops]]
+
+{{Migrated|originalauthors=Sven Vermeulen, Joshua Saddler, M Curtis Napier and Chris Gianelloni}}
 
 [[Category:Graphics Adapters]]
 [[Category:Binary kernel modules]]
