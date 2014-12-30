@@ -11,15 +11,15 @@
 
 В руководстве рассказывается, как настроить преобразование сетевых адресов (NAT) на маршрутизаторе (ядро и iptables), как добавить и настроить распространённые службы (вроде системы доменных имён (DNS) с помощью dnsmasq, DHCP через dhcpcd, ADSL через ppp). Статья завершается более сложными и интересными вещами, которые можно настроить (port forwarding, шейпинг (traffic shaping), прокси/кэширование и т.д.). 
 
-Перед началом ознакомьтесь с некоторыми требованиями, которым необходимо соответствовать. Во-первых, вам понадобится такой компьютер, который имеет как минимум две сетевые платы (NIC). Во-вторых, вам будут нужны настройки провайдера для соединения с интернетом (такие вещи как IP/DNS/шлюз/имя пользователя/пароль). И наконец, нужно будет немного свободного времени, и любовь к Gentoo.
+Before getting started, there's a few basic requirements you must meet. First, you'll need a computer that has at least 2 Network Interface Cards (NICs) in it. Next, you'll need the configuration settings for your internet connection (may include things like IP/DNS/Gateway/username/password). You optionally need a wifi card which supports master mode. It is recommended to avoid NICs with a bypass feature as some of them require proprietary drivers. If you don't have access to that driver, the card will remain in bypass mode permanently and will not be usable. Finally, you'll need a bit of spare time and some Gentoo loving in order to succesfully follow this guide and implement a well functioning home router.
 
 В руководстве используются следующие оговорки: 
 
-* eth0 - сетевая плата, подключенная к локальной сети (LAN)
-* eth1 - сетевая плата, подключенная к глобальной сети (WAN)
-* LAN использует частную сеть вида 192.168.0.xxx
-* Маршрутизатор жестко привязан к IP-адресу 192.168.0.1
-* Маршрутизатор работает на ядре Linux 2.4 или 2.6; С версиями 2.0/2.2 вы разберётесь самостоятельно.
+* eth0 - NIC connected to the Local Area Network (LAN) or network bridge consisting of multiple NICs
+* eth1 - NIC connected to the Wide Area Network (WAN)
+* LAN utilizes the private 192.168.0.xxx network
+* router is hardcoded to the standard 192.168.0.1 IP
+* router is running Linux 2.4 or 2.6; you're on your own with 2.0/2.2
 
 {{Important/ru|Из соображений безопасности, я вам настоятельно рекомендую остановить все ненужные службы на маршрутизаторе, пока у нас не будет возможности запустить межсетевой экран и rolling. Для отображения текущих запущенных служб, просто выполните <code>rc-status</code>.}}
 
@@ -159,7 +159,7 @@ nameserver 123.123.123.123
 
 == Настройка LAN (приведем своих друзей) ==
 
-Этот шаг очень простой, по сравнению с предыдущим. 
+This step is a breeze compared to the previous one. However, if you want to use more than two devices (one for LAN and one for WAN), you will have to set up a [[Network bridge]] between all NICs you plan to use on a LAN. This will allow multiple NICs to be reached by the same IP address. 
 
 If you decide to do so, follow instructions to set up [[Network bridge]]. The name of your bridge (default br0) will then replace eth0 for the LAN device in the steps in this wiki. If you have a large number of network devices in your router, you may consider renaming them via udev to make administration easier. Setting up a bridge and renaming devices is completely optional but recommended for larger home networks. 
 
@@ -180,7 +180,7 @@ config_eth0="192.168.0.1/24 brd 192.168.0.255"
 
 DHCP — вещь, соответствующая своему названию. Это протокол, который позволяет вам настраивать другие узлы автоматически, прямо во время работы. Вы запускаете DHCP-сервер на маршрутизаторе, снабжаете его данными о своей сети (правильные IP, сервера DNS, шлюзы и т. п.), и как только другие компьютеры включаются, они запускают DHCP-клиент, чтобы автоматически настроиться. Ни забот, ни хлопот! За дополнительными сведениями о DHCP всегда можно обратиться к [[Wikipedia:DHCP|Википедии]]. 
 
-Мы будем использовать пакет под названием dnsmasq, который включает и DHCP, и DNS службы. Сейчас давайте просто сосредоточимся на DHCP. Заметьте, что если вам нужен другой DHCP-сервер, вы можете ознакомиться с другим примером в разделе «Прикольные вещи». Также, если вы хотите полазить в настройках DHCP-сервера, то просто почитайте комментарии в {{Path|/etc/dnsmasq.conf}}. Тем не менее, все настройки по умолчанию должны работать. 
+We'll use a package called dnsmasq which provides both DHCP and DNS services. For now lets just focus on the DHCP aspect. Note that if you want to run a different DHCP server, you can find another example in the Fun Things chapter. Also, if you wish to tinker with the DHCP server settings, just read the comments in {{Path|/etc/dnsmasq.conf}}. 
 
 {{Emerge|dnsmasq}}
 
@@ -192,7 +192,7 @@ interface=eth0
 {{RootCmd|rc-update add dnsmasq default
 |/etc/init.d/dnsmasq start}}
 
-Теперь ваш маленький маршрутизатор является истинным DHCP-сервером! Врубайте компьютеры, и наблюдайте за работой! В системах Windows вам возможно потребуется зайти в настройки TCP/IP, и включить параметры «Получить IP-адрес автоматически» и «Получить адрес DNS-сервера автоматически». Иногда изменения не сразу применяются, тогда вам придётся открыть командную строку и выполнить <code>ipconfig /release</code> и <code>ipconfig /renew</code>. Ладно, хватит про Windows, давайте вернёмся к нашим пингвинам.
+Setting the interface is very important. Using default dnsmasq settings will open up your router to DNS amplification attacks, and you may get a scary email from your ISP. You can check to make sure your router is not allowing for DNS amplification attacks by using [http://openresolver.com].
 
 Now your little router is a bona-fide DHCP server! Plugin those computers and watch them work! With Windows systems you should go into the TCP/IP Properties and select the 'Obtain an IP address automatically' and 'Obtain DNS server address automatically' options. Sometimes the changes aren't instantaneous, so you may have to open a command prompt and run <code>ipconfig /release</code> and <code>ipconfig /renew</code>. But enough about Windows, let's get back to our favorite penguin.
 
@@ -276,7 +276,7 @@ net.ipv4.ip_dynaddr = 1
 
 Как только вы все это написали, остальные пользователи сети должны получить возможность использовать интернет так, как будто сами подключились напрямую. 
 
-The ip_dynaddr option is useful for dial on demand systems or when your ISP gives out dynamic addresses. This works around the problem where a connection is attempted before the internet interface is fully setup. Really this just provides for a smoother network experience for users behind your router. 
+The <code>ip_dynaddr</code> option is useful for dial on demand systems or when your ISP gives out dynamic addresses. This works around the problem where a connection is attempted before the internet interface is fully setup. Really this just provides for a smoother network experience for users behind your router. 
 
 == Прикольные вещи (для дождливого дня) ==
 
@@ -433,15 +433,15 @@ Sometimes it's nice to run your own Simple Mail Transfer Protocol (SMTP) server 
 
 Edit {{Path|tcp.qmail-smtp}} and add an entry like so to the allow section:
 
-{{File|tcp.qmail-smtp||<pre>
+{{FileBox|filename=niltcp.qmail-smtp|1=
 192.168.0.:allow,RELAYCLIENT=""
-</pre>}}
+}}
 
 {{RootCmd|make
 |rc-update add svscan default
 |/etc/init.d/svscan start}}
 
-I'm a huge fan of qmail, but you're free to use a different mta :). When you setup e-mail on the hosts in your network, tell them that their SMTP server is 192.168.0.1 and everything should be peachy. You might want to visit the [http://netqmail.org/ netqmail homepage] for more documentation. 
+I'm a huge fan of qmail, but you're free to use a different mta :). When you setup e-mail on the hosts in your network, tell them that their SMTP server is 192.168.0.1 and everything should be peachy. You might want to visit the [http://netqmail.org/ netqmail homepage] for more documentation.
 
 === Улучшенный сервер DHCP ===
 
