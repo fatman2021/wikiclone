@@ -13,7 +13,7 @@ More and more systems require an initramfs to boot up properly. In this guide, w
 === Introduction === <!--T:3-->
 
 <!--T:4-->
-For many users, an initramfs system is of no concern. Their system uses a simple partitioning schema with no exotic drivers or setups (like encrypted file systems), so the Linux kernel is well able to hand over control to the <kbd>init</kbd> binary on their system. But for many systems, an initramfs is almost mandatory. 
+For many users, an initramfs system is of no concern. Their system uses a simple partitioning schema with no exotic drivers or setups (like encrypted file systems), so the Linux kernel is well able to hand over control to the <code>init</code> binary on their system. But for many systems, an initramfs is almost mandatory. 
 
 <!--T:5-->
 The key concept to understanding what an initramfs is (or is needed for) is to understand how the Linux boot process works, even in a high-level approach. 
@@ -21,16 +21,16 @@ The key concept to understanding what an initramfs is (or is needed for) is to u
 === Linux boot process === <!--T:6-->
 
 <!--T:7-->
-Once the Linux kernel has control over the system (which it gets after being loaded by the boot loader), it prepares its memory structures and drivers as well as it can. It then hands over control to an application (usually <kbd>init</kbd>) whose task it is to further prepare the system and make sure that, at the end of the boot process, all necessary services are running and the user is able to log on. The <kbd>init</kbd> application does that by launching, among other services, the <code>udev</code> daemon who will further load up and prepare the system based on the detected devices. When <code>udev</code> is launched, all remaining file systems that have not been mounted are mounted, and the remainder of services is started. 
+Once the Linux kernel has control over the system (which it gets after being loaded by the boot loader), it prepares its memory structures and drivers as well as it can. It then hands over control to an application (usually <code>init</code>) whose task it is to further prepare the system and make sure that, at the end of the boot process, all necessary services are running and the user is able to log on. The <code>init</code> application does that by launching, among other services, the <code>udev</code> daemon who will further load up and prepare the system based on the detected devices. When <code>udev</code> is launched, all remaining file systems that have not been mounted are mounted, and the remainder of services is started. 
 
 <!--T:8-->
-For systems where all necessary files and tools reside on the same file system, the <kbd>init</kbd> application can perfectly control the further boot process. But when multiple file systems are defined (or more exotic installations are done), this might become a bit more tricky: 
+For systems where all necessary files and tools reside on the same file system, the <code>init</code> application can perfectly control the further boot process. But when multiple file systems are defined (or more exotic installations are done), this might become a bit more tricky: 
 
 <!--T:9-->
 * When the {{Path|/usr}} partition is on a separate file system, tools and drivers that have files stored within {{Path|/usr}} cannot be used unless {{Path|/usr}} is available. If those tools are needed to make {{Path|/usr}} available, then we cannot boot up the system.
 
 <!--T:10-->
-* If the root file system is encrypted, then the Linux kernel will not be able to find the <kbd>init</kbd> application, resulting in an unbootable system.
+* If the root file system is encrypted, then the Linux kernel will not be able to find the <code>init</code> application, resulting in an unbootable system.
 
 <!--T:11-->
 The solution for this problem has since long been to use an ''initrd'' (initial root device). 
@@ -38,7 +38,7 @@ The solution for this problem has since long been to use an ''initrd'' (initial 
 === The initial root disk === <!--T:12-->
 
 <!--T:13-->
-The ''initrd'' is an in-memory disk structure (ramdisk) that contains the necessary tools and scripts to mount the needed file systems before control is handed over to the <kbd>init</kbd> application on the root file system. The Linux kernel triggers the setup script (usually called <kbd>linuxrc</kbd> but that is not mandatory) on this root disk, which prepares the system, switches to the real root file system and then calls <kbd>init</kbd>. 
+The ''initrd'' is an in-memory disk structure (ramdisk) that contains the necessary tools and scripts to mount the needed file systems before control is handed over to the <code>init</code> application on the root file system. The Linux kernel triggers the setup script (usually called <code>linuxrc</code> but that is not mandatory) on this root disk, which prepares the system, switches to the real root file system and then calls <code>init</code>. 
 
 <!--T:14-->
 Although the initrd method is all that is needed, it had a few drawbacks: 
@@ -55,19 +55,19 @@ To resolve these (for some perhaps hardly called) problems, the initramfs was cr
 === The initial ram file system === <!--T:18-->
 
 <!--T:19-->
-An ''initramfs'' is an initial ram file system based on ''tmpfs'' (a size-flexible, in-memory lightweight file system), which also didn't use a separate block device (so no caching was done and all overhead mentioned earlier disappears). Just like the initrd, it contains the tools and scripts needed to mount the file systems before the <kbd>init</kbd> binary on the real root file system is called. These tools can be decryption abstraction layers (for encrypted file systems), logical volume managers, software raid, bluetooth driver based file system loaders, etc. 
+An ''initramfs'' is an initial ram file system based on ''tmpfs'' (a size-flexible, in-memory lightweight file system), which also didn't use a separate block device (so no caching was done and all overhead mentioned earlier disappears). Just like the initrd, it contains the tools and scripts needed to mount the file systems before the <code>init</code> binary on the real root file system is called. These tools can be decryption abstraction layers (for encrypted file systems), logical volume managers, software raid, bluetooth driver based file system loaders, etc. 
 
 <!--T:20-->
-The content of the initramfs is made by creating a cpio archive. <kbd>cpio</kbd> is an old (but proven) file archiver solution (and its resulting archive files are called ''cpio files''). You can definitely compare it to <kbd>tar</kbd>. The choice of <kbd>cpio</kbd> here was because it is easier to implement (code-wise) and supported (back then) device files (which <kbd>tar</kbd> couldn't). 
+The content of the initramfs is made by creating a cpio archive. <code>cpio</code> is an old (but proven) file archiver solution (and its resulting archive files are called ''cpio files''). You can definitely compare it to <code>tar</code>. The choice of <code>cpio</code> here was because it is easier to implement (code-wise) and supported (back then) device files (which <code>tar</code> couldn't). 
 
 <!--T:21-->
-All files, tools, libraries, configuration settings (if applicable), etc. are put into the cpio archive. This archive is then compressed using the <kbd>gzip</kbd> utility and stored alongside the Linux kernel. The boot loader will then offer it to the Linux kernel at boot time so the kernel knows an initramfs is needed. 
+All files, tools, libraries, configuration settings (if applicable), etc. are put into the cpio archive. This archive is then compressed using the <code>gzip</code> utility and stored alongside the Linux kernel. The boot loader will then offer it to the Linux kernel at boot time so the kernel knows an initramfs is needed. 
 
 <!--T:22-->
-Once detected, the Linux kernel will create a tmpfs file system, extract the contents of the archive on it, and then launches the <kbd>init</kbd> script located in the root of the tmpfs file system. This script will then mount the real root file system (after making sure it can mount it, for instance by loading additional modules, preparing an encryption abstraction layer, etc.) as well as vital other file systems (such as {{Path|/usr}} and {{Path|/var}} ). 
+Once detected, the Linux kernel will create a tmpfs file system, extract the contents of the archive on it, and then launches the <code>init</code> script located in the root of the tmpfs file system. This script will then mount the real root file system (after making sure it can mount it, for instance by loading additional modules, preparing an encryption abstraction layer, etc.) as well as vital other file systems (such as {{Path|/usr}} and {{Path|/var}} ). 
 
 <!--T:23-->
-Once the root file system and the other vital file systems are mounted, the <kbd>init</kbd> script from the initramfs will switch the root towards the real root file system and finally call the <kbd>/sbin/init</kbd> on that system to continue the boot process. 
+Once the root file system and the other vital file systems are mounted, the <code>init</code> script from the initramfs will switch the root towards the real root file system and finally call the <code>/sbin/init</code> on that system to continue the boot process.
 
 == Creating an initramfs == <!--T:24-->
 
