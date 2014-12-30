@@ -89,36 +89,32 @@ Support for position-independent executables is provided by the standard GNU too
 
 To change the default for building executables from absolute to position-independent, it is necessary to change the selection of support objects and to set the -fPIE and -pie options appropriately. The specs rules for this are startfile, endfile, cc1 and link_command. Exact details of the modifications vary according to the target; to illustrate here are the changes for x86: 
 
-{{Code|standard cc1 rule for x86|<pre>
+{{CodeBox|title=standard cc1 rule for x86|1=
 %(cc1_cpu) %{profile:-p}
-</pre>
 }}
 
-{{Code|addition to cc1 rule for x86|<pre>
+{{CodeBox|title=addition to cc1 rule for x86|1=
 %{!D__KERNEL__: %{!static: %{!fno-PIC: %{!fno-pic: %{!shared:
 %{!nostdlib: %{!nostartfiles: %{!fno-PIE: %{!fno-pie: %{!nopie:
 %{!fPIC: %{!fpic:-fPIE} } } } } } } } } } } }
-</pre>
 }}
 
 This looks a lot more scary than it really is. All it says is that unless one or more of the listed options are specified, add -fPIE to the compilation. The kernel defines __KERNEL__ on all its compilations, so the -D__KERNEL__ check ensures that -fPIE is not added when building the kernel; the kernel is a static executable but as [[#PIEissues]] this is not so easy to detect. When building shared libraries, either -fPIC or -fpic should be specified, so this is used to prevent adding -fPIE when building shared libraries. The -fno-* checks are to ensure that if a build explicitly requests no position-indepedent code, -fPIE is not added. 
 
-{{Code|standard link_command rule for x86|<pre>
+{{CodeBox|title=standard link_command rule for x86|1=
 %{!fsyntax-only:%{!c:%{!M:%{!MM:%{!E:%{!S:    %(linker) %l
 %{pie: -pie} %X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} %{r}
-%{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S}}}
+%{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S} } }
 %{static:} %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate:-lgcov}
-%{!symbolic:%{!shared:%{fbounds-checking:libboundscheck.a%s}}}
-%{!symbolic:%{!shared:%{fbc-strings-only:libboundscheck.a%s}}}
-%{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)}}
-%{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} }}}}}}
-</pre>
+%{!symbolic:%{!shared:%{fbounds-checking:libboundscheck.a%s} } }
+%{!symbolic:%{!shared:%{fbc-strings-only:libboundscheck.a%s} } }
+%{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)} }
+%{!A:%{!nostdlib:%{!nostartfiles:%E} } } %{T*} } } } } } }
 }}
 
-{{Code|replacement for %{pie: -pie} in link_command rule for x86|<pre>
+{{CodeBox|title=replacement for %{pie: -pie} in link_command rule for x86|1=
 %{!nopie: %{!static: %{!A: %{!shared: %{!nostdlib: %{!nostartfiles:
 %{!fno-PIE: %{!fno-pie: -pie} } } } } } } } %{pie: -pie}
-</pre>
 }}
 
 As with the cc1 rule, the addition causes -pie to be set for link commands unless one of the listed options are specified. Note that this replaces the '%{pie: -pie}' section in the original link_command rule. 
@@ -131,7 +127,7 @@ Ideally, when building a static executable, a shared library, or building withou
 
 Where an application builds libraries without -fPIC, it is necessary to modify the build process to avoid -fPIE being added by the compiler. For packages that build only libraries, it is sufficient to do: 
 
-{{Code|switch off automatic PIE for library ebuilds|<pre>
+{{CodeBox|title=switch off automatic PIE for library ebuilds|1=
 inherit flag-o-matic
 ...
 src_compile() {
@@ -139,7 +135,6 @@ src_compile() {
 filter-flags -fPIE
 ...
 }
-</pre>
 }}
 
 However if an ebuild creates both executables and libraries then more detailed modifications need to be made, to add the -fno-PIE to the compilation of objects destined for the libraries. Where an object is used for both a shared library and an executable, it is necessary to modify the build process significantly in order to obtain two objects, one built -fPIC and one built -fPIE for linking to the library and the executable respectively. Most packages that provide both a shared library and a static archive do so by using libtool which does the right thing automatically. Both of these approaches can be taken unconditionally; i.e. it is not necessary to make such changes conditional on the presence of the hardened compiler. 
@@ -160,21 +155,19 @@ Various sections in an ELF file should be written only by the loader, and not by
 
 RELRO is a link option ("-z relro") provided by the standard GNU toolchain. To switch it on by default, it is simply a matter of adding a small rule to the specs file for GCC as illustrated below: 
 
-{{Code|standard link_command rule for x86|<pre>
+{{CodeBox|title=standard link_command rule for x86|1=
 %{!fsyntax-only:%{!c:%{!M:%{!MM:%{!E:%{!S:    %(linker) %l
 %{pie: -pie} %X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} %{r}
-%{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S}}}
+%{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S} } }
 %{static:} %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate:-lgcov}
-%{!symbolic:%{!shared:%{fbounds-checking:libboundscheck.a%s}}}
-%{!symbolic:%{!shared:%{fbc-strings-only:libboundscheck.a%s}}}
-%{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)}}
-%{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} }}}}}}
-</pre>
+%{!symbolic:%{!shared:%{fbounds-checking:libboundscheck.a%s} } }
+%{!symbolic:%{!shared:%{fbc-strings-only:libboundscheck.a%s} } }
+%{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)} }
+%{!A:%{!nostdlib:%{!nostartfiles:%E} } } %{T*} } } } } } }
 }}
 
-{{Code|additionl segment to follow %{pie: -pie} in link_command rule for x86|<pre>
+{{CodeBox|title=additionl segment to follow %{pie: -pie} in link_command rule for x86|1=
 %{!norelro: -z relro} %{relro: }
-</pre>
 }}
 
 So a new option is introduced, "norelro", which can be used to prevent the hardened compiler from automatically switching on RELRO. However this is likely to be phased out, as newer binutils provide a "-z norelro" option which can be appended to LDFLAGS as "-Wl,z,norelro". 
@@ -193,21 +186,19 @@ As described in the [[#RELRO]] chapter, setting BIND_NOW increases the effective
 
 NOW binding is a link option ("-z now") provided by the standard GNU toolchain. To switch it on by default, it is simply a matter of adding a small rule to the specs file for GCC as illustrated below: 
 
-{{Code|standard link_command rule for x86|<pre>
+{{CodeBox|title=standard link_command rule for x86|1=
 %{!fsyntax-only:%{!c:%{!M:%{!MM:%{!E:%{!S:    %(linker) %l
 %{pie: -pie} %X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} %{r}
-%{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S}}}
+%{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S} } }
 %{static:} %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate:-lgcov}
-%{!symbolic:%{!shared:%{fbounds-checking:libboundscheck.a%s}}}
-%{!symbolic:%{!shared:%{fbc-strings-only:libboundscheck.a%s}}}
-%{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)}}
-%{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} }}}}}}
-</pre>
+%{!symbolic:%{!shared:%{fbounds-checking:libboundscheck.a%s} } }
+%{!symbolic:%{!shared:%{fbc-strings-only:libboundscheck.a%s} } }
+%{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)} }
+%{!A:%{!nostdlib:%{!nostartfiles:%E} } } %{T*} } } } } } }
 }}
 
-{{Code|additionl segment to follow %{pie: -pie} in link_command rule for x86|<pre>
+{{CodeBox|title=additionl segment to follow %{pie: -pie} in link_command rule for x86|1=
 %{!nonow: -z now} %{now: }
-</pre>
 }}
 
 So a new option is introduced, "nonow", which can be used to prevent the hardened compiler from automatically switching on NOW binding. However this is likely to be phased out, as newer binutils provide a "-z lazy" option which can be appended to LDFLAGS as "-Wl,z,lazy". 
