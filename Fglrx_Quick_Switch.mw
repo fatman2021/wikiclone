@@ -16,17 +16,17 @@ Here's what I came up with. This assumes that you're already using the open driv
 === If you have an older device... ===
 The legacy driver for HD2000, HD3000 and HD4000 devices is currently in the tree as x11-drivers/ati-drivers-13.1_pre897. This is not really a beta and I think it is only versioned like this to differentiate it from the non-legacy 13.1 driver. It has been patched to work with Linux 3.7. Start by masking any newer versions.
 
-{{File|/etc/portage/package.mask||<pre>
+{{FileBox|filename=/etc/portage/package.mask|
 x11-drivers/ati-drivers:1
-</pre>}}
+}}
 
 If you try to emerge ati-drivers like this, it will downgrade xorg-server to 1.12.4. We can install this version to a separate root instead and then fool the regular system into thinking we also have this version. This assumes that you use xf86-input-evdev for input.
 
 {{RootCmd|ROOT{{=}}"/mnt/fglrx" CPPFLAGS{{=}}"-I/mnt/fglrx/usr/include/xorg" emerge --nodeps {{=}}x11-base/xorg-server-1.12.4 x11-drivers/xf86-input-evdev}}
 
-{{File|/etc/portage/profile/package.provided||<pre>
+{{FileBox|filename=/etc/portage/profile/package.provided|
 x11-base/xorg-server-1.12.4
-</pre>}}
+}}
 
 === Everyone can continue from here... ===
 Now you can emerge ati-drivers.
@@ -39,25 +39,25 @@ Generate a xorg-server configuration file for fglrx with aticonfig. Set any addi
 
 If you're using an old device, you need to manually set the module path in the configuration file that was just generated. Add the following to the start of the file. If you're not using an old device, just skip this step.
 
-{{File|/etc/X11/fglrx.conf||<pre>
+{{FileBox|filename=/etc/X11/fglrx.conf|lang=xorg_conf|
 Section "Files"
   ModulePath "/mnt/fglrx/usr/lib/xorg/modules"
   ModulePath "/usr/lib/xorg/modules"
 EndSection
-</pre>}}
+}}
 
 If you have a 64-bit system, you must use this instead:
 
-{{File|/etc/X11/fglrx.conf||<pre>
+{{FileBox|filename=/etc/X11/fglrx.conf|lang=xorg_conf|
 Section "Files"
   ModulePath "/mnt/fglrx/usr/lib64/xorg/modules"
   ModulePath "/usr/lib/xorg/modules"
 EndSection
-</pre>}}
+}}
 
 To save ourselves from having to swap configuration files around all the time, we can edit the script that is usually used to start the X server so that it uses the right server and configuration file automatically. It'll also ensure that we're using the correct OpenGL driver, which is important because trying to use fglrx with the wrong OpenGL driver will lock up your machine. Replace all the contents of the existing file below. Change '''/mnt/fglrx/usr/bin/X''' to just '''/usr/bin/X''' if you don't have an older device.
 
-{{File|/etc/X11/xinit/xserverrc||<pre>
+{{FileBox|filename=/etc/X11/xinit/xserverrc|lang=bash|<nowiki>
 #!/bin/sh
 
 if lsmod | grep -q "^fglrx\b"; then
@@ -67,19 +67,19 @@ else
 	eselect opengl set xorg-x11
 	exec /usr/bin/X -nolisten tcp "$@"
 fi
-</pre>}}
+</nowiki>}}
 
 In hybrid system setups, drm is needed by i915 (intel) module so the grep expression was changed from "^drm\b" to "^fglrx\b" and branches swapped.
 This should be enough for startx. lightdm and gdm need the following adjustments. I'm afraid I don't know about other display managers. They may just work.
 
-{{File|/etc/lightdm/lightdm.conf||<pre>
+{{FileBox|filename=/etc/lightdm/lightdm.conf|<nowiki>
 ...
 [SeatDefaults]
 xserver-command=/etc/X11/xinit/xserverrc
 ...
-</pre>}}
+</nowiki>}}
 
-{{File|/etc/X11/gdm/custom.conf||<pre>
+{{FileBox|filename=/etc/X11/gdm/custom.conf|<nowiki>
 ...
 [server-Standard]
 command=/etc/X11/xinit/xserverrc -audit 0 
@@ -88,13 +88,14 @@ command=/etc/X11/xinit/xserverrc -audit 0
 # from the gdm greeter screen. Aside from "server-Standard" 
 # there are two more option groups where the path to /usr/bin/X 
 # can be replaced by the xserverrc script, as needed.
-</pre>}}
+</nowiki>}}
 
 If you haven't already done so, you now need to have the '''radeon''' and '''drm''' drivers built as modules rather than built into the kernel. These are the '''CONFIG_DRM_RADEON''' and '''CONFIG_DRM''' options respectively. The framebuffer drivers can remain built in.
 
 Now we need to control which kernel modules are loaded. The good news is that this can be done from the kernel command line. The bad news is that GRUB 2 doesn't support complex configurations out of the box with grub2-mkconfig. The other good news is that we can still easily hack it for our needs. Apply this patch or manually apply the changes.
 
-<pre>--- /etc/config-archive/etc/grub.d/10_linux.dist	2012-12-26 16:17:08.000000000 +0000
+{{CodeBox|lang=diff|1=<nowiki>
+--- /etc/config-archive/etc/grub.d/10_linux.dist	2012-12-26 16:17:08.000000000 +0000
 +++ /etc/grub.d/10_linux	2012-12-26 12:42:28.501458324 +0000
 @@ -228,7 +228,7 @@
  
@@ -120,7 +121,8 @@ Now we need to control which kernel modules are loaded. The good news is that th
 +              "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} modprobe.blacklist=drm,radeon"
  
    list=`echo $list | tr ' ' '\n' | grep -vx $linux | tr '\n' ' '`
-   is_first_entry=false</pre>
+   is_first_entry=false
+</nowiki>}}
 
 Now run grub2-mkconfig as normal. It will create an additional fglrx entry under the advanced menu alongside the usual entries.
 
