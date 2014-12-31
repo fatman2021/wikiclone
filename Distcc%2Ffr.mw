@@ -2,6 +2,11 @@
 
 {{Metadata|abstract=Distcc est un programme conçu pour répartir les tâches de compilation à des hôtes participants sur un réseau.Il comprend un programme serveur, ditccd, et un programme client distcc. Distcc peut travailler de manière transparente avec  ccache, Portage, et automake après un minimum de configuration.}}
 
+{{InfoBox stack
+|{{InfoBox homepage|https://code.google.com/p/distcc/|header=true}}
+|{{InfoBox wikipedia}}
+}}
+
 [http://distcc.samba.org Distcc]  est un programme conçu pour répartir les tâches de compilation à travers un réseau à des hôtes participants. Il comprend un serveur, <code>distccd</code> et un client, <code>distcc</code>. Distcc peut travailler en toute transparence avec [http://ccache.samba.org ccache], Portage et Automake moyennant un minimum de configuration. 
 
 Si vous envisagez d'utiliser distcc pour vous aider à préparer la chaîne des outils de compilation pour  une installation de Gentoo, lisez d'abord la section [[#Utiliser_Distcc_pour_compiler_les_outils_de_compilation|Utiliser  Distcc pour compiler les outils de compilation]]. 
@@ -12,11 +17,11 @@ Si vous envisagez d'utiliser distcc pour vous aider à préparer la chaîne des 
 
 Afin d'utiliser Distcc, tous les ordinateurs sur votre réseau doivent posséder la même version de GCC. Pour être plus précis, mélanger 3.3.x (avec x variable) est accepté, mais mélanger 3.3.x avec 3.2.x '''peut''' conduire à des erreurs de compilation ou des erreurs en exécution. 
 
-=== Installer Distcc ===
-
-Il y a quelques options dont vous devriez être conscient avec d'installer distcc. 
+=== Installing distcc ===
 
 Distcc arrive avec un surveillant graphique pour surveiller les tâches qu'un ordinateur envoie à l'extérieur pour compilation, activé avec l'option <code>gtk</code> de la variable <code>USE</code>.
+
+After configuring the <code>USE</code> setting, install the {{Package|sys-devel/distcc}} package:
 
 {{Emerge|distcc}}
 
@@ -24,51 +29,52 @@ Distcc arrive avec un surveillant graphique pour surveiller les tâches qu'un or
 
 === Configurer  Portage pour l'utilisation de  Distcc ===
 
-Configurer Portage pour l'utilisation de distcc est simple. Exécutez les étapes suivantes sur chacun des systèmes qui devraient participer à la compilation distribuée : 
+Configurer Portage pour l'utilisation de distcc est simple. Exécutez les étapes suivantes sur chacun des systèmes qui devraient participer à la compilation distribuée :
+
+First, make sure that {{Package|sys-devel/distcc}} is installed:
 
 {{Emerge|distcc}}
 
 Maintenant, définissez les variables <code>MAKEOPTS</code> et <code>FEATURES</code> comme indiqué ci-dessous. Une stratégie courante consiste à définir  N à la valeur double du nombre de CPU  (locaux + distants) + 1 et  M comme le nombre de CPU locaux. Au cas où des hôtes distcc ne seraient pas disponibles, ou au cas où les ebuild exigeraient des compilation uniquement locales (par exemple gcc), l'option <code>-lM</code> empêche de créer trop de tâches.
 
-{{File|/etc/portage/make.conf|Setting MAKEOPTS and FEATURES|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=Setting MAKEOPTS and FEATURES|lang=bash|1=
 MAKEOPTS="-jN -lM"
 FEATURES="distcc"
-</pre>
 }}
 
 Par exemple, si vous êtes connecté à deux hôtes quadruple cœur qui exécute <code>distcc</code> et que votre PC  local possède un double cœur, alors la variable   <code>MAKEOPTS</code> devrait ressembler à ceci :
 
-{{File|/etc/portage/make.conf|exemple de MAKEOPTS pour  2 quad-core (hôtes) et un dual core (PC local) |<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=MAKEOPTS example for 2 quad-core (remote) and one dual core (local) PC|lang=bash|1=
 # 2 remote hosts with 4 cores each = 8 cores remote
 # 1 local host with 2 cores = 2 cores local
 # total number of cores is 10, so N = 2*10+1 and M=2
 MAKEOPTS="-j21 -l2"
-</pre>
 }}
 
-While editing your {{Path|make.conf}}, make sure that you do not have <code>-march=native</code> in your <code>CFLAGS</code> or <code>CXXFLAGS</code>. <code>distcc</code> will not distribute work to other machines if <code>march</code> is set to <code>native</code>. You may find the appropriate value with <code>gcc -Q -march=native --help=target</code>. See also [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc] blog post.
+While editing the {{Path|make.conf}} file, make sure that it does not have <code>-march=native</code> in the <code>CFLAGS</code> or <code>CXXFLAGS</code> variables. <tt>distccd</tt> will not distribute work to other machines if <code>march</code> is set to <code>native</code>. The appropriate <code>-march=</code> value can be obtained by running the following command:
+
+{{Cmd|gcc -Q -march{{=}}native --help{{=}}target}}
+
+See [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc] for more information.
 
 === Spécifier les hôtes participants  ===
 
 Utilisez la commande <code>distcc-config</code> pour définir la liste des participants. Voici un exemple de quelques hôtes qui pourraient se trouver dans votre liste : 
 
-{{Code|Exemples de définition d'hôtes participant|<pre>
+The following is an example list of host definitions. In most cases, variants of lines 1 and 2 suffice. More information about the syntax used in lines 3 and 4 can be found in the [http://distcc.googlecode.com/svn/trunk/doc/web/man/distcc_1.html distcc manual page].
+
+{{CodeBox|title=Examples of host definitions|1=
 192.168.0.1          192.168.0.2                       192.168.0.3
 192.168.0.1/2        192.168.0.2                       192.168.0.3/10
 192.168.0.1:4000/2   192.168.0.2/1                     192.168.0.3:3632/4
 @192.168.0.1         @192.168.0.2:/usr/bin/distccd     192.168.0.3
-</pre>
 }}
 
 Il y a aussi plusieurs autres méthodes pour définir les hôtes. Reportez-vous à la page de manuel pour plus de détail.
 
 Si vous désirez compiler sur la machine locale, vous devriez mettre 'localhost' dans la liste des participants. Inversement, si vous ne voulez pas que la machine locale participe (ce qui est souvent le cas) omettez la de la liste. Sur une machine lente, utiliser localhost peut ralentir les choses. Vérifiez la performance de votre configuration.
 
-Cela peut paraître compliqué, mais dans la plupart des cas, une variante des lignes 1 ou 2 fonctionne. 
-
-Comme la plupart des gens n'utilisent pas les lignes 3 ou 4, reportez-vous à [http://distcc.samba.org/man/distcc_1.html à la documentation de distcc] (man distcc) pour une information plus complète qui inclut comment exécuter distcc à travers une connexion SSH. 
-
-Par exemple, pour définir la première ligne de l'exemple précédent : 
+Par exemple, pour définir la première ligne de l'exemple précédent :
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "192.168.0.1 192.168.0.2 192.168.0.3"}}
 
@@ -89,7 +95,7 @@ Ceci est, dans certains cas, plus facile que de configurer Portage. Ce que vous 
 
 Vous pouvez placer ceci dans votre fichier {{Path|~/.bashrc}},  ou son équivalent, pour avoir une variable PATH définie à chaque entrée dans la session.
 
-Ensuite, là où vous taperiez normalement  <code>make</code> , vous devriez taper  <code>make -jN</code> (où N est un entier). 
+Ensuite, là où vous taperiez normalement  <code>make</code> , vous devriez taper  <code>make -jN</code> (où N est un entier).
 
 === Configurer  Distcc pour travailler avec ssh ===
 
@@ -99,7 +105,7 @@ Configure distcc via ssh demande d'éviter quelques pièges. Tout d'abord, gén�
 
 Ensuite, créez une section pour chacun des hôtes dans le fichier de configuration ssh :
 
-{{File|/var/tmp/portage/.ssh/config|Ajout de sections par hôte|<pre>
+{{FileBox|filename=/var/tmp/portage/.ssh/config|title=Add per-host sections|1=
 Host test1
     HostName 123.456.789.1
     Port 1234
@@ -109,7 +115,6 @@ Host test2
     HostName 123.456.789.2
     Port 1234
     User UserName
-</pre>
 }}
 
 Assurez-vous également que chaque hôte est disponible dans le fichier {{Path|known_hosts}} et ajoutez votre clé publique au fichier {{Path|authorized_keys}} des hôtes. Pour configurer les hôtes test1 et test2, exécutez :
@@ -128,11 +133,12 @@ La compilation croisée consiste à utiliser une architecture pour compiler les 
 
 Démarrer votre machine sur le LiveCD de Gentoo Linux et suivez les [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 instruction d'installation ] jusqu'à la partie concernant le démarrage. (voir la  [[FAQ|FAQ de Gentoo ]] pour une plus ample information sur le démarrage.) Ensuite configurer Portage pour utiliser distcc: 
 
-{{File|/etc/portage/make.conf|Configurer Portage pour utiliser distcc|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=Configure Portage to use distcc|lang=bash|1=
 FEATURES="distcc"
 MAKEOPTS="-jN"
-</pre>
 }}
+
+Update the <code>PATH</code> variable in the installation session as well:
 
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
@@ -164,13 +170,17 @@ Parfois  distcc peut faire échouer la compilation d'un paquet. Si cela arrive, 
 
 Si vous avez des versions différentes de GCC sur vos hôtes, vous rencontrerez probablement des problèmes étranges. La solution est de faire en sorte que certains hôtes aient la même version de GCC. 
 
-Des mises à jour récentes de Portage ont fait que Portage utilise  <code>${CHOST}-gcc</code> au lieu de <code>gcc</code> . Ceci veut dire que si vous mélangez des machines i686 avec d'autres  types (i386, i586) vous rencontrerez des problèmes. Un contournement à cela peut être d'exporter les variables <code>CC='gcc' et CXX='c++'</code> ou de les mettre dans {{Path|/etc/portage/make.conf}} 
+Des mises à jour récentes de Portage ont fait que Portage utilise  <code>${CHOST}-gcc</code> au lieu de <code>gcc</code> . Ceci veut dire que si vous mélangez des machines i686 avec d'autres  types (i386, i586) vous rencontrerez des problèmes. Un contournement à cela peut être d'exporter les variables <code>CC='gcc' et CXX='c++'</code> ou de les mettre dans {{Path|/etc/portage/make.conf}}
 
 {{Important|Faire cela redéfinit explicitement quelques comportements de Portage et peut conduire à des résultats étranges dans le futur. Ne faites cela que si vous mélangez les  CHOSTs.}}
 
 === -march=native ===
 
 À partir de GCC 4.3.0, le compilateur prend en charge le commutateur <code>-march=native</code> qui active l'autodétection des processeur et les optimisations qui en valent la peine sur le processeur sur lequel GCC tourne. Il s'agit d'un problème avec  <code>distcc</code> car il autorise le mélange de codes optimisés pour différents processeurs (tels que AMD Athlon et Intel Pentium). N'utilisez ''pas''  <code>-march=native</code> ou <code>-mtune=native</code> dans vos <code>CFLAGS</code> ou <code>CXXFLAGS</code> lorsque vous compilez avec  <code>distcc</code>.
+
+Heed the following warning:
+
+{{Warning|Do '''not''' use <code>-march{{=}}native</code> or <code>-mtune{{=}}native</code> in the <code>CFLAGS</code> or <code>CXXFLAGS</code> variables of {{Path|make.conf}} when compiling with <tt>distcc</tt>.}}
 
 Pour connaître les options que GCC devrait activer lorsqu'il est appelé avec <code>-march=native</code>, exécutez ce qui suit :
 
@@ -186,13 +196,11 @@ Pour connaître les options que GCC devrait activer lorsqu'il est appelé avec <
 
 === Surveillant Distcc  === 
 
-Distcc arrive avec deux surveillants. L'un à base de texte est toujours compilé et est appelé   <code>distccmon-text</code>. Le lancer pour la première fois peut paraître confus, mais il est réellement facile à utiliser. Si vous exécutez le programme sans paramètre, il fonctionnera une fois. Cependant, si vous lui passez un nombre N, il se mettra à jour toutes les N secondes. 
+Distcc arrive avec deux surveillants. L'un à base de texte est toujours compilé et est appelé   <code>distccmon-text</code>. Le lancer pour la première fois peut paraître confus, mais il est réellement facile à utiliser. Si vous exécutez le programme sans paramètre, il fonctionnera une fois. Cependant, si vous lui passez un nombre N, il se mettra à jour toutes les N secondes.
+
+{{Cmd|distccmon-text 10}}
 
 L'autre surveillant n'est activé qu'à travers l'option <code>gtk</code> de la variable <code>USE</code>.  Il est basé sur GTK+ , tourne dans un environnement X et est très agréable. Pour Gentoo, le surveillant graphique a été appelé  <code>distccmon-gui</code> pour éviter la confusion. Par ailleurs, on peut aussi l'appeler <code>distccmon-gnome</code>.
-
-{{RootCmd|distccmon-text N}}
-
-ou exécutez <code>distccmon-gui</code>:
 
 {{RootCmd|distccmon-gui}}
 
@@ -200,20 +208,15 @@ Pour surveiller l'utilisation de distcc par  Portage vous pouvez utiliser :
 {{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
 |DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
 
+{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text 10
+|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
+
 {{Important|Si votre répertoire  distcc est ailleurs, changez la variable DISTCC_DIR en conséquence.}}
 
-== Links ==
+== External resources ==
 
-* [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc].
+* [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc]
+* [https://code.google.com/p/distcc/ Distcc homepage]
 
-== Remerciements ==
 
-Nous tenons à remercier les auteurs, éditeurs et traducteurs suivants pour leur contribution à ce guide :
-
-* Lisa Seelye
-* Mike Frysinger
-* Erwin
-* Sven Vermeulen
-* Lars Weiler
-* Tiemo Kieft
-* nightmorph
+{{Migrated|originalauthors=Lisa Seelye, Mike Frysinger, Erwin, Sven Vermeulen, Lars Weiler, Tiemo Kieft and nightmorph}}
