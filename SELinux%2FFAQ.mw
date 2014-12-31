@@ -1,10 +1,10 @@
 === Introduction ===
 
-Using SELinux requires administrators a more thorough knowledge of their system and a good idea on how processes should behave. Next to the [http://www.gentoo.org/proj/en/hardened/selinux/selinux-handbook.xml SELinux handbook], a proper FAQ allows us to inform and help users in their day-to-day SELinux experience.
+Using SELinux requires administrators a more thorough knowledge of their system and a good idea on how processes should behave. Next to the [[SELinux]] resources, a proper FAQ allows us to inform and help users in their day-to-day SELinux experience.
 
 The FAQ is an aggregation of solutions found on IRC, mailinglists, forums and elsewhere. It focuses on SELinux integration on Gentoo Hardened, but general SELinux questions that are popping up regularly will be incorporated as well.
 
-== General SELinux Support Questions ==
+== General SELinux support questions ==
 
 === Does SELinux enforce resource limits? ===
 
@@ -12,7 +12,7 @@ No, resource limits are outside the scope of an access control system. If you ar
 
 === Can I use SELinux with grsecurity (and PaX)? ===
 
-Definitely, we even recommend it. However, it is suggested that grsecurity's ACL support is not used as it would be redundant to SELinux's access control.
+Definitely, we even recommend it. However, it is suggested that grsecurity's ACL support is not used together with SELinux as it would be redundant to SELinux's access control. Choose one or the other.
 
 === Can I use SELinux and the hardened compiler (with PIE-SSP)? ===
 
@@ -40,45 +40,45 @@ Yes, just use the {{Path|hardened/linux/amd64/no-multilib/selinux}} profile and 
 
 === What is UBAC exactly? ===
 
-UBAC, or ''User Based Access Control'' , introduces additional constraints when using SELinux policy. Participating domains / types that are ''both'' marked as a '''ubac_constrained_type''' (which is an attribute) will only have the allowed privileges in effect if they both run with the same SELinux user context.
+UBAC, or ''User Based Access Control'' , introduces additional constraints when using SELinux policy. Participating domains / types that are ''both'' marked as a <tt>ubac_constrained_type</tt> (which is an attribute) will only have the allowed privileges in effect if they both run with the same SELinux user context.
 
-{{GenericCmd|<pre>
-## # The SELinux allow rule
+{{CodeBox|title=Example of UBAC behavior|<pre>
+# The SELinux allow rule
 allow foo_t bar_t:file { read };
 
-## # This will succeed:
+# This will succeed:
 staff_u:staff_r:foo_t reads file with type staff_u:object_r:bar_t
 
-## # This will be prohibited:
+# This will be prohibited:
 user_u:user_r:foo_t reads file with type staff_u:object_r:bar_t
 </pre>
 }}
 
-Of course, this is not always the case. Besides the earlier mentioned requirement that both types are '''ubac_constrained_type''' , if the source domain is '''sysadm_t''' , then the constraint will not be in effect (the '''sysadm_t''' domain is exempt from UBAC constraints). Also, if the source or destination SELinux user is '''system_u''' then the constraint will also not be in effect.
+Of course, this is not always the case. Besides the earlier mentioned requirement that both types are <tt>ubac_constrained_type</tt>, if the source domain is <tt>sysadm_t</tt>, then the constraint will not be in effect (the <tt>sysadm_t</tt> domain is exempt from UBAC constraints). Also, if the source or destination SELinux user is <tt>system_u</tt> then the constraint will also not be in effect.
 
 == Using SELinux ==
 
 === How do I enable SELinux? ===
 
-This is explained in the [http://www.gentoo.org/proj/en/hardened/selinux/selinux-handbook.xml SELinux handbook] in the chapter on ''Using Gentoo/Hardened SELinux''.
+This is explained in the [[SELinux/Installation|SELinux installation instructions]].
 
 === How do I switch between permissive and enforcing? ===
 
-The easiest way is to use the '''setenforce''' command. With '''setenforce 0''' you tell SELinux to run in permissive mode. Similarly, with '''setenforce 1''' you tell SELinux to run in enforcing mode.
+The easiest way is to use the <tt>setenforce</tt> command. With <kbd>setenforce 0</kbd> SELinux is told to run in permissive mode. Similarly, with <kbd>setenforce 1</kbd> SELinux is told to run in enforcing mode.
 
-You can also add a kernel option '''enforcing=0''' or '''enforcing=1''' in the bootloader configuration (or during the startup routine of the system). This allows you to run SELinux in permissive or enforcing mode from the start of the system.
+It is also possible to add a kernel option <code>enforcing=0</code> or <code>enforcing=1</code> in the bootloader configuration (or during the startup routine of the system). This allows users to run SELinux in permissive or enforcing mode from the start of the system.
 
 The default state of the system is kept in {{Path|/etc/selinux/config}}.
 
 === How do I disable SELinux completely? ===
 
-It might be possible that running SELinux in permissive mode is not sufficient to properly fix any issue you have. To disable SELinux completely, you need to edit {{Path|/etc/selinux/config}} and set '''SELINUX=disabled''' . Next, reboot your system.
+It might be possible that running SELinux in permissive mode is not sufficient to properly fix any issue you have. To disable SELinux completely, you need to edit {{Path|/etc/selinux/config}} and set <code>SELINUX=disabled</code>. Next, reboot the system.
 
 {{Important|When you have been running your system with SELinux disabled, you must boot in permissive mode first and relabel your entire file system. Activities ran while SELinux was disabled might have created new files or removed the labels from existing files, causing these files to be available without security context.}}
 
 === How do I know which file context rule is used for a particular file? ===
 
-If you use the '''matchpathcon''' command, it will tell you what the security context for the given path (file or directory) should be, but it doesn't tell you which rule it used to deduce this. To do that, you can use '''findcon''' :
+If you use the <tt>matchpathcon</tt> command, it will tell you what the security context for the given path (file or directory) should be, but it doesn't tell you which rule it used to deduce this. To do that, you can use <kbd>findcon</kbd>:
 
 {{RootCmd|findcon /etc/selinux/strict/contexts/files/file_contexts -p /lib64/rc/init.d|output=<pre>
 /.*                          system_u:object_r:default_t
@@ -87,7 +87,7 @@ If you use the '''matchpathcon''' command, it will tell you what the security co
 </pre>
 }}
 
-When the SELinux utilities try to apply a context, they try to match the rule that is the most specific, so in the above case, it is the one that leads to the initrc_state_t context.
+When the SELinux utilities try to apply a context, they try to match the rule that is the most specific, so in the above case, it is the one that leads to the <tt>initrc_state_t</tt> context.
 
 The most specific means, in order of tests:
 
@@ -99,36 +99,36 @@ The most specific means, in order of tests:
 If there are specifications that match inside both the policy-provided contexts, the homedir generated contexts and locally-defined contexts, then the following precedence rules apply:
 
 # Rules (regardless of their origin) that do not have any regular expressions take precedence over any other expressions
-# Expressions inside the locally-defined contexts ({{Path|file_contexts.local}}) as generated by <code>semanage fcontext</code> commands take precedence over the homedirs- and policy-provided ones
+# Expressions inside the locally-defined contexts ({{Path|file_contexts.local}}) as generated by <tt>semanage fcontext</tt> commands take precedence over the homedirs- and policy-provided ones
 # Expressions inside the homedirs generated contexts ({{Path|file_contexts.homedirs}}) take precedence over the policy-provided ones ({{Path|file_contexts}})
 
 === How do I make small changes (additions) to the policy? ===
 
-If you are interested in the Gentoo Hardened SELinux development itself, please have a look at the [http://www.gentoo.org/proj/en/hardened/selinux-development.xml|SELinux development guide] and other documentation linked from the [http://www.gentoo.org/proj/en/hardened/selinux/index.xml|Gentoo Hardened SELinux project page].
+If you are interested in the Gentoo Hardened SELinux development itself, please have a look at the [[SELinux#Development|SELinux development resources]].
 
 However, you will eventually need to keep some changes on your policy, due to how you have configured your system or when you need to allow something that is not going to be accepted as a distribution-wide policy change. In that case, read on.
 
-Updates on the policy are only possible as long as you need to ''allow'' additional privileges. It is not possible to remove rules from the policy, only enhance it. To maintain your own set of additional rules, create a file in which you will keep your changes. In the next example, I will use the term {{Path|fixlocal}}, substitute with whatever name you like - but keep it consistent. In the file ({{Path|fixlocal.te}}) put in the following text (again, substitute {{Path|fixlocal}} with your chosen name):
+Updates on the policy are only possible as long as you need to ''allow'' additional privileges. It is not possible to easily remove rules from the policy, only enhance it. To maintain your own set of additional rules, create a file in which you will keep your changes. In the next example, I will use the term {{Path|fixlocal}}, substitute with whatever name you like - but keep it consistent. In the file ({{Path|fixlocal.te}}) put in the following text (again, substitute {{Path|fixlocal}} with your chosen name):
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Example skeleton for a SELinux policy module|<pre>
 policy_module(fixlocal, 1.0)
 
 require {
-## # Declarations of types, classes and permissions used
+# Declarations of types, classes and permissions used
 
 }
 
-## # Declaration of policy rules
+# Declaration of policy rules
 </pre>
 }}
 
 In this file, you can add rules as you like. In the next example, we add three rules:
 
-# Allow '''mozilla_t''' the '''execmem''' privilege (based on a denial that occurs when mozilla fails to start)
-# Allow '''ssh_t''' to connect to any port rather than just the SSH port
-# Allows the '''user_t''' domain to send messages directly to the system logger
+# Allow <tt>mozilla_t</tt> the <tt>execmem</tt> privilege (based on a denial that occurs when mozilla fails to start)
+# Allow <tt>ssh_t</tt> to connect to any port rather than just the SSH port
+# Allows the <tt>user_t</tt> domain to send messages directly to the system logger
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Example policy module|<pre>
 policy_module(fixlocal, 1.0)
 
 require {
@@ -139,23 +139,23 @@ require {
   class process { execmem };
 }
 
-## # Grant mozilla the execmem privilege
+# Grant mozilla the execmem privilege
 allow mozilla_t self:process { execmem };
 
-## # Allow SSH client to connect to any port (as provided by the user through the 
-## # "ssh -p <portnum> ..." command)
+# Allow SSH client to connect to any port (as provided by the user through the 
+# "ssh -p <portnum> ..." command)
 corenet_tcp_connect_all_ports(ssh_t)
 
-## # Allow the user_t domain to send messages to the system logger
+# Allow the user_t domain to send messages to the system logger
 logging_send_syslog_msg(user_t)
 </pre>
 }}
 
-If you need to provide raw allow statements (like the one above for the '''mozilla_t''' domain), make sure that the type ( '''mozilla_t''' ), class ( '''process''' ) and privilege ( '''execmem''' ) are mentioned in the '''require { ... }''' paragraph.
+If you need to provide raw allow statements (like the one above for the <tt>mozilla_t</tt> domain), make sure that the type (<tt>mozilla_t</tt>), class (<tt>process</tt>) and privilege (<tt>execmem</tt>) are mentioned in the <code>require { ... }</code> paragraph.
 
-When using interface names, make sure that the types ( '''ssh_t''' and '''user_t''' ) are mentioned in the '''require { ... }''' paragraph.
+When using interface names, make sure that the types (<tt>ssh_t</tt> and <tt>user_t</tt>) are mentioned in the <code>require { ... }</code> paragraph.
 
-To find the proper interface name (like '''corenet_tcp_connect_all_ports''' above), you can either look for it in the [http://oss.tresys.com/docs/refpolicy/api/ SELinux Reference Policy API] online or, if '''sec-policy/selinux-base-policy''' is built with the ''doc'' USE flag, in {{Path|/usr/share/doc/selinux-base-policy-.*/html}}. Of course, you can also ask for help in '''#gentoo-hardened''' on irc.freenode.net, the mailinglist, forums, etc. to find the proper rules and statements for your case.
+To find the proper interface name (like <tt>corenet_tcp_connect_all_ports</tt> above), you can either look for it in the [http://oss.tresys.com/docs/refpolicy/api/ SELinux Reference Policy API] online or, if {{Package|sec-policy/selinux-base-policy}} is built with the <tt>doc</tt> USE flag, in {{Path|/usr/share/doc/selinux-base-policy-.*/html}}. Of course, you can also ask for help in '''#gentoo-hardened''' on irc.freenode.net, the mailinglist, forums, etc. to find the proper rules and statements for your case.
 
 With the policy file created, you can then build it using the {{Path|Makefile}} provided by the system:
 
@@ -171,7 +171,7 @@ Then, if the builds succeeds, you can load it in memory. Once loaded, it will be
 
 During boot-up, the following message pops up:
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Message during boot-up|<pre>
 There is already a security framework initialized, register_security failed.
 Failure registering capabilities with the kernel
 selinux_register_security: Registering secondary module capability
@@ -187,7 +187,7 @@ This means that the Capability LSM module couldn't register as the primary modul
 
 During boot-up, the following message is shown:
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Message about 'Permission ... in class ... not defined'|<pre>
 SELinux: 2048 avtab hash slots, 16926 rules.
 SELinux: 2048 avtab hash slots, 16926 rules.
 SELinux:  6 users, 6 roles, 1083 types, 34 bools
@@ -202,20 +202,20 @@ SELinux:  Completing initialization.
 </pre>
 }}
 
-This means that the Linux kernel that you are booting supports permissions that are not defined in the policy (as offered through the '''sec-policy/selinux-base-policy''' package). If you do not notice any errors during regular operations, then this can be ignored (the permissions will be made part of upcoming policy definitions).
+This means that the Linux kernel that you are booting supports permissions that are not defined in the policy (as offered through the {{Package|sec-policy/selinux-base-policy}} package). If you do not notice any errors during regular operations, then this can be ignored (the permissions will be made part of upcoming policy definitions).
 
 == SELinux and Gentoo ==
 
 === I get a missing SELinux module error when using emerge ===
 
-When trying to use '''emerge''' , the following error message is displayed:
+When trying to use <tt>emerge</tt>, the following error message is displayed:
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Error message about missing SELinux module|<pre>
 !!! SELinux module not found. Please verify that it was installed.
 </pre>
 }}
 
-This indicates that the portage SELinux module is missing or damaged. Recent Portage versions provide this module out-of-the-box, but the security contexts of the necessary files might be wrong on your system. Try relabelling the files of the portage package:
+This indicates that the portage SELinux module is missing or damaged. Recent Portage versions provide this module out-of-the-box, but the security contexts of the necessary files might be wrong on your system. Try relabeling the files of the portage package:
 
 {{RootCmd|rlpkg portage}}
 
@@ -223,20 +223,20 @@ This indicates that the portage SELinux module is missing or damaged. Recent Por
 
 When running emerge, the following error is shown:
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Unknown value loadpolicy|<pre>
 FEATURES variable contains unknown value(s): loadpolicy
 </pre>
 }}
 
 This is a remnant of the older SELinux policy module set where policy packages might require this FEATURE to be available. This has however since long been removed from the tree.
 
-Please update your profile to a recent SELinux profile (one ending with {{Path|/selinux}}) and make sure that {{Path|/etc/make.conf}} does not have '''FEATURES="loadpolicy"''' set.
+Please update your profile to a recent SELinux profile (one ending with {{Path|/selinux/}}) and make sure that {{Path|/etc/make.conf}} does not have <code>FEATURES="loadpolicy"</code> set.
 
 === During rlpkg I get 'conflicting specifications for ... and ..., using ...' ===
 
-When trying to relabel a package ( '''rlpkg packagename''' ) or system ( '''rlpkg -a -r''' ) you get a message similar to the following:
+When trying to relabel a package (<kbd>rlpkg packagename</kbd>) or system (<kbd>rlpkg -a -r</kbd>) you get a message similar to the following:
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Message about conflicting specifications|<pre>
 filespec_add: conflicting specifications for /usr/bin/getconf and 
 /usr/lib64/misc/glibc/getconf/XBS5_LP64_OFF64, using
 system_u:object_r:lib_t
@@ -247,36 +247,40 @@ This is most likely caused by hard linked files. Remember, SELinux uses the exte
 
 The solution depends on the particular case; in order of most likely to happen and resolve:
 
-# Although both files are the same, they are not used in the same context. In such cases, it is recommended to remove one of the files and then copy the other file back to the first ( '''rm B; cp A B''' ). This way, both files have different inodes and can be labelled accordingly.
-# Both files are used for the same purpose; in this case, it might be better to label the file which would not be labelled correctly (say a binary somewhere in a {{Path|/usr/lib64}} location) using '''semanage''' ( '''semanage fcontext -a -t correct_domain_t /usr/lib64/path/to/file''' )
-It is also not a bad idea to report (after verifying if it hasn't been reported first) this on[https://bugs.gentoo.org Gentoo's bugzilla]so that the default policies are updated accordingly.
+# Although both files are the same, they are not used in the same context. In such cases, it is recommended to remove one of the files and then copy the other file back to the first (<kbd>rm B; cp A B</kbd>). This way, both files have different inodes and can be labeled accordingly.
+# Both files are used for the same purpose; in this case, it might be better to label the file which would not be labeled correctly (say a binary somewhere in a {{Path|/usr/lib64/}} location) using <tt>semanage</tt> (<kbd>semanage fcontext -a -t correct_domain_t /usr/lib64/path/to/file</kbd>)
+It is also not a bad idea to report (after verifying if it hasn't been reported first) this on [https://bugs.gentoo.org Gentoo's bugzilla] so that the default policies are updated accordingly.
 
 === During package installation, ld.so complains 'object 'libsandbox.so' from LD_PRELOAD cannot be preloaded: ignored' ===
 
 During installation of a package, you might see the following error message:
 
-{{GenericCmd|<pre>
+{{CodeBox|title=Message about libsandbox not being preloadable|<pre>
 >> Installing (1 of 1) net-dns/host-991529
 >>> Setting SELinux security labels
 ERROR: ld.so: object 'libsandbox.so' from LD_PRELOAD cannot be preloaded: ignored.
 </pre>
 }}
 
-This message should ''only'' occur after the ''Setting SELinux security labels'' message. It happens because SELinux tells glibc to disable '''LD_PRELOAD''' (and other environment variables that are considered potentially harmful) during domain transitions. Here, portage calls the '''setfiles''' command (part of a SELinux installation) and as such transitions from portage_t to setfiles_t, which clears the environment variable.
+This message should ''only'' occur after the ''Setting SELinux security labels'' message. It happens because SELinux tells glibc to disable <code>LD_PRELOAD</code> (and other environment variables that are considered potentially harmful) during domain transitions. Here, portage calls the <tt>setfiles</tt> command (part of a SELinux installation) and as such transitions from <tt>portage_t</tt> to <tt>setfiles_t</tt>, which clears the environment variable.
 
-We believe that it is safer to trust the SELinux policy here (as setfiles runs in its own confined domain anyhow) rather than updating the policy to allow transitioning between portage_t to setfiles_t without clearing these environment variables. Note that ''libsandbox.so is not disabled during builds and merges'' , only during the activity where Portage labels the files it just merged.
+We believe that it is safer to trust the SELinux policy here (as setfiles runs in its own confined domain anyhow) rather than updating the policy to allow transitioning between <tt>portage_t</tt> to <tt>setfiles_t</tt> without clearing these environment variables. Note that ''libsandbox.so is not disabled during builds and merges'', only during the activity where Portage labels the files it just merged.
 
 So the error is in our opinion cosmetic and can be ignored (but sadly not hidden).
 
 === Emerge does not work, giving 'Permission denied: /etc/make.conf' ===
 
-This is to be expected if you are not using the '''sysadm_r''' role. Any Portage related activity requires that you are in the '''sysadm_r''' role. To transition to the role, first validate if you are currently known as '''staff_u''' (or, if you added your own SELinux identities, a user that has the permission to transition to the '''sysadm_r''' role). Then run '''newrole -r sysadm_r''' to transition.
+This is to be expected if you are not using the <tt>sysadm_r</tt> role. Any Portage related activity requires that you are in the <tt>sysadm_r</tt> role. To transition to the role, first validate if you are currently known as <tt>staff_u</tt> (or, if you added your own SELinux identities, a user that has the permission to transition to the <tt>sysadm_r</tt> role). Then run <kbd>newrole -r sysadm_r</kbd> to transition.
 
 {{Cmd|emerge --info|output=<pre>
 Permission denied: '/etc/make.conf'
-</pre>|id -Z|output=<pre>
+</pre>}}
+
+{{Cmd|id -Z|output=<pre>
 staff_u:staff_r:staff_t
-</pre>|newrole -r sysadm_r|output=<pre>
+</pre>}}
+
+{{Cmd|newrole -r sysadm_r|output=<pre>
 Password: 
 </pre>
 }}
@@ -292,9 +296,7 @@ staff_u:object_r:user_cron_spool_t /var/spool/cron/crontabs/root
 </pre>
 }}
 
-Next, check what the default context is for the given user (in this case, root) when originating from the '''crond_t''' domain:
-
-
+Next, check what the default context is for the given user (in this case, root) when originating from the <tt>crond_t</tt> domain:
 
 {{RootCmd|getseuser root system_u:system_r:crond_t|output=<pre>
 seuser:  root, level (null)
@@ -303,17 +305,17 @@ Context 1       root:staff_r:cronjob_t
 </pre>
 }}
 
-As you can see, the default context is always for the '''root''' SELinux user. However, the {{Path|/var/spool/cron/crontabs/root}} file context in the above example is for the SELinux user staff_u. Hence, cron will not be able to read this file (the '''user_cron_spool_t''' type is a UBAC constrained one).
+As you can see, the default context is always for the <tt>root</tt> SELinux user. However, the {{Path|/var/spool/cron/crontabs/root}} file context in the above example is for the SELinux user <tt>staff_u</tt>. Hence, cron will not be able to read this file (the <tt>user_cron_spool_t</tt> type is a UBAC constrained one).
 
 To fix this, change the user of the file to root:
 
 {{RootCmd|chcon -u root /var/spool/cron/crontabs/root}}
 
-Another workaround would be to disable UBAC completely. This is accomplished with '''USE="-ubac"''' .
+Another workaround would be to disable UBAC completely. This is accomplished with <code>USE="-ubac"</code>.
 
 === When querying the policy, I get 'ERROR: could not find datum for type ...' ===
 
-When using '''seinfo''' or '''sesearch''' to query the policy on the system, you get errors similar to:
+When using <tt>seinfo</tt> or <tt>sesearch</tt> to query the policy on the system, you get errors similar to:
 
 {{RootCmd|seinfo -tasterisk_t|output=<pre>
 ERROR: could not find datum for type asterisk_t
@@ -333,8 +335,8 @@ The file modified last should be the same one as returned by checking {{Path|/se
 
 If this is not the case (which is very likely since you are reading this FAQ entry) then try forcing the utilities policy version to the correct version:
 
-{{File|/etc/selinux/semanage.conf||<pre>
-## # Look for and uncomment the policy-version line and set it to the right version
+{{FileBox|filename=/etc/selinux/semanage.conf|title=Force the SELinux policy version|<pre>
+# Look for and uncomment the policy-version line and set it to the right version
 policy-version = 24
 </pre>
 }}
@@ -344,9 +346,9 @@ policy-version = 24
 
 === Portage fails to label files because "setfiles" does not work anymore ===
 
-Portage uses the '''setfiles''' command to set the labels of the files it installs. However, that command is a dynamically linked executable, so any update in its depending libraries ({{Path|libselinux.so}}, {{Path|libsepol.so}}, {{Path|libaudit.so}} and of course {{Path|libc.so}}) might cause for the application to fail. Gentoo's standard solution ( '''revdep-rebuild''' ) will not work, since the tool will try to rebuild policycoreutils, which will fail to install because Portage cannot set the file labels.
+Portage uses the <tt>setfiles</tt> command to set the labels of the files it installs. However, that command is a dynamically linked executable, so any update in its depending libraries ({{Path|libselinux.so}}, {{Path|libsepol.so}}, {{Path|libaudit.so}} and of course {{Path|libc.so}}) might cause for the application to fail. Gentoo's standard solution (<tt>revdep-rebuild</tt>) will not work, since the tool will try to rebuild {{Package|sys-apps/policycoreutils}}, which will fail to install because Portage cannot set the file labels.
 
-The solution is to rebuild policycoreutils while disabling Portage's selinux support, then label the installed files manually using '''chcon''' , based on the feedback received from '''matchpathcon''' .
+The solution is to rebuild {{Package|sys-apps/policycoreutils}} while disabling Portage's SELinux support, then label the installed files manually using <tt>chcon</tt>, based on the feedback received from <tt>matchpathcon</tt>.
 
 {{RootCmd|FEATURES{{=}}"-selinux" emerge --oneshot policycoreutils
 |for FILE in $(qlist policycoreutils); do CONTEXT{{=}}$(matchpathcon -n ${FILE}); chcon ${CONTEXT} ${FILE}; done}}
@@ -355,22 +357,22 @@ Now Portage will function properly again, labeling files as they should.
 
 === Applications do not transition on a nosuid-mounted partition ===
 
-If you have file systems mounted with the '''nosuid''' option, then applications started from these file systems will not transition into their appropriate domain. This is intentional.
+If you have file systems mounted with the <tt>nosuid</tt> option, then applications started from these file systems will not transition into their appropriate domain. This is intentional.
 
-So, a '''passwd''' binary, although correctly labeled ''passwd_exec_t'' , will not transition into the ''passwd_t'' domain if the binary is stored on a file system mounted with '''nosuid''' .
+So, a <tt>passwd</tt> binary, although correctly labeled <tt>passwd_exec_t</tt> , will not transition into the <tt>passwd_t</tt> domain if the binary is stored on a file system mounted with <tt>nosuid</tt>.
 
 === Why do I always need to re-authenticate when operating init scripts? ===
 
-When you, as an administrator, wants to launch or stop daemons, these activities need to be done as '''system_u:system_r''' . Switching to this context set is a highly privileged operation (since you are effectively leaving the user context and entering a system context) and hence the default setup requires the user to re-authenticate.
+When you, as an administrator, wants to launch or stop daemons, these activities need to be done as <tt>system_u:system_r</tt>. Switching to this context set is a highly privileged operation (since you are effectively leaving the user context and entering a system context) and hence the default setup requires the user to re-authenticate.
 
 You can ask not to re-authenticate if you use PAM by editing {{Path|/etc/pam.d/run_init}} and adding the following line on top:
 
-{{GenericCmd|<pre>
+{{FileBox|filename=/etc/pam.d/run_init|Allowing password-less execution if the user is root|<pre>
 auth     sufficient     pam_rootok.so
 </pre>
 }}
 
-With this in place, you can now prepend your init script activities with '''run_init''' and it will not ask for your password anymore:
+With this in place, you can now prepend your init script activities with <kbd>run_init</kbd> and it will not ask for your password anymore:
 
 {{RootCmd|run_init rc-service local status|output=<pre>
 Authenticating swift.
@@ -380,9 +382,9 @@ Authenticating swift.
 
 === How do I use SELinux with initramfs? ===
 
-We currently do not support booting in enforcing mode with an initramfs image (but we are working on it). For the time being, boot in permissive mode. Once booted, switch to enforcing mode ( '''setenforce 1''' ).
+We currently do not support booting in enforcing mode with an initramfs image (but we are working on it). For the time being, boot in permissive mode. Once booted, switch to enforcing mode (<kbd>setenforce 1</kbd>).
 
-If you run SELinux on a production system and would not like to have attackers be able to switch back to permissive mode (even when they would have the necessary privileges otherwise), set the '''secure_mode_policyload''' boolean. When enabled, enforcing mode cannot be disabled anymore (until you reboot).
+If you run SELinux on a production system and would not like to have attackers be able to switch back to permissive mode (even when they would have the necessary privileges otherwise), set the <tt>secure_mode_policyload</tt> boolean. When enabled, enforcing mode cannot be disabled anymore (until you reboot).
 
 {{RootCmd|setsebool secure_mode_policyload on}}
 
@@ -392,7 +394,7 @@ If you log on through xdm, gdm, kdm, slim or any other graphical logon manager, 
 
 The reason of this is that PAM needs to be configured to include SELinux awareness in your session handling:
 
-{{File|/etc/pam.d/somesession||<pre>
+{{FileBox|filename=/etc/pam.d/somesession|title=Enable SELinux support through PAM sessions|<pre>
 ...
 session  required   pam_loginuid.so
 session  optional   pam_console.so
@@ -410,7 +412,7 @@ The file system is used by the SELinux utilities as an interface to query the SE
 
 Historically (before {{Path|libselinux-2.1.9}}), the mount point for the SELinux file system ''had to be'' {{Path|/selinux}}. From {{Path|libselinux-2.1.9}} onwards, the default location where the file system is looked for is {{Path|/sys/fs/selinux}}, although the library still falls back to the original {{Path|/selinux}} location if it cannot find it at the new place.
 
-However, the {{Path|/sys/fs/selinux}} location currently has an issue for those systems not using an initramfs, as it means that {{Path|/sys}} has not been mounted when '''init''' tries to mount {{Path|/sys/fs/selinux}}. We are working out how to resolve this, but for now, keep {{Path|/selinux}} active.
+However, the {{Path|/sys/fs/selinux}} location currently has an issue for those systems not using an initramfs, as it means that {{Path|/sys}} has not been mounted when <tt>init</tt> tries to mount {{Path|/sys/fs/selinux}}. We are working out how to resolve this, but for now, keep {{Path|/selinux}} active.
 
 === How do I reload all SELinux policy modules? ===
 
@@ -427,7 +429,7 @@ Failures that occur now usually mean that not all SELinux policy modules have be
 
 === Why can't I just './service start' when I am inside /etc/init.d? ===
 
-For the more verbose explanation, see {{Bug|448292}}. Basically, running services requires a few domain transitions, assisted by the '''run_init''' command. This command first changes the working directory to {{Path|/}} before actually running the requested service. As a result, it tries to execute ''./service start'' from within {{Path|/}} instead of {{Path|/etc/init.d}}, resulting in an execution failure.
+For the more verbose explanation, see {{Bug|448292}}. Basically, running services requires a few domain transitions, assisted by the <tt>run_init</tt> command. This command first changes the working directory to {{Path|/}} before actually running the requested service. As a result, it tries to execute <tt>./service start</tt> from within {{Path|/}} instead of {{Path|/etc/init.d}}, resulting in an execution failure.
 
 {{RootCmd|cd /etc/init.d; ./sshd status|output=<pre>
 Authenticating root.
@@ -436,7 +438,7 @@ Exec:: No such file or directory</pre>
 
 === File labels do not seem to be set anymore, and matchpathcon sais <nowiki><<none>></nowiki> ===
 
-When files seem to be labeled 'portage_tmp_t', check with the '''matchpathcon''' command what SELinux thinks the label should be:
+When files seem to be labeled <tt>portage_tmp_t</tt>, check with the <kbd>matchpathcon</kbd> command what SELinux thinks the label should be:
 
 {{RootCmd|matchpathcon /sbin/setfiles|output=<pre>
 /sbin/setfiles    <<none>></pre>
@@ -446,7 +448,7 @@ If that occurs, it might be a pcre upgrade that broke the binary compiled expres
 
 {{RootCmd|for n in *.bin; do sefcontext_compile <nowiki>${{n%%.bin}}</nowiki>; done}}
 
-With this done, the '''matchpathcon''' command should reveal the right context again, and you can relabel the package(s) that had wrong labels:
+With this done, the <tt>matchpathcon</tt> command should reveal the right context again, and you can relabel the package(s) that had wrong labels:
 
 {{RootCmd|matchpathcon /sbin/setfiles|output=<pre>
 /sbin/setfiles  system_u:object_r:setfiles_exec_t</pre>
