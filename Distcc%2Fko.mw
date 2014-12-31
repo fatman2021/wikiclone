@@ -2,6 +2,11 @@
 
 Distcc는 네트워크를 통해 호스트가 참여하여 분산 컴파일 작업을 수행하도록 설계한 프로그램입니다.  distccd 서버와 distcc 클라이언트로 구성되어 있습니다. Distcc는 ccache, Portage, 약간의 설정 과정을 거치는 automake로 눈에 보이지 않도록 작업을 수행할 수 있습니다.
 
+{{InfoBox stack
+|{{InfoBox homepage|https://code.google.com/p/distcc/|header=true}}
+|{{InfoBox wikipedia}}
+}}
+
 [http://distcc.samba.org Distcc] 는 네트워크를 통해 호스트가 참여하여 분산 컴파일 작업을 수행하도록 설계한 프로그램입니다.  <code>distccd</code> 서버와 <code>distcc</code> 클라이언트로 구성되어 있습니다. Distcc는 [http://ccache.samba.org ccache], Portage, 약간의 설정 과정을 거치는 automake로 눈에 보이지 않도록 작업을 수행할 수 있습니다. 
 
 젠투 설치 초기에 도움을 받기 위해 distcc를 사용하려 한다면, [[#Using_Distcc_to_Bootstrap|설치 초기에 distcc 사용하기]] 섹션을 읽어보십시오. 
@@ -12,11 +17,11 @@ Distcc는 네트워크를 통해 호스트가 참여하여 분산 컴파일 작�
 
 distcc를 사용하려면 네트워크상의 모든 컴퓨터에 같은 gcc 버전이 있어야 합니다. 예를 들어 3.3.x(x는 바뀔 수 있음)는 괜찮지만 3.3.x와 3.2.x를 같이 사용하면 '''아마도''' 컴파일 오류 또는 실행시간 오류가 나타날것입니다. 
 
-=== Distcc 설치하기 ===
-
-distcc 설치를 시작하기 전에 알아두어야 할 몇가지 옵션이 있습니다. 
+=== Installing distcc ===
 
 distcc에는 컴파일 작업을 보내는 컴퓨터의 작업을 지켜볼 때 사용하는 그래픽 감시 프로그램이 있으며 <code>gtk</code> <code>USE</code> 플래그로 활성화 합니다.
+
+After configuring the <code>USE</code> setting, install the {{Package|sys-devel/distcc}} package:
 
 {{Emerge|distcc}}
 
@@ -24,52 +29,53 @@ distcc에는 컴파일 작업을 보내는 컴퓨터의 작업을 지켜볼 때 
 
 === Distcc를 사용하도록 포티지 설정하기 ===
 
-distcc를 사용하도록 portage를 설정하는 것은 쉽습니다. 각 시스템이 분산 컴파일 작업에 참여하도록 하려면 다음 단계를 실행하십시오: 
+distcc를 사용하도록 portage를 설정하는 것은 쉽습니다. 각 시스템이 분산 컴파일 작업에 참여하도록 하려면 다음 단계를 실행하십시오:
+
+First, make sure that {{Package|sys-devel/distcc}} is installed:
 
 {{Emerge|distcc}}
 
 이제 <code>MAKEOPTS</code> 변수와 <code>FEATURES</code> 변수를 아래처럼 설정하십시오.
 일반적인 전략은 CPU 전체(로컬+원격) 갯수 + 1 을 N의 값으로 설정하고 로컬 CPU의 갯수를 M으로 설정하는 것입니다. distcc 호스트를 사용할 수 없거나, ebuild에서 로컬 전용 컴파일(gcc)을 필요로 한다면, <code>-IM</code> 플래그를 적용하여 과도한 작업을 분담하지 않도록 막으십시오.
 
-{{File|/etc/portage/make.conf|MAKEOPTS와 FEATURES 설정|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=Setting MAKEOPTS and FEATURES|lang=bash|1=
 MAKEOPTS="-jN -lM"
 FEATURES="distcc"
-</pre>
 }}
 
 예컨대, <code>distcc</code>를 실행 중인 두 대의 쿼드코어 호스트 PC에 듀얼 코어 로컬 PC를 연결했다면, <code>MAKEOPTS</code> 변수값은 다음과 같이 설정합니다:
 
-{{File|/etc/portage/make.conf|2대의 쿼드코어 칩 머신(호스트)과 1대의 듀얼 코어 PC(로컬) 에 대한 MAKEOPTS 예제|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=MAKEOPTS example for 2 quad-core (remote) and one dual core (local) PC|lang=bash|1=
 # 2 remote hosts with 4 cores each = 8 cores remote
 # 1 local host with 2 cores = 2 cores local
 # total number of cores is 10, so N = 2*10+1 and M=2
 MAKEOPTS="-j21 -l2"
-</pre>
 }}
 
-While editing your {{Path|make.conf}}, make sure that you do not have <code>-march=native</code> in your <code>CFLAGS</code> or <code>CXXFLAGS</code>. <code>distcc</code> will not distribute work to other machines if <code>march</code> is set to <code>native</code>. You may find the appropriate value with <code>gcc -Q -march=native --help=target</code>. See also [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc] blog post.
+While editing the {{Path|make.conf}} file, make sure that it does not have <code>-march=native</code> in the <code>CFLAGS</code> or <code>CXXFLAGS</code> variables. <tt>distccd</tt> will not distribute work to other machines if <code>march</code> is set to <code>native</code>. The appropriate <code>-march=</code> value can be obtained by running the following command:
+
+{{Cmd|gcc -Q -march{{=}}native --help{{=}}target}}
+
+See [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc] for more information.
 
 === 참여 호스트 지정 ===
 
 호스트의 목록을 설정하려면 <code>distcc-config</code> 명령을 사용하십시오. 설정값이 될 몇가지 호스트 예제가 있습니다. 
 
-{{Code|호스트 정의 예제|<pre>
+The following is an example list of host definitions. In most cases, variants of lines 1 and 2 suffice. More information about the syntax used in lines 3 and 4 can be found in the [http://distcc.googlecode.com/svn/trunk/doc/web/man/distcc_1.html distcc manual page].
+
+{{CodeBox|title=Examples of host definitions|1=
 192.168.0.1          192.168.0.2                       192.168.0.3
 192.168.0.1/2        192.168.0.2                       192.168.0.3/10
 192.168.0.1:4000/2   192.168.0.2/1                     192.168.0.3:3632/4
 @192.168.0.1         @192.168.0.2:/usr/bin/distccd     192.168.0.3
-</pre>
 }}
 
 호스트를 설정하는데 다른 여러가지 방법도 있습니다. 자세한 내용은 distcc 맨페이지를 보십시오.
 
 만약 여러분들이 지역 장치에서 컴파일 하기를 원한다면 여러분들은 'localhost'를 호스트 목록에 추가해야 합니다. 반대로 지역 장치가 컴파일을 하기를 원치 않으신다면(대부분의 경우) 호스트 목록에서 생략해야 합니다. 느린 장치에서 로컬호스트를 사용하는 것은 실제로 컴파일을 느리게 만듭니다. 성능을 위해 설정을 시험하여 확인하십시오.
 
-모든 것이 복잡한 것 같지만, 대부분 첫번째 줄 또는 두번째 줄로도 충분히 작동합니다. 
-
-대부분 3번째 혹은 4번째의 줄을 쓰지 않으므로, distcc 실행을 SSH 연결을 통할 수 있게 하는 설정내용이 들어간 distcc 설명서를 [http://distcc.samba.org/man/distcc_1.html 참조]하겠습니다. 
-
-예를 들어 앞의 예제에서 첫 줄을 설정한다면: 
+예를 들어 앞의 예제에서 첫 줄을 설정한다면:
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "192.168.0.1 192.168.0.2 192.168.0.3"}}
 
@@ -90,7 +96,7 @@ While editing your {{Path|make.conf}}, make sure that you do not have <code>-mar
 
 로그인 할 때마다 PATH를 설정하기 위해 ~/.bashrc같은 파일에 추가할 수 있습니다.
 
-그런 다음, 여러분이 보통 <code>make</code>라고 입력하는 바와 같이, <code>make -jN</code>(N은 정수형 숫자)을 입력합니다. N의 값은 여러분의 네트워크와 여러분이 컴파일에 사용하는 컴퓨터의 형식에 달려있습니다. 최고의 성능을 부여할 숫자를 찾기 위해 여러분의 설정을 시험해보십시오. 
+그런 다음, 여러분이 보통 <code>make</code>라고 입력하는 바와 같이, <code>make -jN</code>(N은 정수형 숫자)을 입력합니다. N의 값은 여러분의 네트워크와 여러분이 컴파일에 사용하는 컴퓨터의 형식에 달려있습니다. 최고의 성능을 부여할 숫자를 찾기 위해 여러분의 설정을 시험해보십시오.
 
 === distcc가 ssh와 동작하도록 설정 ===
 
@@ -100,7 +106,7 @@ ssh를 통한 distcc 설정에 몇가지 함정이 있습니다. 먼저 암호 �
 
 두번째로, ssh 설정 파일에 각 호스트에 대한 섹션을 만드십시오:
 
-{{File|/var/tmp/portage/.ssh/config|호스트 단위 섹션 추가|<pre>
+{{FileBox|filename=/var/tmp/portage/.ssh/config|title=Add per-host sections|1=
 Host test1
     HostName 123.456.789.1
     Port 1234
@@ -110,7 +116,6 @@ Host test2
     HostName 123.456.789.2
     Port 1234
     User UserName
-</pre>
 }}
 
 {{Path|known_hosts}}파일에 존재하는 각각의 호스트가 있는지 확인하시고 호스트의 {{Path|authorized_keys}} 파일에 공용키를 추가하십시오. test1과 test2 호스트를 설정하려면 다음 명령을 실행하십시오
@@ -129,11 +134,12 @@ Host test2
 
 젠투리눅스 LiveCD가 들어간 새 컴퓨터를 부팅하고 부트스트랩 부분까지 [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 설치 과정]을 따라하십시오(부트스트랩에 대한 더 많은 정보를 얻고자 하신다면 [http://www.gentoo.org//doc/en/faq.xml#stage12 젠투 FAQ]를 보십시오). 다음 distcc를 사용하도록 포티지를 설정하십시오: 
 
-{{File|/etc/portage/make.conf|포티지에서 distcc를 사용하도록 설정|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=Configure Portage to use distcc|lang=bash|1=
 FEATURES="distcc"
 MAKEOPTS="-jN"
-</pre>
 }}
+
+Update the <code>PATH</code> variable in the installation session as well:
 
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
@@ -165,13 +171,17 @@ distcc를 설정하려면 <code>distcc-config --install</code>을 실행하십�
 
 각기 다른 GCC 버전이 호스트에 존재한다면 이상한 문제를 야기할 수 있습니다. 해결 방법은 모든 호스트의 GCC 버전을 같게 하는 것입니다. 
 
-최근 포티지에서는 <code>gcc</code> 대신 <code>${CHOST}-gcc</code>를 사용하도록 업데이트 했습니다.  이는 i686 머신을 다른 형식(i386, i586)의 머신과 혼용해서 사용한다면 문제에 직면함을 의미합니다. 이에 대한 해결책은 <code>export CC='gcc' CXX='c++'</code> 명령을 입력하거나 이 변수값을 {{Path|/etc/portage/make.conf}}에 넣는 것입니다. 
+최근 포티지에서는 <code>gcc</code> 대신 <code>${CHOST}-gcc</code>를 사용하도록 업데이트 했습니다.  이는 i686 머신을 다른 형식(i386, i586)의 머신과 혼용해서 사용한다면 문제에 직면함을 의미합니다. 이에 대한 해결책은 <code>export CC='gcc' CXX='c++'</code> 명령을 입력하거나 이 변수값을 {{Path|/etc/portage/make.conf}}에 넣는 것입니다.
 
 {{Important/ko|이 설정 행위는 명백하게 포티지의 몇가지 동작을 재정의하는 것이며 나중에 이상한 결과가 나타날지도 모릅니다. 오로지 CHOST 값을 섞어 쓸 때에만 설정하십시오.}}
 
 === -march=native ===
 
 GCC 4.3.0부터, GCC가 동작하는 프로세서에서 CPU 자동 감지 및 최적화를 활성화 하는 <code>-march=native</code> 스위치를 지원합니다. (AMD 애슬론과 인텔 펜티움과 같은) 각기 다른 프로세서에서 최적화 한 코드가 섞일 수 있기 때문에 <code>distcc</code>에는 문제가 될 수 있습니다. <code>distcc</code>로 컴파일 할때 <code>CFLAGS</code> 또는 <code>CXXFLAGS</code>에 <code>-march=native</code> 또는 <code>-mtune=native</code> 스위치를 ''사용하지 마십시오''.
+
+Heed the following warning:
+
+{{Warning|Do '''not''' use <code>-march{{=}}native</code> or <code>-mtune{{=}}native</code> in the <code>CFLAGS</code> or <code>CXXFLAGS</code> variables of {{Path|make.conf}} when compiling with <tt>distcc</tt>.}}
 
 GCC를 <code>-march=native</code>로 호출할 때 사용하는 플래그를 알아보려면 다음 명령을 실행하십시오:
 
@@ -187,33 +197,26 @@ GCC를 <code>-march=native</code>로 호출할 때 사용하는 플래그를 알
 
 === distcc 감시 프로그램 === 
 
-distcc에는 두가지 감시 프로그램이 들어있습니다. 항상 빌드하는 텍스트 기반 프로그램을 <code>distccmon-text</code>라고 합니다. 처음 실행하는게 약간 혼동스러울 수도 있지만, 사용 방법은 아주 쉽습니다. 프로그램을 아무런 매개 변수없이 실행한다면 처음 한 번만 실행합니다. 하지만, 숫자를 전달한다면 매 N초마다 업데이트 합니다. 여기에서 N은 여러분이 전달하는 숫자 인자입니다. 
+distcc에는 두가지 감시 프로그램이 들어있습니다. 항상 빌드하는 텍스트 기반 프로그램을 <code>distccmon-text</code>라고 합니다. 처음 실행하는게 약간 혼동스러울 수도 있지만, 사용 방법은 아주 쉽습니다. 프로그램을 아무런 매개 변수없이 실행한다면 처음 한 번만 실행합니다. 하지만, 숫자를 전달한다면 매 N초마다 업데이트 합니다. 여기에서 N은 여러분이 전달하는 숫자 인자입니다.
+
+{{Cmd|distccmon-text 10}}
 
 다른 감시 프로그램은 여러분들이 <code>gtk</code>나 <code>gnome</code>을 여러분의 <code>USE</code> 플래그에 두었을 때에만 실행할 수 있습니다. GTK+ 기반의 프로그램이며, X환경에서 구동되고 정말 사랑스럽습니다. 젠투에서의 GUI 감시 프로그램은 혼동을 피하기 위해 <code>distccmon-gui</code>로 불립니다. 이 감시 프로그램은 다른 프로그램에서 <code>distccmon-gnome</code>으로 참조합니다.
-
-{{RootCmd|distccmon-text N}}
-
-또는 <code>distccmon-gui</code>를 실행하십시오:
 
 {{RootCmd|distccmon-gui}}
 
 포티지의 distcc 사용 상태를 감시한다면 다음 명령을 사용할 수 있습니다:{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
 |DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
 
+{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text 10
+|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
+
 {{Important/ko|distcc 디렉터리가 어디에도 없다면, DISTCC_DIR 변수를 적절하게 바꾸십시오.}}
 
-== Links ==
+== External resources ==
 
-* [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc].
+* [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc]
+* [https://code.google.com/p/distcc/ Distcc homepage]
 
-== 감사문 ==
 
-이 안내서에 제공한 노고에 대해 다음 작성자와 편집자분들께 감사의 말을 전하고자 합니다:
-
-* Lisa Seelye
-* Mike Frysinger
-* Erwin
-* Sven Vermeulen
-* Lars Weiler
-* Tiemo Kieft
-* nightmorph
+{{Migrated|originalauthors=Lisa Seelye, Mike Frysinger, Erwin, Sven Vermeulen, Lars Weiler, Tiemo Kieft and nightmorph}}
