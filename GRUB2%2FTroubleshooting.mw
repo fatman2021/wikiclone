@@ -1,0 +1,101 @@
+This article documents issues that might arise when trying to use or install GRUB2.
+
+== Installation errors ==
+
+=== Installing GRUB2 from within a chroot ===
+
+When a separate {{Path|/boot}} partition exists, be sure to mount the target root partition before chrooting, but do not the {{Path|/boot}} partition until ''after'' chrooting to the new environment. This is required because <tt>grub2-mkconfig</tt> will not detect {{Path|/boot}} as a separate partition and will assume {{Path|/boot}} and root are on the same partition.
+
+=== Reinstalling the GRUB2 EFI boot manager entry ===
+
+In case the boot manager entries need to be restored, they can be re-added without invoking <tt>grub2-install</tt>. Load the <code>efivars</code> kernel module and install {{Package|sys-boot/efibootmgr}}:
+	 
+{{RootCmd|modprobe efivars}}
+
+{{Emerge|sys-boot/efibootmgr}}
+
+Next add a boot menu entry:
+
+{{RootCmd|efibootmgr --create --gpt --disk /dev/sda --part 1 --write-signature --label "gentoo" --loader "\\EFI\\gentoo\\grubx86.efi"}}
+
+=== grub2-install: error: cannot find EFI directory. ===
+
+{{Note|The following examples presumes a '''64-bit''' EFI GRUB2 install, adjust accordingly for 32-bit EFI.}}
+
+{{RootCmd|grub2-install --target{{=}}x86_64-efi|output=<pre>
+grub2-install: error: cannot find EFI directory.
+</pre>}}
+
+Properly setting the <code>GRUB_PLATFORMS</code> variable in {{Path|/etc/portage/make.conf}} (the first time!) as listed above should resolve this error. Set the <code>GRUB_PLATFORMS</code> variable then re-emerge GRUB2 using the following command:
+
+{{Emerge|--newuse|sys-boot/grub:2}}
+
+In the case this error persists try forcing the install to the EFI directory by issuing the <kbd>grub2-install</kbd> command with correct parameters for the <kdb>--target</kbd> and <kbd>--efi-directory</kbd> options:
+
+{{RootCmd|grub2-install --target{{=}}x86_64-efi --efi-directory{{=}}/boot}}
+
+=== grub2-install: Attempting to install GRUB2 to a disk or partition ===
+
+{{RootCmd|grub2-install /dev/sda1 |output=<pre>
+Attempting to install GRUB to a partition disk or to a partition.  This is a BAD idea.
+Embedding is not possible.  GRUB can only be installed in this setup by using blocklists. 
+However, blocklists are UNRELIABLE and their use is discouraged.
+</pre>}}
+
+There could be many reasons for this error to come up.
+
+==== No mounted /boot ====
+
+A {{Path|/boot}} partition is not mounted.
+
+{{RootCmd|mount /boot}}
+
+==== No BIOS boot partition while using BIOS-GPT setup ====
+
+This could mean there is not a <code>EF02</code> or <code>bios_boot</code> partition to embed the {{Path|core.img}} file in.
+
+Creating a little partition of a few hundreds kilobytes may be enough, although it is good practice to align this partition to 2048 sectors to avoid a performance penalty with the disk. A 1 MiB partition should work well.
+
+==== Attempting to install GRUB2 in a partition ====
+
+When attempting to install GRUB2 in a partition e.g. {{Path|/dev/sda5}} (for instance because the boot loader will be chainloaded by a different boot loader), simply add <tt>--force</tt> option switch to force install.
+
+==== Missing target detection ====
+
+If <kbd>grub2-install</kbd> does not print any errors message or if the error message is about scanning disk files and several platforms are enabled in {{Path|/etc/portage/make.conf}} while nothing is installed on the disk, then edit the {{Path|/sbin/grub2-install}} script with a text editor of choice.
+
+Change the <code>platform</code> variable to the appropriate platform for the current use case. The platform ''must'' be rightly set when emerging {{Package|sys-boot/grub}}, else it will be incorrectly configured in the {{Path|/sbin/grub2-install}} script.
+
+For example, to set the platform for "PC", change <code>platform=qemu</code> to <code>platform=pc</code>.
+
+{{Note|This is true for GRUB version 1.99x only... for GRUB2 the correct file to investigate can be found at {{Path|/etc/grub.d/00_header}}; change <code>transform{{=}}"s,grub,grub2-qemu,"</code> <code>to transform{{=}}"s,grub,grub2,"</code> for instance to install rightly with grub2-$platform-install.}}
+
+=== grub-setup: mo post-MBR gap ===
+
+{{RootCmd|grub2-bios-setup|output=<pre>
+grub-setup: warn: This msdos-style partition label has no post-MBR gap; embedding won't be possible!
+grub2-bios-setup: warn: Embedding is not possible. GRUB can only be installed in this setup by using blocklists.
+            However, blocklists are UNRELIABLE and its use is discouraged.
+grub2-bios-setup: error: If you really want blocklists, use --force.
+</pre>}}
+
+This error means that GRUB2 could not find the usual gap between the MBR and first partition of a disk. It is possible that the gap does not exist. Some tools (e.g. LiveUSB disk installer) format disks so that the first partition starts at sector 1 instead of 2048. 
+
+Repartitioning might be necessary to resolve the issue.
+
+=== grub2-install: embedding area is unusually small ===
+
+{{RootCmd|grub2-install /dev/sda|output=<pre>
+grub2-install: warn: Your embedding area is unusually
+small. core.img won't fit in it.
+grub2-install: warn: Embedding is not possible. GRUB can
+only be installed in this setup by using blocklists. However,
+blocklists are UNRELIABLE and their use is discouraged.
+grub2-install: error: will not proceed with blocklists.
+</pre>}}
+
+There is not enough room at the beginning of the disk before the first partition.
+
+In general this is a bit of trouble to fix. One or more partitions need to be resized in order to leave some free space at the beginning of the drive. The [http://gparted.sourceforge.net/livecd.php GParted LiveCD] or Gentoo-based [[http://sourceforge.net/projects/systemrescuecd/ SystemRescueCD]] are excellent tools to make this job less difficult.
+
+If the swap partition is the first partition on the disk (e.g. {{Path|/dev/sda1}}) it is possible to simply remove the existing swap space partition and re-partition the space. This resolution would avoid the need for booting into a live medium in order to resize a root ({{Path|/}}) partition.
