@@ -252,7 +252,8 @@ Installing GRUB2 as the system's boot loader depends on how the system is meant 
 
 This article covers the following situations:
 
-* [[#BIOS with MBR or GPT|BIOS with MBR or GPT]]
+* [[#BIOS with MBR|BIOS with MBR]]
+* [[#BIOS with GPT|BIOS with GPT]]
 * [[#UEFI with GPT|UEFI with GPT]]
 * [[#BIOS with hybrid MBR-GPT partitioning|BIOS with hybrid MBR-GPT partitioning]]
 
@@ -370,11 +371,21 @@ Users who have followed the [[Handbook:Main_Page|Gentoo installation instruction
 
 === UEFI with GPT ===
 
-==== UEFI partition ====
+Make sure that the {{Path|/boot}} location is available - if this uses a separate partition, make sure that it is mounted:
+
+{{RootCmd|mount /boot}}
+
+Run the <kbd>grub2-install</kbd> command to copy the relevant files to {{Path|/boot/grub}}. This should install Grub2 in {{Path|/boot/grub}}, copy the core image to {{Path|/boot/efi/EFI/gentoo/grubx64.efi}}, and call [[Efibootmgr|efibootmgr]] to add a boot entry.
+
+{{RootCmd|grub2-install --target{{=}}x86_64 /dev/sda|output=<pre>
+Installation finished. No error reported.
+</pre>}}
+
+<tt>grub2-install</tt> accepts a <tt>--target</tt> option to set the CPU architecture and system platform. If unspecified, <tt>grub2-install</tt> will attempt to guess the proper values; on an AMD64/x86 system it will use <tt>i386-pc</tt> by default. <tt>grub2-install</tt> also accepts a <tt>--boot-directory</tt> option to tell the GRUB2 installer which directory to look for GRUB2's boot files. This defaults to the current {{Path|/boot}} but is useful when trying to move a root partition.
+
+==== Partitioning for UEFI with GPT ====
 
 For UEFI GPT boot using GRUB2, the system ''must'' have a dedicated EFI partition containing a FAT filesystem.
-
-{{Important|UEFI GPT setup is entirely different ''and incompatible'' with the steps listed in the two BIOS modes above. Attempting to somehow combine BIOS mode with the steps to come will result in a broken system.}}
 
 The EFI partition can ''replace'' having a {{Path|/boot}} partition on {{Path|/dev/sda1}} by having a {{Path|/boot/efi}} partition on {{Path|/dev/sda1}}. This is to say a successful EFI boot scenario using GRUB2 ''can'' operate with two partitions total (three total if a swap partition is needed): a root partition and an EFI partition. Using this configuration, the {{Path|/boot}} ''folder'' will be located in the root {{Path|/}} ''partition'' (at {{Path|/boot}}) and the EFI ''partition'' will mount ''in'' the boot ''folder'' (at {{Path|/boot/efi}}). For further clarification, see the example {{Path|/etc/fstab}} file below.
 
@@ -399,21 +410,13 @@ Proceed to create a FAT filesystem on the EFI system partition using <kbd>mkdosf
 
 {{RootCmd|mount /boot/efi}}
 
-==== Install GRUB2 for UEFI ====
-
-Use <kbd>grub2-install</kbd> to install it for UEFI use:
-
-{{RootCmd|grub2-install --target{{=}}x86_64-efi}}
-
-This should install Grub2 in {{Path|/boot/grub}}, copy the core image to {{Path|/boot/efi/EFI/gentoo/grubx64.efi}}, and call [[Efibootmgr|efibootmgr]] to add a boot entry.
-
-{{Note|In case the information in the install section above was glazed over, it is helpful to [[GRUB2#Installation|set the GRUB_PLATFORMS variable]] in {{Path|/etc/portage/make.conf}} This will assist GRIUB2 in determining what options to use when detecting the proper EFI target. For 32-bit EFI systems use <code>efi-32</code>. For 64-bit use <code>efi-64</code>.}}
+{{Note|It is helpful to set the <code>GRUB_PLATFORMS</code> variable in {{Path|/etc/portage/make.conf}}. This will assist GRUB2 in determining what options to use when detecting the proper EFI target. For 32-bit EFI systems use <code>efi-32</code>. For 64-bit use <code>efi-64</code>.}}
 
 {{Important|In order for GRUB2 to install properly, the EFI directory ''must'' be mounted ''and'' the <tt>efivars</tt> kernel module must be loaded before the <tt>grub2-install</tt> command will complete successfully.}}
 
 ==== Alternative: using the default UEFI firmware location ====
 
-If the system's UEFI firmware fails to find GRUB2's EFI bootloader file, using the default bootloader location should provide a working solution. This circumvents the boot menu managed by [[Efibootmgr|efibootmgr]] and thus offers reduced functionality, but is less error prone. Do do this, verify the EFI partition is mounted at {{Path|/boot/efi}} then copy the file {{Path|grubx64.efi}} located at {{Path|/boot/efi/EFI/gentoo/grubx64.efi}} to {{Path|/boot/efi/EFI/BOOT/BOOTX64.EFI}}. This example assumes a 64-bit EFI system, adjust accordingly for 32-bit EFI systems.
+If the system's UEFI firmware fails to find GRUB2's EFI bootloader file, using the default boot loader location should provide a working solution. This circumvents the boot menu managed by [[Efibootmgr|efibootmgr]] and thus offers reduced functionality, but is less error prone. Do do this, verify the EFI partition is mounted at {{Path|/boot/efi}} then copy the file {{Path|grubx64.efi}} located at {{Path|/boot/efi/EFI/gentoo/grubx64.efi}} to {{Path|/boot/efi/EFI/BOOT/BOOTX64.EFI}}. This example assumes a 64-bit EFI system, adjust accordingly for 32-bit EFI systems.
 
 === BIOS with hybrid MBR-GPT partitioning ===
 
@@ -421,15 +424,17 @@ Dual booting with operating systems that are blind to a GPT-partitioned disk req
 
 {{Warning|Playing with a hybrid MBR can be confusing; make no assumptions about the reliability of the instructions in this sub-section. Consider the advice found here as guidance for experimentation; not official documentation!}} 
 
-Some operating systems lack ability to boot from anything but BIOS - MBR (includes all versions of Microsoft Windows prior to Windows Vista). It should be noted that support for 32-bit (as opposed to 64-bit) UEFI is less than perfect for certain machines.
+Some operating systems lack the ability to boot from anything but BIOS - MBR (which includes all versions of Microsoft Windows prior to Windows Vista). It should be noted that support for 32-bit (as opposed to 64-bit) UEFI is less than perfect for certain machines.
 
-GRUB2 supports booting from GPT and MBR partition tables via the <tt>part_gpt</tt> and <tt>part_msdos</tt> modules. However, a successful setup and GRUB2's ability to boot correctly depends both on loaded partition modules and on correctly installing GRUB2. A determining factor in how GRUB2 is installed BIOS - MBR vs BIOS - GPT) is the presence of a EE00 (GPT protective) partition as the first partition in the MBR.  
+GRUB2 supports booting from GPT and MBR partition tables via the <tt>part_gpt</tt> and <tt>part_msdos</tt> modules. However, a successful setup and GRUB2's ability to boot correctly depends both on loaded partition modules and on correctly installing GRUB2. A determining factor in how GRUB2 is installed (BIOS-MBR vs BIOS-GPT) is the presence of a EE00 (GPT protective) partition as the first partition in the MBR.  
 
-With a hybrid MBR, GRUB2 will install ''if'' the first partition in the MBR table is an <code>EE00</code> partition. An <code>EF02</code> partition should be present anywhere in the disk and not necessarily in the MBR list to leave enough open sectors embed the {{Path|core.img}} file to the disk.
+With a hybrid MBR, GRUB2 will install ''if'' the first partition in the MBR table is an <code>EE00</code> partition. An <code>EF02</code> partition should be present anywhere in the disk and not necessarily in the MBR list. Leave enough open sectors before the first partition!
 
 {{Note|In this case one does ''not'' have to add/list an <code>EE00</code> partition in the hybrid MBR list manually, <tt>gdisk</tt> will provide a prompt to list one if booting with GRUB2 before displaying the provided list (up to 3 partitions) by the user.}}
 
-Creating a hybrid MBR is easy using <kbd>gdisk</kbd>: at the main menu press the {{Key|r}} key (for recovery and transformation), then press {{Key|h}} key (CHS recompute), then enter the series of partitions (less or equal to 3) in the order they should be be listed in the MBR. Finally enter the hexadecimal partition type without the <code>0x</code> prefix or accept the defaults by repeatedly pressing the {{Key|y}} key. Enable only a single boot flag as found the following example:
+Creating a hybrid MBR is easy using <kbd>gdisk</kbd>: at the main menu press the {{Key|r}} key (for recovery and transformation), then press {{Key|h}} key (CHS recompute), then enter the series of partitions (less or equal to 3) in the order they should be be listed in the MBR. Finally enter the hexadecimal partition type without the <code>0x</code> prefix or accept the defaults by repeatedly pressing the {{Key|y}} key.
+
+Enable only a single boot flag as found the following example:
 
 {{RootCmd|gdisk /dev/sdg|output=<pre>
 GPT fdisk (gdisk) version 0.8.1
@@ -500,13 +505,9 @@ Number  Boot  Start Sector   End Sector   Status      Code
 Recovery/transformation command (? for help): w
 </pre>}}
 
-Verify successful operation by listing the devices.
+{{Note|In the example above, {{Key|N}} was used to answer the safe questions. Without {{Key|N}}, <tt>fdisk -l /dev/sdg</tt> will list the MBR partition list just fine but <tt>ls /dev</tt> wouldn't list the partitions - and even more annoying: the partitions wouldn't be listed in DOS/BIOS.}}
 
-{{Note|In the example above, {{Key|N}} was used to answer the safe questions because without that <tt>fdisk -l /dev/sdg</tt> will list the MBR partition list just fine but listing the block devices with a <tt>ls /dev</tt> wouldn't list the partitions and more annoying: the partitions wouldn't be listed in DOS/BIOS.}}
-
-{{Note|It might be necessary to manually remove the <code>EE00</code> (GPT protective) partition in the MBR list for that drive using <tt>fdisk</tt>, because <tt>fdisk</tt> lists that partition as being the third one. The BIOS/DOS does not recognize the partition table with its presence then. This is quite weird (as the previous output shows) because the MBR partition table should be correctly recognized when the hybrid MBR was freshly created. The GPT partition table needs to be reloaded then from a file and the MBR needs to be re-hybridizeda second time after a few experiments.}}
-
-And finally install GRUB2. See the [[#Troubleshooting|troubleshooting]] section below for possible issues not listed in the notes above.
+Finally install GRUB2. See the [[#Troubleshooting|troubleshooting]] section below for possible issues not listed in the notes above.
 
 == Chainloading ==
 
