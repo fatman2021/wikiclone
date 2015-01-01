@@ -1,0 +1,103 @@
+{{Stub}}
+
+Most x86 and x86_64 systems only use either the MBR (MS-DOS based) partition table layout, or the GPT (GUID Partition Table) layout. However, in certain situations it might be necessary for a GPT partition layout to have an "MBR view" overlayed. This is called '''Hybrid MBR/GPT'''.
+
+== Using hybrid partition table ==
+
+Using a hybrid partition table might be necessary when dual-booting operating systems that are blind to a GPT-partitioned disk. In these situations, the partition definition requires a tricky workaround.
+
+=== Creating with gdisk ===
+
+Creating a hybrid MBR is easy using <kbd>gdisk</kbd>: at the main menu press the {{Key|r}} key (for recovery and transformation), then press {{Key|h}} key (CHS recompute), then enter the series of partitions (less or equal to 3) in the order they should be be listed in the MBR. Finally enter the hexadecimal partition type without the <code>0x</code> prefix or accept the defaults by repeatedly pressing the {{Key|y}} key.
+
+Enable only a single boot flag as found the following example:
+
+{{RootCmd|gdisk /dev/sdg|output=<pre>
+GPT fdisk (gdisk) version 0.8.1
+ 
+Partition table scan:
+  MBR: MBR only
+  BSD: not present
+  APM: not present
+  GPT: present
+ 
+Found valid MBR and GPT. Which do you want to use?
+ 1 - MBR
+ 2 - GPT
+ 3 - Create blank GPT
+ 
+Your answer: 2
+</pre>}}
+
+{{RootCmd|gdisk /dev/sdg|output=<pre>
+...
+Using GPT and creating fresh protective MBR.
+ 
+Command (? for help): r
+Recovery/transformation command (? for help): p
+Disk /dev/sdg: 625142448 sectors, 298.1 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 744E8BF3-39A4-4908-8646-AC2E5661C8CF
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 625142414
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+ 
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048       566233087   270.0 GiB   8300  Linux filesystem
+   2       566233088       625142414   28.1 GiB    0700  Microsoft basic data
+Recovery/transformation command (? for help): h
+ 
+WARNING! Hybrid MBRs are flaky and dangerous! If you decide not to use one,
+just hit the Enter key at the below prompt and your MBR partition table will
+be untouched.
+ 
+Type from one to three GPT partition numbers, separated by spaces, to be
+added to the hybrid MBR, in sequence: 2 1
+Place EFI GPT (0xEE) partition first in MBR (good for GRUB)? (Y/N): N
+ 
+ 
+Creating entry for GPT partition #2 (MBR partition #1)
+Enter an MBR hex code (default 07): 
+Set the bootable flag? (Y/N): Y
+ 
+Creating entry for GPT partition #1 (MBR partition #2)
+Enter an MBR hex code (default 83): 
+...
+Unused partition space(s) found. Use one to protect more partitions? (Y/N): N
+ 
+Recovery/transformation command (? for help): o
+ 
+Disk size is 625142448 sectors (298.1 GiB)
+MBR disk identifier: 0x00000000
+MBR partitions:
+ 
+Number  Boot  Start Sector   End Sector   Status      Code
+   1      *      566233088    625142414   primary     0x07
+   2                  2048    566233087   primary     0x83
+   4                     1         2047   primary     0xEE
+ 
+ 
+Recovery/transformation command (? for help): w
+</pre>}}
+
+{{Note|In the example above, {{Key|N}} was used to answer the safe questions. Without {{Key|N}}, <tt>fdisk -l /dev/sdg</tt> will list the MBR partition list just fine but <tt>ls /dev</tt> wouldn't list the partitions - and even more annoying: the partitions wouldn't be listed in DOS/BIOS.}}
+
+== Supporting boot loaders ==
+
+=== GRUB2 ===
+
+GRUB2 supports booting from GPT and MBR partition tables via the <tt>part_gpt</tt> and <tt>part_msdos</tt> modules. However, a successful setup and GRUB2's ability to boot correctly depends both on loaded partition modules and on correctly installing GRUB2. A determining factor in how GRUB2 is installed (BIOS-MBR vs BIOS-GPT) is the presence of a EE00 (GPT protective) partition as the first partition in the MBR.  
+
+With a hybrid MBR, GRUB2 will install ''if'' the first partition in the MBR table is an <code>EE00</code> partition. An <code>EF02</code> partition should be present anywhere in the disk and not necessarily in the MBR list. Leave enough open sectors before the first partition!
+
+{{Note|In this case one does ''not'' have to add/list an <code>EE00</code> partition in the hybrid MBR list manually, <tt>gdisk</tt> will provide a prompt to list one if booting with GRUB2 before displaying the provided list (up to 3 partitions) by the user.}}
+
+
+GRUB2 requires an <code>EE00</code> partition type at the first listing in the MBR partition list entry, however it may pose a problem when booting other operating systems on the same disk (especially Windows). A workaround is available in order to recognize a GPT partitioned disk with (or without) hybrid MBR. Removing any protective <code>EE00</code> partition with the <tt>fdisk</tt> command.
+
+{{Warning|Do '''not use''' <tt>gdisk</tt> to remove the <code>EE00</code> partition! The <tt>gdisk</tt> command does not work because a "fake" partition exists to protect the main GPT table while booted in BIOS - MBR mode.}}
+
+Use other disk tools such as <tt>parted</tt> ({{Package|sys-block/parted}}) or <tt>gparted</tt> ({{Package|sys-block/gparted}}) to resize after that. Otherwise use <tt>gdisk</tt> to add protective <code>EE00</code> partitions to protect at least GPT main and backup the partition before using any non-GPT aware tools if necessary.
+
+Another issue should be addressed when attempting to use a GPT Hybrid MBR configuration: Windows MSDOS based bootloaders) may not find suitable partitions to boot from if there is a <code>EE00</code> partition protecting the GPT main partition table (sectors 1-2047). If this happens remove the protective <code>EE00</code> partition before getting a valid MBR partition list in [MS]DOS tools (to format a partition for example, the tools recognized a GPT partitioned disk at least). And ''then'' use <tt>gdisk</tt> to recompute the CHS value for hybrid MBR (in the ''recovery and transformation'' menu, or in the ''expert'' section of <tt>gdisk</tt>'s main menu).
