@@ -315,41 +315,49 @@ Creating partitions in <tt>gdisk</tt> is straight forward for users already fami
 == UEFI GPT ==
 
 === UEFI Partition ===
+
 For UEFI GPT boot using GRUB2, the system ''must'' have a dedicated EFI partition containing a FAT filesystem.
 
 {{Important|UEFI GPT setup is entirely different ''and incompatible'' with the steps listed in the two BIOS modes above. Attempting to somehow combine BIOS mode with the steps to come will result in a broken system.}}
 
-The EFI partition can ''replace'' having a {{Path|/boot}} partition on {{Path|/dev/sda1}} by having a {{Path|/boot/efi}} partition on {{Path|/dev/sda1}}. This is to say a successful EFI boot scenario using GRUB2 ''can'' operate with two partitions total (three total if a swap partition is needed): a root partition and an EFI partition. Using this configuration, the {{Path|/boot}} '''folder''' will be located in the root {{Path|/}} '''partition''' (at {{Path|/boot}}) and the EFI '''partition''' will mount ''in'' the boot '''folder''' (at {{Path|/boot/efi}}). For further clarification, see the example {{Path|/etc/fstab}} file below.
+The EFI partition can ''replace'' having a {{Path|/boot}} partition on {{Path|/dev/sda1}} by having a {{Path|/boot/efi}} partition on {{Path|/dev/sda1}}. This is to say a successful EFI boot scenario using GRUB2 ''can'' operate with two partitions total (three total if a swap partition is needed): a root partition and an EFI partition. Using this configuration, the {{Path|/boot}} ''folder'' will be located in the root {{Path|/}} ''partition'' (at {{Path|/boot}}) and the EFI ''partition'' will mount ''in'' the boot ''folder'' (at {{Path|/boot/efi}}). For further clarification, see the example {{Path|/etc/fstab}} file below.
 
-{{FileBox|filename=/etc/fstab|title=Example of an UEFI capable {{Path|/etc/fstab}} file with a swap partition:|
-<pre>
+{{FileBox|filename=/etc/fstab|title=Example of an UEFI capable {{Path|/etc/fstab}} file with a swap partition:|<pre>
 /dev/sda1		/boot/efi	vfat		noauto,noatime	1 2
 /dev/sda2		none		swap		sw		0 0
 /dev/sda3		/		ext4		noatime		0 1
 </pre>}}
 
-Generating a 100MB partition for {{Path|/boot/efi}} should provide plenty of space for holding multiple <code>.efi</code> files (multiple entries will most likely not be needed; most systems will only use one).
+Generating a 100MB partition for {{Path|/boot/efi}} should provide plenty of space for holding multiple {{Path|*.efi}} files (multiple entries will most likely not be needed; most systems will only use one).
 
-Create the partition using the partitioning [[Partition#GUID_Partition_Table|tool of choice]]. The <kbd>gdisk</kbd> ({{Package|sys-apps/gptfdisk}}) and <kbd>parted</kbd> ({{Package|sys-block/parted}}) tools utilities nicely for this purpose. When using the <kbd>gdisk</kbd> utility, be sure to use type <code>EF00</code>.
+Create the partition using the partitioning [[Partition#GUID_Partition_Table|tool of choice]]. The <tt>gdisk</tt> ({{Package|sys-apps/gptfdisk}}) and <tt>parted</tt> ({{Package|sys-block/parted}}) tools fit nicely for this purpose. When using the <tt>gdisk</tt> utility, be sure to use type <code>EF00</code>.
 
 Proceed to create a FAT filesystem on the EFI system partition using <kbd>mkdosfs</kbd> and add it to {{Path|/etc/fstab}} by following the example below:
 
 {{RootCmd|mkdosfs -F 32 -n efi-boot /dev/sda1
-|mkdir /boot/efi
-|echo '/dev/sda1		/boot/efi	vfat		noauto,noatime	1 2' >> /etc/fstab
-|mount /boot/efi}}
+|mkdir /boot/efi}}
 
-=== Install BRUB2 for UEFI ===
+{{FileBox|filename=/etc/fstab|title=Adding the /boot/efi mount entry|<pre>
+/dev/sda1		/boot/efi	vfat		noauto,noatime	1 2
+</pre>}}
+
+{{RootCmd|mount /boot/efi}}
+
+=== Install GRUB2 for UEFI ===
+
+Use <kbd>grub2-install</kbd> to install it for UEFI use:
+
 {{RootCmd|grub2-install --target{{=}}x86_64-efi}}
-This should install Grub2 in {{Path|/boot/grub}}, copy the core image to {{Path|/boot/efi/EFI/gentoo/grubx64.efi}}, and call <kbd>efibootmgr</kbd> to add a boot entry.
 
-{{Note|In case the information in the install section above was glazed over, it is helpful to [[GRUB2#Installation|set the GRUB_PLATFORMS variable]] in {{Path|/etc/portage/make.conf}} This will assist Grub2 in determining what options to use when detecting the proper EFI target. For 32-bit EFI systems use "<code>efi-32</code>". For 64-bit use "<code>efi-64</code>".}}
+This should install Grub2 in {{Path|/boot/grub}}, copy the core image to {{Path|/boot/efi/EFI/gentoo/grubx64.efi}}, and call [[Efibootmgr|efibootmgr]] to add a boot entry.
 
-{{Important|In order for GRUB2 to install properly, the EFI directory ''must'' be mounted ''and'' the <code>efivars</code> kernel module present in the kernel before the <code>grub2-install</code> command will complete successfully.}}
+{{Note|In case the information in the install section above was glazed over, it is helpful to [[GRUB2#Installation|set the GRUB_PLATFORMS variable]] in {{Path|/etc/portage/make.conf}} This will assist GRIUB2 in determining what options to use when detecting the proper EFI target. For 32-bit EFI systems use <code>efi-32</code>. For 64-bit use <code>efi-64</code>.}}
+
+{{Important|In order for GRUB2 to install properly, the EFI directory ''must'' be mounted ''and'' the <tt>efivars</tt> kernel module must be loaded before the <tt>grub2-install</tt> command will complete successfully.}}
 
 === Alternative: Using the Default UEFI Firmware Location ===
 
-If the system's UEFI firmware fails to find GRUB2's EFI bootloader file, using the default bootloader location should provide a working solution. This circumvents the boot menu managed by <kbd>efibootmgr</kbd> and thus offers reduced functionality, but is less error prone. Do do this, verify the EFI partition is mounted at {{Path|/boot/efi}} then copy the file {{Path|grubx64.efi}} located at {{Path|/boot/efi/EFI/gentoo/grubx64.efi}} to {{Path|/boot/efi/EFI/BOOT/BOOTX64.EFI}} This example assumes a 64-bit EFI system, adjust accordingly for 32-bit EFI systems.
+If the system's UEFI firmware fails to find GRUB2's EFI bootloader file, using the default bootloader location should provide a working solution. This circumvents the boot menu managed by [[Efibootmgr|efibootmgr]] and thus offers reduced functionality, but is less error prone. Do do this, verify the EFI partition is mounted at {{Path|/boot/efi}} then copy the file {{Path|grubx64.efi}} located at {{Path|/boot/efi/EFI/gentoo/grubx64.efi}} to {{Path|/boot/efi/EFI/BOOT/BOOTX64.EFI}}. This example assumes a 64-bit EFI system, adjust accordingly for 32-bit EFI systems.
 
 == Hybrid GPT MBR ==
 Dual booting with operating systems that are blind to a GPT-partitioned disk requires a tricky workaround.
