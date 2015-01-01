@@ -651,61 +651,70 @@ menuentry "Windows 7 UEFI/GPT" {
 }
 </pre>}}
 
-== Extended Features ==
+== Extended features ==
 
-=== Enabling Resume Swap for Suspend ===
+=== Enabling resume swap for suspend ===
+
 Open up {{Path|/etc/default/grub}} with root privileges and add: 
 
-{{CodeBox|<pre>GRUB_CMDLINE_LINUX="resume=/dev/sdXY"</pre>}} 
+{{FileBox|filename=/etc/default/grub|title=Enabling resume swap|<pre>
+GRUB_CMDLINE_LINUX="resume=/dev/sdXY"
+</pre>}} 
 
 Where ''XY'' is the swap partition location, which can be found by running the <code>fdisk</code> command:
 
 {{RootCmd|fdisk -l}} 
 
-If it appears UUID labels are being used in {{Path|/etc/default/grub}} instead of a device path then enter the UUID instead. In order to update the menulist with the startup information that was changed in GRUB2's configuration file ({{Path|/etc/default/grub}}) run: 
+If it appears UUID labels are being used in {{Path|/etc/default/grub}} instead of a device path then enter the UUID instead. In order to update the menu list with the startup information that was changed in GRUB2's configuration file ({{Path|/etc/default/grub}}) run: 
 
 {{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg}}
 
 === Chroot ===
-When a separate {{Path|/boot}} partition exists, be sure to mount the target root partition before chrooting, but do not the {{Path|/boot}} partition until '''after''' chrooting to the new environment. This is required because <kbd>grub2-mkconfig</kbd> will not detect {{Path|/boot}} as a separate partition and will assume {{Path|/boot}} and root are on the same partition.
+
+When a separate {{Path|/boot}} partition exists, be sure to mount the target root partition before chrooting, but do not the {{Path|/boot}} partition until ''after'' chrooting to the new environment. This is required because <tt>grub2-mkconfig</tt> will not detect {{Path|/boot}} as a separate partition and will assume {{Path|/boot}} and root are on the same partition.
 
 === Booting from LVM, RAID and/or Encrypted Volumes ===
 
 This section is based on converting a non-UEFI, MBR partition based system to boot from a GPT RAID enabled disk. It is currently incomplete, and partially edited from the previous version.
 
-{{Note|In '''BIOS''' - MBR disks, leave a space at the start of the disk for GRUB2 to be installed. The conventional 32 kilobytes (63 sectors of 512 bytes) is not enough for GRUB2 when RAID is enabled, the space should be at least 1MB (the first primary partition should start on or after sector 2048). Most disk partition utilities automatically perform this operation.
-
-On '''BIOS''' - GPT disks, explicit allocation of space for the GRUB2 BIOS boot partition must be provided. Create a disk at least 1 MB in size, type <code>EF02</code> (BIOS boot partition). (This will not be used in a UEFI system, so you could use the same space for the EFI partition (type <code>EF00</code>) when swapping the disk between systems)
-
-For the following three code blocks, first observe the output of GRUB2 installing on the first few sectors (only 63 sectors of 512 bytes) of a disk. Installing with limited sectors will cripple GRUB2's operation making it incapable of supporting complex disk setups such as RAID and ultimately unable to boot the system. GRUB2's outpout on the second block (a disk with 2048 sectors free before the first primary partition) displays adequate output. The output from GRUB2 in the third block shows the <code>EF02</code> partition (without which GRUB2 will refuse to install).
+{{Note|In BIOS - MBR disks, leave a space at the start of the disk for GRUB2 to be installed. The conventional 32 kilobytes (63 sectors of 512 bytes) is not enough for GRUB2 when RAID is enabled, the space should be at least 1MB (the first primary partition should start on or after sector 2048). Most disk partition utilities automatically perform this operation.
+<br/>
+On BIOS - GPT disks, explicit allocation of space for the GRUB2 BIOS boot partition must be provided. Create a disk at least 1 MB in size, type <code>EF02</code> (BIOS boot partition). (This will not be used in a UEFI system, so you could use the same space for the EFI partition (type <code>EF00</code>) when swapping the disk between systems)
+<br/>
+For the following three code blocks, first observe the output of GRUB2 installing on the first few sectors (only 63 sectors of 512 bytes) of a disk. Installing with limited sectors will cripple GRUB2's operation making it incapable of supporting complex disk setups such as RAID and ultimately unable to boot the system. GRUB2's output on the second block (a disk with 2048 sectors free before the first primary partition) displays adequate output. The output from GRUB2 in the third block shows the <code>EF02</code> partition (without which GRUB2 will refuse to install).
 }}
 
-{{CodeBox|title=Code block 1|<pre>Disk /dev/sda: 160.0 GB, 160000000000 bytes, 312500000 sectors
+{{CodeBox|title=Code block 1|<pre>
+Disk /dev/sda: 160.0 GB, 160000000000 bytes, 312500000 sectors
 Units = sectors of 1 * 512 = 512 bytes
 Sector size (logical/physical): 512 bytes / 512 bytes
 I/O size (minimum/optimal): 512 bytes / 512 bytes
 Disk identifier: 0x000cfe45
-
+ 
    Device Boot      Start         End      Blocks   Id  System
-/dev/sda1   *          63    48821534    24410736   8e  Linux LVM</pre>}}
+/dev/sda1   *          63    48821534    24410736   8e  Linux LVM
+</pre>}}
 
-{{CodeBox|title=Code block 2|<pre>Disk /dev/sda: 320.1 GB, 320072933376 bytes, 625142448 sectors
+{{CodeBox|title=Code block 2|<pre>
+Disk /dev/sda: 320.1 GB, 320072933376 bytes, 625142448 sectors
 Units = sectors of 1 * 512 = 512 bytes
 Sector size (logical/physical): 512 bytes / 512 bytes
 I/O size (minimum/optimal): 512 bytes / 512 bytes
 Disk identifier: 0x0009d633
-
+ 
    Device Boot      Start         End      Blocks   Id  System
-/dev/sda1   *        2048      499711      248832   8e  Linux LVM</pre>}}
+/dev/sda1   *        2048      499711      248832   8e  Linux LVM
+</pre>}}
 
-{{CodeBox|title=Code block 3|<pre>GPT fdisk (gdisk) version 0.8.8
-
+{{CodeBox|title=Code block 3|<pre>
+GPT fdisk (gdisk) version 0.8.8
+ 
 Partition table scan:
   MBR: protective
   BSD: not present
   APM: not present
   GPT: present
-
+ 
 Found valid GPT with protective MBR; using GPT.
 Disk /dev/sdb: 5860533168 sectors, 2.7 TiB
 Logical sector size: 512 bytes
@@ -714,48 +723,48 @@ Partition table holds up to 128 entries
 First usable sector is 34, last usable sector is 5860533134
 Partitions will be aligned on 2048-sector boundaries
 Total free space is 1050590 sectors (513.0 MiB)
-
+ 
 Number  Start (sector)    End (sector)  Size       Code  Name
    1            2048         1050623   512.0 MiB   EF02  BIOS boot partition
    2         1312768        68421631   32.0 GiB    8200  Linux swap
    3        68683776       270010367   96.0 GiB    8300  root
    4       270272512       471599103   96.0 GiB    8300  var
-   5       471861248      5860533134   2.5 TiB     8300  home</pre>}}
+   5       471861248      5860533134   2.5 TiB     8300  home
+</pre>}}
 
 ==== Booting from LVM Logical Volumes ====
+
 GRUB2 supports booting from an [[LVM]] partition however the <code>device-mapper</code> USE flag must be set in order to activate this feature.
 
-{{FileBox|filename=/etc/portage/package.use|<pre>
+{{FileBox|filename=/etc/portage/package.use|title=Enabling the device-mapper USE flag for GRUB2|<pre>
 sys-boot/grub:2 device-mapper
 </pre>}}
 
-If GRUB2 is currently installed, re-emerge it using the <tt>--newuse</tt> option:
+If GRUB2 is currently installed, re-emerge it using the <kbd>--newuse</kbd> option:
 
-{{Emerge
-|sys-block/grub:2
-|params+=--newuse
-}}
+{{Emerge|sys-block/grub:2|params+=--newuse}}
 
 Next tell GRUB2 to pre-load the <code>lvm</code> module:
 
-{{RootCmd|echo "GRUB_PRELOAD_MODULES{{=}}lvm" >> /etc/default/grub}}
+{{FileBox|filename=/etc/default/grub|title=Preloading LVM module|lang=bash|1=
+GRUB_PRELOAD_MODULES=lvm
+}}
 
 Finally (re)generate a GRUB2 {{Path|grub.cfg}} file using the <kbd>grub2-mkconfig</kbd> command.
 
 ==== Booting from RAID Array ====
 
-After considerable grief, the following working configuration was obtained. 
+In this section, we assume a system has three hard drives. {{Path|/dev/sda}} is the original MBR Windows Vista disk, untouched apart from installing GRUB2 onto it. {{Path|/dev/sdb}} and {{Path|/dev/sdc}} are configured identically.
 
-The system has three hard drives. /dev/sda is the original MBR Windows Vista disk, untouched apart from installing GRUB2 onto it. /dev/sdb and /dev/sdc are configured identically.
-
-{{CodeBox|<pre>GPT fdisk (gdisk) version 0.8.10
-
+{{CodeBox|<pre>
+GPT fdisk (gdisk) version 0.8.10
+ 
 Partition table scan:
   MBR: protective
   BSD: not present
   APM: not present
   GPT: present
-
+ 
 Found valid GPT with protective MBR; using GPT.
 Disk /dev/sdc: 1953525168 sectors, 931.5 GiB
 Logical sector size: 512 bytes
@@ -764,18 +773,20 @@ Partition table holds up to 128 entries
 First usable sector is 34, last usable sector is 1953525134
 Partitions will be aligned on 2048-sector boundaries
 Total free space is 509918 sectors (249.0 MiB)
-
+ 
 Number  Start (sector)    End (sector)  Size       Code  Name
    1            2048        67110911   32.0 GiB    8200  Linux swap
    2        67110912        67127295   8.0 MiB     EF02  BIOS boot partition
    3        67373056       402917375   160.0 GiB   8300  Linux filesystem
-   4       403179520      1953525134   739.3 GiB   8300  Linux filesystem</pre>}}
+   4       403179520      1953525134   739.3 GiB   8300  Linux filesystem
+</pre>}}
 
-sdb3/sdc3 are raided together to make the / partition.
+{{Path|/dev/sdb3}} and {{Path|/dev/sdc3}} are raided together to make the {{Path|/}} partition.
 
-sdb4/sdc4 are raided together to make the /home partition.
+{{Path|/dev/sdb4}} and {{Path|/dev/sdc4}} are raided together to make the {{Path|/home}} partition.
 
-{{CodeBox|<pre>menuentry 'Gentoo GNU/Linux, with Linux x86_64-3.14.14-gentoo' --class gentoo --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-x86_64-3.14.14-gentoo-advanced-8bb0e52c-d524-4af8-ac08-f3c9238c6040' {
+{{FileBox|filename=/boot/grub/grub.cfg|<pre>
+menuentry 'Gentoo GNU/Linux, with Linux x86_64-3.14.14-gentoo' --class gentoo --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-x86_64-3.14.14-gentoo-advanced-8bb0e52c-d524-4af8-ac08-f3c9238c6040' {
 	load_video
 	set gfxpayload=keep
 	insmod gzio
@@ -795,7 +806,7 @@ sdb4/sdc4 are raided together to make the /home partition.
 	echo	'Loading initial ramdisk ...'
 	initrd	/boot/initramfs-genkernel-x86_64-3.14.14-gentoo
 }
-
+ 
 menuentry 'Gentoo GNU/Linux mirror 2' --class gentoo --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-8bb0e52c-d524-4af8-ac08-f3c9238c6040' {
         load_video
         insmod gzio
@@ -828,37 +839,33 @@ At this point, GRUB2 is ready to hand over control to Linux. Any errors up to th
 
 Linux is unable to assemble RAID assemblies in the kernel. It must call out to user-space tools; if the root partition is a RAID set, an initramfs '''must''' be used.
 
-{{Warning|Do '''not''' use <kbd>genkernel</kbd> utility to generate a kernel when using a RAID set for the root partition.
-}}
+{{Warning|Do ''not'' use <kbd>genkernel</kbd> utility to generate a kernel when using a RAID set for the root partition.}}
 
-Make sure the kernel is configured correctly. Especially make sure that <code>CONFIG_FHANDLE</code> variable is set (this is why genkernel> must not be used - genkernel will reset the value of <code>CONFIG_FHANDLE</code> and reap havoc upon the RAID set).
+Make sure the kernel is configured correctly. Especially make sure that <code>CONFIG_FHANDLE</code> variable is set (this is why genkernel must not be used - genkernel will reset the value of <code>CONFIG_FHANDLE</code> and reap havoc upon the RAID set).
 
 Compile the kernel manually by running the following commands as root:
 
-{{RootCmd
-|cd /usr/src/linux
+{{RootCmd|cd /usr/src/linux
 |make
 |make modules_install
 |make install
 }}
 
-At this point it is probably a good idea to <kbd>emerge udev</kbd> - and make sure all warnings are fixed! This is how I picked up on FHANDLE, before that the raid was randomly losing devices (separate from, but confused with, it losing the root device led to a real puzzle).
+At this point it is probably a good idea to <kbd>emerge udev</kbd> - and make sure all warnings are fixed! 
 
 Use the <kbd>genkernel</kbd> utility to generate an initramfs:
 
-{{RootCmd
-|genkernel --mdadm --disklabel all --install initramfs
-}}
+{{RootCmd|genkernel --mdadm --disklabel all --install initramfs}}
 
-{{Note| The <tt>--mdadm</tt> option is needed to make the initramfs RAID-aware, and apparently the <tt>--disklabel</tt> option is needed to view disk UUIDs.}}
+{{Note|The <code>--mdadm</code> option is needed to make the initramfs RAID-aware, and the <code>--disklabel</code> option is needed to view disk UUIDs.}}
 
-The linux and initrd lines in {{Path|/boot/grub/grub.cfg}} should now load the Linux kernel. Add the <code>domdadm</code> parameter to the Linux kernel cmdline in GRUB2. Without it the RAID set will not assemble and the Linux kernel will not find the root device.
+The <code>linux</code> and <code>initrd</code> lines in {{Path|/boot/grub/grub.cfg}} should now load the Linux kernel. Add the <code>domdadm</code> parameter to the Linux kernel command line in GRUB2. Without it the RAID set will not assemble and the Linux kernel will not find the root device.
 
-Note that the second boot option contains a deliberate error. Linux will be unable to find root device by itself and will drop into the GRUB2 shell. ''This is needed.''
+{{Note|The second boot option contains a deliberate error. Linux will be unable to find root device by itself and will drop into the GRUB2 shell. ''This is needed.''}}
 
-The first boot option correctly assembles the root RAID set at boot time, and boots successfully. Any attempt to access the root device from user space will fail as if the RAID set does not exist. This breaks GRUB2, and making the mistake of trying to run <kbd>grub2-install</kbd> on top of these errors will break GRUB boot altogether. Make sure Rescue CD and a copy of the Gentoo handbook are easily available before attempting to use a RAID set on the root disk.
+The first boot option correctly assembles the root RAID set at boot time, and boots successfully. Any attempt to access the root device from user space will fail as if the RAID set does not exist. This breaks GRUB2, and making the mistake of trying to run <tt>grub2-install</tt> on top of these errors will break GRUB boot altogether. Make sure Rescue CD and a copy of the Gentoo handbook are easily available before attempting to use a RAID set on the root disk.
 
-The second option drops into a GRUB2 shell. Running <kbd>ls /dev/md*</kbd> will show that initrd has found the RAID set devices, and giving it the device, eg /dev/md127, will boot into a fully working system with userspace access to the boot device.
+The second option drops into a GRUB2 shell. Running <kbd>ls /dev/md*</kbd> will show that initrd has found the RAID set devices, and giving it the device, eg {{Path|/dev/md127}}, will boot into a fully working system with userspace access to the boot device.
 
 Put these into a {{Path|/etc/grub.d}} script at the first available opportunity.
 
@@ -868,7 +875,7 @@ Any further documentation from a user that has successfully booted a system from
 
 {{Note|Booting from RAID is only relevant for BIOS [boot]. EFI users shall roll out their custom initramfs or use an initramfs package available out there. Depending on your setup, you may use either a BIOS - MBR or a BIOS - GPT combination. Here is an example to a BIOS - GPT setup with {{Path|/boot}} and <code>root</code> {{Path|/}} in a RAID-1 configuration [http://sinodun.com/2010/07/installing-grub2-on-gnulinux-software-raid/] and Xen on RAID-5.}}
 
-{{Note|The <kbd>grub2-mkdevicemap</kbd> command and UUID re-setting have been removed and are no longer distributed with GRUB2. The UUID problem GRUB2 once had no longer appears to be an issue. Installing to two devices in a RAID-1 configuration seemed to work with no problems; This is the command that was successful <kbd>grub2-install /dev/sda && grub2-install /dev/sdb</kbd> (after creating the expected </code>EF02</code> BIOS boot partition).}}
+{{Note|The <tt>grub2-mkdevicemap</tt> command and UUID re-setting have been removed and are no longer distributed with GRUB2. The UUID problem GRUB2 once had no longer appears to be an issue. Installing to two devices in a RAID-1 configuration seemed to work with no problems; This is the command that was successful <kbd>grub2-install /dev/sda && grub2-install /dev/sdb</kbd> (after creating the expected </code>EF02</code> BIOS boot partition).}}
 
 {{Important|If this is a new installation of Gentoo, be sure to <kbd>emerge mdadm</kbd> in the chrooted environment before attempting to install GRUB2 as described in the note above, otherwise it will fail with '''"Path {{Path|/boot/grub}} is not readable by GRUB on boot. Installation is impossible. Aborting."'''  After installing the <kbd>mdadm</kbd> tool, GRUB2 can correctly read the RAID devices. The <kbd>grub2-install /dev/sda</kbd> and <kbd>grub2-install /dev/sdb</kbd> should work as expected on a RAID-1 array comprised of {{Path|/dev/sda2}} and {{Path|/dev/sdb2}} for boot.}}
 
@@ -889,9 +896,10 @@ Booting from a RAID array is very similar to booting from a LVM Logical Volume a
 
 This should work with a simple software RAID setup. However, the author has no idea or what command, if any exit at the moment of writing, to use to assemble an array such as <kbd>mdadm --assemble --scan /dev/md0</kbd> that an initramfs could take care of.
 
-==== Booting from LUKS I havePhysical Volume ====
+==== Booting from LUKS ====
 
 Tell GRUB2 to look for cryptodisks:
+
 {{RootCmd|echo "GRUB_CRYPTODISK_ENABLE{{=}}y" >> /etc/default/grub}}
 
 (Re)generate the {{Path|grub.cfg}} with the <code>grub2-mkconfig</code> utility.
@@ -899,9 +907,11 @@ Tell GRUB2 to look for cryptodisks:
 {{Important|In grub 2.02 and greater, this parameter was renamed to <code>GRUB_ENABLE_CRYPTODISK</code>}}
 
 === Booting from Network (PXE) ===
+
 For more information on network booting with GRUB2, read the official "[https://www.gnu.org/software/grub/manual/grub.html#Network Network (PXE)]" section from the GNU software manual.
 
 === Using Framebuffer Display ===
+
 To have GRUB2 use a [[framebuffer]] graphical display, re-emerge GRUB with the <code>truetype</code> USE flag enabled. This will install a default True Type font as well as a font conversion utility.
 {{Emerge|--newuse sys-boot/grub:2}}
 
@@ -911,21 +921,20 @@ Proceed to configure the default GRUB2 configuration file located at {{Path|/etc
 …
 # Set resolution and color depth
 GRUB_GFXMODE=1366x768x32
-
+ 
 # Keep resolution when loading the kernel
 GRUB_GFXPAYLOAD_LINUX=keep
-
+ 
 # Set a background image
 GRUB_BACKGROUND="/boot/grub/bg.png"
-
+ 
 # Use a custom font, converted using grub2-mkfont utility
 GRUB_FONT="/boot/grub/fonts/roboto.pf2"
 }}
 
 In order to find out what display modes the system's graphics card supports, use the following commands on the GRUB2 shell:
 
-{{Cmd|prompt=(grub)|color=white|insmod all_video|videoinfo
-}}
+{{Cmd|prompt=(grub)|color=white|insmod all_video|videoinfo}}
 
 == Troubleshooting ==
 First off, checkout if you have an EFI02 (GPT disk) or bios_grub ([G]parted) for '''BIOS''' - GPT installation or enough gap before the first partition of the disk or the boot partition for '''BIOS''' - MBR installation before firing up `grub2-install' command. This will spare you some time.
