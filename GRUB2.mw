@@ -937,21 +937,24 @@ In order to find out what display modes the system's graphics card supports, use
 {{Cmd|prompt=(grub)|color=white|insmod all_video|videoinfo}}
 
 == Troubleshooting ==
-First off, checkout if you have an EFI02 (GPT disk) or bios_grub ([G]parted) for '''BIOS''' - GPT installation or enough gap before the first partition of the disk or the boot partition for '''BIOS''' - MBR installation before firing up `grub2-install' command. This will spare you some time.
 
-Secondly, checkout if {{Path|/boot/grub/grub.cfg}} was correctly generated with <kbd>grub2-mkconfig</kbd> or generate one yourself with a custom menuentry. Refer to previous section for more information. Do not fail to do this simple check before rebooting!
+First off, check if the system has a EFI02 (GPT disk) or bios_grub ([G]parted) for BIOS - GPT installation or enough gap before the first partition of the disk or the boot partition for BIOS - MBR installation before firing up <tt>grub2-install</tt> command. This will spare considerable debugging time.
+
+Secondly, check if {{Path|/boot/grub/grub.cfg}} was correctly generated with <kbd>grub2-mkconfig</kbd> or generate one with a custom menu entry. Refer to previous section for more information. Do not fail to do this simple check before rebooting!
 
 === GPT Hybrid MBR Workaround ===
-GRUB2 requires an <code>EE00</code> partition type at the first listing in the MBR partition list entry, howver it may pose a problem when booting other operating systems on the same disk (especially Windows). A workaround is available in order to recognize a GPT partitioned disk with (or without) hybrid MBR. Removing any protective <code>EE00</code> partition with the <kbd>fdisk</kbd> command.
-{{Warning|Not NOT USE gdisk to remove the <code>EE00</code> partition! The <kbd>gdisk</kbd> command does not work because a "fake" partition exists to protect the main GPT table while booted in '''BIOS''' - MBR mode.}}
 
-Use other disk tools such as <kbd>parted</kbd> ({{Package|sys-block/parted}}) or <kbd>gparted</kbd> ({{Package|sys-block/gparted}}) to resize after that. Otherwise use gdisk to add protective <code>EE00</code> partitions to protect at least GPT main and backup the partition before using any non-GPT aware tools if necessary.
+GRUB2 requires an <code>EE00</code> partition type at the first listing in the MBR partition list entry, however it may pose a problem when booting other operating systems on the same disk (especially Windows). A workaround is available in order to recognize a GPT partitioned disk with (or without) hybrid MBR. Removing any protective <code>EE00</code> partition with the <tt>fdisk</tt> command.
 
-Another issue should be addressed when attemping to use a GPT Hybrid MBR configuration: Windows (MSDOS based bootloaders) may not find suitable partitions to boot from if there is a <code>EE00</code> partition protecting the GPT main partition table (sectors 1-2047). If this happens remove the protective <code>EE00</code> partition before getting a valid MBR partition list in [MS]DOS tools (to format a partition for example, the tools recognized a GPT partitioned disk at least). And ''then'' use gdisk to recompute the CHS value for hybrid MBR (in the ''recovery and transformation'' menu, or in the ''expert'' section of gdisk's main menu).
+{{Warning|Do '''not use''' <tt>gdisk</tt> to remove the <code>EE00</code> partition! The <tt>gdisk</tt> command does not work because a "fake" partition exists to protect the main GPT table while booted in BIOS - MBR mode.}}
+
+Use other disk tools such as <tt>parted</tt> ({{Package|sys-block/parted}}) or <tt>gparted</tt> ({{Package|sys-block/gparted}}) to resize after that. Otherwise use <tt>gdisk</tt> to add protective <code>EE00</code> partitions to protect at least GPT main and backup the partition before using any non-GPT aware tools if necessary.
+
+Another issue should be addressed when attempting to use a GPT Hybrid MBR configuration: Windows MSDOS based bootloaders) may not find suitable partitions to boot from if there is a <code>EE00</code> partition protecting the GPT main partition table (sectors 1-2047). If this happens remove the protective <code>EE00</code> partition before getting a valid MBR partition list in [MS]DOS tools (to format a partition for example, the tools recognized a GPT partitioned disk at least). And ''then'' use <tt>gdisk</tt> to recompute the CHS value for hybrid MBR (in the ''recovery and transformation'' menu, or in the ''expert'' section of <tt>gdisk</tt>'s main menu).
 
 === Repopulating EFI Boot Manager Entries ===
 
-{{Note|The following examples presumes a '''32-bit''' EFI GRUB2 install, adjust accordingly for 64-bit EFI.}}
+{{Note|The following examples presumes a ''32-bit'' EFI GRUB2 install, adjust accordingly for 64-bit EFI.}}
 
 In case the Boot Manager entries need to be restored, they can be re-added without invoking <kbd>grub-install</kbd>. Load the <code>efivars</code> kernel module and install {{Package|sys-boot/efibootmgr}}:
 	 
@@ -978,11 +981,11 @@ grub2-install: error: cannot find EFI directory.
 '''Resolution:'''
 
 Properly setting the <code>GRUB_PLATFORMS</code> variable in {{Path|/etc/portage/make.conf}} (the first time!) as listed above would have resolved this error. Set the <code>GRUB_PLATFORMS</code> variable then re-emerge GRUB2 using the following command:
-{{Emerge
-|--newuse
-|sys-boot/grub:2}}
 
-In the case this error persists try forcing the install to the EFI directory by issuing the grub2-install command with correct parameters for the <tt>--target</tt> and <tt>--efi-directory</tt> options:
+{{Emerge|--newuse|sys-boot/grub:2}}
+
+In the case this error persists try forcing the install to the EFI directory by issuing the <kbd>grub2-install</kbd> command with correct parameters for the <kdb>--target</kbd> and <kbd>--efi-directory</kbd> options:
+
 {{RootCmd|grub2-install --target{{=}}x86_64-efi --efi-directory{{=}}/boot}}
 
 ==== Attempting to Install GRUB2 to a Disk or Partition ====
@@ -997,10 +1000,14 @@ However, blocklists are UNRELIABLE and their use is discouraged.
 
 '''Possible explanations followed by resolutions:'''
 
-# A {{Path|/boot}} partition is not mounted, run (as root) <kbd>mount /boot</kbd>
-# Attempting to install GRUB2 with a traditional ''BIOS'' - GPT setup. This could mean there is not any <code>EF02</code> or <code>bios_boot</code> partition to embed the {{Path|core.img}} file. Creating a little partition of a few hundreds kilobytes may be enough, although it is good practice to align this partition to 2048 sectors to avoid a performance penalty with the disk. A 1 MiB partition should work well.
-# Attempting to install GRUB2 in a partition e.g. {{Path|/dev/sda5}} using a ''BIOS'' - MBR setup (who did try it to ''BIOS'' - GPT?), simply add <tt>--force</tt> option switch to force install. It should behave with enough gap before the first sector of first partition or by using the <kbd>chattr</kbd> command (as described in the [[GRUB2#BIOS_MBR|''BIOS'' - MBR instructions above]]). It is also possible to destroy the partition boundary and the LUKS or LVM2 header (if one exists).
-# If <kbd>grub2-install</kbd> does not print any errors message or if the error message is about scanning disk files and several platforms are enabled in {{Path|/etc/portage/make.conf}} while nothing is installed on the disk, then edit the {{Path|/sbin/grub2-install}} script with a text editor of choice. Change the <code>platform</code> variable to appropriate platform for the current use case. The platform ''must'' be rightly set when emerging {{Package|sys-boot/grub}}, else it will be incorrectly configured in the {{Path|/sbin/grub2-install}} script. For example, to set the platform for "PC", change <code>platform=qemu</code> to <code>platform=pc</code>.
+* A {{Path|/boot}} partition is not mounted, run (as root): <kbd>mount /boot</kbd>
+
+* Attempting to install GRUB2 with a traditional BIOS - GPT setup. This could mean there is not any <code>EF02</code> or <code>bios_boot</code> partition to embed the {{Path|core.img}} file. Creating a little partition of a few hundreds kilobytes may be enough, although it is good practice to align this partition to 2048 sectors to avoid a performance penalty with the disk. A 1 MiB partition should work well.
+
+* Attempting to install GRUB2 in a partition e.g. {{Path|/dev/sda5}} using a BIOS - MBR setup (who did try it to BIOS - GPT?), simply add <tt>--force</tt> option switch to force install. It should behave with enough gap before the first sector of first partition or by using the <kbd>chattr</kbd> command (as described in the [[GRUB2#BIOS_MBR|BIOS - MBR instructions above]]). It is also possible to destroy the partition boundary and the LUKS or LVM2 header (if one exists).
+
+* If <kbd>grub2-install</kbd> does not print any errors message or if the error message is about scanning disk files and several platforms are enabled in {{Path|/etc/portage/make.conf}} while nothing is installed on the disk, then edit the {{Path|/sbin/grub2-install}} script with a text editor of choice. Change the <code>platform</code> variable to appropriate platform for the current use case. The platform ''must'' be rightly set when emerging {{Package|sys-boot/grub}}, else it will be incorrectly configured in the {{Path|/sbin/grub2-install}} script. For example, to set the platform for "PC", change <code>platform=qemu</code> to <code>platform=pc</code>.
+
 {{Note|Step 4 is true for sys-boot/grub-1.99x only... for sys-boot/grub-2.x the correct file to investigate can be found at {{Path|/etc/grub.d/00_header}}, transform{{=}}"s,grub,grub2-qemu," to transform{{=}}"s,grub,grub2," for example, to install rightly with grub2-$platform-install.}}
 
 ==== No Post-MBR Gap (Free Space) ====
@@ -1022,7 +1029,7 @@ This error means, that GRUB2 could not find the usual gap between the MBR and fi
 
 Repartitioning the disk should resolve the issue.
 
-Some visualization-based blockdevices can also cause problems. See [http://bbs.archlinux.org/viewtopic.php?pid=581760#p581760 this post] from the Arch Linux forum for more information.
+Some visualization-based block devices can also cause problems. See [http://bbs.archlinux.org/viewtopic.php?pid=581760#p581760 this post] from the Arch Linux forum for more information.
 
 ==== Embedding Area is Unusually Small ====
 
