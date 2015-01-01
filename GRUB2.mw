@@ -360,38 +360,42 @@ This should install Grub2 in {{Path|/boot/grub}}, copy the core image to {{Path|
 If the system's UEFI firmware fails to find GRUB2's EFI bootloader file, using the default bootloader location should provide a working solution. This circumvents the boot menu managed by [[Efibootmgr|efibootmgr]] and thus offers reduced functionality, but is less error prone. Do do this, verify the EFI partition is mounted at {{Path|/boot/efi}} then copy the file {{Path|grubx64.efi}} located at {{Path|/boot/efi/EFI/gentoo/grubx64.efi}} to {{Path|/boot/efi/EFI/BOOT/BOOTX64.EFI}}. This example assumes a 64-bit EFI system, adjust accordingly for 32-bit EFI systems.
 
 == Hybrid GPT MBR ==
+
 Dual booting with operating systems that are blind to a GPT-partitioned disk requires a tricky workaround.
-{{Warning|''WARNING:'' Playing with a hybrid MBR can be confusing; make no assumptions about the reliability of the instructions in this sub-section. Consider the advice found here as guidance for experimentation; not official documentation!}} 
 
-Some operating systems lack ability to boot from anything but '''BIOS''' - MBR (includes all versions of Microsoft Windows prior to Windows Vista). It should be noted that support for 32-bit (as opposed to 64-bit) UEFI is less than perfect for certain machines.
+{{Warning|Playing with a hybrid MBR can be confusing; make no assumptions about the reliability of the instructions in this sub-section. Consider the advice found here as guidance for experimentation; not official documentation!}} 
 
-GRUB2 supports booting from GPT and MBR partition tables via the <code>part_gpt</code> and <code>part_msdos</code> modules. However, a successful setup and GRUB2's ability to boot correctly depends both on loaded partition modules and on correctly installing GRUB2. A determining factor in how GRUB2 is installed ('''BIOS''' - MBR vs '''BIOS''' - GPT) is the presence of a EE00 (GPT protective) partition as the first partition in the MBR.  
+Some operating systems lack ability to boot from anything but BIOS - MBR (includes all versions of Microsoft Windows prior to Windows Vista). It should be noted that support for 32-bit (as opposed to 64-bit) UEFI is less than perfect for certain machines.
 
-With a hybrid MBR, GRUB2 will install '''if''' the first partition in the MBR table is an <code>EE00</code> partition. An <code>EF02</code> partition should be present anywhere in the disk and not necessarily in the MBR list to leave enough open sectors embed the {{Path|core.img}} file to the disk.
-{{Note|In this case one does ''not'' have to add/list an <code>EE00</code> partition in the hybrid MBR list manually, <kbd>gdisk</kbd> will provide a prompt to list one if booting with GRUB2 before displaying the provided list (up to 3 partitions) by the user.}}
+GRUB2 supports booting from GPT and MBR partition tables via the <tt>part_gpt</tt> and <tt>part_msdos</tt> modules. However, a successful setup and GRUB2's ability to boot correctly depends both on loaded partition modules and on correctly installing GRUB2. A determining factor in how GRUB2 is installed BIOS - MBR vs BIOS - GPT) is the presence of a EE00 (GPT protective) partition as the first partition in the MBR.  
 
-Creating a hybrid MBR is easy using <kbd>gdisk</kbd>: At the main menu press the {{Key|r}} key (for recovery and transformation), then press {{Key|h}} key (CHS recompute), then enter the series of partitions (less or equal to 3) in the order they should be be listed in the MBR. Finally enter the hexadecimal partition type without the <code>0x</code> prefix or accept the defaults by repeatedly pressing the {{Key|y}} key. Enable only a single boot flag as found the following example:
+With a hybrid MBR, GRUB2 will install ''if'' the first partition in the MBR table is an <code>EE00</code> partition. An <code>EF02</code> partition should be present anywhere in the disk and not necessarily in the MBR list to leave enough open sectors embed the {{Path|core.img}} file to the disk.
+
+{{Note|In this case one does ''not'' have to add/list an <code>EE00</code> partition in the hybrid MBR list manually, <tt>gdisk</tt> will provide a prompt to list one if booting with GRUB2 before displaying the provided list (up to 3 partitions) by the user.}}
+
+Creating a hybrid MBR is easy using <kbd>gdisk</kbd>: at the main menu press the {{Key|r}} key (for recovery and transformation), then press {{Key|h}} key (CHS recompute), then enter the series of partitions (less or equal to 3) in the order they should be be listed in the MBR. Finally enter the hexadecimal partition type without the <code>0x</code> prefix or accept the defaults by repeatedly pressing the {{Key|y}} key. Enable only a single boot flag as found the following example:
 
 {{RootCmd|gdisk /dev/sdg|output=<pre>
 GPT fdisk (gdisk) version 0.8.1
-
+ 
 Partition table scan:
   MBR: MBR only
   BSD: not present
   APM: not present
   GPT: present
-
+ 
 Found valid MBR and GPT. Which do you want to use?
  1 - MBR
  2 - GPT
  3 - Create blank GPT
-
-Your answer: 2</pre>}}
+ 
+Your answer: 2
+</pre>}}
 
 {{RootCmd|gdisk /dev/sdg|output=<pre>
 ...
 Using GPT and creating fresh protective MBR.
-
+ 
 Command (? for help): r
 Recovery/transformation command (? for help): p
 Disk /dev/sdg: 625142448 sectors, 298.1 GiB
@@ -401,51 +405,52 @@ Partition table holds up to 128 entries
 First usable sector is 34, last usable sector is 625142414
 Partitions will be aligned on 2048-sector boundaries
 Total free space is 2014 sectors (1007.0 KiB)
-
+ 
 Number  Start (sector)    End (sector)  Size       Code  Name
    1            2048       566233087   270.0 GiB   8300  Linux filesystem
    2       566233088       625142414   28.1 GiB    0700  Microsoft basic data
 Recovery/transformation command (? for help): h
-
+ 
 WARNING! Hybrid MBRs are flaky and dangerous! If you decide not to use one,
 just hit the Enter key at the below prompt and your MBR partition table will
 be untouched.
-
+ 
 Type from one to three GPT partition numbers, separated by spaces, to be
 added to the hybrid MBR, in sequence: 2 1
 Place EFI GPT (0xEE) partition first in MBR (good for GRUB)? (Y/N): N
-
-
+ 
+ 
 Creating entry for GPT partition #2 (MBR partition #1)
 Enter an MBR hex code (default 07): 
 Set the bootable flag? (Y/N): Y
-
+ 
 Creating entry for GPT partition #1 (MBR partition #2)
 Enter an MBR hex code (default 83): 
 ...
 Unused partition space(s) found. Use one to protect more partitions? (Y/N): N
-
+ 
 Recovery/transformation command (? for help): o
-
+ 
 Disk size is 625142448 sectors (298.1 GiB)
 MBR disk identifier: 0x00000000
 MBR partitions:
-
+ 
 Number  Boot  Start Sector   End Sector   Status      Code
    1      *      566233088    625142414   primary     0x07
    2                  2048    566233087   primary     0x83
    4                     1         2047   primary     0xEE
-
-
-Recovery/transformation command (? for help): w</pre>}}
+ 
+ 
+Recovery/transformation command (? for help): w
+</pre>}}
 
 Verify successful operation by listing the devices.
 
-{{Note|In the example above, {{Key|N}} was used to answer the safe questions because without that <kbd>/fdisk -l /dev/sdg</kbd> will list the MBR partition list just fine but listing the block devices with a <kbd>ls /dev</kbd> wouldn't list the partitions and more annoying: the partitions wouldn't be listed in DOS/BIOS.}}
+{{Note|In the example above, {{Key|N}} was used to answer the safe questions because without that <tt>fdisk -l /dev/sdg</tt> will list the MBR partition list just fine but listing the block devices with a <tt>ls /dev</tt> wouldn't list the partitions and more annoying: the partitions wouldn't be listed in DOS/BIOS.}}
 
-{{Note|I had to manually remove the <code>EE00</code> (GPT protective) partition in the MBR list for that drive using <kbd>fdisk</kbd>, because <kbd>fdisk</kbd> listed that partition as being the third one. And I couldn't get the BIOS/DOS recognize the partition table with its presence. This is quite weird (as the previous output shows) because the MBR partition table was correctly recognized when the hybrid MBR was freshly created. I had to reload GPT partition table from a file and re-hybridize the MBR a second time after a few experiments.}}
+{{Note|It might be necessary to manually remove the <code>EE00</code> (GPT protective) partition in the MBR list for that drive using <tt>fdisk</tt>, because <tt>fdisk</tt> lists that partition as being the third one. The BIOS/DOS does not recognize the partition table with its presence then. This is quite weird (as the previous output shows) because the MBR partition table should be correctly recognized when the hybrid MBR was freshly created. The GPT partition table needs to be reloaded then from a file and the MBR needs to be re-hybridizeda second time after a few experiments.}}
 
-And finally install GRUB2. See the Troubleshooting section below for possible issues not listed in the notes above.
+And finally install GRUB2. See the [[#Troubleshooting|troubleshooting]] section below for possible issues not listed in the notes above.
 
 == Chainloading ==
 GRUB2 was built with a truly improved chainload mode when compared to GRUB Legacy. The new ISO (or loop) chainload mechanism makes chainloading a breeze. It is actually possible to chainload ISO images (LiveCD/DVDs) with GRUB Legacy, however there exists no way to pass kernel cmd line arguments before boot. In any case, the ISO images in question should be built keeping kernel cmd line arguments in mind. The SystemRescueCd or, on a lesser extent, Gentoo Minimal LiveCD. Without kernel cmd line options, booting ISO images with GRUB2 will fail in the physical media check/test stage of the ISOs boot process. Gentoo liveCD is handy because it has a minimal shell which lets the user mount the squashed image to the correct location and then press the {{Key|Esc}} key to continue the boot process. This makes it possible to have a handy way to install an operating system with everything in RAM, especially for "light weight" LiveCDs. No more need to listen to a whining CD/DVD drive on each new command!
