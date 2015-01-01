@@ -1,93 +1,105 @@
-This article provides information on how to get up and running with '''GRUB2''' in the simplest configurations. For more comprehensive information, see [[GRUB2]].
+<languages />
+<translate>
+This article provides information on how to get up and running with '''GRUB2''' in the simplest configurations. For more comprehensive information, see [[GRUB2]]. For a migration from [[GRUB|GRUB Legacy]] to GRUB2, see [[GRUB2 Migration]].
 
-== Gentoo GRUB Legacy (0.97) to GRUB2 Migration Guide ==
+== Installing GRUB2 software ==
 
-The guide is available [[GRUB2 Migration|here]].
+The {{Package|sys-boot/grub}} package is slotted; both grub-0.97 and grub-2.00 may be installed at the same time. However, while both versions of GRUB can be installed on the system at the same time, only one version of GRUB may be active as the system's boot loader at the same time.
 
-== GRUB Slots ==
-The {{Package|sys-boot/grub}} package is slotted; both grub-0.97 and grub-2.00 may be installed at the same time.
-
-'''If you want to install grub-0.97 or keep it installed after an upgrade''', call emerge with the "0" slot on the end of the package atom. This will add sys-boot/grub:0 to the system's world file. For example:
-{{emerge|params=--noreplace|sys-boot/grub:0}}
-
-{{Note|While both versions of GRUB can be install on the system at the same time, only one version of GRUB may be installed in the MBR at one time.}}
-
-== Installing the Software ==
-First set the <code>GRUB_PLATFORMS</code> variable in {{Path|make.conf}} (optional). If unset, GRUB2 will guess which platform you want. It guesses "pc" (which is not UEFI; see examples below) for X86/AMD64 architecture.
+To install GRUB2, first set the <code>GRUB_PLATFORMS</code> variable in {{Path|make.conf}} (optional). If unset, GRUB2 will guess which platform to use on the system. It guesses "pc" (which is not UEFI; see examples below) for X86/AMD64 architecture.
 
 {{FileBox|filename=/etc/portage/make.conf|title=GRUB_PLATFORMS example|lang=bash|1=
 # Standard PC (BIOS)
 GRUB_PLATFORMS="pc"
-
+ 
 # UEFI on amd64
 GRUB_PLATFORMS="efi-64"
-
+ 
 # UEFI and PC
 GRUB_PLATFORMS="efi-64 pc"
 }}
 
-After the variable is get, then emerge the software:
+After the variable is get, emerge the software:
+
 {{emerge|sys-boot/grub:2}}
 
-== Installing a Bootable Image ==
-Mount your {{Path|/boot}} volume if you have one.
+== Activating the GRUB2 boot loader ==
+
+Mount {{Path|/boot}} if applicable:
+
 {{RootCmd|mount /boot}}
 
-If you are using an EFI platform, mount your EFI system volume at {{Path|/boot/efi}}. This should be a FAT formatted volume containing an EFI subdirectory.
+When using an EFI platform, make sure that the EFI System Partition is available at {{Path|/boot/efi}}. This can either be through a specific mount point (at {{Path|/boot/efi}}) or by having the boot partition ''be'' the EFI System Partition.
+
 {{RootCmd|mount /boot/efi}}
 
-Run the grub2-install utility to copy the relevant files to {{Path|/boot/grub}}. On the PC platform, this also installs a boot image to the Master Boot Record (MBR) or a partition's boot sector.
+Run the <kbd>grub2-install</kbd> utility to copy the relevant files to {{Path|/boot/grub}}. On the PC platform, this also installs a boot image to the Master Boot Record (MBR) or a partition's boot sector.
 
-The grub2-install command accepts a <tt>--target</tt> option to specify which CPU/Platform to install. If unspecified, grub2-install will make a guess; on X86/AMD64 it will use "i386-pc" by default.
+To install GRUB2 to the MBR:
 
-Installing GRUB2 to the MBR:
-{{RootCmd|grub2-install /dev/sda
-|output=Installation finished. No error reported.}}
+{{RootCmd|grub2-install /dev/sda||output=<pre>
+Installation finished. No error reported.
+</pre>}}
 
-Installing GRUB2 to a partition (not recommended):
-{{RootCmd|grub2-install /dev/sda1
-|output=Installation finished. No error reported.}}
+To install GRUB2 to a partition (not recommended):
 
-Installing GRUB2 on an EFI capable system:
-{{RootCmd|grub2-install --target{{=}}x86_64-efi
-|output=Installation finished. No error reported.}}
+{{RootCmd|grub2-install /dev/sda1|output=<pre>
+Installation finished. No error reported.
+</pre>}}
 
-{{Important|If having difficulty installing GRUB2 to an EFI capable system (like the example above), make sure the <code>GRUB_PLATFORMS</code> variable is properly set in {{Path|/etc/portage/make.conf}}}}
+To install GRUB2 on an EFI capable system:
 
-== Automatic Configuration ==
-GRUB2 is traditionally configured by using the grub2-mkconfig program to generate a configuration file.
+{{RootCmd|grub2-install --target{{=}}x86_64-efi|output=<pre>
+Installation finished. No error reported.
+</pre>}}
 
-grub2-mkconfig generates the configuration file based on template sections located in {{Path|/etc/grub.d}}. The default templates should cover most common boot setups.
+{{Important|When installing GRUB2 to an EFI capable system (like the example above) is giving troubles, make sure the <code>GRUB_PLATFORMS</code> variable is properly set in {{Path|/etc/portage/make.conf}}}}
+
+The <tt>grub2-install</tt> command accepts a <tt>--target</tt> option to specify which CPU/Platform to install. If unspecified, grub2-install will make a guess; on X86/AMD64 it will use "i386-pc" by default.
+
+== Automatic configuration ==
+
+GRUB2 is traditionally configured by using the <tt>grub2-mkconfig</tt> program to generate a configuration file.
+
+<tt>grub2-mkconfig</tt> generates the configuration file based on template sections located in {{Path|/etc/grub.d}}. The default templates should cover most common boot setups.
 
 {{Cmd|ls /etc/grub.d|lang=bash|
 |output=00_header  10_linux  20_linux_xen  30_os-prober  40_custom  41_custom  README}}
 
-The behavior of these templates can be controlled by setting variables in {{Path|/etc/default/grub}}. See the [http://www.gnu.org/software/grub/manual/html_node/Simple-configuration.html GRUB manual] for reference.
+The behavior of these templates can be controlled by setting variables in {{Path|/etc/default/grub}}. See the [http://www.gnu.org/software/grub/manual/html_node/Simple-configuration.html GRUB manual] for more information.
 
-=== Kernel Naming Schemes ===
-In order for grub2-mkconfig to detect your Linux kernel(s), they must be named vmlinuz-''version'' or kernel-''version''. 
+=== Kernel naming scheme ===
+
+In order for <tt>grub2-mkconfig</tt> to detect the available Linux kernel(s), their names must start with <code>vmlinuz-</code> or <code>kernel-</code>.
 
 For example:
+
+{{CodeBox|title=Example kernel names that GRUB2 can detect|<pre>
  /boot/vmlinuz-3.4.3
  /boot/kernel-2.6.39-gentoo
  /boot/kernel-genkernel-x86_64-3.17.1-gentoo-r1
+</pre>}}
 
-If you use an [[initramfs]], it should be named initramfs-''version''.img or initrd-''version''.img. File names generated by genkernel will also work.
+When using an [[initramfs]], its name should start with <code>initramfs-</code> or <code>initrd-</code> and end with <code>.img</code>. The version must match one of a kernel image. File names generated by [[genkernel]] will also work.
 
 For example:
+
+{{CodeBox|title=Example initramfs names that GRUB2 can detect|<pre>
  /boot/initramfs-3.4.3.img
  /boot/initramfs-genkernel-x86_64-2.6.39-gentoo
+</pre>}}
 
-Generate the {{Path|grub.cfg}} file:
-{{RootCmd|mount /boot
-|grub2-mkconfig -o /boot/grub/grub.cfg
-|output=Generating grub.cfg ...
+To generate the {{Path|grub.cfg}} file, execute the <kbd>grub2-mkconfig</kbd> command like so:
+
+{{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg|output=<pre>
+Generating grub.cfg ...
 Found linux image: /boot/vmlinuz-3.2.9
-done}}
+done
+</pre>}}
 
-=== Silent Kernel Decompression ===
+=== Silent kernel decompression ===
 
-To silence kernel decompression make your line in {{Path|/etc/default/grub}} look like this.
+To silence kernel decompression at boot time, edit {{Path|/etc/default/grub}} and add <code>quiet</code> to the <code>GRUB_CMDLINE_LINUX_DEFAULT</code> parameter.
 
 {{FileBox|filename=/etc/default/grub|title=Silent decompression example|lang=bash|1=
 GRUB_CMDLINE_LINUX_DEFAULT="quiet"
@@ -101,14 +113,18 @@ To boot systemd while using GRUB2 make the <code>GRUB_CMDLINE_LINUX</code> varia
 GRUB_CMDLINE_LINUX="init=/usr/lib/systemd/systemd"
 }}
 
-=== Loading Another Operating System ===
+=== Loading another operating system ===
 
-grub2-mkconfig can also generate configurations to load ''other'' operating systems. To do this requires the {{Package|sys-boot/os-prober}} package.
+<tt>grub2-mkconfig</tt> can also generate configurations to load ''other'' operating systems. This requires the {{Package|sys-boot/os-prober}} package.
 
-To boot Windows, the {{Package|sys-fs/ntfs3g}} also needs to be installed. It allows for the grub2-mkconfig utility to probe NTFS filesystems.
+To boot Windows, the {{Package|sys-fs/ntfs3g}} also needs to be installed. It allows for the <tt>grub2-mkconfig</tt> utility to probe NTFS filesystems.
 
-== Manual Configuration ==
-Instead of using <kbd>grub2-mkconfig</kbd>, a typical simple {{Path|grub.conf}} (the configuration file used for '''GRUB''') can easily be converted to be suitable for use in {{Path|grub.cfg}}.
+== Manual configuration ==
+
+Users do not need to use <tt>grub2-mkconfig</tt>. The {{Path|grub.cfg}} file can be edited manually as well.
+
+As most users have experience with GRUB Legacy format, the next example shows how to write a GRUB2 configuration file based on information from the GRUB Legacy configuration.
+
 {|
 ! style="text-align: left;" | <code>grub.conf</code> (GRUB Legacy)
 |
@@ -127,5 +143,11 @@ root <span style="font-weight: bold; color: maroon;">(</span>hd0,<span style="fo
 <span style="display: inline-block; width: 4ex; overflow: hidden;">	</span><span style="font-weight: bold; color: green;">linux</span> /boot/kernel-3.2.12-gentoo root=/dev/sda3<br />
 <span style="font-weight: bold; color: green;">}</span>
 |}
+
+== See also ==
+
+Please refer to the [[GRUB2]] article for more information and an exhaustive list of resources.
+
+</translate>
 
 [[Category:Bootloaders]]
