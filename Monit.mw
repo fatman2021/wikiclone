@@ -8,10 +8,13 @@
 |{{InfoBox ohloh}}
 }}
 
-{{Package|app-admin/monit}}[http://mmonit.com/monit/] is a utility for managing and monitoring processes, programs, files, directories and filesystems on a UNIX system. 
+{{Package|app-admin/monit}} is a utility for managing and monitoring processes, programs, files, directories and filesystems on a UNIX system. 
 
-== Installation ==
-=== Useflags ===
+== Configuration ==
+
+=== Installing monit ===
+
+The {{Package|app-admin/monit}} application has two USE flags: 
 
 {{USEflag
 |package=app-admin/monit
@@ -19,99 +22,107 @@
 |ssl++yes
 }}
 
-=== Emerge ===
-{{emerge|monit}}
+Once the USE flags are properly determined, install {{Package|app-admin/monit}} through <kbd>emerge</kbd>:
 
-== Configuration ==
-Config file of monit resides in {{Path|/etc/monitrc}}. And there is a item to specify a config directory. Uncomment if needed.
+{{Emerge|app-admin/monit}}
 
-{{FileBox|filename=/etc/monitrc|1=
+=== Monit configuration files ===
+
+The Monit application uses {{Path|/etc/monitrc}} as its configuration file.
+
+To make adding and removing monitoring definitions easy, <tt>monit</tt> supports including files inside a specified directory (usually {{Path|/etc/monit.d}}. To enable this, edit {{Path|/etc/monitrc}} like so:
+
+{{FileBox|filename=/etc/monitrc|Allowing flexible configuration entries|1=
 ## It is possible to include additional configuration parts from other files or
 ## directories.
-#
-#  include /etc/monit.d/*
-#
+include /etc/monit.d/*
 }}
 
+When a Monit related configuration file is altered, tell <tt>monit</tt> to reread its configuration settings:
 
-=== Users ===
-Users added to the monit or users group will be able to manipulate monit through the web interface.
+{{RootCmd|monit reload}}
 
-{{RootCmd|gpasswd -a $USER monit}}
-{{RootCmd|gpasswd -a $USER users}}
+=== Automatically starting monit at boot ===
 
-{{warning|passwords can be streamed to monits web interface, disable it all together after it is setup}}
+It is recommended to start <tt>monit</tt> through the {{Path|/etc/inittab}} so that <tt>init</tt> itself launches the <tt>monit</tt> application, and will automatically relaunch it when <tt>monit</tt> would suddenly die. Starting <tt>monit</tt> through an init script would not provide this functionality.
 
-{{important|for security purposes change this entry}}
-
-{{FileBox|filename=/etc/monitrc|allow admin:monit}}
-
-== Boot Services ==
-=== inittab ===
-{{FileBox|filename=/etc/inittab|title=auto restart monit in case of failure|1=
-ca:12345:ctrlaltdel:/sbin/shutdown -r now
-
+{{FileBox|filename=/etc/inittab|title=Auto restart monit in case of failure|1=
 # Run monit in standard runlevels
 mo:2345:respawn:/usr/bin/monit -Ic /etc/monitrc
-
-# Used by /etc/init.d/xdm to control DM startup.
 }}
 
-to start monit immediately after changing inittab
+After updating {{Path|/etc/inittab}}, <tt>monit</tt> can be immediately started through <kbd>telinit q</kbd>.
 
-{{RootCmd|telinit q}}
+=== User management ===
 
-=== OpenRC ===
-{{note|prefer inittab method over rc services}}
-To start the service at boot.
-{{RootCmd|rc-update add monit default}}
-To start the service immediately.
-{{RootCmd|/etc/init.d/monit start}}
+Users added to the <tt>monit</tt> or <tt>users</tt> group will be able to manipulate <tt>monit</tt> through its web interface.
 
-==== Monitoring Monit ====
-This hourly cron script will check to make sure monit has not crashed.  As this uses pgrep, make sure to not name it monit.
+To add users to one of these groups, use <kbd>gpasswd</kbd>:
 
-{{FileBox|filename=/etc/cron.hourly/moncheck|lang=bash|1=
-#!/bin/bash
-if ! pgrep monit >/dev/null; then
-    rc-service monit restart
-fi
+{{RootCmd|gpasswd -a $USER monit
+|gpasswd -a $USER users}}
+
+Inside the {{Path|/etc/monitrc}} file, the <code>allow</code> statement should refer to these groups, like so:
+
+{{FileBox|filename=/etc/monitrc|Granting groups access to the web interface|1=
+set httpd port 2812
+  allow @monit
+  allow @users
 }}
 
-== Pidfile Check ==
-monit relies on the pidfile convention, it can only monitor background daemons. For daemons that do not create a pidfile, [http://mmonit.com/wiki/Monit/FAQ#pidfile a trick] is needed.
+It is also possible to hard-code usernames and passwords in the {{Path|monitrc}} file, but this is not recommended. Check the {{Path|monitrc}} file for default passwords and remove those, or alter them to use a strong, unique password. The syntax used then is <code>allow &lt;username&gt;:&lt;password&gt;</code>.
 
-pidfile approach is [http://mywiki.wooledge.org/ProcessManagement intrinsically broken] for monitforing process. Monit can overcome this by checking the pidfile frequently enough to be reliable, though.
+=== Monit web interface ===
 
-== Examples ==
-=== Auto Restart Mysql ===
-{{FileBox|filename=/etc/monitrc|title=auto restart mysql|1=
+The default location of the web interface is at [http://localhost:2812 localhost:2812], with <tt>admin</tt> as admin username and <tt>monit</tt> as default password. Make sure to change this!
+
+== Monitoring applications through monit ==
+
+The Monit application uses PID file checks to see if an application is still running or not. That implies that a PID file ''must'' be available for an application, otherwise <tt>monit</tt> cannot guard it. If a daemon does not create a PID file, use a [http://mmonit.com/wiki/Monit/FAQ#pidfile wrapper] to create one.
+
+{{Note|The use of PID files (and validating PIDs from tools like <tt>ps</tt>) for monitoring is often said to be broken<ref>Greg Wooledge. [http://mywiki.wooledge.org/ProcessManagement Process management], Retrieved on January 1st, 2015</ref>. Monit does try to overcome this weakness by checking the PID file frequently enough to be reliable.}}
+
+Through using the {{Path|/etc/monit.d/}} location, it is easy to add in additional monitoring rules.
+
+For instance, to automatically restart [[MySQL]] when it would die:
+
+{{FileBox|filename=/etc/monit.d/mysql|title=Auto restart mysql|1=
 check process mysql with pidfile /var/run/mysqld/mysqld.pid
     start program = "/bin/bash -c 'rc-service mysql start'"
     stop program  = "/bin/bash -c 'rc-service mysql stop'"
 }}
 
-=== Squid Memory Alert ===
-{{Package|net-proxy/squid}} is a caching proxy that is memory hungry. It can control its memory consumption by itself in the configuration file, while we can make an redundent check here.
+Another example is to manage the memory usage of a process and create an alert when it grows beyond a certain threshold:
 
-{{FileBox|filename=/etc/monitrc|title=check squid|1=
+{{FileBox|filename=/etc/monit.d/squid|title=Check squid and alert on memory consumption bigger than 512 MByte|1=
  check process squid with pidfile /run/squid.pid
    start program = "/bin/bash -c 'rc-service squid start'"
    stop  program = "/bin/bash -c 'rc-service squid stop'"
-   if totalmem > 30 MB then alert
+   if totalmem > 512 MB then alert
 }}
 
-== CLI Interface ==
-We can run monit foreground and see the effect.
+== Debugging monit ==
+
+=== Running monit in the foreground ===
+
+To run <tt>monit</tt> in the foreground and provide feedback on everything it is detecting, use the <kbd>-Ivv</kbd> option:
 
 {{RootCmd|monit -Ivv|output=<pre>
 ...
-'squid' total mem amount of 30848kB matches resource limit [total mem amount>30720kB]
+'squid' total mem amount of 525748kB matches resource limit [total mem amount>524288kB]
 </pre>}}
 
-== Web Interface ==
+== External resources ==
 
-Navigate to http://localhost:2812/ & login using your edited configuration line or admin / monit if you have not changed it yet.
+For more information about Monit, the following resources can help out.
+
+* [http://mmonit.com/monit/documentation/monit.html Monit official documentation]
+* [http://mmonit.com/wiki/Main/HomePage Monit Wiki]
+* [https://wiki.amahi.org/index.php/Monit Configuring Monit for Avahi]
+
+== References ==
+
+{{reflist}}
 
 </translate>
 
