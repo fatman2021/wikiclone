@@ -453,20 +453,27 @@ Verify successful operation by listing the devices.
 And finally install GRUB2. See the [[#Troubleshooting|troubleshooting]] section below for possible issues not listed in the notes above.
 
 == Chainloading ==
-GRUB2 was built with a truly improved chainload mode when compared to GRUB Legacy. The new ISO (or loop) chainload mechanism makes chainloading a breeze. It is actually possible to chainload ISO images (LiveCD/DVDs) with GRUB Legacy, however there exists no way to pass kernel cmd line arguments before boot. In any case, the ISO images in question should be built keeping kernel cmd line arguments in mind. The SystemRescueCd or, on a lesser extent, Gentoo Minimal LiveCD. Without kernel cmd line options, booting ISO images with GRUB2 will fail in the physical media check/test stage of the ISOs boot process. Gentoo liveCD is handy because it has a minimal shell which lets the user mount the squashed image to the correct location and then press the {{Key|Esc}} key to continue the boot process. This makes it possible to have a handy way to install an operating system with everything in RAM, especially for "light weight" LiveCDs. No more need to listen to a whining CD/DVD drive on each new command!
+
+GRUB2 was built with a truly improved chainload mode when compared to GRUB Legacy. The new ISO (or loop) chainload mechanism makes chainloading a breeze. It is actually possible to chainload ISO images (LiveCD/DVDs) with GRUB Legacy, however there exists no way to pass kernel cmd line arguments before boot. In any case, the ISO images in question should be built keeping kernel cmd line arguments in mind.
+
+Without kernel cmd line options, booting ISO images with GRUB2 will fail in the physical media check/test stage of the ISOs boot process. Gentoo liveCD is handy because it has a minimal shell which lets the user mount the squashed image to the correct location and then press the {{Key|Esc}} key to continue the boot process. This makes it possible to have a handy way to install an operating system with everything in RAM, especially for "light weight" LiveCDs. No more need to listen to a whining CD/DVD drive on each new command!
 
 === ISO images ===
-To chainload an ISO with custom or default kernel cmdline arguments, an entry similar to (or exactly like) the following can be added to GRUB2's {{Path|grub.cfg}} file:
-{{CodeBox|<pre>
+
+To chainload an ISO with custom or default kernel command line arguments, an entry similar to the following can be added to GRUB2's {{Path|grub.cfg}} file:
+
+{{FileBox|filename=/boot/grub/grub.cfg|title=Example entry for chainloading an ISO file|<pre>
 menuentry "SYSRESCUECD" {
 	set iso=/systemrescuecd-x86-3.8.1.iso
 	loopback loop ${iso}
 	linux  (loop)/isolinux/rescue64 nomodeset vga=791 docache setkmap=fr isoloop=${iso}
 	initrd (loop)/isolinux/initram.igz
-}</pre>}}
+}
+</pre>}}
 
 For a permanent and automatic entry to GRUB2's {{Path|grub.cfg}} file, a custom script could be added to the {{Path|/etc/grub.d}} script location:
-{{FileBox|filename=/etc/grub.d/50_isofile|<pre>
+
+{{FileBox|filename=/etc/grub.d/50_isofile|title=Custom script to load a CD|<pre>
 #!/bin/sh
 exec tail -n +3 $0
 
@@ -496,9 +503,10 @@ Do not forget to make the script executable:
 Finally regenerate GRUB2's {{Path|grub.cfg}} file using <kbd>grub2-mkconfig</kbd> command.
 
 === Another Bootloader ===
-Chainloading another bootloader to GRUB2 is fairly easy if support in GRUB2 for the specific bootloader in question. Otherwise, one could use a ''man in the middle'' (in other works "another bootloader") to do the task.  In the latter case, one could use GRUB4DOS as it has functionalities similar to GRUB Legacy. This is required when loading another bootloader like TrueCrypt becomes problematic in a single multiboot disk. Otherwise something as simple as the following example is enough to boot another disk that uses a "Custom Super Bootloader":
 
-{{CodeBox|<pre>
+Chainloading another bootloader to GRUB2 is fairly easy if support in GRUB2 is enabled for the specific bootloader in question. Something as simple as the following example is enough to boot another disk that uses a "Custom Super Bootloader":
+
+{{FileBox|filename=/boot/grub/grub.cfg|title=Chainloading another bootloader|<pre>
 menuentry "Custom Super Bootloader Example" {
      insmod part_msdos
      insmod chain
@@ -507,11 +515,12 @@ menuentry "Custom Super Bootloader Example" {
 </pre>}}
 
 === TrueCrypt ===
-To make a long story short GRUB2 cannot chainload a disk with TrueCrypt in the MBR or Rescue CD image located in encrypted partitions. For other boot loaders this is perfectly possible, feasible; it even works with GRUB Legacy. It also works with [https://sites.google.com/site/grubdos/ GRUB4DOS] (which could be used as workaround; see {{Bug|385619}} for more information) If attempting to boot from an single disk that contains a TrueCrypt partition use the above GRUB4DOS menu entry as a starting point. The infamous `invalid signature' await the more adventurous ones who attempt to do so using GRUB2. 
 
-Since GRUB2 has problems with attempting to boot an encrypted TrueCrypt partition, use either GRUB Legacy or GRUB4DOS as workaround. GRUB4DOS has an interface very similar to GRUB Legacy and menu.lst entry which can be used to chainload the TrueCrypt bootloader or to boot a Rescue CD (from an encrypted partition on the same disk). An executable with <code>grldr</code> in the {{Path|/}} root of the booting device is required, plus a menu.lst. See below for a menu entry example. Chainloading TrueCrypt bootloader on a '''separate''' disk is relatively simple and can be done in GRUB2 like any other bootloader.
+To make a long story short GRUB2 cannot chainload a disk with TrueCrypt in the MBR or Rescue CD image located in encrypted partitions. For other bootloaders this is perfectly possible, feasible; it even works with GRUB Legacy. It also works with [https://sites.google.com/site/grubdos/ GRUB4DOS] (which could be used as workaround; see {{Bug|385619}} for more information) If attempting to boot from an single disk that contains a TrueCrypt partition use the above GRUB4DOS menu entry as a starting point. The infamous ''invalid signature'' await the more adventurous ones who attempt to do so using GRUB2.
 
-{{CodeBox|<pre>
+Since GRUB2 has problems with attempting to boot an encrypted TrueCrypt partition, use either GRUB Legacy or GRUB4DOS as workaround. GRUB4DOS has an interface very similar to GRUB Legacy and menu.lst entry which can be used to chainload the TrueCrypt bootloader or to boot a Rescue CD (from an encrypted partition on the same disk). An executable with {{Path|grldr}} in the {{Path|/}} root of the booting device is required, plus a {{Path|menu.lst}}. See below for a menu entry example. Chainloading TrueCrypt bootloader on a ''separate'' disk is relatively simple and can be done in GRUB2 like any other bootloader.
+
+{{CodeBox|title=Chainloading TrueCrypt bootloader on a separate disk|<pre>
 title Windows7-TrueCrypt-BIOS/MBR
 find --set-root /truecrypt_rescue_image.iso
 map --mem /truecrypt_rescue_image.iso (hd32)
@@ -522,12 +531,13 @@ root (hd32)
 chainloader (hd32)
 </pre>}}
 
-{{Note|The remapping may not be necessary if the system has a single boot disk. The mapping '''is''' necessary before chainloading TrueCrypt bootloader in the case that the boot disk (hd1 as shown in the example above) should appear as the primary boot device (hd0), otherwise TrueCrypt would fail to boot because the correct disk will not be found.}}
+{{Note|The remapping may not be necessary if the system has a single boot disk. The mapping ''is'' necessary before chainloading TrueCrypt bootloader in the case that the boot disk (hd1 as shown in the example above) should appear as the primary boot device (hd0), otherwise TrueCrypt would fail to boot because the correct disk will not be found.}}
 
 Another workaround cited on the bug is to boot from TrueCrypt as the main boot loader and then hit the {{Key|Esc}} to chainload the following partition (if one exists) or the following disk.
 
 === Windows (MSDOS based boot loaders) ===
-If Windows (or any other MSDOS based bootloaders) are on another disk partitioned with a MSDOS partition layout with its bootloader within the MBR, then it should be possible to boot using a simple menu entry as the previous example in the [[GRUB2#Chainloading#Another_Bootloader]] section.  '''This''' section describes how to probe and manually specify a Windows partition for booting.  This use case is encountered when multiple Windows operating systems are installed on a single hard disk.
+
+If Windows (or any other MSDOS based bootloaders) are on another disk partitioned with a MSDOS partition layout with its bootloader within the MBR, then it should be possible to boot using a simple menu entry as the previous example in the [[GRUB2#Chainloading#Another_Bootloader]] section.  ''This'' section describes how to probe and manually specify a Windows partition for booting.  This use case is encountered when multiple Windows operating systems are installed on a single hard disk.
 
 Microsoft Windows 8 (and above versions) are no longer installed using MSDOS partitions by default, however they do maintain backwards compatibility with BIOS MBR systems. In order to specify Windows 8 (and above) to use MSDOS partitioning the install DVD needs to be booted in BIOS mode (a non-UEFI boot mode) in order for Windows to install into MSDOS partitions. Manually create a MSDOS partition layout, then manually boot the Windows DVD using a BIOS option in the boot menu list. Sometimes it is necessary in the BIOS firmware configuration tool to disable UEFI mode completely in order to force BIOS MBR mode.
 
@@ -536,69 +546,80 @@ Opinions differ on whether MBR (MSDOS) or GPT EFI is partition schemes are bette
 {{Note|When installing Windows 8 into GPT partitions, unlike Linux and other operating systems, Windows 8 requires a UEFI partition in order to use a GPT partition layout.}}
 
 ==== MSDOS Partitions ====
+
 {{Note|Complications will arise if Windows is in another partition of the disk and the partition is encrypted (with TrueCrypt for example), or simply if a hybrid MBR is involved.}}
 
-{{Note|If a dual boot system using MBR is the end goal, it is easiest to install Windows on a separate disk. However, if Windows will be installed to a disk with a pre-existing Linux installation, then creating a backup the MBR (or at least the bootloader portion) '''before''' installing Windows will ensure a recovery option exists. Windows '''will''' overwrite any existing MBR structure rendering a "Windows only" boot.}}
+{{Note|If a dual boot system using MBR is the end goal, it is easiest to install Windows on a separate disk. However, if Windows will be installed to a disk with a pre-existing Linux installation, then creating a backup the MBR (or at least the bootloader portion) ''before'' installing Windows will ensure a recovery option exists. Windows ''will'' overwrite any existing MBR structure rendering a "Windows only" boot.}}
 
 The simplest way to dual boot Windows (or MS-DOS) is to add an MBR menu entry to GRUB2's {{Path|grub.cfg}} file for each Windows operating system installed.
 
 Windows 7 example the {{Path|grub.cfg}} file:
 
-{{CodeBox|<pre>menuentry "Windows 7 BIOS MBR" {
+{{FileBox|filename=/boot/grub/grub.cfg|title=Windows 7 example|<pre>
+menuentry "Windows 7 BIOS MBR" {
      insmod part_msdos
      insmod ntldr
      insmod ntfs
      ntldr (hd0,msdos1)/bootmgr
-}</pre>}}
+}
+</pre>}}
 
 A Windows XP example the {{Path|grub.cfg}} file:
 
-{{CodeBox|<pre>menuentry "Windows XP BIOS MBR" {
+{{FileBox|filename=/boot/grub/grub.cfg|title=Windows XP example|<pre>
+menuentry "Windows XP BIOS MBR" {
      insmod part_msdos
      insmod ntldr
      insmod ntfs
      ntldr (hd0,msdos1)/ntldr
-}</pre>}}
+}
+</pre>}}
 
-An entry for a GPT hybrid MBR works bit different than the previous '''BIOS''' - MBR examples. Booting multiple versions of Windows can be achieved with remapping and/or hiding partitions with GRUB2's <code>parttool</code> option:
+An entry for a GPT hybrid MBR works a bit different than the previous BIOS - MBR examples. Booting multiple versions of Windows can be achieved with remapping and/or hiding partitions with GRUB2's <code>parttool</code> option:
 
-{{CodeBox|<pre>menuentry "Windows 7 BIOS MBR" {
+{{FileBox|filename=/boot/grub/grub.cfg|title=Example for GPT hybrid MBR|<pre>
+menuentry "Windows 7 BIOS MBR" {
      insmod part_msdos
      insmod chain
      parttool hd1,msdos1 hidden+ boot-
      parttool hd1,msdos2 hidden- boot+
      chainloader (hd1,msdos2)+1
-}</pre>}}
+}
+</pre>}}
 
 {{Note|Remapping the disk with <code>parttool</code> in the manner above is only required if multiple Windows systems are installed on the same disk.}}
 
 Remapping the devices to set the primary boot disk to additional disks can be achieved by setting the {{Path|grub.cfg}} file to something like the following example:
 
-{{CodeBox|<pre>menuentry "Windows 7 BIOS MBR" {
+{{FileBox|filename=/boot/grub/grub.cfg|title=Remapping devices example|<pre>
+menuentry "Windows 7 BIOS MBR" {
      insmod part_msdos
      insmod chain
      drivemap hd0 hd1
      chainloader (hd1,msdos2)+1
-}</pre>}}
+}
+</pre>}}
 
 ===== Probing =====
+
 GRUB2 is capable of automatically finding Windows partitions and assigning the root partitions. The Windows partition must first be mounted before the probe will be successful. See notes at the end of this section concerning missing {{Path|C:\bootmgr}} and {{Path|C:\Boot}} files and folders; it is wise to make these folders do exist before trying to boot Windows using GRUB2.
 
 Probing feature requires {{Package|sys-boot/os-prober}} package which is not initially pulled in when installing GRUB2.
-{{Emerge
-|sys-boot/os-prober
-|params+=--newuse
-}}
 
-{{RootCmd|1=grub2-probe --target=hints_string /mnt/windows7/bootmgr
-|output=<pre>--hint-bios=hd1,msdos1 --hint-efi=hd1,msdos1 --hint-baremetal=ahci1,msdos1</pre>}}
+{{Emerge|sys-boot/os-prober|params+=--newuse}}
 
-{{RootCmd|1=grub2-probe --target=fs_uuid /mnt/windows7/bootmgr|
-output=<pre>2ABF87DC395CFC02</pre>}}
+{{RootCmd|1=grub2-probe --target=hints_string /mnt/windows7/bootmgr|output=<pre>
+--hint-bios=hd1,msdos1 --hint-efi=hd1,msdos1 --hint-baremetal=ahci1,msdos1
+</pre>}}
 
-From the output provided by the above two commands, the ''search'' line within GRUB2's {{Path|grub2.cfg}} file (below) can be constructed. Remapping the drive and partition as the first hard drive and first partition will make Windows XP or Windows 8 more free of silent errors while loading. Also note from the previously covered <code>ntldr</code> module usage, specifying the $root prefix is no longer needed. Using it will generate boot errors.
+{{RootCmd|1=grub2-probe --target=fs_uuid /mnt/windows7/bootmgr|output=<pre>
+2ABF87DC395CFC02
+</pre>}}
 
-{{CodeBox|<pre>menuentry 'Microsoft Windows 7 or Windows 8 (on sdb1)' --class windows {
+From the output provided by the above two commands, the <code>search</code> line within GRUB2's {{Path|grub2.cfg}} file (below) can be constructed. Remapping the drive and partition as the first hard drive and first partition will make Windows XP or Windows 8 more free of silent errors while loading. Also note from the previously covered <tt>ntldr</tt> module usage, specifying the <tt>$root</tt> prefix is no longer needed. Using it will generate boot errors.
+
+{{FileBox|filename=/boot/grub/grub.cfg|title=Constructing the search line|<pre>
+menuentry 'Microsoft Windows 7 or Windows 8 (on sdb1)' --class windows {
         insmod part_msdos
         insmod ntfs
         insmod search_fs_uuid
@@ -607,22 +628,28 @@ From the output provided by the above two commands, the ''search'' line within G
         drivemap (hd1,msdos1) (hd0,msdos1)
         #Or, "drivemap (hd1,msdos2) (hd0,msdos1)" for those with Windows installed on sdb2)
         ntldr /bootmgr
-}</pre>}}
+}
+</pre>}}
 
-{{Important|If the {{Path|C:\bootmgr}} and the {{Path|C:\Boot}} folders for which the bootmgr file is linked do not exist, the files need to be installed using an Administrator <kbd>cmd.exe</kbd> shell (escalated command prompt). Regeneration should be possible by using this command: {{Cmd|prompt=C:\>|color=white|bcdboot c:\Windows /s c:}}}}
+{{Important|If the {{Path|C:\bootmgr}} and the {{Path|C:\Boot}} folders for which the {{Path|bootmgr}} file is linked do not exist, the files need to be installed using an Administrator <kbd>cmd.exe</kbd> shell (escalated command prompt). Regeneration should be possible by using this command:
+{{Cmd|prompt=C:\>|color=white|bcdboot c:\Windows /s c:}}
+}}
 
-Seeing a boot error message concerning a missing bootmgr file after attempting to boot one of the previously mentioned {{Path|grub.cfg}} entries is the indication the {{Path|C:\Boot}} folder is missing. This happens when using Windows 8 since the {{Path|C:\Boot}} folder does not seem to be generated by default.
+Seeing a boot error message concerning a missing {{Path|bootmgr}} file after attempting to boot one of the previously mentioned {{Path|grub.cfg}} entries is the indication the {{Path|C:\Boot}} folder is missing. This happens when using Windows 8 since the {{Path|C:\Boot}} folder does not seem to be generated by default.
 
 ==== GPT Partitions ====
+
 In the case the Windows bootloader was overwritten with GRUB2 or if {{Path|bootmgr}} doesn't do the trick, a UEFI dual boot could be achieved using the following menu entry:
 
-{{CodeBox|<pre>menuentry "Windows 7 UEFI/GPT" {
+{{FileBox|filename=/boot/grub/grub.cfg|title=UEFI dual-boot|<pre>
+menuentry "Windows 7 UEFI/GPT" {
     insmod part_gpt
     insmod search_fs_uuid
     insmod chain
     search --fs-uuid --no-floppy --set{{=}}root 28cf-35de
     chainloader ($root)/EFI/MICROSOFT/BOOT/bootmgfw.efi
-}</pre>}}
+}
+</pre>}}
 
 == Extended Features ==
 
