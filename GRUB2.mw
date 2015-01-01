@@ -246,6 +246,33 @@ GRUB2 will use all installed scripts that are marked as executable (which by def
 
 After modifying the scripts (or removing the executable bit), regenerate the GRUB2 configuration file using <kbd>grub2-mkconfig</kbd>.
 
+=== Manipulating configuration scripts ===
+
+Some features or GRUB2 functionalities are only possible to be exploited by modifying the configuration scripts. For instance, to support dual-booting with FreeBSD, the following manipulation needs to be done.
+
+Change the {{Path|/etc/grub.d/40_custom}} script to:  
+
+{{FileBox|filename=/etc/grub.d/40_custom|title=Adding DualBoot|<pre>
+menuentry "FreeBSD" --class freebsd --class bsd --class os {
+ insmod ufs2
+ insmod bsd
+ set root=(hd0,1)
+ kfreebsd /boot/kernel/kernel
+ kfreebsd_loadenv /boot/device.hints
+ set kFreeBSD.vfs.root.mountfrom=ufs:/dev/ada0s1a
+ set kFreeBSD.vfs.root.mountfrom.options=rw
+ set kFreeBSD.hw.psm.synaptics_support=1
+}
+</pre>}}
+
+{{Path|/dev/sda1}} or <code>(hd0,1)</code> is the partition in which FreeBSD resides. If the normal UFS install was used for the FreeBSD partition then {{Path|/dev/sda1}} is a container (something like a logical partition). It consists of the swap and root partition. Verify the {{Path|40_custom}} script is executable by running <kbd>ls -la /etc/grub.d/40_custom</kbd>. If the executable bit is not set then set it using the <kbd>chmod u+x 40_custom</kbd> command.  
+
+Next install GRUB2 using the <kbd>grub2-install</kbd> command and update GRUB2's configuration file:
+
+{{RootCmd|grub2-install /dev/sda
+|grub2-mkconfig -o /boot/grub/grub.cfg}}  
+  
+
 == Installing the boot loader ==
 
 Installing GRUB2 as the system's boot loader depends on how the system is meant to boot (through BIOS or UEFI) and how the disk on which the boot loader should be installed is partitioned (using MBR or GPT partition layout).
@@ -562,32 +589,6 @@ There is not enough room at the beginning of the disk before the first partition
 In general this is a bit of trouble to fix. One or more partitions need to be resized in order to leave some free space at the beginning of the drive. The [http://gparted.sourceforge.net/livecd.php GParted LiveCD] or Gentoo-based [[http://sourceforge.net/projects/systemrescuecd/ SystemRescueCD]] are excellent tools to make this job less difficult.
 
 If the swap partition is the first partition on the disk (e.g. {{Path|/dev/sda1}}) it is possible to simply remove the existing swap space partition and re-partition the space. This resolution would avoid the need for booting into a live medium in order to resize a root ({{Path|/}}) partition.
-
-== DualBoot Gentoo and FreeBSD [MBR] ==
-
-Change the {{Path|/etc/grub.d/40_custom}} script to:  
-
-{{FileBox|filename=/etc/grub.d/40_custom|title=Adding DualBoot|<pre>
-menuentry "FreeBSD" --class freebsd --class bsd --class os {
- insmod ufs2
- insmod bsd
- set root=(hd0,1)
- kfreebsd /boot/kernel/kernel
- kfreebsd_loadenv /boot/device.hints
- set kFreeBSD.vfs.root.mountfrom=ufs:/dev/ada0s1a
- set kFreeBSD.vfs.root.mountfrom.options=rw
- set kFreeBSD.hw.psm.synaptics_support=1
-}
-</pre>}}
-
-{{Path|/dev/sda1}} or <code>(hd0,1)</code> is the partition in which FreeBSD resides. If the normal UFS install was used for the FreeBSD partition then {{Path|/dev/sda1}} is a container (something like a logical partition). It consists of the swap and root partition. Verify the {{Path|40_custom}} script is executable by running <kbd>ls -la /etc/grub.d/40_custom</kbd>. If the executable bit is not set then set it using the <kbd>chmod u+x 40_custom</kbd> command.  
-
-Next install GRUB2 using the <kbd>grub2-install</kbd> command and update GRUB2's configuration file:
-
-{{RootCmd|grub2-install /dev/sda
-|grub2-mkconfig -o /boot/grub/grub.cfg}}  
-  
-Unless modified by the end user, script files in located in {{Path|/etc/grub.d}} are executable and will be read by GRUB2 to create boot configuration files ({{Path|grub.cfg}}).
 
 == See also ==
 
