@@ -481,21 +481,15 @@ Next add a boot menu entry:
 
 {{RootCmd|efibootmgr --create --gpt --disk /dev/sda --part 1 --write-signature --label "gentoo" --loader "\\EFI\\gentoo\\grubx86.efi"}}
 
-=== Installation errors ===
-
-==== grub2-install: error: cannot find EFI directory. ====
+=== grub2-install: error: cannot find EFI directory. ===
 
 {{Note|The following examples presumes a '''64-bit''' EFI GRUB2 install, adjust accordingly for 32-bit EFI.}}
-
-'''Error message:'''
 
 {{RootCmd|grub2-install --target{{=}}x86_64-efi|output=<pre>
 grub2-install: error: cannot find EFI directory.
 </pre>}}
 
-'''Resolution:'''
-
-Properly setting the <code>GRUB_PLATFORMS</code> variable in {{Path|/etc/portage/make.conf}} (the first time!) as listed above would have resolved this error. Set the <code>GRUB_PLATFORMS</code> variable then re-emerge GRUB2 using the following command:
+Properly setting the <code>GRUB_PLATFORMS</code> variable in {{Path|/etc/portage/make.conf}} (the first time!) as listed above should resolve this error. Set the <code>GRUB_PLATFORMS</code> variable then re-emerge GRUB2 using the following command:
 
 {{Emerge|--newuse|sys-boot/grub:2}}
 
@@ -503,17 +497,13 @@ In the case this error persists try forcing the install to the EFI directory by 
 
 {{RootCmd|grub2-install --target{{=}}x86_64-efi --efi-directory{{=}}/boot}}
 
-==== Attempting to install GRUB2 to a disk or partition ====
-
-'''Error message:'''
+=== grub2-install: Attempting to install GRUB2 to a disk or partition ===
 
 {{RootCmd|grub2-install /dev/sda1 |output=<pre>
 Attempting to install GRUB to a partition disk or to a partition.  This is a BAD idea.
 Embedding is not possible.  GRUB can only be installed in this setup by using blocklists. 
 However, blocklists are UNRELIABLE and their use is discouraged.
 </pre>}}
-
-'''Possible explanations followed by resolutions:'''
 
 * A {{Path|/boot}} partition is not mounted, run (as root): <kbd>mount /boot</kbd>
 
@@ -525,9 +515,7 @@ However, blocklists are UNRELIABLE and their use is discouraged.
 
 {{Note|Step 4 is true for sys-boot/grub-1.99x only... for sys-boot/grub-2.x the correct file to investigate can be found at {{Path|/etc/grub.d/00_header}}, transform{{=}}"s,grub,grub2-qemu," to transform{{=}}"s,grub,grub2," for example, to install rightly with grub2-$platform-install.}}
 
-==== No post-MBR gap (free space) ====
-
-'''Error message:'''
+=== grub-setup: mo post-MBR gap ===
 
 {{RootCmd|grub2-bios-setup|output=<pre>
 grub-setup: warn: This msdos-style partition label has no post-MBR gap; embedding won't be possible!
@@ -536,19 +524,11 @@ grub2-bios-setup: warn: Embedding is not possible. GRUB can only be installed in
 grub2-bios-setup: error: If you really want blocklists, use --force.
 </pre>}}
 
-'''Explanation:'''
+This error means that GRUB2 could not find the usual gap between the MBR and first partition of a disk. It is possible that the gap does not exist. Some tools (e.g. LiveUSB disk installer) format disks so that the first partition starts at sector 1 instead of 2048. 
 
-This error means, that GRUB2 could not find the usual gap between the MBR and first partition of a disk. It is possible that the gap does not exist. Some tools (e.g. LiveUSB disk installer) format disks so that the first partition starts at sector 1 instead of 2048. 
+Repartitioning might be necessary to resolve the issue.
 
-'''Resolution:'''
-
-Repartitioning the disk should resolve the issue.
-
-Some visualization-based block devices can also cause problems. See [http://bbs.archlinux.org/viewtopic.php?pid=581760#p581760 this post] from the Arch Linux forum for more information.
-
-==== Embedding area is unusually small ====
-
-'''Error message:'''
+=== grub2-install: embedding area is unusually small ===
 
 {{RootCmd|grub2-install /dev/sda|output=<pre>
 grub2-install: warn: Your embedding area is unusually
@@ -559,37 +539,11 @@ blocklists are UNRELIABLE and their use is discouraged.
 grub2-install: error: will not proceed with blocklists.
 </pre>}}
 
-'''Explanation:'''
-
-There is not enough room at the beginning of the disk ''before'' the first partition.
-
-'''Resolution:'''
+There is not enough room at the beginning of the disk before the first partition.
 
 In general this is a bit of trouble to fix. One or more partitions need to be resized in order to leave some free space at the beginning of the drive. The [http://gparted.sourceforge.net/livecd.php GParted LiveCD] or Gentoo-based [[http://sourceforge.net/projects/systemrescuecd/ SystemRescueCD]] are excellent tools to make this job less difficult.
 
-If the swap partition is the first partition on the disk (e.g. {{Path|/dev/sda1}}) it is possible to simply remove the existing swap space partition and re-partition the space. This resolution would avoid the need for booting into a live medium in order to resize a root ({{Path|/}}) partition. 
-
-Begin by disabling the swap partition and launching fdisk:
-
-{{RootCmd|swapoff /dev/sda1
-|fdisk /dev/sda}}
-
-This should bring up the fdisk prompt, where the following commands can be entered to shrink the partition found on {{Path|/dev/sda1}}:
-
-* {{Key|x}} - extra functionality
-* {{Key|b}} - move beginning of data in a partition
-* {{Key|1}} - Choose the first partition
-* {{Key|4096}} - New beginning of data (1-8000369, default 63)
-* {{Key|w}} - write table to disk and exit
-
-A number smaller than 4096 may work, but 4096 is a wise choice.
-
-Next, reformat the swap partition, and re-enable it:
-
-{{RootCmd|mkswap /dev/sda1
-|swapon /dev/sda1}}
-
-It should now be possible to install GRUB2 onto {{Path|/dev/sda}}.
+If the swap partition is the first partition on the disk (e.g. {{Path|/dev/sda1}}) it is possible to simply remove the existing swap space partition and re-partition the space. This resolution would avoid the need for booting into a live medium in order to resize a root ({{Path|/}}) partition.
 
 == DualBoot Gentoo and FreeBSD [MBR] ==
 
