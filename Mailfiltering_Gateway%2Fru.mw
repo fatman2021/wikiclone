@@ -63,14 +63,13 @@ Amavisd-new это фреймворк по фильтрации содержим
 
 Начните с создания записи <code>MX</code> для почтового шлюза и записи <code>A</code> для следующего пункта назначения. 
 
-{{Code|Настройка DNS|<pre>
-(Создайте запись MX для сервера шлюза)
+{{CodeBox|title=Setting up DNS|1=
+(Create a MX record for the gateway server)
                 MX      10      mailgateway.mydomain.tld.
-(Создайте запись A для сервера шлюза)
-mailgateway     A       почтовыйшлюз.ip.добавьте.сюда
-(Создайте запись A для следующего почтового сервера)
-mail            A       почтовыйсервер.ip.добавьте.сюда
-</pre>
+(Create an A record for the gateway server)
+mailgateway     A       mgw.ip.add.here
+(Create an A record for the next hop mail server)
+mail            A       ms.ip.add.here
 }}
 
 
@@ -107,11 +106,11 @@ Razor использует пинги, чтобы определить ближ�
 
 Сначала нам нужно сказать <code>postfix</code>, чтобы он прослушивал порт 10025, и мы уберем большинство ограничений, так как они уже были применены экземпляром <code>postfix</code>, который прослушивает порт 25. Также мы убедимся, что на порту 10025 он прослушивает только локальные соединения. Чтобы этого достичь, нам нужно добавить следующие строки в конце файла {{Path|/etc/postfix/master.cf}}  
 
-{{Code|Изменяем файл master.cf|<pre>
+{{CodeBox|title=Changing the master.cf file|1=
 smtp-amavis     unix -        -       n     -       2  smtp
   -o smtp_data_done_timeout=1200
   -o smtp_send_xforward_command=yes
-#Либо эквивалентно, при использовании lmtp:
+#Equivalently when using lmtp:
 #lmtp-amavis    unix -        -       n     -       2  lmtp
 #   -o lmtp_data_done_timeout=1200
 #   -o lmtp_send_xforward_command=yes
@@ -131,14 +130,13 @@ smtp-amavis     unix -        -       n     -       2  smtp
   -o smtpd_soft_error_limit=1001
   -o smtpd_hard_error_limit=1000
   
-#Если вы вместо этого хотите использовать прокси-фильтрацию
+#If you want to use proxy filtering instead
 #smtp            inet n         -       n      -       8 smtpd
 # -o smtpd_proxy_filter=127.0.0.1:10024
 # -o smtpd_client_connection_count_limit=4
-#Если вы не хотите сканировать исходящую почту, используйте это
+#If you don't want to scan outgoing mail use this
 #10.0.0.2:smtp   inet n         -       n       -      - smtpd
 #-o content_filter=
-</pre>
 }}
 
 {{Note/ru|Строка <code>smtp-amavis</code> определяет, что максимум два процесса могут быть запущены в любой момент времени. Если вам нужно большее число процессов, измените это число так, как вам нужно. Помните, что число должно соответствовать числу <code>$max_servers</code> в {{Path|amavisd.conf}} . Помните, что <code>amavisd-new</code> очень требователен к памяти, поэтому повышение количества процессов <code>amavisd-new</code> может легко привести к исчерпанию памяти и большому использованию свопа, что приведет к катастрофическому падению производительности.}}
@@ -155,7 +153,7 @@ smtp-amavis     unix -        -       n     -       2  smtp
 
 Также нам надо установить, куда нужно отправлять почту далее. Скажите Postfix фильтровать всю почту через внешний фильтр содержимого, и включите явный выбор маршрута, чтобы Postfix знал, куда направлять почту. 
 
-{{File|/etc/postfix/main.cf||<pre>
+{{FileBox|filename=/etc/postfix/main.cf|lang=ini|1=
 biff = no
 empty_address_recipient = MAILER-DAEMON
 queue_minfree = 120000000
@@ -164,22 +162,20 @@ content_filter = smtp-amavis:[127.0.0.1]:10024
 #Equivalently when using lmtp:
 #content_filter = lmtp-amavis:[127.0.0.1]:10024
   
-# Карта транспорта
+# TRANSPORT MAP
 #
-# Вставьте текст из sample-transport.cf если вам нужен явный маршрут.
+# Insert text from sample-transport.cf if you need explicit routing.
 transport_maps = hash:/etc/postfix/transport
   
 relay_domains = $transport_maps
-</pre>
 }}
 
 У Postfix есть множество установленных опций в {{Path|main.cf}} . Для более детального объяснения данного файла просмотрите <code>man 5 postconf</code>, либо то же самое онлайн [http://www.postfix.org/postconf.5.html Параметры Конфигурации Postfix] . 
 
 Файл {{Path|transport}} это обычный файл хэша Postfix. Направьте почту на домен в левой части, и она будет перенаправлена в пункт назначения в правой части. 
 
-{{File|/etc/postfix/transport||<pre>
+{{FileBox|filename=/etc/postfix/transport|1=
 mydomain.tld                          smtp:mail.mydomain.tld
-</pre>
 }}
 
 После того, как мы отредактировали файл, нам нужно запустить команду <code>postmap</code>. Postfix не будет читать данный файл, пока мы не преобразуем его в нужный формат с помощью команды <code>postmap /etc/postfix/transport</code> . Тогда будет создан файл {{Path|/etc/postfix/transport.db}} . Нет необходимости перезагружать Postfix, так как он увидит изменения автоматически. 
@@ -210,30 +206,30 @@ Amavisd-new и сам имеет некоторое число дополнит�
 
 Отредактируйте следующие строки в {{Path|/etc/amavisd.conf}}  
 
-{{File|/etc/amavisd.conf||<pre>
-# (Вставьте какой домен проверять)
+{{FileBox|filename=/etc/amavisd.conf|lang=ini|1=
+# (Insert the domains to be scanned)
 $mydomain = 'example.com';
-# (Работать только на интерфейсе-петле)
+# (Bind only to loopback interface)
 $inet_socket_bind = '127.0.0.1';
-# (Передавать Postfix на порту 10025)
+# (Forward to Postfix on port 10025)
 $forward_method = 'smtp:127.0.0.1:10025';
 $notify_method = $forward_method;
-# (Определить аккаунт, куда посылать письма с вирусами)
+# (Define the account to send virus alert emails)
 $virus_admin = "virusalert\@$mydomain";
-# (Всегда добавлять заголовки относительно проверки на спам)
+# (Always add spam headers)
 $sa_tag_level_deflt  = -100;
-# (Добавлять заголовок обнаружения спама, вроде такого X-Spam-Status: Yes)
+# (Add spam detected header aka X-Spam-Status: Yes)
 $sa_tag2_level_deflt = 5;
-# (Включать какие-либо действия при таком уровне спама)
+# (Trigger evasive action at this spam level)
 $sa_kill_level_deflt = $sa_tag2_level_deflt;
-# (Не отсылать статус получения отправителю. Это не влияет на получение спама.
-#  Чтобы сделать это, используйте kill_level)
+# (Do not send delivery status notification to sender.  It does not affect
+# delivery of spam to recipient. To do that, use the kill_level)
 $sa_dsn_cutoff_level = 10;
-# Не отбрасывать письма, а помещать их в карантин
-$final_virus_destiny      = D_DISCARD;  # (по умолчанию D_DISCARD)
-$final_banned_destiny     = D_DISCARD;  # (по умолчанию D_BOUNCE)
-$final_spam_destiny       = D_DISCARD;  # (по умолчанию D_BOUNCE)
-</pre>
+# Don't bounce messages left and right, quarantine
+# instead
+$final_virus_destiny      = D_DISCARD;  # (defaults to D_DISCARD)
+$final_banned_destiny     = D_DISCARD;  # (defaults to D_BOUNCE)
+$final_spam_destiny       = D_DISCARD;  # (defaults to D_BOUNCE)
 }}
 
 {{Note/ru|Строка <code>$sa_tag2_level_deflt {{=}} 5;</code> устанавливает границу определения письма как спам в 5 баллов. Это немного низкое значение. Как вы могли заметить, по умолчанию Amavisd-new задает <code>6.3</code> . Если вы не хотите видеть ни одного письма со спамом в вашем почтовом ящике, выбирайте <code>5</code> , однако если вы не хотите разбираться с ложными срабатываниями, выбирайте <code>6.3</code> .}}
@@ -250,60 +246,56 @@ $final_spam_destiny       = D_DISCARD;  # (по умолчанию D_BOUNCE)
 
 Мы будем использовать ClamAV в качестве вирусного сканера, так как у него неплохой процент детектирования, сравнимый с коммерческими предложениями, он очень быстр, и у него открытый исходный код. Мы с вами любим файлы логов, поэтому создайте лог <code>clamd</code>, используя <code>syslog</code> и включите дополнительное логгирование. Кроме того, не запускайте <code>clamd</code> от пользователя <code>root</code> . Теперь отредактируйте {{Path|/etc/clamd.conf}}  
 
-{{File|/etc/clamd.conf||<pre>
-# (Детальные логи с использованием syslog)
+{{FileBox|filename=/etc/clamd.conf|1=
+# (Verbose logging with syslog)
 LogSyslog
 LogVerbose
 LogFacility LOG_MAIL
-# (Измените положение pid файла)
+# (Change pid file location)
 PidFile /var/run/amavis/clamd.pid
-# (Установите сокет clamav)
+# (Set the clamav socket)
 LocalSocket /var/amavis/clamd
-# (Закрыть соединение, когда данный лимит будет превышен)
+# (Close the connection when this limit is exceeded)
 StreamMaxLength 10M
-# (Не запускать clamd от пользователя)
+# (Don't run clamd as root)
 User amavis
-# (Более новые версии требуют, чтобы это было раскомментировано)
+# (Newer versions require you to uncomment this)
 ScanMail
 ScanArchive
-</pre>
 }}
 
 {{Note/ru|Также помните, что нужно удалить директиву Example, чтобы ClamAV заработал}}
 
 В пакете программ ClamAV есть демон <code>freshclam</code>, который периодически проверяет обновления вирусных сигнатур. Вместо того, чтобы обновлять вирусные сигнатуры дважды в день, заставим <code>freshclam</code> обновлять вирусные сигнатуры каждые два часа. 
 
-{{File|/etc/freshclam.conf||<pre>
-# (Логи с использованием Syslog)
+{{FileBox|filename=/etc/freshclam.conf|1=
+# (Syslog logging)
 LogSyslog
-# (Детальные логи)
+# (Verbose logging)
 LogVerbose
-# (Явно уберем привилегии root)
+# (Explicitly drop root privileges)
 DatabaseOwner clamav
-# (Проверять обновления каждые 2 часа. Это официальная рекомендация)
+# (Check for updates every two hours. That is the official recommendation)
 Checks 12
-# (Используйте зеркало, которое ближе всего к вам. Замените XY на код вашей страны)
+# (Use the mirror closest to you. Replace XY with your country code
 DatabaseMirror db.XY.clamav.net
-</pre>
 }}
 
 Запустите <code>clamd</code> м <code>freshclam</code>, используя инициализационные скрипты, изменив {{Path|/etc/conf.d/clamd}} . 
 
-{{File|/etc/conf.d/clamd||<pre>
+{{FileBox|filenam=/etc/conf.d/clamd|lang=bash|1=
 START_CLAMD=yes
 FRESHCLAM_OPTS="-d"
-</pre>
 }}
 
 В конце, укажите в файле {{Path|amavisd.conf}} новое положение сокета. 
 
-{{File|/etc/amavisd.conf||<pre>
-# (Раскомментируйте сканер clamav и измените месторасположение сокета)
+{{FileBox|filename=/etc/amavisd.conf|lang=bash|1=
+# (Uncomment the clamav scanner and modify socket location)
 ['ClamAV-clamd',
 \&ask_daemon, ["CONTSCAN {}\n", "/var/amavis/clamd"],
   qr/\bOK$/, qr/\bFOUND$/,
   qr/^.*?: (?!Infected Archive)(.*) FOUND$/ ],
-</pre>
 }}
 
 {{Warning/ru|НЕ изменяйте <code>$unix_socketname</code>, если только вы не понимаете, что вы делаете.}}
@@ -336,25 +328,24 @@ Razor2 это распределенная сеть контрольных су�
 
 Amavis сам использует библиотеки Perl для Spamassassin, поэтому нет необходимости запускать сервис. Кроме того, это создает некоторую путаницу в конфигурации, так как некоторые настройки Spamassassin конфигурируются в файле {{Path|/etc/mail/spamassassin/local.cf}}, но, потом, перенастраиваются в {{Path|/etc/amavisd.conf}} . 
 
-{{File|/etc/mail/spamassassin/local.cf||<pre>
-# Включить систему Байеса
+{{FileBox|filename=/etc/mail/spamassassin/local.cf|1=
+# Enable the Bayes system
 use_bayes               1
   
-# Включить все сетевые проверки
+# Enable all network checks
 skip_rbl_checks         0
   
-# Письма на таких языках не будут маркироваться
-# как возможный спам на иностранном языке
-# - датский, английский, норвежский, шведский
+# Mail using languages used in these country codes will not be marked
+# as being possibly spam in a foreign language.
+# - danish english norwegian swedish
 ok_languages            da en no sv
-
-# Письма с такими локалями не будут маркироваться
-# как возможный спам на иностранном языке
+  
+# Mail using locales used in these country codes will not be marked
+# as being possibly spam in a foreign language.
 ok_locales              en
   
-# Использовать такой путь к фильтру Байеса
+# Use a sensible bayes path
 bayes_path              /var/amavis/.spamassassin/bayes
-</pre>
 }}
 
 
@@ -368,19 +359,17 @@ bayes_path              /var/amavis/.spamassassin/bayes
 
 Как только почта по настоящему начнет проходить через данный почтовый шлюз, вы, скорее всего, выясните, что вышеприведенная настройка несовершенна. Может быть каким-то из ваших клиентов нравится получать письма, которые не нравятся другим. Вы можете достаточно просто создать белые и черные списки для отправителей. Раскомментируйте следующую строку в {{Path|amavisd.conf}} . 
 
-{{File|amavisd.conf|Общесайтовые очки|<pre>
+{{FileBox|filename=amavisd.conf|title=do sitewide scoring|lang=bash|1=
 read_hash("/var/amavis/sender_scores_sitewide"),
-</pre>
 }}
 
 В файле {{Path|sender_scores_sitewide}} вы помещаете полные адреса электронной почты, либо только их доменные части, а затем указываете положительное/отрицательное количество очков, которое нужно добавить к очкам спама. 
 
-{{File|whitelist_sender|Пример|<pre>
-# (Занести в белый список все письма с конкретного адреса электронной почты)
+{{FileBox|filename=whitelist_sender|title=example|1=
+# (Whitelist all emails from the specific email address)
 postmaster@example.net                -3.0
-# (Занести в белый список всю почту с example.net, за исключением поддоменов)
+# (Whitelist all emails from the example.net excluding subdomains)
 .example.net                          1.0
-</pre>
 }}
 
 
@@ -394,12 +383,11 @@ postmaster@example.net                -3.0
 
 В поисках более хорошего метода, пока вы можете добавить следующее в файл {{Path|amavisd.conf}}, чтобы не выполнять проверки на спам для почтовых ящиков <code>postmaster</code> и <code>abuse</code>. 
 
-{{Code|Не проверять с помощью спам-фильтров почту с ящиков postmaster и abuse|<pre>
+{{CodeBox|title=Bypass spam filters for all postmaster and abuse mails|1=
 map { $bypass_spam_checks{lc($_)}=1 } (qw(
         postmaster@
         abuse@
 ));
-</pre>
 }}
 
 {{Important/ru|''Никогда'' не следует автоматически отбрасывать письма к аккаунтам <code>postmaster</code> или <code>abuse</code>. Смотрите [http://www.ietf.org/rfc/rfc2142.txt RFC 2142 ИМЕНА ПОЧТОВЫХ ЯЩИКОВ ДЛЯ ЧАСТОИСПОЛЬЗУЕМЫХ СЕРВИСОВ, РОЛЕЙ И ФУНКЦИЙ] . В противном случае, ваши домены могут попасть в какие-то из списков плохих хостов на [http://www.rfc-ignorant.org/ rfc-ignorant.org] .}}
@@ -491,30 +479,29 @@ Database updated (21370 signatures) from database.clamav.net (193.1.219.100).
 
 === Создаем .procmailrc ===
 
-{{File|/home/spamtrap/.procmailrc||<pre>
-#Некоторые переменные по умолчанию
+{{FileBox|filename=/home/spamtrap/.procmailrc|lang=bash|1=
+#Set some default variables
 MAILDIR=$HOME/.maildir
   
 SPAM_FOLDER=$MAILDIR/.spam-found/
   
 LIKELY_SPAM_FOLDER=$MAILDIR/.likely-spam-found/
   
-#Письма с очками спама 7+ в каталог со спамом
+#Sort mails with a spamscore of 7+ to the spamfolder
 :0:
 * ^X-Spam-Status: Yes
 * ^X-Spam-Level: \*\*\*\*\*\*\*
 $SPAM_FOLDER
   
-#Письма с очками спама между 5 и 7 в папку "скорее всего спам"
+#Sort mail with a spamscore between 5-7 to the likely spam folder
 :0:
 * ^X-Spam-Status: Yes
 $LIKELY_SPAM_FOLDER
   
-#Остальные письма во входящие
+#Sort all other mails to the inbox
 :0
 *
 ./
-</pre>
 }}
 
 {{Warning/ru|Если ваш почтовый сервер будет высоконагруженным, вы НЕ должны использовать папку для "возможного спама". Вместо этого установите <code>$sa_tag2_level_deflt</code> в достаточно большое значение, чтобы избежать ложных срабатываний, и направляйте письма прямо в <code>$SPAM_FOLDER</code> .}}
@@ -523,9 +510,8 @@ $LIKELY_SPAM_FOLDER
 
 Проверьте, что Postfix использует <code>procmail</code> для доставки почты. 
 
-{{File|/etc/postfix/main.cf||<pre>
+{{FileBox|filename=/etc/postfix/main.cf|lang=ini|1=
 mailbox_command = /usr/bin/procmail -a "DOMAIN"
-</pre>
 }}
 
 === Создаем каталоги для почты ===
@@ -562,13 +548,12 @@ Amavisd-new должен иметь возможность читать эти �
 
 Теперь запустите <code>crontab -u amavis -e</code>, чтобы отредактировать crontab пользователя amavis, чтобы разрешить автоматическое обучение фильтра Байеса каждый час. 
 
-{{File|crontab|для пользователя amavis|<pre>
+{{FileBox|filename=crontab|title=for amavis user|1=
 #Auto learn
 0 * * * *          /usr/bin/sa-learn --spam /var/amavis/.maildir/Bayes/.spam/{cur,new} \
                     > /dev/null 2>&1
 0 * * * *          /usr/bin/sa-learn --ham /var/amavis/.maildir/Bayes/.ham/{cur,new} > \
                    /dev/null 2>&1
-</pre>
 }}
 
 {{Note/ru|Пользователь <code>amavis</code> должен быть членом группы <code>cron</code> чтобы он имел право запускать задачи.}}
@@ -579,23 +564,21 @@ Amavisd-new должен иметь возможность читать эти �
 
 Теперь измените amavis, чтобы он перенаправлял письма со спамом на аккаунт <code>spamtrap</code>, при этом сохраняя заголовки спама. 
 
-{{File|/etc/amavisd.conf||<pre>
-# (Определить аккаунт, куда нужно посылать вирусную почту со спамом)
+{{FileBox|filename=/etc/amavisd.conf|lang=ini|1=
+# (Define the account to send virus spam emails)
 $spam_quarantine_to = "spamtrap\@$myhostname";
-</pre>
 }}
 
 === Очистка ===
 
 Мы не хотим хранить почту вечно, поэтому будем использовать <code>tmpwatch</code>, чтобы регулярно ее очищать. Установите эту программу командой <code>emerge tmpwatch</code> . Только <code>root</code> может запустить <code>tmpwatch</code>, так что нам нужно отредактировать файл crontab пользователя <code>root</code>. 
 
-{{File|crontab|Пользователь root|<pre>
-# Очистка
-# Хранить письма с вирусами неделю (24*7 часов)
+{{FileBox|filename=crontab|title=root user|1=
+# Clean up
+# Keep virusmails for a week (24*7 hours)
 15 0 * * *      /usr/sbin/tmpwatch -c -f -d --quiet 168 /var/amavis/virusmails/
-# Удалять письма spam и ham, по которым происходило обучение, через неделю
+# Delete spam and ham learned after a week
 15 0 * * *      /usr/sbin/tmpwatch -c -f -d --quiet 168 /var/amavis/.maildir/Bayes/
-</pre>
 }}
 
 == Серые списки ==
@@ -631,22 +614,20 @@ Postfix 2.1 поставляется с простым сервером поли
 
 Теперь, когда все это готово, все что нам остается сделать, это добавить серые списки к конфигурации postfix. Сначала добавим необходимую информацию к {{Path|master.cf}} : 
 
-{{Code|Изменяем master.cf для использования серых списков|<pre>
+{{CodeBox|title=Modifying master.cf to use greylisting|1=
 policy-greylist  unix  -       n       n       -       -       spawn
    user=nobody argv=/usr/bin/perl /usr/bin/greylist.pl
-</pre>
 }}
 
 Обычно демон spawn программы postfix убивает своих потомков через 1000 секунд, но это слишком мало для процесса работы с серыми списками, поэтому мы увеличим лимит времени в {{Path|main.cf}} : 
 
-{{File|main.cf|используем серые списки|<pre>
+{{FileBox|filename=main.cf|title=use greylisting|lang=ini|1=
 policy-greylist_time_limit = 3600
-# (Под smtpd_recipient_restrictions добавьте:)
+# (Under smtpd_recipient_restrictions add:)
 check_sender_access hash:/etc/postfix/sender_access
-# (Добавьте попозже:)
+# (Later on add:)
 restriction_classes = greylist
 greylist = check_policy_service unix:private/policy-greylist
-</pre>
 }}
 
 {{Warning/ru|Проверьте, что вы указали <code>check_sender_access</code> ПОСЛЕ <code>reject_unauth_destination</code>, иначе ваша система может стать открытым почтовым ретранслятором.}}
@@ -655,11 +636,10 @@ greylist = check_policy_service unix:private/policy-greylist
 
 Мы не хотим использовать серые списки для всех доменов, а только для тех, которые часто эксплуатируются спамерами. В конце концов, это будет задерживать доставку почты. Список недавно подделанных доменов MAIL FROM можно найти [http://www.monkeys.com/anti-spam/filtering/sender-domain-validate.in онлайн] . Добавьте домены, с которых вы получаете много спама к {{Path|/etc/postfix/sender_access}} : 
 
-{{Code|Формат файла sender_access|<pre>
+{{CodeBox|Format of sender_access|1=
 aol.com     greylist
 hotmail.com greylist
 bigfoot.com greylist
-</pre>
 }}
 
 Если вы хотите более сложный список: 
@@ -683,13 +663,12 @@ bigfoot.com greylist
 
 После установки <code>postgrey</code> нам нужно отредактировать файл {{Path|main.cf}} . Изменения почти те же самые, как мы делали при настройке серых списков. 
 
-{{File|main.cf|используем серые списки|<pre>
-# (Добавьте под smtpd_recipient_restrictions:)
+{{FileBox|filename=main.cf|title=use greylisting|lang=ini|1=
+# (Under smtpd_recipient_restrictions add:)
 check_sender_access hash:/etc/postfix/sender_access
-# (Добавьте попозже:)
+# (Later on add:)
 smtpd_restriction_classes = greylist
 greylist = check_policy_service inet:127.0.0.1:10030
-</pre>
 }}
 
 {{Note/ru|Только SMTPD_POLICY_README программы Postfix использует <code>restriction_classes</code>, однако похоже это не работает.}}
@@ -713,9 +692,8 @@ SPF позволяет доменам определять в своих DNS з�
 
 Сначала, владельцы домена должны создать специальную DNS запись <code>TXT</code>. Затем агент передачи почты (MTA) с поддержкой SPF может прочитать ее, и если почта исходит с сервера, который не описан в записи SPF, то почта может быть отклонена. Например, запись может выглядеть так: 
 
-{{Code|Пример записи SPF|<pre>
+{{CodeBox|title=Example SPF record|1=
 example.com.  IN TXT  "v=spf1 a mx ptr -all"
-</pre>
 }}
 
 <code>-all</code> означает, что нужно отклонять всю почту по умолчанию, но разрешать почту из записей DNS <code>A</code>( <code>a</code> ), <code>MX</code>( <code>mx</code> ) и <code>PTR</code>( <code>ptr</code> ). Для большего количества информации прочитайте ресурсы, приведенные ниже. 
@@ -740,18 +718,16 @@ example.com.  IN TXT  "v=spf1 a mx ptr -all"
 
 Теперь мы все сделали, и все, что нам осталось - это настроить Portage, чтобы он использовал новую политику. 
 
-{{File|master.cf|Использование SPF|<pre>
+{{FileBox|filename=master.cf|title=use SPF|1=
 policy-spf  unix  -       n       n       -       -       spawn
    user=nobody argv=/usr/bin/perl /usr/local/bin/spf.pl
-</pre>
 }}
 
 Теперь добавьте проверку SPF в {{Path|main.cf}} . Правильно настроенный SPF не должен повредить, поэтому мы можем проверять SPF для всех доменов: 
 
-{{File|main.cf|Используем SPF|<pre>
-# (Добавьте под smtpd_recipient_restrictions:)
+{{FileBox|filename=main.cf|title=use SPF|1=
+# (Under smtpd_recipient_restrictions add:)
 check_policy_service unix:private/policy-spf
-</pre>
 }}
 
 {{Note/ru|Если вы испытываете проблемы с SPF, например, при использовании <code>fetchmail</code> , вы можете разрешить SPF только для некоторых доменов.}}
@@ -778,7 +754,7 @@ Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
 
 Теперь, после создания базы данных, нам нужно создать необходимые таблицы. Вы можете вырезать и вставить следующие команды в поле ввода программы mysql: 
 
-{{Code|Создаем таблицы MySQL|<pre>
+{{CodeBox|title=MySQL table layout|lang=sql|1=
 CREATE TABLE users (
     id         int unsigned NOT NULL auto_increment,
     priority   int          NOT NULL DEFAULT '7',  -- 0 is low priority
@@ -832,7 +808,6 @@ CREATE TABLE policy (
                -- (subject to final_spam_destiny setting)
    PRIMARY KEY (id)
   );
-</pre>
 }}
 
 {{Note/ru|Если у вас какие-то проблемы с использованием копирования и вставки, вы можете скопировать куда-нибудь данный текст, и убрать лишние символы.}}
@@ -845,7 +820,7 @@ CREATE TABLE policy (
 
 После создания таблиц, давайте заведем тестового пользователя и тестовую политику: 
 
-{{Code|Создаем тестового пользователя и тестовую политику|<pre>
+{{CodeBox|title=Create test user and test policy|lang=sql|1=
 INSERT INTO users
    SET
       id         =1,
@@ -872,7 +847,6 @@ INSERT INTO policy
       spam_tag_level         =-50.0,
       spam_tag2_level        =7.0,
       spam_kill_level        =10.0;
-</pre>
 }}
 
 {{Note/ru|Скопируйте этот текст куда-нибудь еще, и подправьте его так, чтобы он описывал то, что вам нужно.}}
@@ -885,16 +859,16 @@ INSERT INTO policy
 
 Теперь, когда мы настроили MySQL, нужно сообщить Amavis, что его нужно использовать: 
 
-{{File|amavisd.conf|Обновление для использования MySQL|<pre>
+{{FileBox|filename=amavisd.conf|title=Update to use MySQL|lang=ini|1=
 @lookup_sql_dsn =
    ( ['DBI:mysql:maildb:host1', 'mail', 'very_secret_password']  );
   
-# (Для ясности раскомментируйте значение по умолчанию)
+# (For clarity uncomment the default)
 $sql_select_policy = 'SELECT *,users.id FROM users,policy'.
    ' WHERE (users.policy_id=policy.id) AND (users.email IN (%k))'.
    ' ORDER BY users.priority DESC';
   
-# (Если вы хотите белые/черные списки для отправителей)
+# (If you want sender white/blacklisting)
    $sql_select_white_black_list = 'SELECT wb FROM wblist,mailaddr'.
      ' WHERE (wblist.rid=?) AND (wblist.sid=mailaddr.id)'.
      '   AND (mailaddr.email IN (%k))'.
@@ -922,7 +896,7 @@ Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
 
 Теперь, после создания базы данных, создадим необходимые таблицы. Вы можете вырезать и вставить следующие команды в поле ввода программы mysql: 
 
-{{Code|Структура таблиц MySQL|<pre>
+{{CodeBox|title=MySQL table layout|lang=sql|1=
       CREATE TABLE bayes_expire (
           id                    int(11)         NOT NULL default '0',
           runtime               int(11)         NOT NULL default '0',
@@ -977,7 +951,6 @@ Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
           totscore              float           default '0',
           PRIMARY KEY           (username,email,ip)
           ) TYPE=MyISAM;
-</pre>
 }}
 
 {{Important/ru|Строка <code>INSERT</code> необходима, иначе Spamassassin не будет работать.}}
@@ -998,19 +971,18 @@ Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
 
 Теперь дадим Spamassassin требуемую информацию: 
 
-{{File|/etc/mail/spamassassin/secrets.cf||<pre>
-# (Скажем Spamassassin использовать MySQL для данных Байеса)
+{{FileBox|filename=/etc/mail/spamassassin/secrets.cf|1=
+# (Tell Spamassassin to use MySQL for bayes data
 bayes_store_module              Mail::SpamAssassin::BayesStore::SQL
 bayes_sql_dsn                   DBI:mysql:sa_bayes:localhost:3306
 bayes_sql_username              db_name
 bayes_sql_password              another_very_secret_password
   
-# (Скажем Spamassassin использовать MySQL для данных AWL)
+# (Tell Spamassassin to use MySQL for AWL data
 auto_whitelist_factory          Mail::SpamAssassin::SQLBasedAddrList
 user_awl_dsn                    DBI:mysql:sa_bayes:localhost:3306
 user_awl_sql_username           db_name
 user_awl_sql_password           another_very_secret_password
-</pre>
 }}
 
 Далее измените разрешения для необходимой безопасности: 
@@ -1041,13 +1013,12 @@ user_awl_sql_password           another_very_secret_password
 
 К счастью, Gentoo дает вам способ сделать это автоматически. В главе [http://www.gentoo.org/doc/ru/handbook/handbook-amd64.xml?part=3&chap=6#doc_chap3 вмешиваемся в процесс установки] , настольная книга Gentoo объясняет, как выполнять задачи после установки конкретного пакета, вроде такого: 
 
-{{Code|Пример bashrc для запуска вышеописанного chown|<pre>
+{{CodeBox|title=Example bashrc snippet for running the mentioned chown|lang=bash|1=
 if [ "${PN}" == "amavisd-new" ] &&
    [ "${EBUILD_PHASE}" == "postinst" ]; 
 then
   chown -R amavis:mailusers /var/amavis/.maildir
 fi
-</pre>
 }}
 
 === Получение помощи ===
