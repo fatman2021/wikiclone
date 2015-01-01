@@ -17,14 +17,14 @@
 
 Если вы хотите произвести более точную настройку cross-toolchain’а, то вот скрипт, который генерирует команду с точными версиями toolchain-пакетов для сборки на вспомогательных машинах (скрипт нужно запускать на целевой машине).
 
-{{Code|Скрипт для тонкой настройки инструментов распределенной разработки|<pre>
+{{CodeBox|title=Script to fine-tune cross development tools|lang=bash|1=
 #! /bin/bash
-A="sys-devel/binutils" ; B=`equery l $A` ; BINUTILS_VER=`echo $B | cut -d- -f3-`
-A=`/usr/bin/gcc-config -c` ; B=`echo $A | cut -d- -f5` ; GCC_VER=`equery l sys-devel/gcc | grep $B | cut -d- -f3-`
-KERNEL_VER=`uname -r | sed s/-gentoo//`
-A="sys-libs/glibc" ; B=`equery l $A` ; LIBC_VER=`echo $B | cut -d- -f3-`
+A="sys-devel/binutils" ; B=`equery l $A` ; BINUTILS_VER=`echo $B {{!}} cut -d- -f3-`
+A=`/usr/bin/gcc-config -c` ; B=`echo $A {{!}} cut -d- -f5` ; GCC_VER=`equery l sys-devel/gcc {{!}} grep $B {{!}} cut -d- -f3-`
+KERNEL_VER=`uname -r {{!}} sed s/-gentoo//`
+A="sys-libs/glibc" ; B=`equery l $A` ; LIBC_VER=`echo $B {{!}} cut -d- -f3-`
 echo "crossdev --b =$BINUTILS_VER --g =$GCC_VER --k =$KERNEL_VER --l =$LIBC_VER -t `uname -m`"
-</pre>}}
+}}
 
 Затем необходимо установить <code>distcc</code> на все машины, которые будут вовлечены в процесс. Это включает и машину, на которой будет запущен emerge, и машины с кросс-компиляторами. Посмотрите [[Distcc/ru|документацию Gentoo по Distcc]] для более подробной информации по настройке и использованию <code>distcc</code>.
 
@@ -38,11 +38,11 @@ echo "crossdev --b =$BINUTILS_VER --g =$GCC_VER --k =$KERNEL_VER --l =$LIBC_VER 
 
 При использовании <code>crossdev -t sparc</code> может появиться одна из следующих ошибок:
 
-{{Code|Ошибки, появляющиеся при запуске crossdev -t sparc|<pre>
+{{CodeBox|title=Errors displayed when running crossdev -t sparc|1=
 linker with -z relro support required
 support for the tls_model attribute is required
 this configuration requires -mlong-double-128 support
-</pre>}}
+}}
 
 Если это происходит, попробуйте использовать другую команду:
 
@@ -75,10 +75,9 @@ lrwxrwxrwx  1 root root 15 Dec 23 20:13 sparc-unknown-linux-gnu-gcc -> /usr/bin/
 
 Затем создадим новый скрипт на этой машине. Запустите свой любимый текстовый редактор и создайте файл со следующим текстом, сохранив его как {{Path|sparc-unknown-linux-gnu-wrapper}}. Помните о том, что CHOST (в данном случае <code>sparc-unknown-linux-gnu</code>) нужно заменить на реальный CHOST данного компьютера, т. е. того, на котором будет запускаться emerge. 
 
-{{Code/ru|Новый оберточный скрипт|<pre>
+{{CodeBox|title=The new wrapper script|lang=bash|1=
 #!/bin/bash
 exec /usr/lib/distcc/bin/sparc-unknown-linux-gnu-g${0:$[-2]} "$@"
-</pre>
 }}
 
 Далее, сделаем скрипт исполнимым и создадим соответствующие символьные ссылки: 
@@ -106,11 +105,11 @@ lrwxrwxrwx  1 root root 15 Jul 27 10:52 sparc-unknown-linux-gnu-gcc -> /usr/bin/
 
 Далее нужно позаботиться о том, чтобы обертки оставались доступными после обновлений distcc, поскольку символьные ссылки при обновлении перезаписываются. Можно сделать это с помощью файла {{Path|/etc/portage/bashrc}}, примерно такого:
 
-{{Code|/etc/portage/bashrc|<pre>
+{{FileBox|filename=/etc/portage/bashrc|lang=bash|1=
 case ${CATEGORY}/${PN} in
-	sys-devel/distcc&#41;
-		# Эй, как так случилось, что CONFIG PROTECT не сработал?
-		if [ "${EBUILD_PHASE}" == "postinst" ] || [ "${EBUILD_PHASE}" == "postrm" ];
+	sys-devel/distcc)
+		# Hey man, how come that CONFIG PROTECT don't work?
+		if [ "${EBUILD_PHASE}" == "postinst" ] {{!}}{{!}} [ "${EBUILD_PHASE}" == "postrm" ];
 		then
 			cd /usr/lib/distcc/bin
 			rm cc c++ gcc g++
@@ -120,10 +119,10 @@ case ${CATEGORY}/${PN} in
 			ln -s sparc-unknown-linux-gnu-wrapper g++
 		fi
 	;;
-esac</pre>
+esac
 }}
 
-Поздравляем! Теперь у вас есть (надеемся) работающая установка cross-distcc.
+Поздравляем! Теперь у вас (надеемся) есть работающая установка cross-distcc.
 
 === Как это работает ===
 
