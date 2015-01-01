@@ -209,22 +209,29 @@ Each time the <tt>grub2-mkconfig</tt> utility is called a new configuration will
 {{Important|If <tt>grub2-mkconfig</tt> does not report found entries then no entries were found. In this case GRUB2 will offer no boot selections when upon system restart which may be a tricky, time consuming situation to resolve. Make sure the output is satisfactory before restarting the system.}}
 
 == BIOS MBR and BIOS GPT ==
-Installing GRUB2 in BIOS MBR or BIOS GPT mode is reminiscent of installing Legacy GRUB, the main difference is that GRUB2 uses new GRUB2 additions. If a GPT partition table is present on the system, a small BIOS boot partition will need to be created. 1 MiB will be enough to work but 2-4 MiB is a more safe option. This BIOS boot partition will hold the stage 2 of the bootloader. BIOS boot partitions do not need formatted with a filesystem; the <kbd>grub2-install</kbd> command will overwrite any pre-existing filesystem with one of it's own.
 
-To set a partition as a BIOS partition use the command line tool <kbd>parted</kbd> ({{Package|sys-block/parted}}) by typing (change 1 to the number of the partition you want to mark as a BIOS Boot partition!):
+Installing GRUB2 in BIOS MBR or BIOS GPT mode is reminiscent of installing Legacy GRUB, the main difference is that GRUB2 uses new GRUB2 additions. If a GPT partition table is present on the system, a small BIOS boot partition will need to be created. 1 MiB will be enough to work but 2-4 MiB is a more safe option. This BIOS boot partition will hold the stage 2 of the bootloader. BIOS boot partitions do not need formatted with a filesystem; the <tt>grub2-install</tt> command will overwrite any pre-existing filesystem with one of it's own.
+
+To set a partition as a BIOS partition use the command line tool <kbd>parted</kbd> ({{Package|sys-block/parted}}) by typing (change <code>1</code> to the number of the partition to mark as a BIOS Boot partition!):
+
 {{RootCmd|set 1 bios_grub on|prompt=(parted) |color=white}} 
 
-More specifically, the following type of layout will work for BIOS GPT, and it is easier to use the curses-based <kbd>cgdisk</kbd> utility ({{Package|sys-apps/gptfdisk}}). Create the first partition at sector 2048, leaving the first 1 MiB of disk space free for MBRs, etc.). Provide it with an additional 4096 to 8192 sectors (2-4 MiB) for size. Set the type code to <code>0xEF02</code> and give it a label of "gptbios" (effectively what the bios_grub command does when using <kbd>parted</kbd>). Continue adding partitions as needed ({{Path|/boot}}, {{Path|/}}, etc.).
+More specifically, the following type of layout will work for BIOS GPT, and it is easier to use the curses-based <tt>cgdisk</tt> utility ({{Package|sys-apps/gptfdisk}}). Create the first partition at sector 2048, leaving the first 1 MiB of disk space free for MBRs, etc.). Provide it with an additional 4096 to 8192 sectors (2-4 MiB) for size. Set the type code to <code>0xEF02</code> and give it a label of <code>gptbios</code> (effectively what the <tt>bios_grub</tt> command does when using <tt>parted</tt>). Continue adding partitions as needed ({{Path|/boot}}, {{Path|/}}, etc.).
 
-If a {{Path|/boot}} partition is needed, start by mounting the {{Path|/boot}} parition:
+If a {{Path|/boot}} partition is needed, start by mounting the {{Path|/boot}} partition:
+
 {{RootCmd|mount /boot}}
 
-Run the <kbd>grub2-install</kbd> to copy the relevant files to {{Path|/boot/grub}}. On the PC platform, this also installs a boot image to the Master Boot Record (MBR) or a partition's boot sector. <kbd>grub2-install</kbd> accepts a <kbd>--target</kbd> option to set the CPU architecture and system platform. If unspecified, <kbd>grub2-install</kbd> will attempt to guess the correct at the correct values; on an AMD64/x86 system it will use "i386-pc" by default. <kbd>grub2-install</kbd> also accepts a <kbd>--boot-directory</kbd> option to tell the GRUB2 installer which directly to look for GRUB2's boot files. This defaults to the current {{Path|/boot}} but is useful when trying to move a root partition.
+Run the <kbd>grub2-install</kbd> command to copy the relevant files to {{Path|/boot/grub}}. On the PC platform, this also installs a boot image to the Master Boot Record (MBR) or a partition's boot sector. <tt>grub2-install</tt> accepts a <tt>--target</tt> option to set the CPU architecture and system platform. If unspecified, <tt>grub2-install</tt> will attempt to guess the correct at the correct values; on an AMD64/x86 system it will use <tt>i386-pc</tt> by default. <tt>grub2-install</tt> also accepts a <tt>--boot-directory</tt> option to tell the GRUB2 installer which directly to look for GRUB2's boot files. This defaults to the current {{Path|/boot}} but is useful when trying to move a root partition.
 
 If all goes well, after running the <kbd>grub2-install</kbd> command an output such as the one below is to be expected:
-{{RootCmd|grub2-install /dev/sda|output=<pre>Installation finished. No error reported.</pre>}}
+
+{{RootCmd|grub2-install /dev/sda|output=<pre>
+Installation finished. No error reported.
+</pre>}}
 
 === Partitioning and Preparing Boot Disk ===
+
 Before installing GRUB2 to a boot medium (internal disk, a removable device, etc.) some special care should be given while preparing and partitioning the boot device. The type of special care depends on the boot type involved: BIOS ''or'' UEFI. BIOS booting can be easily achieved using one of three methods:
 
 1. Booting from disk partitioned with an existing MBR boot scheme.
@@ -236,10 +243,12 @@ A different kind of special care should be provided when using UEFI. GPT is part
 When dual booting with Windows, be aware that Windows cannot boot from either a BIOS MBR ''or'' a GPT partitioned disk using an EFI platform. In the latter case, dual booting Windows is not difficult. In the former case, it can be difficult to dual boot with Windows on a GPT partitioned disk that uses a hybrid MBR.
 
 Before going further, consider backing up the boot device MBR. Presuming the MBR resides on the {{Path|/dev/sda}} device, the following command could be used to backup the MBR:
+
 {{RootCmd|dd if{{=}}/dev/sda of{{=}}/root/sda.mbr bs{{=}}512 count{{=}}1}}
 
-Or to simply its boot loader with something (here one can go as far as 446 bytes):
-{{RootCmd|dd if{{=}}/dev/sda of{{=}}/root/sda.mbr bs{{=}}440 count{{=}}1}}
+Or to simply backup the boot loader (and ignore partition information):
+
+{{RootCmd|dd if{{=}}/dev/sda of{{=}}/root/sda.mbr bs{{=}}446 count{{=}}1}}
 
 {{Note|If the bootloader in question is GRUB Legacy or GRUB2 in a traditional ''BIOS'' - MBR setup, then, to make a wise choice, the whole first track (63 sectors) should be backed up. GRUB Legacy's stage1_5 is roughly 10KB and GRUB2's {{Path|core.img}} is roughly 25KB (without additional modules). These files are embedded in the gap (free space) before the first partition on the device specified in the installation procedure.}}
 
@@ -249,15 +258,15 @@ The following is the output of pressing the {{Key|p}} key using the <kbd>gdisk</
 
 {{RootCmd|gdisk /dev/sdc|output=<pre>
 GPT fdisk (gdisk) version 0.8.1
-
+ 
 Partition table scan:
   MBR: protective
   BSD: not present
   APM: not present
   GPT: present
-
+ 
 Found valid GPT with protective MBR; using GPT.
-
+ 
 Command (? for help): p
 Disk /dev/sdc: 976773168 sectors, 465.8 GiB
 Logical sector size: 512 bytes
@@ -266,7 +275,7 @@ Partition table holds up to 128 entries
 First usable sector is 34, last usable sector is 976773134
 Partitions will be aligned on 2048-sector boundaries
 Total free space is 2014 sectors (1007.0 KiB)
-
+ 
 Number  Start (sector)    End (sector)  Size       Code  Name
    1            2048       828377087   395.0 GiB   8E00  Linux LVM
    2       828377088       891291647   30.0 GiB    0700  Microsoft basic data
@@ -274,11 +283,11 @@ Number  Start (sector)    End (sector)  Size       Code  Name
    4       975177728       976754687   770.0 MiB   8300  Linux filesystem
    5       976754688       976756735   1024.0 KiB  EF02  BIOS boot partition
    6       976756736       976773134   8.0 MiB     EF00  EFI System
-
+ 
 Command (? for help): 
 </pre>}}
 
-{{Note|Note the <code>0x</code> hexadecimal prefix does not need entered for GPT when using <kbd>fdisk</kbd>.}}
+{{Note|The <code>0x</code> hexadecimal prefix does not need to be entered for GPT when using <tt>fdisk</tt>.}}
 
 Using the same setup, the <kbd>parted</kbd> utility gives an output with slightly different syntax:
 
@@ -289,7 +298,7 @@ Using /dev/sdc
 ...
 Sector size (logical/physical): 512B/512B
 Partition Table: gpt
-
+  
 Number  Start   End    Size    File system  Name                  Flags
  1      1049kB  424GB  424GB                Linux LVM             lvm
  2      424GB   456GB  32.2GB               Microsoft basic data
@@ -297,11 +306,11 @@ Number  Start   End    Size    File system  Name                  Flags
  4      499GB   500GB  807MB   ext2         Linux filesystem
  5      500GB   500GB  1049kB               BIOS boot partition   bios_grub
  6      500GB   500GB  8396kB               EFI System            boot
-
+  
 (parted)
 </pre>}}
 
-Creating partitions in <kbd>gdisk</kbd> is straight forward for users already familiar with the <kbd>fdisk</kbd> partitioning utility. After starting <kbd>gdisk</kbd>, type {{Key|n}} (for new) in the main menu, provide beginning and end sectors (if needed), then set the partition type <code>EF00</code> for an EFI system partition.
+Creating partitions in <tt>gdisk</tt> is straight forward for users already familiar with the <tt>fdisk</tt> partitioning utility. After starting <kbd>gdisk</kbd>, type {{Key|n}} (for new) in the main menu, provide beginning and end sectors (if needed), then set the partition type <code>EF00</code> for an EFI system partition.
 
 == UEFI GPT ==
 
