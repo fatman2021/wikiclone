@@ -22,7 +22,7 @@ Une cellule AFS est un collection de serveurs administrativement regroupés, qui
 
 === Quels sont les bénéfices de l'utilisation  d'AFS ? ===
 
-Les principales forces de AFS sont : ses possibilités de cache ( du coté client, typiquement de 100 Mo à 1 Go), ses fonctionnalités de sécurité (basées sur Kerberos 4, listes de contrôle d'accès), sa simplicité d'adressage (vous n'avez qu'un seul système de fichiers), sa modulabilité (vous pouvez rajoute des serveurs à votre cellule en fonction de vos besoins), ses protocoles de communication. 
+The main strengths of AFS are its: caching facility (on client side, typically 100M to 1GB), security features (Kerberos 5 based, access control lists), simplicity of addressing (you just have one filesystem), scalability (add further servers to your cell as needed), communications protocol. 
 
 === Où puis-je trouver plus d'information ? ===
 
@@ -30,7 +30,8 @@ Lisez les [http://www.angelfire.com/hi/plutonic/afs-faq.html FAQ AFS] .
 
 La page d'accueil de OpenAFS est à  [http://www.openafs.org www.openafs.org] . 
 
-AFS a été développé à l'origine par Transarc qui est maintenant détenu par IBM. Depuis avril 2005, il a été retiré du catalogue des produits d'IBM.
+AFS was originally developed by Transarc which is now owned by IBM. Since April 2005, it has been withdrawn from IBM's product catalogue. 
+IBM branched the source of the AFS product, and made a copy of the source available for community development and maintenance in 2000. They called the release OpenAFS.
 
 === Comment résoudre les problèmes ? ===
 
@@ -279,7 +280,7 @@ netlabs
 
 CellServDB indique à votre client quels serveurs il doit contacter pour une cellule donnée.  ThisCell devrait être tout à fait évident. Normallement vous utilisez un nom qui est unique pour votre  organisation. Votre domaine (officiel) devrait être un bon choix. 
 
-Pour un démarrage rapide, vous pouvez maintenant démarrer  {{Path|/etc/init.d/openafs-client}} et utilise <code>klog</code> pour vous identifier et commencer à utiliser votre accès à la cellule. Pour des connexions automatiques, vous pouvez consulter la section appropriée ci-après. 
+For a quick start, you can now start {{Path|/etc/init.d/openafs-client}} and use <code>kinit; aklog</code> to authenticate yourself and start using your access to the cell. For automatic logons to you cell, you want to consult the appropriate section below. 
 
 === Ajuster le  cache ===
 
@@ -291,7 +292,7 @@ Vous pouvez placer votre cache sur un système de fichiers existant (s'il est ex
 
 La commande suivante créera les liens appropriés pour démarrer votre client afs au démarrage du système. 
 
-{{Warning|Vous devriez toujours avoir un serveur afs en route dans votre domaine lorsque vous essayez de démarrer le client afs. Votre système ne démarrera pas avant un certain temps si votre serveur est arrêté (et cela représente un temps plutôt long). }}
+{{Warning|Unless <code>afsd</code> is started with the <code>-dynroot</code> option, you should always have a running afs server in your domain when trying to start the afs client. Your system won't boot until it gets some timeout if your AFS server is down (and this is quite a long long time.)}}
 
 {{RootCmd|rc-update add openafs-client default}}
 
@@ -346,19 +347,19 @@ of the files in your AFS cell depends on the service key it contains.}}
 
 === Lancer le serveur AFS ===
 
-Vous devez exécuter la commande  <code>bosserver</code> pour initialiser le serveur superviseur de base (Basic OverSeer ou BOS) qui surveille et contrôle les autres processus serveurs sur sa machine serveur.  Voyez-le comme l'initialisation du système.    Incluez l'option  <code>-noauth</code> pour désactiver la vérification d'autorisation, car vous n'avez pas encore ajouté l'utilisateur admin à ce stade. 
+You need to run the <code>bosserver</code> command to initialize the Basic OverSeer (BOS) Server, which monitors and controls other AFS server processes on its server machine. Think of it as init for the system. 
 
 {{Note|As of OpenAFS 1.6.0, it is no longer neccessary to include the <code>-noauth</code> flag to disable authentication.  This makes the setup more secure, since there is not a window in which the servers are running with authentication disabled. This also has the nice side effect of greatly simplifying the server setup procedure.}}
 
 Start the OpenAFS <code>bosserver</code>.
 
-{{RootCmd|bosserver -noauth &}}
+{{RootCmd|/etc/init.d/openafs-server start}}
 
 Ensure the OpenAFS servers start on reboot:
 
 {{RootCmd|rc-update add openafs-server default}}
 
-Vérifiez que le serveur BOS a créé {{Path|/etc/openafs/server/CellServDB}} et {{Path|/etc/openafs/server/ThisCell}}
+Verify that the BOS Server created {{Path|/etc/openafs/server/CellServDB}} and {{Path|/etc/openafs/server/ThisCell}}:
 
 {{RootCmd|ls -al /etc/openafs/server/|output=<pre>
 -rw-r--r--    1 root     root           41 Jun  4 22:21 CellServDB
@@ -366,26 +367,23 @@ Vérifiez que le serveur BOS a créé {{Path|/etc/openafs/server/CellServDB}} et
 </pre>
 }}
 
-=== Définir le nom de la cellule et l'appartenance aux membres pour un processus serveur ===
+=== Defining Cell Name for Server Processes ===
 
 Assignons d'abord un nom de cellule. 
 
-{{Important|Il y a quelques restriction sur le format des noms. Deux des plus importantes sont que le nom ne peut pas comprendre de lettre capitale et est limité à 64 caractères. Rappelez-vous que votre nom de cellule apparaîtra sous {{Path|/afs}} , aussi il vaut mieux le choisir assez court.}}
+{{Important|There are some restrictions on the name format. Two of the most important restrictions are that the name cannot include uppercase letters or more than 64 characters. Remember that your cell name will show up under {{Path|/afs}} , so you might want to choose a short one. If your AFS service is to be accessible over the internet, you should use a registered internet domain name for your cell's name. This avoids conficts in the global AFS namespace.}}
 
 {{Note|Dans ce qui suit, et dans chacune des instructions de ce guide, remplacez l'argument SERVEUR_NAME par le nom complètement qualifié de l'hôte  de la machine sur laquelle vous réalisez l'installation (tel que '''afs.gentoo.org''').  Remplacez  l'argument   CELL_NAME par le nom complet de votre cellule  (comme '''gentoo''' )}}
 
 Exécutez la commande  <code>bos setcellname</code> pour définir le nom de la cellule : 
 
-{{RootCmd|bos setcellname SERVER_NAME CELL_NAME -noauth}}
+{{RootCmd|bos setcellname localhost CELL_NAME -localauth}}
 
 === Démarrer le processus de serveur de base de données ===
 
-Utilisez ensuite la commande <code>bos create</code> pour créer des entrées poour les quatres processus de serveur de base de données dans rle fichier {{Path|/etc/openafs/BosConfig}}. Les quatres processus ne s'exécutent que sur des machines serveur de base de données. 
+Next use the <code>bos create</code> command to create entries for the three database server processes in the {{Path|/etc/openafs/BosConfig}} file. The three processes run on database server machines only. 
 
 {| class="wikitable" style="text-align: left;" 
-|- 
-| kaserver
-| The Authentication Server maintains the Authentication Database. This can be replaced by a Kerberos 5 daemon. If anybody wants to try that feel free to update this document 
 |- 
 | buserver
 | The Backup Server maintains the Backup Database
@@ -394,40 +392,34 @@ Utilisez ensuite la commande <code>bos create</code> pour créer des entrées po
 | The Protection Server maintains the Protection Database
 |- 
 | vlserver
-| The Volume Location Server maintains the Volume Location Database (VLDB). Very important 
+| The Volume Location Server maintains the Volume Location Database (VLDB). Very important :)
 |-
 |}
 
 {{Note|OpenAFS includes an Kerberos 4 server, called <code>kaserver</code>. The <code>kaserver</code> is obsolete and should not be used for new installations.}}
 
-{{RootCmd|bos create SERVER_NAME kaserver simple /usr/libexec/openafs/kaserver -cell CELL_NAME -noauth
-|bos create SERVER_NAME buserver simple /usr/libexec/openafs/buserver -cell CELL_NAME -noauth
-|bos create SERVER_NAME ptserver simple /usr/libexec/openafs/ptserver -cell CELL_NAME -noauth
-|bos create SERVER_NAME vlserver simple /usr/libexec/openafs/vlserver -cell CELL_NAME -noauth}}
+{{RootCmd|bos create localhost buserver simple /usr/libexec/openafs/buserver -cell CELL_NAME -localauth
+|bos create localhost ptserver simple /usr/libexec/openafs/ptserver -cell CELL_NAME -localauth
+|bos create localhost vlserver simple /usr/libexec/openafs/vlserver -cell CELL_NAME -localauth}}
 
 Vous pouvez vérifier que tous les serveurs tournent avec la commande  <code>bos status</code> : 
 
-{{RootCmd|bos status SERVER_NAME -noauth|output=<pre>
-Instance kaserver, currently running normally.
+{{RootCmd|bos status localhost -localauth|output=<pre>
 Instance buserver, currently running normally.
 Instance ptserver, currently running normally.
 Instance vlserver, currently running normally.
 </pre>
 }}
 
-=== Démarrer le serveur de fichiers, le serveur de volumes et le sauveteur  ===
+=== Starting the first File Server, Volume Server and Salvager ===
 
 Démarrez le processus <code>fs</code>, qui consiste en les processus  serveur de fichiers, serveur de volumes et sauveteur. . 
 
-{{RootCmd|bos create SERVER_NAME fs fs /usr/libexec/openafs/fileserver /usr/libexec/openafs/volserver /usr/libexec/openafs/salvager -cell CELL_NAME -noauth}}
+{{RootCmd|bos create localhost fs fs /usr/libexec/openafs/fileserver /usr/libexec/openafs/volserver /usr/libexec/openafs/salvager -localauth}}
 
 Vérifiez que tous les processus tournent : 
 
-{{RootCmd|bos status SERVER_NAME -long -noauth|output=<pre>
-Instance kaserver, (type is simple) currently running normally.
-Process last started at Mon Jun  4 21:07:17 2001 (2 proc starts)
-Last exit at Mon Jun  4 21:07:17 2001
-Command 1 is '/usr/libexec/openafs/kaserver'
+{{RootCmd|bos status localhost -long -localauth|output=<pre>
   
 Instance buserver, (type is simple) currently running normally.
 Process last started at Mon Jun  4 21:07:17 2001 (2 proc starts)
@@ -459,18 +451,18 @@ Si vous installez le premier serveur AFS de la cellule, créez le premier volume
 
 {{Note|Remplacez l'argument nom de partition par le nom d'une des partitions du serveur AFS de la machine. Tout système de fichiers monté sous un répertoire appelé {{Path|/vicepx}} , où x is peut aller de a à z, sera considéré et utilisé comme partition de serveur AFS. Tout système de fichiers unix conviendra (au contraire du  cache client , qui ne peut être qu'ext2/3). Truc: le serveur vérifie, pour chaque point de montage  {{Path|/vicepx}}, si un système de fichiers y est monté. Si ce n'est pas le cas, le serveur n'essayera pas de l'utiliser. Ce comportement peut être modifié en plaçant un fichier nommé {{Path|AlwaysAttach}} dans ce répertoire.}}
 
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME root.afs -cell CELL_NAME -noauth}}
+{{RootCmd|vos create localhost PARTITION_NAME root.afs -localauth}}
 
 S'il existe des machines serveur AFS de fichiers et de volumes dans la cellule, exécutez les commandes <code>vos sncvldb</code> et <code>vos syncserv</code> pour synchroniser le VLDB (Volume Location Database ou base de données des emplacements de volumes) avec l'état réel des volumes sur la machine locale. Cela copiera toutes les données nécessaires sur votre nouveau serveur. 
 
-Si la commande échoue avec le message ''partition /vecepa does not exist on the serveur'', assurez-vous que la partition est montée avant de lancer les serveurs OpenAFS, ou montez le répertoire et redémarrez les processus en utilisant <code>bos restart SERVER_NAME -all -cell CELL_NAME -noauth</code> . 
+If the command fails with the message "partition /vicepa does not exist on the server", ensure that the partition is mounted before running OpenAFS servers, or mount the directory and restart the processes using <code>bos restart localhost -all -cell CELL_NAME -localauth</code> . 
 
-{{RootCmd|vos syncvldb SERVER_NAME -cell CELL_NAME -verbose -noauth
-|vos syncserv SERVER_NAME -cell CELL_NAME -verbose -noauth}}
+{{RootCmd|vos syncvldb localhost -verbose -localauth
+|vos syncserv localhost -verbose -localauth}}
 
 === Démarrer la partie serveur du serveur de mise à jour  ===
 
-{{RootCmd|bos create SERVER_NAME upserver simple "/usr/libexec/openafs/upserver -crypt /etc/openafs/server -clear /usr/libexec/openafs" -cell CELL_NAME -noauth}}
+{{RootCmd|bos create localhost upserver simple "/usr/libexec/openafs/upserver -crypt /etc/openafs/server -clear /usr/libexec/openafs" -localauth}}
 
 === Creating the first Administrative Account ===
 
@@ -527,21 +519,21 @@ User's (AFS ID 1) tokens for afs@mycellname.com [Expires Oct 21 20:26]
 
 Vous devez d'abord définir quelques ACLs, de manière à ce que n'importe quel utilisateur puisse inspecter {{Path|/afs}}. 
 
-{{Note|La configuration du client par défaut d'OpenAFS possède  '''dynroot''' activé. Cette option  transforme  {{Path|/afs}} en un répertoire virtuel composé du contenu de votre fichier {{Path|/etc/openafs/CellServDB}}. Telle que, la commande suivante ne fonctionnera pas, parce qu'elle nécessite un répertoire AFS réel. Vous pouvez désactiver ''dynroot'' temporairement  en définissant '''ENABLE_DYNROOT''' à '''no''' dans {{Path|/etc/conf.d/openafs-client}} . N'oubliez pas de redémarre le client après changement des paramètres.}}
+{{Note|The default OpenAFS client configuration has '''dynroot''' enabled. This option turns {{Path|/afs}} into a virtual directory composed of the contents of your {{Path|/etc/openafs/CellServDB}} file. Fortunately, '''dynroot''' provides a way to access volumes by name using the "magic" {{Path|/afs/.:mount/}} directory.  This obviates the need to disable '''dynroot''' and and client restarts.}}
 
-{{RootCmd|fs setacl /afs system:anyuser rl}}
+{{Cmd|fs setacl /afs/.:mount/CELL_NAME:root.afs/. system:anyuser rl}}
 
 Ensuite, vous devez créer le volume root, le monter en lecture seule sur {{Path|/afs/<cell name>}} et en lecture/écriture sur  {{Path|/afs/.<cell name>}} . 
 
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME root.cell
-|fs mkmount /afs/CELL_NAME root.cell
-|fs setacl /afs/CELL_NAME system:anyuser rl
-|fs mkmount /afs/.CELL_NAME root.cell -rw}}
+{{Cmd|vos create SERVER_NAME PARTITION_NAME root.cell
+|fs mkmount /afs/.:mount/CELL_NAME:root.afs/CELL_NAME root.cell
+|fs setacl /afs/.:mount/CELL_NAME:root.afs/CELL_NAME system:anyuser rl
+|fs mkmount /afs/.:mount/CELL_NAME:root.afs/.CELL_NAME root.cell -rw}}
 
 
 At this point, you can create volumes for your new AFS site and add them to the filespace. Users and groups should be created and directory ACLs setup to allow users to create files and directories. To create and mount a volume:
 
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
+{{Cmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/MOUNT_POINT VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/.MOUNT_POINT VOLUME_NAME -rw
 |fs setquota /afs/CELL_NAME/.MOUNT_POINT -max QUOTUM}}
@@ -558,7 +550,7 @@ OpenAFS est une technologie extensive. Lisez la documentation AFS pour plus d'in
 
 === Configurer PAM pour obtenir un jeton AFS à la connexion ===
 
-Pour utilise AFS vous devez vous identifier auprès du serveur KA si vous utilisez une mise en œuvre AFS Kerberos 5, ou auprès d'un Kerberos 5 KDC si vous utilisez MIT, Heimdal ou ShiShi kerberos 5. Néanmoins, pour vous connecter à une machine, vous devez avoir un un compte utilisateur, qui peut être local dans {{Path|/etc/passwd}} , NIS, LDAP (OpenLDAP) ou une base de données Hesiod. PAM autorise Gentoo à lier l'authentification auprès de AFS et à se connecter au compte utilisateur. 
+To use AFS you need to authenticate against the Kerberos 5 KDC (MIT, Heimdal, ShiShi Kerberos 5, or Microsoft Active Directory). However in order to login to a machine you will also need a user account, this can be local in {{Path|/etc/passwd}} , NIS, LDAP (OpenLDAP), or a Hesiod database. PAM allows Gentoo to tie the authentication against AFS and login to the user account. 
 
 {{Note|This section is out of date. See [http://docs.openafs.org/QuickStartUnix/HDRWQ41.html Enabling AFS Login on Linux Systems] }}
 
@@ -624,16 +616,4 @@ session    optional     pam_afs.so.1 no_unlog
 </pre>
 }}
 
-== Remerciements ==
-
-Nous tenons à remercier les auteurs et éditeurs suivants pour leur contribution à ce guide :
-
-
-* Stefaan De Roeck
-* Holger Brueckner
-* Benny Chuang
-* Tiemo Kieft
-* Steven McCoy
-* Shyam Mani
-
-[[Category:Filesystems]]
+[[Category:Filesystems]] {{Migrated|originalauthors=Stefaan De Roeck, Holger Brueckner, Benny Chuang, Tiemo Kieft, Steven McCoy, Shyam Mani}}
