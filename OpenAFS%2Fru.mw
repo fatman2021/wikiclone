@@ -22,7 +22,7 @@ AFS была создана на основе разработанной в це
 
 === Какая выгода от использования AFS? ===
 
-Главная сила AFS: возможности кэширования (на клиентской стороне, обычно от 100 МБ до 1 ГБ), функции безопасности (на основе Kerberos 4, списки контроля доступа), простота адресации (у вас только одна файловая система), масштабируемость (возможность добавления серверов в ячейку), протокол обмена информацией. 
+The main strengths of AFS are its: caching facility (on client side, typically 100M to 1GB), security features (Kerberos 5 based, access control lists), simplicity of addressing (you just have one filesystem), scalability (add further servers to your cell as needed), communications protocol. 
 
 === Где можно получить больше информации? ===
 
@@ -30,7 +30,8 @@ AFS была создана на основе разработанной в це
 
 Главная страница проекта OpenAFS: [http://www.openafs.org www.openafs.org]. 
 
-AFS была создана компанией Transarc, которой теперь владеет IBM. В апреле 2005 года AFS убрали из каталога продуктов IBM.
+AFS was originally developed by Transarc which is now owned by IBM. Since April 2005, it has been withdrawn from IBM's product catalogue. 
+IBM branched the source of the AFS product, and made a copy of the source available for community development and maintenance in 2000. They called the release OpenAFS.
 
 === Как отлавливать проблемы? ===
 
@@ -352,7 +353,7 @@ You need to run the <code>bosserver</code> command to initialize the Basic OverS
 
 Start the OpenAFS <code>bosserver</code>.
 
-{{RootCmd|bosserver -noauth &}}
+{{RootCmd|/etc/init.d/openafs-server start}}
 
 Ensure the OpenAFS servers start on reboot:
 
@@ -403,8 +404,7 @@ Next use the <code>bos create</code> command to create entries for the three dat
 
 You can verify that all servers are running with the <code>bos status</code> command: 
 
-{{RootCmd|bos status SERVER_NAME -noauth|output=<pre>
-Instance kaserver, currently running normally.
+{{RootCmd|bos status localhost -localauth|output=<pre>
 Instance buserver, currently running normally.
 Instance ptserver, currently running normally.
 Instance vlserver, currently running normally.
@@ -415,15 +415,11 @@ Instance vlserver, currently running normally.
 
 Start the <code>fs</code> process, which consists of the File Server, Volume Server and Salvager (fileserver, volserver and salvager processes). 
 
-{{RootCmd|bos create SERVER_NAME fs fs /usr/libexec/openafs/fileserver /usr/libexec/openafs/volserver /usr/libexec/openafs/salvager -cell CELL_NAME -noauth}}
+{{RootCmd|bos create localhost fs fs /usr/libexec/openafs/fileserver /usr/libexec/openafs/volserver /usr/libexec/openafs/salvager -localauth}}
 
 Verify that all processes are running: 
 
-{{RootCmd|bos status SERVER_NAME -long -noauth|output=<pre>
-Instance kaserver, (type is simple) currently running normally.
-Process last started at Mon Jun  4 21:07:17 2001 (2 proc starts)
-Last exit at Mon Jun  4 21:07:17 2001
-Command 1 is '/usr/libexec/openafs/kaserver'
+{{RootCmd|bos status localhost -long -localauth|output=<pre>
   
 Instance buserver, (type is simple) currently running normally.
 Process last started at Mon Jun  4 21:07:17 2001 (2 proc starts)
@@ -455,18 +451,18 @@ If you are installing the first AFS Server ever in the cell, create the first AF
 
 {{Note|For the partition name argument, substitute the name of one of the machine's AFS Server partitions. Any filesystem mounted under a directory called {{Path|/vicepx}} , where x is in the range of a-z, will be considered and used as an AFS Server partition. Any unix filesystem will do (as opposed to the client's cache, which can only be ext2/3). Tip: the server checks for each {{Path|/vicepx}} mount point whether a filesystem is mounted there. If not, the server will not attempt to use it. This behaviour can be overridden by putting a file named {{Path|AlwaysAttach}} in this directory.}}
 
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME root.afs -cell CELL_NAME -noauth}}
+{{RootCmd|vos create localhost PARTITION_NAME root.afs -localauth}}
 
 If there are existing AFS file server machines and volumes in the cell issue the <code>vos sncvldb</code> and <code>vos syncserv</code> commands to synchronize the VLDB (Volume Location Database) with the actual state of volumes on the local machine. This will copy all necessary data to your new server. 
 
 If the command fails with the message "partition /vicepa does not exist on the server", ensure that the partition is mounted before running OpenAFS servers, or mount the directory and restart the processes using <code>bos restart localhost -all -cell CELL_NAME -localauth</code> . 
 
-{{RootCmd|vos syncvldb SERVER_NAME -cell CELL_NAME -verbose -noauth
-|vos syncserv SERVER_NAME -cell CELL_NAME -verbose -noauth}}
+{{RootCmd|vos syncvldb localhost -verbose -localauth
+|vos syncserv localhost -verbose -localauth}}
 
 === Starting the Server Portion of the Update Server ===
 
-{{RootCmd|bos create SERVER_NAME upserver simple "/usr/libexec/openafs/upserver -crypt /etc/openafs/server -clear /usr/libexec/openafs" -cell CELL_NAME -noauth}}
+{{RootCmd|bos create localhost upserver simple "/usr/libexec/openafs/upserver -crypt /etc/openafs/server -clear /usr/libexec/openafs" -localauth}}
 
 === Creating the first Administrative Account ===
 
@@ -525,19 +521,19 @@ First you need to set some ACLs, so that any user can lookup {{Path|/afs}} .
 
 {{Note|The default OpenAFS client configuration has '''dynroot''' enabled. This option turns {{Path|/afs}} into a virtual directory composed of the contents of your {{Path|/etc/openafs/CellServDB}} file. Fortunately, '''dynroot''' provides a way to access volumes by name using the "magic" {{Path|/afs/.:mount/}} directory.  This obviates the need to disable '''dynroot''' and and client restarts.}}
 
-{{RootCmd|fs setacl /afs system:anyuser rl}}
+{{Cmd|fs setacl /afs/.:mount/CELL_NAME:root.afs/. system:anyuser rl}}
 
 Then you need to create the root volume, mount it readonly on {{Path|/afs/<cell name>}} and read/write on {{Path|/afs/.<cell name>}} . 
 
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME root.cell
-|fs mkmount /afs/CELL_NAME root.cell
-|fs setacl /afs/CELL_NAME system:anyuser rl
-|fs mkmount /afs/.CELL_NAME root.cell -rw}}
+{{Cmd|vos create SERVER_NAME PARTITION_NAME root.cell
+|fs mkmount /afs/.:mount/CELL_NAME:root.afs/CELL_NAME root.cell
+|fs setacl /afs/.:mount/CELL_NAME:root.afs/CELL_NAME system:anyuser rl
+|fs mkmount /afs/.:mount/CELL_NAME:root.afs/.CELL_NAME root.cell -rw}}
 
 
 At this point, you can create volumes for your new AFS site and add them to the filespace. Users and groups should be created and directory ACLs setup to allow users to create files and directories. To create and mount a volume:
 
-{{RootCmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
+{{Cmd|vos create SERVER_NAME PARTITION_NAME VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/MOUNT_POINT VOLUME_NAME
 |fs mkmount /afs/CELL_NAME/.MOUNT_POINT VOLUME_NAME -rw
 |fs setquota /afs/CELL_NAME/.MOUNT_POINT -max QUOTUM}}
@@ -620,16 +616,4 @@ session    optional     pam_afs.so.1 no_unlog
 </pre>
 }}
 
-== Благодарности ==
-
-Мы хотели бы поблагодарить следующих авторов и редакторов за их вклад в это руководство:
-
-
-* Stefaan De Roeck
-* Holger Brueckner
-* Benny Chuang
-* Tiemo Kieft
-* Steven McCoy
-* Shyam Mani
-
-[[Category:Filesystems]]
+[[Category:Filesystems]] {{Migrated|originalauthors=Stefaan De Roeck, Holger Brueckner, Benny Chuang, Tiemo Kieft, Steven McCoy, Shyam Mani}}
