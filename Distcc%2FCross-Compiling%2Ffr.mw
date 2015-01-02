@@ -17,14 +17,14 @@ Tout d'abord, vous devez installer <code>crossdev</code> sur toutes les machines
 
 Si vous voulez régler finement la chaine de compilation croisée (cross-toolchain), voici un script qui produira une ligne de commande avec la version exacte du paquet de développement croisé à construire sur les machines assistantes (le script est à exécuter depuis la machine cible).
 
-{{Code|Script pour régler finement les outils de compilation croisée|<pre>
+{{CodeBox|title=Script to fine-tune cross development tools|lang=bash|1=
 #! /bin/bash
-A="sys-devel/binutils" ; B=`equery l $A` ; BINUTILS_VER=`echo $B | cut -d- -f3-`
-A=`/usr/bin/gcc-config -c` ; B=`echo $A | cut -d- -f5` ; GCC_VER=`equery l sys-devel/gcc | grep $B | cut -d- -f3-`
-KERNEL_VER=`uname -r | sed s/-gentoo//`
-A="sys-libs/glibc" ; B=`equery l $A` ; LIBC_VER=`echo $B | cut -d- -f3-`
+A="sys-devel/binutils" ; B=`equery l $A` ; BINUTILS_VER=`echo $B {{!}} cut -d- -f3-`
+A=`/usr/bin/gcc-config -c` ; B=`echo $A {{!}} cut -d- -f5` ; GCC_VER=`equery l sys-devel/gcc {{!}} grep $B {{!}} cut -d- -f3-`
+KERNEL_VER=`uname -r {{!}} sed s/-gentoo//`
+A="sys-libs/glibc" ; B=`equery l $A` ; LIBC_VER=`echo $B {{!}} cut -d- -f3-`
 echo "crossdev --b =$BINUTILS_VER --g =$GCC_VER --k =$KERNEL_VER --l =$LIBC_VER -t `uname -m`"
-</pre>}}
+}}
 
 Ensuite il vous faudra installer  <code>distcc</code> sur toutes les machines qui sont impliquées dans le processus. Ceci inclut la machine qui doit exécuter emerge et les machines disposant du compilateur croisé (cross-compiler). Reportez-vous à la [[Distcc|Documentation Gentoo de Distcc ]] pour plus d'informations sur la manière de paramétrer et d'utiliser <code>distcc</code>.
 
@@ -38,11 +38,11 @@ Si vous effectuez une compilation croisée entre des sous-architectures pour Int
 
 Utiliser <code>crossdev -t sparc</code> pourrait échouer avec une des erreurs suivantes :
 
-{{Code|Erreurs affichées lors de l'exécution de  crossdev -t sparc|<pre>
+{{CodeBox|title=Errors displayed when running crossdev -t sparc|1=
 linker with -z relro support required
 support for the tls_model attribute is required
 this configuration requires -mlong-double-128 support
-</pre>}}
+}}
 
 Si cela vous arrive, essayez la commande suivante à la place de la précédente :
 
@@ -75,10 +75,9 @@ Voici ce que vous devez faire :
 
 Ensuite, nous allons créer le nouveau script sur cette machine. Lancez votre éditeur favori et créez un fichier avec le texte suivant, puis sauvegardez-le comme {{Path|sparc-unknown-linux-gnu-wrapper}} . Pensez à remplacer  CHOST (dans ce cas, <code>sparc-unknown-linux-gnu</code> ) par le CHOST réel de la machine qui exécutera la commande emerge. 
 
-{{Code|Le nouveau script enveloppe|<pre>
+{{CodeBox|title=The new wrapper script|lang=bash|1=
 #!/bin/bash
 exec /usr/lib/distcc/bin/sparc-unknown-linux-gnu-g${0:$[-2]} "$@"
-</pre>
 }}
 
 Ensuite, nous allons rendre le script exécutable  et créer les liens symboliques corrects : 
@@ -106,11 +105,11 @@ lrwxrwxrwx  1 root root 15 Jul 27 10:52 sparc-unknown-linux-gnu-gcc -> /usr/bin/
 
 Ensuite nous devons nous assurer que ces enveloppes restent disponibles après la mise à jour du paquet distcc car il écrase les liens symboliques. Nous pouvons le faire grâce au fichier {{Path|/etc/portage/bashrc}} qui ressemble à ceci :
 
-{{Code|/etc/portage/bashrc|<pre>
+{{FileBox|filename=/etc/portage/bashrc|lang=bash|1=
 case ${CATEGORY}/${PN} in
-	sys-devel/distcc
+	sys-devel/distcc)
 		# Hey man, how come that CONFIG PROTECT don't work?
-		if [ "${EBUILD_PHASE}" == "postinst" ] || [ "${EBUILD_PHASE}" == "postrm" ];
+		if [ "${EBUILD_PHASE}" == "postinst" ] {{!}}{{!}} [ "${EBUILD_PHASE}" == "postrm" ];
 		then
 			cd /usr/lib/distcc/bin
 			rm cc c++ gcc g++
@@ -120,18 +119,13 @@ case ${CATEGORY}/${PN} in
 			ln -s sparc-unknown-linux-gnu-wrapper g++
 		fi
 	;;
-esac</pre>
+esac
 }}
 
-Félicitations ! Vous disposez maintenant d'une configuration distcc de compilation croisée fonctionnelle.
+Congratulations; you (hopefully) now have a working cross-distcc setup.
 
 === Comment ça marche ===
 
 Lorsque <code>distcc</code> est appelé, il recherche ce qui est appelé  (par exemple <code>i686-pc-linux-gnu-gcc</code> , <code>sparc-unknown-linux-gnu-g++</code> , etc.) Lorsque distcc distribue ensuite la compilation à une machine assistante, il lui passe le nom par lequel il a été appelé. Le démon distcc sur l'autre machine assistante recherche alors un binaire de ce nom. S'il voit simplement  <code>gcc</code> , il cherchera  <code>gcc</code> , qui est probablement le compilateur natif sur la machine assistante, si ce n'est pas la même architecture que celle de la machine exécutant la commande  <code>emerge</code> . Quand le nom ''complet'' du compilateur est envoyé, (par exemple,  <code>sparc-unknown-linux-gnu-gcc</code> ), il ne peut y avoir de  confusion.
 
-== Remerciements ==
-
-Nous tenons à remercier les auteurs et éditeurs suivants pour leur contribution à ce guide :
-
-* Andrew Gaffney
-* Joshua Saddler
+{{Migrated|originalauthors=Andrew Gaffney, Joshua Saddler}}
