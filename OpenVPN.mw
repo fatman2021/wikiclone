@@ -4,8 +4,8 @@
 |{{InfoBox ohloh}}
 }}
 
-== 初始化要求 ==
-{{Kernel|确定内核启用 CONFIG_TUN 选项|<pre>
+== Initial requirements ==
+{{Kernel|Enable CONFIG_TUN in your kernel|<pre>
 Device Drivers ->  Network device support
 <*>   Universal TUN/TAP device driver support
 </pre>}}
@@ -27,44 +27,44 @@ Device Drivers ->  Network device support
 |systemd
 }}
 
-== 安装 ==
+== Installation ==
 
-安装 openvpn
+Install openvpn package by running
 
 {{RootCmd|emerge -v net-misc/openvpn}}
 
-== 安装和配置 ==
+== Setup and Configuration ==
 
-=== 服务器配置 ===
+=== Server side ===
 
-如果是初次设置openvpn服务, 我们需要[[Create a Public Key Infrastructure Using the easy-rsa Scripts|从头开始创建一个 PKI (公共密钥体系)]].
+If this is the first time setting up an openvpn server, we will need to [[Create a Public Key Infrastructure Using the easy-rsa Scripts|create a PKI (Public Key Infrastructure) from scratch]].
 
-{{Note|在本例中, 我们应该将生成的密钥放在 <code>/etc/openvpn/exmaple/</code> 目录}}
+{{Note|In this example, we would place all generated keys into <code>/etc/openvpn/exmaple/</code>}}
 
-{{Note|这仅会创建一个单独的服务端. 更多 openvpn 实例, 参见 'Gentoo 细节' 部分.}}
+{{Note|The example will just setup a single server. For multiple openvpn instance, see following 'Gentoo Specifics' section.}}
 
-创建一个openvpn服务端配置文件.
+Write a server-side openvpn configuration.
 
-{{File|/etc/openvpn/openvpn.conf|设置一个使用udp协议的openvpn服务端|<pre>
-# 服务器监听端口
+{{File|/etc/openvpn/openvpn.conf|setup a example udp openvpn server|<pre>
+# server binding port
 port 12112
 
-# openvpn协议, 可以是 tcp / udp / tcp6 / udp6
+# openvpn protocol, could be tcp / udp / tcp6 / udp6
 proto udp
 
-# tun/tap 设备
+# tun/tap device
 dev tun0
 
-# 密钥配置, 使用生成的密钥
+# keys configuration, use generated keys
 ca example/ca.crt
 cert example/example.crt
 key example/example.key
 dh example/dh2048.pem
 
-# tls-auth密钥安全认证选项
+# optional tls-auth key to secure identifying
 # tls-auth example/ta.key 0
 
-# OpenVPN网络信息 
+# OpenVPN 'virtual' network infomation, network and mask
 server 10.100.0.0 255.255.255.0
 
 # persistent device and key settings
@@ -72,29 +72,29 @@ persist-key
 persist-tun
 ifconfig-pool-persist ipp.txt
 
-# 推送路由表
+# pushing route tables
 push "route 192.168.1.0 255.255.255.0"
 # push "dhcp-option DNS 192.168.1.1"
 
-# 连接
+# connection
 keepalive 10 120
 comp-lzo
 
 user nobody
 group nobody
 
-# 日志
+# logging
 status openvpn-status.log
 log /etc/openvpn/openvpn.log
 verb 4</pre>}}
 
-启动 openvpn 服务端
+to start openvpn server, run
 
 {{RootCmd|/etc/init.d/openvpn start}}
 
-=== 客户端设置 ===
+=== Client side ===
 
-通过安全的方式(比如SSH)将必需的密钥拷贝到客户端
+Copy the necessary key files to client, via a '''secure''' way (such as SSH), including
 
 * ca.crt
 * client1.csr (in this example)
@@ -102,22 +102,22 @@ verb 4</pre>}}
 * client1.key (in this example)
 * ta.key (if using tls-auth)
 
-创建一个openvpn客户端配置文件.
+Write a client-side openvpn configuration.
 
-{{File|/etc/openvpn/openvpn.conf|使用udp协议的openvpn客户端设置|<pre>
-# 客户端声明
+{{File|/etc/openvpn/openvpn.conf|client-side udp openvpn configuration|<pre>
+# specify client-side
 client
 
-# tun/tap 设备
+# tun/tap devcie
 dev tun0
 
-# 协议类型, 基于服务端设置
+# protocol, according to server
 proto udp
 
-# 服务器地址
+# server address
 remote address.to.server 12112
 
-# 连接
+# connection
 comp-lzo
 resolv-retry 30
 nobind
@@ -126,51 +126,51 @@ nobind
 persist-key
 persist-tun
 
-# 密钥设置
+# keys settings
 ca example/ca.crt
 cert example/client1.crt
 key example/client1.key
 
-# tls-auth选项
+# optional tls-auth
 # tls-auth exmaple/ta.key 1
 
-# 日志
+# logging
 log /etc/openvpn/openvpn.log
 verb 4</pre>}}
 
-启动客户端
+To start client, run
 ===OpenRC===
 {{RootCmd|/etc/init.d/openvpn start}}
 or
 ===systemd===
 {{RootCmd|systemctl start openvpn}}
 
-如果一切顺利,您已经有了一个可用的OpenVPN连接.
+If all goes well, this would give you a working OpenVPN server and client connection.
 
-== Gentoo 细节 ==
-初始化脚本运行多个隧道. 这取决于隧道的名字 - 例如 EXAMPLE
+== Gentoo Specifics ==
+The init script allows multiple tunnels. Decide on a name for the tunnel - eg EXAMPLE
 
-===使用 OpenRC:===
+===Using OpenRC:===
 
 {{RootCmd|ln -s /etc/init.d/openvpn /etc/init.d/openvpn.EXAMPLE}}
 
-现在创建 /etc/openvpn/EXAMPLE.conf 作为您的配置文件
+Now create your config as /etc/openvpn/EXAMPLE.conf 
 
 {{RootCmd|/etc/init.d/openvpn.EXAMPLE start}}
 
-===使用 systemd:===
+===Using systemd:===
 
-创建 /etc/openvpn/EXAMPLE.conf 作为您的配置文件
+Create your config as /etc/openvpn/EXAMPLE.conf
 
 {{RootCmd|ln -s /usr/lib/systemd/system/openvpn@.service /etc/systemd/system/openvpn@EXAMPLE.service}}
 
 {{RootCmd|systemctl start openvpn@EXAMPLE}}
 
-您可以使用喜爱的名字替换掉 EXAMPLE 来创建更多隧道.  每一个隧道都有自己的配置文件并且可以独立启动停止.  默认使用openvpn.conf作为配置文件并不会创建到服务的符号链接.  这两种方法您都可以选择.
+You can then create more tunnels by replacing EXAMPLE with more names.  Each one has its own configuration and can be stopped and started individually.  The default is simply to use openvpn.conf and not symlink the service.  You can of course use both methods.
 
-== 故障排除 ==
+== Trouble shooting ==
 
-== 扩展资源 ==
+== External Resources ==
 
 *https://wiki.archlinux.org/index.php/OpenVPN
 *[http://forums.gentoo.org/viewtopic-t-538662.html easy vpn]
