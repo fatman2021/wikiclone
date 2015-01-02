@@ -401,6 +401,46 @@ Linux Kernel 3.13 [http://kernelnewbies.org/Linux_3.13#head-f95c198f6fdc7defe36f
 : {{RootCmd|cat /sys/kernel/debug/dri/0/radeon_pm_info}}
 : {{Note|With more than one monitor connected, the memory clock will '''NOT''' be on full speed as it was before.}}
 
+
+=== Power consumption when using multi-head / multi-monitor ===
+When using more than one monitor at once the power consumption of your graphics card increases up to additionally 150% of its idle power consumption, because the memory clock switches to fullspeed (see above). This causes my system (Radeon HD6870) to consume ~30W of extra power. You can prevent this when using power method "profile" instead of "dpm" and by forcing "profile" to "low". 
+Using power method "dpm" and setting a low power profile is also possible. But enforcing is not really possible because the "dpm" method uses hardware on the GPU to dynamically change the clocks and voltage based on GPU load. 
+
+* Deaktivate dpm first (Kernel >= 3.13) with an appropriate kernel commandline via GRUB at boottime:
+: {{FileBox|filename=/boot/grub/grub.cfg|1=GRUB_CMDLINE_LINUX_DEFAULT="radeon.dpm=0"}}
+: {{Note|"dpm" is default since kernel 3.13, supported on R6xx and newer asics.}}
+
+* After reboting your system to desktop force the power profile to "low". (You can also do that automated in /etc/local.d/*):
+: {{RootCmd|echo "low" > /sys/class/drm/card0/device/power_profile}}
+
+Limitation: For my KDE desktop environment this only works when applying it ''after'' starting KDE. An automated command in /etc/local.d/*.start is not sufficient. The memory clock rises and stays up (like normal behavior).<br />
+
+Solution: Let KDE do the job with ist autostart feature.
+
+* Allow your user to change the power profile by giving him the appropriate privilege when booting. Create a file like the following:
+{{FileBox|filename=/etc/local.d/pm.start|1=chown <YourUser> /sys/class/drm/card0/device/power_profile}}
+
+* Add a startscript to KDE autostart:
+{{FileBox|filename=~/.kde/Autostart/pm.sh|1=#! /bin/bash
+echo low > /sys/class/drm/card0/device/power_profile
+exit 0 }}
+
+* Don't forget to make it executable:
+: {{Cmd| chmod +x ~/.kde/Autostart/pm.sh}}
+
+You can check the result via kernel debugfs (see above) and it should be similar:
+{{RootCmd|cat /sys/kernel/debug/dri/0/radeon_pm_info<pre>
+default engine clock: 900000 kHz
+current engine clock: 99990 kHz
+default memory clock: 1050000 kHz
+current memory clock: 150000 kHz
+voltage: 950 mV
+PCIE lanes: 16
+</pre>}}
+
+Benefit: Use as many monitors as possible without increasing your power consumption. Despite the all-time reduced memory clock by force you still have enough graphic resources for KDE desktop effects, playing movies in HD (also with USE="vdpau") and all regular stuff you need for work. 
+
+
 === Tuning ===
 I couldn't find a summary of all options available so feel free to add to this.
 {{Warning|There are several options to tweak the radeon driver and some of these might break your desktop, so if you are uncomfortable with the console better stick to default.}}
