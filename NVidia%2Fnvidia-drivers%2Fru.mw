@@ -11,24 +11,39 @@
 == Аппаратная совместимость ==
 Пакет {{Package|x11-drivers/nvidia-drivers}} поддерживает целый диапазон доступных плат nVidia. В зависимости от видеокарты, которой вы обладаете, для установки доступно большое число версий. Прочитайте официальную документацию nVidia [http://www.nvidia.com/object/IO_32667.html Что такое устаревший драйвер?], для того, чтобы узнать, какую версию пакета nvidia-drivers вы должны использовать. Достаточно подходящий способ узнать это с помощью интерактивной формы предложен [http://www.nvidia.com/Download/Find.aspx здесь]. Введите вашу видеокарту (учитывая параметр Legacy в поле 'Product Type'), и вы должны получить наилучшую поддерживаемую версию, отображенную под формой.
 
+The {{Package|x11-drivers/nvidia-drivers}} package supports a range of available nVidia cards. Multiple versions are available for installation, depending on the card(s) that the system has. See the official nVidia documentation, [http://www.nvidia.com/object/IO_32667.html What's a legacy driver?], to find out what version of {{Package|x11-drivers/nvidia-drivers}} should be used. A pretty decent way to find this out through [http://www.nvidia.com/Download/Find.aspx  an interactive form]. Enter the graphics card that is used by the system (mind the Legacy option in the 'Product Type' field) and the form should end up with the best supported version.
+
 Если ваша карта определилась как устаревшая, вам необходимо замаскировать свежие выпуски {{Package|nvidia-drivers}}, т. е. 
 {{RootCmd|echo ">x11-drivers/nvidia-drivers-174" >> /etc/portage/package.mask}}
+
+{{FileBox|filename=/etc/portage/package.mask|Masking drivers with version higher than 174|1=
+>x11-drivers/nvidia-drivers-174
+}}
 
 Заметьте, что Gentoo не предоставляет версии 71.86.xx. Если вашей карте требуются эти драйвера, рекомендуется использовать драйвер [[nouveau]] .
 
 == Ядро ==
 Как упомянуто выше, драйвер ядра nVidia устанавливается и работает на текущем ядре. Он собирается в виде модуля, поэтому ядро должно поддерживать загрузку модулей ядра (смотри ниже).
 
+As mentioned above, the nVidia kernel driver installs and runs against the current kernel. It builds as a module, so the kernel must support the loading of kernel modules (see below).
+
 Модуль ядра (nvidia.ko) состоит из проприетарной части (широко известной как ''двоичный блоб''), которая управляет графическими чипами, и части с открытым исходным кодом (клей — англ. ''glue''), которая во время исполнения работает как посредник между проприетарной частью и ядром. Они должны работать вместе слаженно, иначе вы столкнетесь с потерей данных (из-за паники ядра, сбоя X-сервера с несохраненными данными в X-приложениях) и даже повреждением аппаратного обеспечения (перегрев и другие проблемы с управлением питания тут же приходят на ум).
 
-=== Совместимость ядра ===
-Время от времени, новый релиз ядра изменяет внутренний двоичный интерфейс приложений (англ. ABI, application binary interface) для драйверов, что означает, что все драйвера, которые используют этот интерфейс, должны быть соответствующим образом изменены. Для драйверов с открытым исходным кодом, особенно распространяемых с ядром, эти изменения практически тривиальны для исправления, так как целая цепочка вызовов между драйверами и другими частями ядра может быть просмотрена достаточно легко. Для проприетарных драйверов типа nvidia.ko, это далеко не так. При изменении внутреннего двойчного интерфейса приложений, вы не можете просто исправить используемый ''клей'', потому что вам неизвестно как этот клей используется проприетарной частью. Если вам удастся наладить работу и все будет работать исправно, вы все еще рискуете тем, что работа nvidia.ko в новом, неподдерживаемом ядре приведет к потере данных и аппаратному сбою.
+=== Kernel compatibility ===
 
-Когда выпускается новая, несовместимая версия ядра, возможно, некоторое время лучше всего придерживаться новейшего поддерживаемого ядра. Обычно, Nvidia требуется несколько недель для подготовки нового проприетарного релиза, который, по их мнению, подходит для общего использования. Просто будьте терпеливы. Если вы хотите отбросить все предосторожности, ebuild-файл nvidia-drivers поддерживает команду epatch_user из класса eutils.class: это позволит вам исправить nvidia-drivers для их совместимости с последним, неподдерживаемым релизом ядра, с которым вы хотите работать. Однако заметьте, что ни сопроводители пакета nvidia-drivers, ни Nvidia не окажут вам поддержки, как только у Вас появятся проблемы. Ваша гарантия на аппаратное обеспечение, возможно, будет аннулирована. Мейнтейнеры Gentoo не смогут начать исправлять ваши проблемы, так как это проприетарный драйвер, который может быть отлажен только Nvidia. Мейнтейнеры ядра (как пакета Gentoo, так и разработчики самого ядра), определенно не будут поддерживать проприетарные драйвера, или, в самом деле, любую ''испорченную'' систему, которая может вызвать проблемы.
+From time to time, a new kernel release changes the internal ABI for drivers, which means all drivers that use those ABIs must be changed accordingly. For open source drivers, especially those distributed with the kernel, these changes are nearly trivial to fix since the entire chain of calls between drivers and other parts of the kernel can be reviewed quite easily. For proprietary drivers like nvidia.ko, it doesn't work quite the same. When the internal ABIs change, then it is not possible to merely fix the "glue", because nobody knows how the glue is used by the proprietary part. Even after managing to patch things up to have things seem to work nicely, the user still risks that running nvidia.ko in the new, unsupported kernel will lead to data loss and hardware failure.
+
+When a new, incompatible kernel version is released, it is probably best to stick with the newest supported kernel for a while. Nvidia usually takes a few weeks to prepare a new proprietary release they think is fit for general use. Just be patient. If absolutely necessary, then it is possible to use the epatch_user command with the nvidia-drivers ebuilds: this allows the user to patch nvidia-drivers to somehow fit in with the latest, unsupported kernel release. Do note that neither the nvidia-drivers maintainers nor Nvidia will support this situation. The hardware warranty will most likely be void, Gentoo's maintainers cannot begin to fix the issues since it's a proprietary driver that only Nvidia can properly debug, and the kernel maintainers (both Gentoo's and upstream) will certainly not support proprietary drivers, or indeed any "tainted" system that happens to run into trouble.
 
 === Требуемые параметры ядра ===
 Если вы используете '''genkernel all''' для конфигурации ядра, тогда все в порядке. Если нет, дважды проверьте конфигурацию ядра, так чтобы поддержка загружаемых модулей была включена:
 {{KernelBox|1=
+[*] Enable loadable module support --->
+}}
+
+If <tt>genkernel all</tt> was used to configure the kernel, then everything is all set. If not, double check the kernel configuration so that this support is enabled:
+
+{{KernelBox|title=Enable loadable module support|1=
 [*] Enable loadable module support --->
 }}
 
@@ -38,8 +53,19 @@ Processor type and features --->
     [*] MTRR (Memory Type Range Register) support
 }}
 
+{{KernelBox|title=Enable MTRR support|1=
+Processor type and features --->
+    [*] MTRR (Memory Type Range Register) support
+}}
+
 Также, если у вас видеокарта AGP, вы можете дополнительно включить в ядро поддержку драйвера '''apggart''', как встроенного в ядро, так и в качестве модуля. Если вы не используете встроенный в ядро apggart, то драйверы будут использовать собственную реализацию '''apggart''', называемую '''NvAGP'''. На определенных системах, это приводит к лучшей производительности, чем встроенный в ядро agpgart, а на некоторых, выполняется хуже. Вам потребуется оценить это на своей собственной системе для достижения наилучшей производительности. Если вы не уверены что делать, используйте встроенный в ядро agpgart:
 {{KernelBox|1=
+Device Drivers --->
+    Graphics support --->
+        -*- /dev/agpgart (AGP Support) --->
+}}
+
+{{KernelBox|title=Enable agpgart support|1=
 Device Drivers --->
     Graphics support --->
         -*- /dev/agpgart (AGP Support) --->
@@ -69,9 +95,17 @@ Available kernel symlink targets:
  [2] linux-3.7.9-gentoo 
 </pre>}}
 
+{{RootCmd|eselect kernel list|output=<pre>
+Available kernel symlink targets:
+  [1]   linux-3.7.10-gentoo *
+  [2]   linux-3.7.9-gentoo
+</pre>}}
+
 В результате, приведенном выше, заметно, что ядро '''linux-3.7.10-gentoo''' помечено звездочкой ('''*'''), для того, чтобы продемонстрировать, что это то ядро, на которое указывает символьная ссылка.
 
 Если символьная ссылка не указывает на корректные исходные тексты, вы можете ее обновить, выбирая номер требуемых вами исходных текстов ядра, как в приведенном далее примере.
+{{RootCmd|eselect kernel set 1}}
+
 {{RootCmd|eselect kernel set 1}}
 
 == Драйвера == 
@@ -89,6 +123,9 @@ Available kernel symlink targets:
 |modprobe nvidia 
 }}
 
+== Драйвера ==
+Теперь самое время установить драйвера. Вы можете это сделать сначала следуя [http://www.gentoo.org/doc/en/xorg-config.xml Описанию настройки X-сервера], и, затем, установив '''VIDEO_CARDS="nvidia"''' в {{Path|/etc/portage/make.conf}}. После того, как Вы установите X-сервер,, он затем установит правильную версию '''nvidia-drivers''' для Вас.
+
 Для того, чтобы предотвратить загрузку модулей вручную с каждой запуском системы, вы, возможно, хотите, чтобы это происходило автоматически каждый раз, когда вы ее загружаете. Поэтому, отредактируйте {{Path|/etc/conf.d/modules}} и добавьте туда '''nvidia'''.
 
 {{Important/ru|Если вы скомпилировали '''agpart''' как модуль, вам потребуется добавить и его в {{Path|/etc/conf.d/modules}}.}}
@@ -97,10 +134,18 @@ Available kernel symlink targets:
 После установки подходящих драйверов, вам надо сконфигурировать X-сервер для использования драйвера '''nvidia''' вместо драйвера по умолчанию '''nv'''.
 {{VIDEO_CARDS/xorg.conf|nvidia}}
 
+Once the appropriate drivers are installed, configure the X server to use the <tt>nvidia</tt> driver instead of the default <tt>nv</tt> driver.
+
+{{VIDEO_CARDS/xorg.conf|nvidia}}
+
 Запустите '''eselect''', так чтобы X-сервер использовал GLX библиотеки nVidia:
 {{RootCmd|eselect opengl set nvidia}}
 
+{{RootCmd|eselect opengl set nvidia}}
+
 === Разрешения ===
+{{VIDEO_CARDS/Permissions|nvidia}}
+
 {{VIDEO_CARDS/Permissions|nvidia}}
 
 == Тестирование видеокарты ==
@@ -109,10 +154,18 @@ Available kernel symlink targets:
 direct rendering: Yes 
 </pre>}}
 
+To test the nVidia card, fire up X and run <kbd>glxinfo</kbd>, which is part of the {{Package|x11-apps/mesa-progs}} package. It should say that direct rendering is activated:
+
+{{Cmd|glxinfo {{!}} grep direct|output=<pre>
+direct rendering: Yes
+</pre>}}
+
 Для проверки кадровой частоты — FPS, запустите '''glxgears'''.
 
 == Включение поддержки nvidia ==
 Некоторые инструменты, такие как '''mplayer''' и '''xine-lib''', используют локальный USE-флаг, называемый '''xvmc''', включающий поддержку XvMCNVIDIA. Это полезно при просмотре видео высокого разрешения. Добавьте '''xvmc''' в список USE-флагов в {{Path|/etc/portage/make.conf}}, или добавьте его как USE-флаг в '''media-video/mplayer''' и/или '''media-libs/xine-lib''' в файле {{Path|/etc/portage/package.use}}.
+
+Some tools, such as {{Package|media-video/mplayer}} and {{Package|media-libs/xine-lib}}, use a local USE flag called <code>xvmc</code> which enables XvMCNVIDIA support, useful when watching high resolution movies. Add in <code>xvmc</code> in the USE variable in {{Path|/etc/portage/make.conf}} or add it as USE flag to <code>media-video/mplayer</code> and/or <code>media-libs/xine-lib</code> in {{Path|/etc/portage/package.use}}.
 
 Серии GeForce 8 и более поздние GPU выходят с поддержкой VDPAU, которая заменила собой поддержку XvMCNVIDIA. Смотри статью [[VDPAU]] для включения поддержки VDPAU.
 
@@ -122,6 +175,8 @@ direct rendering: Yes
 
 === Использование инструмента управления настройками от NVidia ===
 nVidia также предоставляет вам инструмент для управления настройками. Этот инструмент разрешает вам просматривать и изменять настройки графики без перезапуска X-сервера. Он доступен через Portage как '''media-video/nvidia-settings'''. Как упомянуто ранее, он будет задействован автоматически, если вы установили драйвера с USE-флагом '''gtk''', прописанным в файле {{Path|/etc/portage/make.conf}} или в {{Path|/etc/portage/package.use}}.
+
+nVidia also provides a settings tool. This tool allows the user to monitor and change graphical settings without restarting the X server and is available through Portage as {{Package|media-video/nvidia-settings}}. As mentioned earlier, it will be pulled in automatically when installing the drivers with the <code>gtk</code> USE flag set in {{Path|/etc/portage/make.conf}} or in {{Path|/etc/portage/package.use}}.
 
 === Включение OpenGL/OpenCL ===
 
@@ -133,6 +188,8 @@ nVidia также предоставляет вам инструмент для 
 Вы должны проверить, чтобы сервер Xorg не был запущен во время проведения этих изменений.
 
 == Устранение неполадок ==
+* {{Bug|nvidia-drivers|search=package}}
+
 * {{Bug|nvidia-drivers|search=package}}
 
 === Драйвер не инициализируется, если включены прерывания MSI ===
@@ -165,18 +222,20 @@ options nvidia NVreg_DeviceFileMode=432 NVreg_DeviceFileUID=0 NVreg_DeviceFileGI
 {{Path|/proc/mtrr}}: 
 {{RootCmd|cat /proc/mtrr}}
 
-Каждая строка должна содержать ''write-back'' или ''write-combining''. Если вы видите строку со словом ''uncachable'', то должны изменить настройки BIOS, чтобы это исправить.
+When nVidia 2D acceleration is giving problems, then it is likely that the system is unable to set up a write-combining range with MTRR. To verify, check the contents of {{Path|/proc/mtrr}}:
+
+{{RootCmd|cat /proc/mtrr}}
+
+Every line should contain <tt>write-back</tt> or <tt>write-combining</tt>. When a line shows up with <tt>uncachable</tt> in it then it is necessary to change a BIOS setting to fix this.
 
 Перезагрузитесь и войдите в BIOS, затем найдите настройки MTRR (возможно, под ''CPU Settings''). Измените настройки с ''continuous'' на ''discrete'' и перезагрузитесь обратно в Linux. Теперь вы обнаружите, что записи со словом ''uncachable'' больше нет и 2D-ускорение работает без каких-либо неполадок.
 
 === Когда я пытаюсь загрузить модуль ядра, я получаю сообщение ''no such device'' ===
 Это обычно вызвано одной из следующих проблем:
 
+This is usually caused by one of the following issues:
+
 1. Вы вовсе не имеете видеокарты nVidia. Проверьте вывод '''lspci''', чтобы удостовериться, что видеокарта nVidia установлена и обнаружена.
-
-2. Версия x11-drivers/nvidia-drivers, установленная на данный момент, не поддерживает вашу модель видеокарты. Проверьте файл README в каталоге /usr/share/nvidia-drivers-*/, чтобы просмотреть список поддерживаемых устройств, или воспользуйтесь поиском драйвера на сайте http://www.geforce.com/drivers. Смотри раздел [[NVidia/nvidia-drivers#Which_version.3F|Which_version]] выше.
-
-3. Другой драйвер ядра получил управление аппаратными ресурсами. Проверьте результат работы команды '''lspci -k''', чтобы посмотреть связан ли другой драйвер, например "nouveau", с видеокартой. Если это так, вам нужно отключить этот драйвер или его замаскировать.
 
 === Xorg сообщает, что не может найти какие-либо экраны ===
 Когда вы загружаете компьютер, и получаете черный экран или командную строку в консоли, вместо графического интерфейса пользователя; вы можете нажать Ctrl+Alt+F2, чтобы вызвать командную строку, если она отсутствует. Затем вы можете запустить команды:
@@ -198,6 +257,29 @@ Section "Device"
     BusID          "PCI:1:0:0"
 EndSection
 }}
+
+When after booting the system, it ends up with a black screen or a console prompt instead of the GUI; then press {{Key|Ctrl+Alt+F2}} to bring up a console prompt. Next, run:
+
+{{RootCmd| /etc/init.d/xdm stop}}
+
+{{Cmd| startx}}
+
+to see the output of Xorg. If one of the first errors is that Xorg can't find any screens, then follow the following steps to resolve the issue.
+
+It should be enough to run the following command before rebooting:
+
+{{Cmd| /opt/bin/nvidia-xconfig}}
+
+But if that doesn't work, run <kbd>lspci</kbd> and notice that the video card starts off like this:
+
+{{RootCmd|lspci|output=<pre>
+ . . .
+01:00.0 VGA compatible controller: make and model of videocard
+ . . . 
+</pre>
+}}
+
+Take the first bit, <code>01.00.0</code> and put it in the {{Path|/etc/X11/xorg.conf}} file with the <code>BusID</code> option:
 
 &nbsp;
 
@@ -221,23 +303,38 @@ Device drivers --->
 Пакет драйверов nVidia также поставляется с исчерпывающей документацией. Она устанавливается в каталог '''/usr/share/doc''' и может быть просмотрена с помощью следующей команды:
 {{Cmd|less /usr/share/doc/nvidia-drivers-*/README.bz2}}
 
-=== Параметры модулей ядра ===
-Модуль ядра '''nvidia''' принимает набор параметров (options), который позволяет вам настроить поведение драйвера. Большинство из них упомянуто в документации. Для того, чтобы добавить или изменить значения этих параметров, отредактируйте файл '''/etc/modprobe.d/nvidia.conf'''. Не забудьте запустить '''update-modules''' после изменения этого файла. Держите в уме, что вам потребуется перезагрузить модуль '''nvidia''' перед тем, как новые настройки вступят в силу.
+The nVidia driver package also comes with comprehensive documentation. This is installed into {{Path|/usr/share/doc}} and can be viewed with the following command:
+
+{{Cmd|less /usr/share/doc/nvidia-drivers-*/README.bz2}}
+
+=== Kernel module parameters ===
+
+The <tt>nvidia</tt> kernel module accepts a number of parameters (options) which can be used to tweak the behaviour of the driver. Most of these are mentioned in the documentation. To add or change the values of these parameters, edit the file {{Path|/etc/modprobe.d/nvidia.conf}}. Remember to run <kbd>update-modules</kbd> after modifying this file, and bear in mind to reload the <code>nvidia</code> module before the new settings take effect.
 
 Отредактируйте /etc/modprobe.d/nvidia.conf в Вашем любимом редакторе:
+{{RootCmd|nano -w /etc/modprobe.d/nvidia.conf}}
+
 {{RootCmd|nano -w /etc/modprobe.d/nvidia.conf}}
 
 Обновите информацию о модулях:
 {{RootCmd|update-modules}}
 
+{{RootCmd|update-modules}}
+
 Выгрузите модуль nvidia...
+{{RootCmd|modprobe -r nvidia}}
+
 {{RootCmd|modprobe -r nvidia}}
 
 ...и загрузите его снова:
 {{RootCmd|modprobe nvidia}}
 
+{{RootCmd|modprobe nvidia}}
+
 === Расширенная конфигурация X-сервера ===
 GLX-интерфейс также имеет огромное количество параметров, которые можно настроить. Они управляют конфигурацией выхода TV, одновременным выводом на два монитора, определением частоты монитора, и так далее. Опять же, все доступные параметры подробно описаны в документации.
+
+The GLX layer also has a plethora of options which can be configured. These control the configuration of TV out, dual displays, monitor frequency detection, etc. Again, all of the available options are detailed in the documentation.
 
 Если вы хотите использовать какие-либо из этих параметров, вам необходимо их перечислить в соответственном разделе Device в файле конфигурации X (обычно находящемся в '''/etc/X11/xorg.conf'''). Например, предположим я хочу отключить всплывающий логотип — splash logo:
 
@@ -253,6 +350,9 @@ EndSection
 == Смотрите также ==
 * [[nouveau & nvidia-drivers switching|Переключение между nouveau и nvidia-drivers]].
 * [[NVIDIA Driver with Optimus Laptops|Драйвер NVIDIA для ноутбуков с видеокартой Optimus]].
+
+== Благодарности ==
+Мы хотим поблагодарить следующих авторов и редакторов за их вклад в это руководство: Sven Vermeulen, Joshua Saddler, M Curtis Napier and Chris Gianelloni.
 
 {{Migrated|originalauthors=Sven Vermeulen, Joshua Saddler, M Curtis Napier and Chris Gianelloni}}
 
