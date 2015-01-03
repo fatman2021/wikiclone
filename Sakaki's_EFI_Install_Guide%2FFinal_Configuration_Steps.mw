@@ -1,12 +1,12 @@
 <!-- Page: Final_Configuration_Steps -->
 
-<span id="final_config_steps">Currently</span>, your target system is using a kernel configuration largely based on that shipped with the Gentoo minimal installation image (with some [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#buildkernel_config_changes|necessary changes imposed by <tt>buildkernel</tt>]], for example to support <tt>systemd</tt>). Since this configuration is (by design!) lightweight, it leaves many options disabled (including many device drivers). As a result, at this point in the installation a number of features that may be present on your machine (such as Bluetooth, WiFi, touchscreen etc.) may not yet be usable.
+<span id="final_config_steps">Currently</span>, your target system is using a kernel configuration largely based on that shipped with the Gentoo minimal installation image (with some [[../Configuring_and_Building_the_Kernel#buildkernel_config_changes|necessary changes imposed by <tt>buildkernel</tt>]], for example to support <tt>systemd</tt>). Since this configuration is (by design!) lightweight, it leaves many options disabled (including many device drivers). As a result, at this point in the installation a number of features that may be present on your machine (such as Bluetooth, WiFi, touchscreen etc.) may not yet be usable.
 
 In this (penultimate) chapter, we'll address that, by enabling the relevant configuration options and recompiling the kernel (using the <tt>buildkernel</tt> tool's <tt>--menuconfig</tt> option).
 
 Unfortunately, it's impossible to be precise about the exact options you'll need to enable, as these vary from machine to machine. Nevertheless, we'll cover a number of the most commonly encountered requirements (and by way of example, provide explicit instructions for WiFi, Bluetooth, touchscreen, audio, and integrated card reader on the CF-AX3).
 
-This section of the tutorial has no precise analogue in the Gentoo manual, although elements of it are reflected in [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=7 Chapter 7]. You may also find it useful to refer to the [[Kernel/Gentoo_Kernel_Configuration_Guide|"Gentoo Kernel Configuration Guide"]] on the wiki.
+This section of the tutorial has no precise analogue in the Gentoo manual, although elements of it are reflected in [[Handbook:AMD64/Installation/Kernel|Chapter 7]]. You may also find it useful to refer to the [[Kernel/Gentoo_Kernel_Configuration_Guide|"Gentoo Kernel Configuration Guide"]] on the wiki.
 
 We will also address some additional miscellaneous issues at the end of this chapter, namely:
 * pruning your kernel configuration (to remove unused items and make the kernel image smaller); 
@@ -18,14 +18,14 @@ Let's get started!
 
 == <span id="general_approach">General Approach</span> ==
 
-{{Important|In what follows, I am assuming that you know how to use the <tt>make menuconfig</tt> kernel configuration tool (which <tt>buildkernel</tt> invokes). You can find a short overview of <tt>make menuconfig</tt> in an [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro{{!}}earlier troubleshooting section]] of this tutorial; if you skipped it before (because the troubleshooting section didn't apply to you then), you may wish to [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro{{!}}review it now]] (or at least, read the sub-section regarding [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#kernel_config_shorthand_note{{!}}"implementing a shorthand configuration fragment in <tt>make menuconfig</tt>"]]), before proceeding. Greg Kroah-Hartman's ''Linux Kernel in a Nutshell'' is also highly recommended.<ref name{{=}}"kernel_in_nutshell">Kroah-Hartman, Greg. [http://www.kroah.com/lkn/ ''Linux Kernel in a Nutshell'' (ebook)]. O'Reilly, 2006</ref>}}
+{{Important|In what follows, I am assuming that you know how to use the <tt>make menuconfig</tt> kernel configuration tool (which <tt>buildkernel</tt> invokes). You can find a short overview of <tt>make menuconfig</tt> in an [[../Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro{{!}}earlier troubleshooting section]] of this tutorial; if you skipped it before (because the troubleshooting section didn't apply to you then), you may wish to [[../Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro{{!}}review it now]] (or at least, read the sub-section regarding [[../Setting_up_the_GNOME_3_Desktop#kernel_config_shorthand_note{{!}}"implementing a shorthand configuration fragment in <tt>make menuconfig</tt>"]]), before proceeding. Greg Kroah-Hartman's ''Linux Kernel in a Nutshell'' is also highly recommended.<ref name{{=}}"kernel_in_nutshell">Kroah-Hartman, Greg. [http://www.kroah.com/lkn/ ''Linux Kernel in a Nutshell'' (ebook)]. O'Reilly, 2006</ref>}}
 
 <span id="resume_after_menuconfig_tutorial">The</span> general approach when looking to enable a feature which is physically supported on your machine (for example, Bluetooth), is as follows:
 * Obviously, check whether the feature already works (it's always possible that your current kernel already has the necessary options enabled or modularized). If it does, great, you're done!
 * Ensure your boot USB key is inserted, then invoke <tt>buildkernel --menuconfig</tt> in a terminal (which will run the <tt>make menuconfig</tt> tool).
 * Collect as much information as possible about the physical device (vendor name, model name etc.), using tools such as <tt>hwinfo</tt>, <tt>lspci</tt> and <tt>lsusb</tt> (in a separate terminal window).
 * If the device description should match one given in the specific CF-AX3 instructions below, implement the given kernel configuration shorthand fragment (using the <tt>buildkernel --menuconfig</tt> interface).
-* Otherwise, search (still via the <tt>menuconfig</tt> interface; see the [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro|tutorial earlier]]) for a suitable option, and then enable (or modularize) it (and any dependencies). If you can't find anything suitable this way, do a web search based on the information collected. (Unfortunately, there is no automated tool to do this for you).
+* Otherwise, search (still via the <tt>menuconfig</tt> interface; see the [[../Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro|tutorial earlier]]) for a suitable option, and then enable (or modularize) it (and any dependencies). If you can't find anything suitable this way, do a web search based on the information collected. (Unfortunately, there is no automated tool to do this for you).
 * Once you have made all desired changes, exit and save <tt>make menuconfig</tt>, thereby allowing <tt>buildkernel</tt> to continue and create a new kernel; and then reboot. With luck, your desired feature should now be operational.
 * If all else fails, invoke <tt>buildkernel --menuconfig</tt> again, try modularizing ''all'' options under the appropriate sub-menu in the <tt>make menuconfig</tt> interface, then save and exit, to create a new kernel as before. If, after a reboot, the desired feature is operational, you should then be able to locate its driver using <tt>hwinfo --pci --usb</tt> (after which you can rerun <tt>buildkernel --menuconfig</tt> if you like, to turn off all other unneeded items and recompile). This approach (i.e., turn on pretty much everything so that something will work ^-^) is actually the one taken by many Linux distributions (such as Ubuntu) for their 'generic' kernels, so don't feel shy to try it if need be.
 
@@ -46,21 +46,21 @@ In what follows, we will cover the following (common) features, using the Panaso
 
 To reiterate, what follows is simply an example, for a particular PC (the CF-AX3). Where necessary, follow the steps [[#general_approach|above]] to set the necessary options for your particular choice of target machine.
 
-{{Important|If you have decided to [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#deblob_or_not{{!}}deblob your kernel]] ('''not''' the default route followed in this tutorial), then it's likely that many hardware features will be unusable no matter what you enable in the kernel, since there'll be no firmware (blobs) present for the drivers to upload to their respective devices.}}
+{{Important|If you have decided to [[../Configuring_and_Building_the_Kernel#deblob_or_not{{!}}deblob your kernel]] ('''not''' the default route followed in this tutorial), then it's likely that many hardware features will be unusable no matter what you enable in the kernel, since there'll be no firmware (blobs) present for the drivers to upload to their respective devices.}}
 
 === <span id="config_prelims">Preliminaries</span> ===
 
-Ensure your boot USB key is inserted in the target machine, and then (at the terminal within the GNOME session that we opened [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#open_gnome_terminal|earlier]]), issue:
+Ensure your boot USB key is inserted in the target machine, and then (at the terminal within the GNOME session that we opened [[../Setting_up_the_GNOME_3_Desktop#open_gnome_terminal|earlier]]), issue:
 {{RootCmd
 |buildkernel --snapshot-backup
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to create a 'last known good' backup of the current kernel (and configuration) on the boot USB key. Although <tt>buildkernel</tt> does create a backup of the previous version when it is run, that backup is not persistent, and will be overwritten the ''next'' time buildkernel is executed. Keeping a (timestamped) backup via <tt>--snapshot-backup</tt> ensures that there's no risk we run <tt>buildkernel</tt> twice between reboots, thereby losing our reference point.
 
 Next, issue:
 {{RootCmd
 |buildkernel --menuconfig
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Because you have not specified <tt>--ask</tt> here, but you ''have'' specified <tt>--menuconfig</tt>, the process will run through by itself (assuming no errors) to the point where you can modify the kernel configuration using the standard <tt>curses</tt>-based <tt>make menuconfig</tt> editor GUI. You can now use that interface to enable specific features as specified in the kernel configuration shorthand 'recipes' given below.
 
@@ -68,12 +68,12 @@ Now, because it will be useful to have a second terminal available (for <tt>emer
 
 {{Cmd
 |su --login root
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 |output=<pre>
 Password: <enter root password>
 </pre>
 }}
-The password required here is the one you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in previously).
+The password required here is the one you set up [[../Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in previously).
 
 === <span id="config_wifi">WiFi</span> ===
 
@@ -81,7 +81,7 @@ The CF-AX3 has integrated WiFi, based on an Intel 7260 device. To find out which
 {{RootCmd
 |lspci {{!}} grep -i net
 |lsusb {{!}} grep -i net
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 and observe the output.
 
@@ -99,11 +99,11 @@ On the CF-AX3, the built-in Ethernet adaptor is (obviously!) already working und
 }}
 {{News|Update: Oct 10, 2014|Need to add <tt>sys-kernel/linux-firmware</tt> to {{Path|/etc/portage/package.accept_keywords}} for the CF-AX3|
 As of Linux kernel 3.17.0, you will (temporarily) need to add <tt>sys-kernel/linux-firmware</tt> to {{Path|/etc/portage/package.accept_keywords}}, as the required firmare file {{Path|/lib/firmware/iwlwifi-7260-8.ucode}} (for the CF-AX3) is not currently present in the 'stable' version. Presumably this issue will be addressed shortly.}}
-Now, while the firmware for this 7260 ''is'' already included in {{Package|sys-kernel/linux-firmware}} (which we installed [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#install_firmware|earlier]]), using it requires MVM firmware support (which, at the time of writing, the minimal-install kernel configuration has disabled).
+Now, while the firmware for this 7260 ''is'' already included in {{Package|sys-kernel/linux-firmware}} (which we installed [[../Configuring_and_Building_the_Kernel#install_firmware|earlier]]), using it requires MVM firmware support (which, at the time of writing, the minimal-install kernel configuration has disabled).
 
 Set the following options (within <tt>buildkernel</tt>) to rectify this, and thereby activate [[:Wikipedia:Wi-Fi|WiFi]]:
-{{Kernel
-|Configuration options for 7260 wireless card (WiFi) on the CF-AX3
+{{KernelBox
+|title=Configuration options for 7260 wireless card (WiFi) on the CF-AX3
 |<pre>
 Device Drivers  --->
  -*- Network device support  --->
@@ -113,7 +113,7 @@ Device Drivers  --->
    <M>    Intel Wireless WiFi MVM Firmware support
 </pre>
 }}
-{{Note|Most of the time, it's equally fine to either modularize (<tt>M</tt>) or build in (<tt>*</tt>) a function, as desired; <tt>buildkernel</tt> [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#copy_all_modules_to_initramfs{{!}}copies all modules]] into the initramfs.}}	
+{{Note|Most of the time, it's equally fine to either modularize (<tt>M</tt>) or build in (<tt>*</tt>) a function, as desired; <tt>buildkernel</tt> [[../Configuring_and_Building_the_Kernel#copy_all_modules_to_initramfs{{!}}copies all modules]] into the initramfs.}}	
 Incidentally, the 7260 device ''also'' supports [[:Wikipedia:WiMAX|WiMAX]], but as of the time of writing, the ebuilds for {{Package|net-misc/networkmanager}} do not, so I have not detailed its activation here.
 
 {{Note|When you later restart under your new kernel and log in again to GNOME (see [[#finishing_up_config{{!}}"Finishing Up", below]]), you should be able to see and activate WiFi connections by clicking on the 'network' icon in the top bar (or, by clicking on the 'spanner and screwdriver' icon from the drop-down menu under the rightmost ('power') icon on the top bar).}}
@@ -123,12 +123,12 @@ Incidentally, the 7260 device ''also'' supports [[:Wikipedia:WiMAX|WiMAX]], but 
 Like many modern notebooks, the CF-AX3 has an integrated [[:Wikipedia:Bluetooth|Bluetooth]] modem. To see information about your system's Bluetooth hardware, issue in the second terminal (the one not displaying the <tt>menuconfig</tt> interface):
 {{RootCmd
 |hwinfo --bluetooth
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 To enable it on the CF-AX3, set the following options (this will work for many other machines too):
-{{Kernel
-|Configuration options for Bluetooth on the CF-AX3
+{{KernelBox
+|title=Configuration options for Bluetooth on the CF-AX3
 |<pre>
 -*- Networking support  --->
  <M>   Bluetooth subsystem support  --->
@@ -143,7 +143,7 @@ To enable it on the CF-AX3, set the following options (this will work for many o
 You must now ensure that the Bluetooth service will start on boot. To do so, issue:
 {{RootCmd
 |systemctl enable bluetooth
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 === <span id="config_touchscreen">Touchscreen</span> ===
@@ -151,11 +151,11 @@ You must now ensure that the Bluetooth service will start on boot. To do so, iss
 As is increasingly common, the CF-AX3 has a [[:Wikipedia:Touchscreen|touchscreen]] (an eGalaxTouch device in this case). You can generally find out more information about your touchscreen (and touchpad, if present, although this is likely already supported at this point in the install), by issuing in the second terminal (the one not displaying the <tt>menuconfig</tt> interface):
 {{RootCmd
 |hwinfo --mouse
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 To enable the eGalaxTouch device (this will also work for many other touchscreen panels), set the following options:
-{{Kernel
-|Configuration options for touchscreen on the CF-AX3
+{{KernelBox
+|title=Configuration options for touchscreen on the CF-AX3
 |<pre>
 Device Drivers  --->
  HID support  ---> 
@@ -170,14 +170,14 @@ Device Drivers  --->
 The CF-AX3 has an integrated webcam (a common feature on many laptops and netbooks). You can find out more information about your machine's webcam by issuing in the second terminal (the one not displaying the <tt>menuconfig</tt> interface):
 {{RootCmd
 |hwinfo --pci --usb {{!}} awk '/webcam/' RS{{=}}"" IGNORECASE{{=}}1
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 {{Note|The <tt>hwinfo</tt> command will output blank-line-separated records about each device found on the PCI and USB busses (your webcam will almost certainly be on one of those, most likely USB). Then the <tt>awk</tt> command prints any of these records that contain the text "webcam" (not case sensitive), using a blank line as a record separator.}}
 
 To enable the webcam on the CF-AX3 (this will work for many modern machines, as many webcams are [[:Wikipedia:USB_video_device_class|UVC]] devices), set the following options:
-{{Kernel
-|Configuration options for webcam on the CF-AX3
+{{KernelBox
+|title=Configuration options for webcam on the CF-AX3
 |<pre>
 Device Drivers  --->
  <M> Multimedia support  --->
@@ -195,12 +195,12 @@ Device Drivers  --->
 The CF-AX3 has an integrated Intel HD audio device, accessed on the PCI bus. You can find out more information about your machine's soundcard by issuing in the second terminal (the one not displaying the <tt>menuconfig</tt> interface):
 {{RootCmd
 |hwinfo --sound
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 As configured, sound works 'out of the box' for the CF-AX3, but the [[:Wikipedia:PulseAudio|<tt>pulseaudio</tt>]] sound server complains about lack of high resolution timer support, and insufficiently large buffers. To address these problems on the CF-AX3, set the following options
-{{Kernel
-|Configuration options for audio on the CF-AX3
+{{KernelBox
+|title=Configuration options for audio on the CF-AX3
 |<pre>
 General Setup  --->
  Timers subsystem  --->
@@ -221,15 +221,15 @@ Device Drivers  --->
 The CF-AX3 has an integrated [[:Wikipedia:Secure_Digital|SD/MMC]] card reader. You can find out more information about your machine's reader by issuing in the second terminal (the one not displaying the <tt>menuconfig</tt> interface):
 {{RootCmd
 |hwinfo --pci --usb {{!}} awk '/ sd /' RS{{=}}"" IGNORECASE{{=}}1
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 Although the necessary kernel options (<tt>MMC_SDHCI</tt> and <tt>MMC_SDHCI_PCI</tt>) for this card ''are'' modularized in the minimal install kernel, there is a bug impacting the CF-AX3 (and many other machines) which prevents correct initialization when a card is inserted. To fix this, still in the second terminal, issue:<ref>AdminEmpire: [http://www.adminempire.com/o2-sd-card-reader-fix-linux/ "O2 SD-Card Reader fix Linux"]</ref>
 {{RootCmd
 |echo "options sdhci debug_quirks{{=}}0x40" > /etc/modprobe.d/sd-card-fix.conf
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
-{{Note|Note that <tt>buildkernel</tt> [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#copy_static_gpg{{!}}''will'' copy]] the contents of {{Path|/etc/modprobe.d}} into the initramfs for you.}}
+{{Note|Note that <tt>buildkernel</tt> [[../Configuring_and_Building_the_Kernel#copy_static_gpg{{!}}''will'' copy]] the contents of {{Path|/etc/modprobe.d}} into the initramfs for you.}}
 {{Note|When you later restart under your new kernel and log in again to GNOME (see [[#finishing_up_config{{!}}"Finishing Up", below]]), you should be able to insert an SD card and have it automatically show up in GNOME).}}
 
 === <span id="config_others">Others</span> ===
@@ -246,30 +246,29 @@ Lastly, if you find that your early boot splash is being interrupted with the er
 
 When satisfied with your configuration, exit <tt>menuconfig</tt>, saving changes. Once you have done so, <tt>buildkernel</tt> will automatically create a new kernel with the newly created configuration, sign it, and copy it over to the boot USB key. Wait for the process to complete (you get the message "<tt>All done!</tt>"). Then (leaving the boot USB key inserted) restart your target machine (you can do this from within GNOME, by clicking on the 'power' icon (in the top right of the screen), clicking on the 'power' button in the dropdown menu that then appears, and then clicking on the 'Restart' button in the dialog).
 
-The machine should then power cycle (you will be cleanly logged out of GNOME first). When it restarts, as before, you will need to enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard to unlock the LUKS partition. You should then be presented with a GNOME login page (as [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#login_to_gnome|previously]]). Directly at the target machine, click on your (regular) user name then, when prompted, type in the (regular user) password you set up [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#setup_regular_user|earlier]] (ensure you have the correct keyboard settings, if relevant, as discussed [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#input_source_menu|above]]).
+The machine should then power cycle (you will be cleanly logged out of GNOME first). When it restarts, as before, you will need to enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard to unlock the LUKS partition. You should then be presented with a GNOME login page (as [[../Setting_up_the_GNOME_3_Desktop#login_to_gnome|previously]]). Directly at the target machine, click on your (regular) user name then, when prompted, type in the (regular user) password you set up [[../Setting_up_the_GNOME_3_Desktop#setup_regular_user|earlier]] (ensure you have the correct keyboard settings, if relevant, as discussed [[../Setting_up_the_GNOME_3_Desktop#input_source_menu|above]]).
 
 You should now be able to use all the features of your machine that you just enabled (such as WiFi etc.).
 
-{{Note|Of course, it's entirely fine to repeat this <tt>"buildkernel --menuconfig"</tt> process a few times, so if there are other features you need to enable, feel free to do so now. If your machine fails to boot with a given configuration, see these [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#revert_to_previous_kernel{{!}}earlier instructions]] for how to fall back to the prior kernel on the boot USB key (<tt>buildkernel</tt> makes a backup of the previous kernel each time it is run).}}
+{{Note|Of course, it's entirely fine to repeat this <tt>"buildkernel --menuconfig"</tt> process a few times, so if there are other features you need to enable, feel free to do so now. If your machine fails to boot with a given configuration, see these [[../Configuring_systemd_and_Installing_Necessary_Tools#revert_to_previous_kernel{{!}}earlier instructions]] for how to fall back to the prior kernel on the boot USB key (<tt>buildkernel</tt> makes a backup of the previous kernel each time it is run).}}
 
 === <span id="config_lcd_backlight">LCD Screen Backlight (Addressing the i915 Regression)</span> ===
 
 One final note. Like most laptops, the CF-AX3 has a dimmable backlight on its LCD screen. With modern kernels (3.17+) and the i915 graphics driver (as used by many Ultrabooks), you may find that you [https://lkml.org/lkml/2014/9/24/421 cannot change the display brightness] using the standard GNOME controls. This is a regression; if it affects you, first use the process described in [[#config_prelims|"Preliminaries", above]] to get a root terminal, then issue:
 {{RootCmd
 |nano -w /etc/buildkernel.conf
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Locate the line specifying <tt>ADDITIONALKERNELCMDS</tt>. If it is currently commented out (the line starts with a <tt>#</tt> character), then uncomment and edit that line so it reads:
-{{File|/etc/buildkernel.conf|Specifying additional kernel command line options|<pre>
+{{FileBox|filename=/etc/buildkernel.conf|title=Specifying additional kernel command line options|lang=bash|1=
 ADDITIONALKERNELCMDS="video.use_native_backlight=0"
-</pre>
 }}
 Save and exit the <tt>nano</tt> editor.
 {{Note|If you already have some additional kernel command line options specified using the <tt>ADDITIONALKERNELCMDS</tt> variable, then simply add the <tt>video.use_native_backlight{{=}}0</tt> text to the end of the string (in {{Path|/etc/buildkernel.conf}}), separating it from the existing text with a space.}}
 Now, ensure that you have the boot USB key inserted, and issue:
 {{RootCmd
 |buildkernel
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to rebuild the kernel. Wait for the process to finish (you receive the message "<tt>All done!</tt>"). Then power cycle the machine as described in [[#finishing_up_config|"Finishing Up", above]].
 
@@ -280,7 +279,7 @@ When you log in again to GNOME, you should find that the screen brightness contr
 {{Note|This is an entirely ''optional'' step - if you'd like to skip it, simply [[#suspend_hibernate{{!}}continue to the next section]] now.}}
 
 As your current Linux kernel is largely derived from the minimal-install image configuration, it contains a lot of modularized and enabled features that are irrelevant to your machine (for example, all the specific x86 platform support drivers for vendors other than yours). While this bloat is mostly harmless, there are a few negative side effects of having features you don't need, for example:
-* the kernel image is larger (which makes boot time slightly longer); even even where most features are modularized, since all modules [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#copy_static_gpg|are copied]] into the initramfs, which is then [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#initramfs_into_kernel|integrated into the kernel itself]]. This can be an important consideration if you choose to migrate your kernel into the (often cramped) Windows EFI system partition (instructions for which are [[EFI_Gentoo_End_to_End_Install/Using_Your_New_Gentoo_System#migrating_off_usb_key|provided later]]);
+* the kernel image is larger (which makes boot time slightly longer); even even where most features are modularized, since all modules [[../Configuring_and_Building_the_Kernel#copy_static_gpg|are copied]] into the initramfs, which is then [[../Configuring_and_Building_the_Kernel#initramfs_into_kernel|integrated into the kernel itself]]. This can be an important consideration if you choose to migrate your kernel into the (often cramped) Windows EFI system partition (instructions for which are [[../Using_Your_New_Gentoo_System#migrating_off_usb_key|provided later]]);
 * more code must be (uselessly) compiled each time you upgrade your kernel, which costs time; and
 * more features = a larger attack surface exposed to malware.
 
@@ -291,42 +290,42 @@ Accordingly, you may wish to perform another <tt>buildkernel --menuconfig</tt> r
 First, if you don't have a root terminal open already in GNOME, do so now: press the {{Key|Windows Key}}, and type 'terminal', then press {{Key|Enter}}. A standard-issue terminal window should open. Become root:
 {{Cmd
 |su --login root
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 |output=<pre>
 Password: <enter root password>
 </pre>
 }}
-The password required here is the one you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
+The password required here is the one you set up [[../Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
 
 Then in this terminal, issue:
 {{RootCmd
 |buildkernel --snapshot-backup
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to create a 'last known good' backup of the current kernel (and configuration) on the USB boot key (this ensures that there's no risk we lose our 'safe' version, which might otherwise happen were we to run <tt>buildkernel</tt> twice in a row between test reboots).
 
 Now switch to the kernel directory, ask <tt>localmodconfig</tt> to do its magic, then return:
 {{RootCmd
 |pushd /usr/src/linux && make localmodconfig && popd
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 Finally, ensure you have the boot USB key inserted, and create a new kernel based on the stripped-down configuration:
 {{RootCmd
 |buildkernel --menuconfig
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 This will allow you to review the proposed configuration for sanity in the <tt>make menuconfig</tt> tool, and make any necessary changes.
-{{Note|You can find a short overview of <tt>make menuconfig</tt> in an [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro{{!}}earlier troubleshooting section]] of this tutorial.}}
+{{Note|You can find a short overview of <tt>make menuconfig</tt> in an [[../Setting_up_the_GNOME_3_Desktop#make_menuconfig_intro{{!}}earlier troubleshooting section]] of this tutorial.}}
 
 When satisfied with your configuration, exit <tt>menuconfig</tt>, saving any changes. Once you have done so, <tt>buildkernel</tt> will automatically create a new kernel with the newly created configuration, sign it, and copy it over to the boot USB key, as before. Once the process completes (you get the message "<tt>All done!</tt>"), leave the USB key inserted and reboot in the normal manner. 
 
-{{Note|If your machine fails to boot with a given configuration, see these [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#revert_to_previous_kernel{{!}}earlier instructions]] for how to fall back to the prior kernel on the boot USB key.}}
+{{Note|If your machine fails to boot with a given configuration, see these [[../Configuring_systemd_and_Installing_Necessary_Tools#revert_to_previous_kernel{{!}}earlier instructions]] for how to fall back to the prior kernel on the boot USB key.}}
 
 This is very much an optional task, so feel free to postpone it for a rainy day (or forever if you like ^-^ !).
 
-{{Note|However, if you would like to migrate your kernel to the Windows EFI partition on the hard drive (instructions for which are provided [[EFI_Gentoo_End_to_End_Install/Using_Your_New_Gentoo_System#migrating_off_usb_key{{!}}later]]), then it may be worth slimming down your configuration somewhat: standard Windows 8 installations (like the CF-AX3) have a 100MB EFI system partition, of which about 20% is used for Windows files: as such, an 'unslimmed' kernel ''will'' fit, but there'll be no room for backups etc.}}
+{{Note|However, if you would like to migrate your kernel to the Windows EFI partition on the hard drive (instructions for which are provided [[../Using_Your_New_Gentoo_System#migrating_off_usb_key{{!}}later]]), then it may be worth slimming down your configuration somewhat: standard Windows 8 installations (like the CF-AX3) have a 100MB EFI system partition, of which about 20% is used for Windows files: as such, an 'unslimmed' kernel ''will'' fit, but there'll be no room for backups etc.}}
 
 == <span id="suspend_hibernate">Suspend and Hibernate</span> ==
 
@@ -341,27 +340,26 @@ For the CF-AX3, the 'stock' configuration works perfectly for suspend (simply pr
 To achieve this, we need to use the {{Path|/etc/systemd/sleep.conf}} file (which does not exist by default).<ref>[http://www.freedesktop.org/software/systemd/man/systemd-sleep.conf.html <tt>systemd-sleep.conf</tt> manpage]</ref> If you don't have a root terminal open already in GNOME, do so now: press the {{Key|Windows Key}}, and type 'terminal', then press {{Key|Enter}}. A standard-issue terminal window should open. Become root:
 {{Cmd
 |su --login root
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 |output=<pre>
 Password: <enter root password>
 </pre>
 }}
-The password required here is the one you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
+The password required here is the one you set up [[../Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
 
 Then in this terminal, issue:
 {{RootCmd
 |nano -w /etc/systemd/sleep.conf
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Put the following text in the file:
-{{File|/etc/systemd/sleep.conf|Asking systemd to write shutdown to /sys/power/disk on hibernate|<pre>
+{{FileBox|filename=/etc/systemd/sleep.conf|title=Asking systemd to write shutdown to /sys/power/disk on hibernate|1=
 [Sleep]
 HibernateMode=shutdown
-</pre>
 }}
 Save and exit the <tt>nano</tt> editor (you can also close out the terminal if you have no further use for it).
 
-After this, hibernate should work properly (on the CF-AX3). Press {{Key|Fn}}{{Key|F10}} and the machine will write its memory to the LVM swap partition on the LUKS encrypted volume (<tt>buildkernel</tt> conforms the kernel command line to specify this, as noted [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#real_resume_var|earlier]]), and then automatically power off. To resume, ensure that the boot USB key is inserted, and slide the power key. Enter your LUKS password when prompted, log in to GNOME, and you should find your desktop just as you left it. As this feature uses encrypted swap, it is relatively safe to travel with the laptop hibernated in this fashion (you should unplug and carry the boot USB key separately, of course).
+After this, hibernate should work properly (on the CF-AX3). Press {{Key|Fn}}{{Key|F10}} and the machine will write its memory to the LVM swap partition on the LUKS encrypted volume (<tt>buildkernel</tt> conforms the kernel command line to specify this, as noted [[../Configuring_and_Building_the_Kernel#real_resume_var|earlier]]), and then automatically power off. To resume, ensure that the boot USB key is inserted, and slide the power key. Enter your LUKS password when prompted, log in to GNOME, and you should find your desktop just as you left it. As this feature uses encrypted swap, it is relatively safe to travel with the laptop hibernated in this fashion (you should unplug and carry the boot USB key separately, of course).
 
 == <span id="set_default_python">Setting the System Default <tt>python</tt> Interpreter</span> ==
 
@@ -377,17 +375,17 @@ It's generally safe to set the default {{Path|/usr/bin/python}} to refer to vers
 To do so, open a root terminal in GNOME (if you don't already have one open): press the {{Key|Windows Key}}, and type 'terminal', then press {{Key|Enter}}. A standard-issue terminal window should open. Become root:
 {{Cmd
 |su --login root
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 |output=<pre>
 Password: <enter root password>
 </pre>
 }}
-The password required here is the one you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
+The password required here is the one you set up [[../Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
 
 Then in this terminal, issue:
 {{RootCmd
 |eselect python list
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
   [1]   python2.7
   [2]   python3.3 *
@@ -396,7 +394,7 @@ Then in this terminal, issue:
 Your output may very somewhat from the above, but you should see that one of the lines has a '2.7' version (it is <tt>[1]</tt> in the above). Now set it as the default:
 {{RootCmd
 |eselect python set 1
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 {{Note|Substitute the correct index for python 2.7 (in the list returned on your system) for <tt>1</tt> in the above command.}}
 
@@ -404,45 +402,39 @@ That's it! There's no need to run <tt>python-updater</tt> here as we've really j
 
 == <span id="disabling_sshd">Disabling <tt>sshd</tt></span> ==
 
-Up until now, you've [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#start_sshd|been running]] <tt>sshd</tt> (the [[:Wikipedia:Secure_Shell|secure shell]] daemon) on your target machine, to allow for simpler configuration via a helper PC. This is no longer required, and running such a service can present security risks. Unless you have good reason to keep it, stop <tt>sshd</tt> now (and ensure it does not restart again on boot).
+Up until now, you've [[../Configuring_systemd_and_Installing_Necessary_Tools#start_sshd|been running]] <tt>sshd</tt> (the [[:Wikipedia:Secure_Shell|secure shell]] daemon) on your target machine, to allow for simpler configuration via a helper PC. This is no longer required, and running such a service can present security risks. Unless you have good reason to keep it, stop <tt>sshd</tt> now (and ensure it does not restart again on boot).
 
 To do so, open a root terminal in GNOME (if you don't already have one open): press the {{Key|Windows Key}}, and type 'terminal', then press {{Key|Enter}}. A standard-issue terminal window should open. Become root:
 {{Cmd
 |su --login root
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 |output=<pre>
 Password: <enter root password>
 </pre>
 }}
-The password required here is the one you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
+The password required here is the one you set up [[../Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
 
 Then in this terminal, issue:
 {{RootCmd
 |systemctl stop sshd
 |systemctl disable sshd
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 {{Note|If you ''do'' wish to retain <tt>sshd</tt>, you should at least disable the ability to log-in directly as root (by editing {{Path|/etc/ssh/sshd_config}}), change to password-less login, and possibly <tt>emerge</tt> and configure <tt>denyhosts</tt> ({{Package|app-admin/denyhosts}}), or some similar service.<ref>Saive, Ravi. [http://www.tecmint.com/5-best-practices-to-secure-and-protect-ssh-server/ "5 Best Practices to Secure and Protect SSH Server"]</ref>}}
 
 == <span id="next_steps">Next Steps</span> ==
 
-Once you have worked through the above points to your satisfaction, congratulations - you now have a fully functioning dual-boot machine! We'll now cover a few quick points about day-to-day maintenance, cleanup, and other software you might like to install. [[EFI_Gentoo_End_to_End_Install/Using_Your_New_Gentoo_System|Click here]] to go to the next (and final) chapter, "Using Your New Gentoo System".
+Once you have worked through the above points to your satisfaction, congratulations - you now have a fully functioning dual-boot machine! We'll now cover a few quick points about day-to-day maintenance, cleanup, and other software you might like to install. [[../Using_Your_New_Gentoo_System|Click here]] to go to the next (and final) chapter, "Using Your New Gentoo System".
 
 == <span id="notes">Notes</span> ==
 {{reflist}}
 
-== <span id="acknowledgements">Acknowledgements</span> ==
-
-We would like to thank the following authors and editors for their contributions to this guide:
-
-* {{Mail|sakaki@deciban.com|sakaki}}
-
 {| style="margin: 1em auto 1em auto;"
 |-
-| [[EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop|<]]
-| [[EFI_Gentoo_End_to_End_Install|Home]]
-| [[EFI_Gentoo_End_to_End_Install/Using_Your_New_Gentoo_System|>]]
+| [[../Setting_up_the_GNOME_3_Desktop|<]]
+| [[../|Home]]
+| [[../Using_Your_New_Gentoo_System|>]]
 |}
 
 [[Category:Core system]]
