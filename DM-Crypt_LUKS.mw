@@ -65,7 +65,7 @@ GnuPG crypted key file should be piped to cryptsetup with something like `gpg -q
 When done, creating logical volume if using LVM or adding the crypted cyphertext to a vdev can be done then.
 
 == Generating an initramfs ==
-After encrypting system or disk(s), one will need an initramfs so that rootfs can be mounted in there and then pass the control to real init. There are a few generic initramfs builder that can be used to accomplish the task such as [[dracut]], [[mkinitcpio]] (there's an ebuild ad thread in the forums) [https://github.com/tokiclover/bar-overlay sys-kernel/mkinitramfs-ll] or even {{Package|sys-kernel/genkernel}}[cryptsetup] which has LUKS support.
+After encrypting system or disk(s), one will need an initramfs so that rootfs can be mounted in there and then pass the control to real init. There are a few generic initramfs builder that can be used to accomplish the task such as [[dracut]], [[mkinitcpio]] (there's an ebuild ad thread in the forums) [https://github.com/tokiclover/mkinitramfs-ll sys-kernel/mkinitramfs-ll] or even {{Package|sys-kernel/genkernel}}[cryptsetup] (or the next variant) which has LUKS support.
 
 === Genkernel/Genkernel-next ===
 To use {{Package|sys-kernel/genkernel}} or {{Package|sys-kernel/genkernel-next}}, edit {{Path|/etc/portage/package.use}} to enable the cryptsetup USE flag before emerging it.  The static USE flag may also be enabled on the {{Package|sys-fs/cryptsetup}} so that genkernel will use the system binaries (otherwise it will build its own private copy).  The following example will build only an initramfs (not an entire kernel) and enable support for luks.
@@ -104,6 +104,23 @@ initrd /boot/initramfs-3.4.0-gentoo.img
 implications of this outlined in the --allow-discards section of the [http://code.google.com/p/cryptsetup/wiki/Cryptsetup140# cryptsetup wiki].}}
 
 For a comprehensive list of luks options within dracut please see the section in the [https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html#_crypto_luks Dracut Manual].
+
+=== Mkinitramfs-LL ===
+
+This tools is a lightweight and modular variant of the previous well known initramfs generating tools which comes with udev free dependency. It depends only on [[busybox]] with [[medv]] by default and depends on extra packages for additional functionalities. So, nor bash, coreutils nor util-linux is bundled into the initramfs.
+Extra flexibilities are offered as well, like the possibility to have DM-Crypt LUKS on top of [[LVM]] or vice versa, [[ZFS]] on top of DM-Crypt, DM-Crypt on top of RAID et al.
+
+{{RootCmd|mkinitramfs-ll --all --luks --lvm --firmware{{=}}nouveau --gpg}}
+
+Actually, the --all switch will suffice for DM-Crypt and LVM2.
+Use the following GRUB2 configuration exerpt to get going.
+
+{{FileBox|filename=/etc/default/grub|<pre>
+...
+GRUB_CMDLINE_LINUX="iroot=root-UUID=<uuid> ikroot=pwd video=1920x1080-24"
+...</pre>}}
+
+Or else, there is an optional environment variable in mkinitramfs-ll.conf to set environment variables that have the same effect as the the kernel command line argument which can be disabled on runtime if need be to avoid fighting, again and again, the boot loader when an update pop up.
 
 === Custom ===
 Now, with a complicated setup one could have to build his/her own to satisfy specific requirements. This where modular or advanced initramfs package shine such as [https://github.com/tokiclover/mkinitramfs-ll mkinitramfs-ll] dracut or mkinitcpio.
