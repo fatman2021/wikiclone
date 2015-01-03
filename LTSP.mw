@@ -42,13 +42,13 @@ The LTSP server package needs a tftp and dhcp server. In this tutorial {{Package
 === Kernel ===
 Besides the obvious drivers, the server kernel ought to have the following settings. If you're going to use NFS to serve the chroot environments, make sure to compile it in as well and reboot afterwards.
 
-{{Kernel|LTSP server|<pre>
+{{KernelBox|title=LTSP server|1=
 File systems  --->
     [*] FUSE (Filesystem in Userspace) support
     [*] Network File Systems  --->
         <*> NFS server support
         [*]  NFS server support for NFS version 3
-</pre>}}
+}}
 
 === DHCP and PXE-boot ===
 First, setup the server to provide client machines with a kernel at boottime. Although the server depends on a range of possible packages, the manual will use the ones listed in this paragraph. The PXE bootloader is provided by {{Package|sys-boot/syslinux}}. Dnsmasq is a DHCP/DNS/TFTP server. Advanced TFTP is also one of the TFTP server options, and the only one to support multicast TFTP.<sup>'''[[#External resources|1]]'''</sup> The chroot environments as well as the kernels served at boot time are stored in /opt/ltsp. 
@@ -57,10 +57,10 @@ Configure {{Package|net-dns/dnsmasq}} as a DHCP/TFTP server. The TFTP server is 
 
 Setup the PXE bootloader; view the [[Syslinux#pxelinux_bootloader_installation|PXE install]] section for more detail. In the example configuration, the system mounts the local client disk after booting and loading the kernel from the server. Make sure the kernel and initramfs are in /var/lib/tftpboot as well as the custom real_init option. You can test the work so far with a working kernel and system.
 
-{{File|/var/lib/tftpboot/pxelinux.cfg/default|ltsp-client 5.3+|<pre>
+{{FileBox|filename=/var/lib/tftpboot/pxelinux.cfg/default|title=ltsp-client 5.3+|1=
 kernel kernel-YOURKERNELVERSION
 append initrd=initramfs-YOURKERNELVERSION root=/dev/nfs nfsroot=YOURSERVERIP:/opt/ltsp/i686 real_init=/sbin/init-ltsp
-</pre>}}
+}}
 
 Start the services, now and at every boot
 {{RootCmd|/etc/init.d/dnsmasq start|rc-update add dnsmasq default}}
@@ -68,11 +68,11 @@ Start the services, now and at every boot
 === NFS and Xinetd ===
 The chroot environments are shared with NFS. Xinetd is used for '''ldminfod''' and '''nbd''' sharing. By default only the localhost is allowed access, so edit the /etc/xinetd.conf and restart the service.
 
-{{File|/etc/xinetd.conf||<pre>
+{{FileBox|filename=/etc/xinetd.conf|1=
 ...
 only_from = 192.168.0.1/24
 ...
-</pre>}}
+}}
 
 {{RootCmd|/etc/init.d/nfs start
 |/etc/init.d/xinetd start
@@ -82,7 +82,7 @@ only_from = 192.168.0.1/24
 === NBD ===
 Booting from NBD is still considered testing and doesn't work quite out-of-the-box. On the server, several changes are required besides installing {{Package|sys-block/nbd}}. First, create an nbd-server initscript.
 
-{{File|/etc/init.d/nbd-server||<pre>
+{{FileBox|filename=/etc/init.d/nbd-server|lang=bash|1=
 #!/sbin/runscript
 
 command="/usr/bin/nbd-server"
@@ -91,15 +91,15 @@ pidfile="/var/run/${SVCNAME}.pid"
 depend() {
         use net
 }
-</pre>}}
+}}
 
 For the initscript to work, a default config file has to be created also:
-{{File|/etc/nbd-server/config||<pre>
+{{FileBox|filename=/etc/nbd-server/config|lang=ini|1=
 [generic]
 [ltsp]
 exportname = /opt/ltsp/images/i686.img
 readonly = true
-</pre>}}
+}}
 
 Now, start the service now and at every boot.
 {{RootCmd|/etc/init.d/nbd-server start|rc-update add nbd-server default}}
@@ -111,7 +111,7 @@ some changes have to be made in that configuration as well. In the syslog-ng set
 fully qualified domain name.
 {{Note|Remote logging is only activated if SYSLOG_HOST is specified.}}
 
-{{File|/etc/syslog-ng/syslog-ng.conf||<pre>
+{{FileBox|filename=/etc/syslog-ng/syslog-ng.conf|1=
 source net { udp(); };
 destination remote { file("/var/log/remote/$FULLHOST"); };
 log { source(net); destination(remote); };
@@ -133,25 +133,26 @@ You can invoke the build script with command line arguments or configure the con
 
 ==== Video Cards ====
 Make sure you check if the video card drivers you need are installed. By default only '''fbdev''' and '''vesa''' are included.
-{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+{{FileBox|filename=/etc/ltsp/ltsp-build-client.conf|lang=bash|1=
 VIDEO_CARDS="vesa intel radeon mach64"
-</pre>}}
+}}
 
 ==== Network Cards ====
 If you use Genkernel and non default network cards, add the ''post_install_initramfs_builder()'' function in the kicktoo profile to add Genkernel network modules. This will be included in the next release (5.4.5).
-{{File|/etc/ltsp/profiles/kicktoo.profile||<pre>
+{{FileBox|filename=/etc/ltsp/profiles/kicktoo.profile|lang=bash|1=
 post_install_initramfs_builder() {
 	if [ "${initramfs_builder}" == "genkernel" ]; then
 		# add you're own network drivers if needed
 		# eg. "MODULES_NET=\"\${MODULES_NET}\" via-rhine"
 		echo "MODULES_NET=\"\${MODULES_NET}\"" >> "${chroot_dir}/usr/share/genkernel/arch/${MAIN_ARCH}/modules_load"
 	fi
-}</pre>}}
+}
+}}
 
 ==== Kernel ====
 A separate section for the client kernel is in order. A standard Genkernel kernel is created during the installation when configuration changes are made. It's advisable to take a closer look at the client's kernel config and use the config during the client install. Make sure your network drivers are included as modules.
 
-{{Kernel|LTSP client|<pre>
+{{KernelBox|title=LTSP client|1=
 General setup  --->
     [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support 
 
@@ -173,12 +174,12 @@ File systems  --->
         [*]     NFS client support for NFS version 3
         [*]     NFS client support for the NFSv3 ACL protocol extension
         [*]     NFS client support for NFS version 4 (EXPERIMENTAL)
-</pre>}}
+}}
 
-{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+{{FileBox|filename=/etc/ltsp/ltsp-build-client.conf|lang=bash|1=
 KERNEL_SOURCES="=sys-kernel/gentoo-sources-2.6.34-r12"
 KERNEL_CONFIG_URI="tftp://192.168.67.1/ltsp/x86/gentoo-sources-2.6.34-r12.config"
-</pre>}}
+}}
 
 === Building the Client ===
 When all configuration has been done, you can start building the client.
@@ -202,10 +203,10 @@ While some properties of the client's environment are more or less statically se
 
 The lts.conf file is downloaded at client boot time from a preconfigured location in the tftproot, namely /ltsp/i686/lts.conf. Create your lts.conf there and change your architecture if applicable.
 
-{{File|/var/lib/tftpboot/ltsp/i686/lts.conf||<pre>
+{{FileBox|filename=/var/lib/tftpboot/ltsp/i686/lts.conf|lang=ini|1=
 [default]
  SERVER=192.168.67.1
-</pre>}}
+}}
 
 {{Note|The default LTSP server ip is set to 192.168.67.1, set yours if it is different.}}
 
@@ -216,24 +217,24 @@ daemon and the ldm login process. Some of these settings will now be discussed i
 === LDM ===
 If all is well, LDM will be started by ''ltsp-client'' and you can proceed to log in with a user on the server. If not, you might want to check if the LDM Info Daemon is disabled in /etc/xinitd.d/ldminfod. When the X server cannot start it might help to add your own [[xorg.conf]] file. As many different xorg.conf files can exist for many different clients in the same chroot, make sure to name them properly.
 
-{{File|/var/lib/tftproot/ltsp/i686/lts.conf||<pre>
+{{FileBox|filename=/var/lib/tftproot/ltsp/i686/lts.conf|lang=ini|1=
 [acer-aspire-one]
   X_CONF = /etc/X11/xorg-acer-aspire-one.conf
 
 [00:1E:68:C2:FF:EE]
   LIKE=acer-aspire-one
-</pre>}}
+}}
 
 If you want another window manager, install it on the server and put the following in the LTSP configuration file (replace Fluxbox with the window manager of your choice).
-{{File|/var/lib/tftpboot/ltsp/i686/lts.conf||<pre>
+{{FileBox|filename=/var/lib/tftpboot/ltsp/i686/lts.conf|lang=ini|1=
 LDM_XSESSION = /usr/bin/fluxbox
-</pre>}}
+}}
 
 === NBD Boot ===
 If you configured the '''nbd''' USE flag, you'll be able to generate a NBD bootable image and initramfs. This is optional (and testing) for now, so you have to follow some steps to accomplish this. First, before the client install, configure the initramfs-builder for using [[Dracut]]. This generates an initramfs which allows to boot an NBD image.
-{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+{{FileBox|filename=/etc/ltsp/ltsp-build-client.conf|lang=bash|1=
 INITRAMFS_BUILDER="dracut"
-</pre>}}
+}}
 {{Warning|A Dracut initramfs won't boot from NFS (tested <025).}}
 
 You have to generate an image with '''ltsp-build-client'''. The resulting image ends up in {{Path|/opt/ltsp/image/i686.img}}.
@@ -246,15 +247,15 @@ Because Dracut's named export function isn't bugfree yet, export names can't end
 A 5.2 client is somewhat different from a 5.3 client. The main difference is that a 5.2 client has to be specifically prepared to function as an LTSP client while a 5.3 client takes care of this during the boot init process. In theory ltsp-client-5.3 can be installed on any Gentoo system, allowing it to be booted as an LTSP client.
 
 Starting from ltsp-server-5.3, it's possible to install a 5.2 or a 5.3 client. This can be done by setting one of the different provided build profiles. By default, the kicktoo-5.3.profile is used.
-{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+{{FileBox|filename=/etc/ltsp/ltsp-build-client.conf|lang=bash|1=
 INSTALLER_PROFILE=/etc/ltsp/profiles/quickstart-5.2.profile
-</pre>}}
+}}
 
 Booting a 5.3 client requires the following PXE configuration, without a real_init.
-{{File|/var/lib/tftpboot/pxelinux.cfg/default|ltsp-client-5.2|<pre>
+{{FileBox|filename=/var/lib/tftpboot/pxelinux.cfg/default|title=ltsp-client-5.2|1=
 kernel kernel-YOURKERNELVERSION
 append initrd=initramfs-YOURKERNELVERSION root=/dev/nfs nfsroot=YOURSERVERIP:/opt/ltsp/i686
-</pre>}}
+}}
 
 == Tips & Tricks ==
 Several optional tips and tricks concerning LTSP can be found here. Most of them are Gentoo specific. Non-Gentoo specific tips & tricks can be found on the [http://wiki.ltsp.org/wiki/Tips_and_Tricks LTSP Wiki].
@@ -262,21 +263,21 @@ Several optional tips and tricks concerning LTSP can be found here. Most of them
 === NBD Swap from USB ===
 The '''nbdswapd''' allows clients to use swap space through a NBD. For this to work, the '''ltsp-server''' has to be emerged with the nbd USE flag enabled. Also, the lts.conf needs to be updated and the nbdswapd.conf has to contain the mountpoint of your usb stick and the desired swap size (64Mb by default).
 
-{{File|/etc/ltsp/nbdswapd.conf||<pre>
+{{FileBox|filename=/etc/ltsp/nbdswapd.conf|lang=ini|1=
 SIZE=128
 SWAPDIR=/mnt/usbswap
-</pre>}}
+}}
 
-{{File|/var/lib/tftpboot/ltsp/i686/lts.conf||<pre>
+{{FileBox|filename=/var/lib/tftpboot/ltsp/i686/lts.conf|lang=ini|1=
 [default]
   NBD_SWAP = True
-</pre>}}
+}}
 
 === Decreasing Chroot Size ===
 You can make the make the built LTSP client chroot smaller using a combination of several methods. It's possible to get a chroot less than 1Gb. First up is the {{Highlight|EXCLUDE}} var in the ltsp-build-client program. This can be used to automatically unmerge packages at the end of the client build.
-{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+{{FileBox|filename=/etc/ltsp/ltsp-build-client.conf|lang=bash|1=
 EXCLUDE="sys-apps/man-pages sys-kernel/genkernel"
-</pre>}}
+}}
 
 If you never intend to do any maintenance on the chroot again, you can even unmerge gcc this way. Also you can remove the build time dependencies in the chroot by [[#Chrooting|chrooting]] into the client chroot and executing the following command.
 {{RootCmd|<nowiki>emerge --depclean --with-bdeps=n</nowiki>}}
@@ -289,20 +290,20 @@ At the moment, X configuration is disabled. Therefore, all LTSP X settings (in l
 {{RootCmd|cp /opt/ltsp/i686/usr/share/X11/xorg.conf.d/10-evdev.conf /opt/ltsp/i686/etc/X11/xorg.conf.d/10-evdev.conf}}
 
 Then edit the file and add the line to the keyboard section of the evdev.conf
-{{File|/opt/ltsp/i686/etc/X11/xorg.conf.d/10-evdev.conf||<pre>
+{{FileBox|filename=/opt/ltsp/i686/etc/X11/xorg.conf.d/10-evdev.conf|lang=xorg_conf|1=
 Option "XkbLayout" "fr"
-</pre>}}
+}}
 
 === Quickstart ===
 {{Warning|Support for Quickstart is deprecated, see the Gentoo Bug, comment 186, for more info.}}
 You can also use [http://dev.gentoo.org/~agaffney/quickstart.php Quickstart] as a possible installer for ltsp-build-client (instead of the kicktoo default). Quickstart was the foundation of Kicktoo, but is not under active development anymore. To use this option, emerge it and do the following:
 
-{{File|/etc/ltsp/ltsp-build-client.conf||<pre>
+{{FileBox|filename=/etc/ltsp/ltsp-build-client.conf|lang=bash|1=
 ...
 INSTALLER=quickstart
 INSTALLER_PROFILE=/etc/ltsp/profiles/quickstart.profile
 ...
-</pre>}}
+}}
 
 === Portage Profile ===
 Since ltsp-server-5.3, most of the Portage settings needed to build an ltsp-client chroot are not set in the Quickstart or Kicktoo profiles anymore. Instead they are derived from an LTSP Portage profile. This profile is present in the ltsp overlay, and symlinked to the ${chroot}/make.profile during the ltsp-client install.
@@ -316,7 +317,7 @@ Since ltsp-server-5.3, most of the Portage settings needed to build an ltsp-clie
 
 === virtual terminals on clients ===
 Several programs will fight for the virtual terminals on the clients. Comment out getty in inittab:
-{{File|/opt/ltsp/i686/etc/inittab|commenting example|<pre>
+{{FileBox|filename=/opt/ltsp/i686/etc/inittab|title=commenting example|1=
 ...
 # TERMINALS
 #c1:12345:respawn:/sbin/agetty 38400 tty1 linux
@@ -325,7 +326,8 @@ Several programs will fight for the virtual terminals on the clients. Comment ou
 #c4:2345:respawn:/sbin/agetty 38400 tty4 linux
 #c5:2345:respawn:/sbin/agetty 38400 tty5 linux
 #c6:2345:respawn:/sbin/agetty 38400 tty6 linux
-...</pre>}}
+...
+}}
 
 === Locales ===
 ltsp-build-client does not work witch all locale. quickstart actually requires 'C' locale. So if ltsp-build-client shouts with the following message:
