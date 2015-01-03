@@ -25,7 +25,7 @@ Accordingly, the process we'll be following in this section is:
 # Installing GNOME 3 and key applications; then
 # Testing GNOME 3, and refining settings.
 
-This section has no direct equivalent in the Gentoo Handbook (although the part about adding a user reflects the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=11#doc_chap1 "User Administration"] section from Chapter 11, and the X11 troubleshooting section has elements of the [https://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=7#doc_chap2 "Default: Manual (Kernel) Configuration"] section from Chapter 7). 
+This section has no direct equivalent in the Gentoo Handbook (although the part about adding a user reflects the [[Handbook:AMD64/Installation/Finalizing#User_administration|"User Administration"]] section from Chapter 11, and the X11 troubleshooting section has elements of the [[Handbook:AMD64/Installation/Kernel#Default:_Manual_configuration|"Default: Manual (Kernel) Configuration"]] section from Chapter 7). 
 
 {{Note|You may find the articles [[GNOME/Configuration{{!}}"GNOME Configuration HOWTO"]] and [[Systemd/Installing Gnome3 from scratch{{!}}"systemd/Installing Gnome3 from scratch"]] (both from the Gentoo wiki) useful background reading.}}
 
@@ -41,11 +41,11 @@ Right, let's get started!
 
 == <span id="add_regular_user">Adding a User for Daily Use</span> ==
 
-Per the [http://www.gentoo.org/doc/en/handbook/handbook-amd64.xml?part=1&chap=11#doc_chap1 handbook], it is strongly recommended to set up a user for day-to-day use on your machine. Let's do that now. <span id="setup_regular_user">Issue (via the <tt>ssh</tt> connection from the helper PC)</span>:
+Per the [[Handbook:AMD64/Installation/Finalizing#User_administration|Gentoo Handbook]], it is strongly recommended to set up a user for day-to-day use on your machine. Let's do that now. <span id="setup_regular_user">Issue (via the <tt>ssh</tt> connection from the helper PC)</span>:
 {{RootCmd
 |useradd --create-home --groups users,wheel,portage,lpadmin,lp --shell /bin/bash --comment "sakaki" sakaki
 |passwd sakaki
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 New password: <enter your new password>
 Retype new password: <enter your new password again>
@@ -91,17 +91,20 @@ The meaning of those <tt>useradd</tt> options is as follows:
 
 As we'll be using X11<ref name="x11_guide">Wikibooks: [https://en.wikibooks.org/wiki/Guide_to_X11 ''Guide to X11'']</ref> as the underlying graphical platform for GNOME, we'll install it next.
 
-We need to set a few USE flags for {{Package|media-libs/mesa}} (an OpenGL-like library which X pulls in as a dependency), so issue:
+We need to set a few USE flags for {{Package|media-libs/mesa}} (an OpenGL-like library which X pulls in as a dependency), and while we're at it, set a few others that we'll need shortly for GNOME, so issue:
 
 {{RootCmd
 |nano -w /etc/portage/package.use
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 and ''append'':
-{{File|/etc/portage/package.use|Append the following per-package use flags|<pre>
+{{FileBox|filename=/etc/portage/package.use|title=Append the following per-package use flags|1=
 # required by standard X-server installation
 >=media-libs/mesa-9.1.6                 xa gbm
-</pre>
+# required by Gnome 3.14
+>=media-libs/mesa-9.1.6                 gles2
+>=media-libs/cogl-1.18.2                gles2
+>=media-libs/clutter-1.20.0             egl
 }}
 Save and exit <tt>nano</tt>.
 
@@ -111,28 +114,34 @@ Here are what those flags do (you may also find this [http://www.linuxfromscratc
 |-
 ! Package !! Use flag !! Description
 |-
-| rowspan=2|{{Package|media-libs/mesa}} || <tt>xa</tt> || This enables the XA (X Acceleration) API for [[:Wikipedia:Gallium3D{{!}}Gallium3D]] (a device driver framework for 3D graphics chipsets).
+| rowspan=3|{{Package|media-libs/mesa}} || <tt>xa</tt> || This enables the XA (X Acceleration) API for [[:Wikipedia:Gallium3D{{!}}Gallium3D]] (a device driver framework for 3D graphics chipsets).
 |-
-| <tt>gbm</tt> || This enables support for the Graphics Buffer Manager for [[:Wikipedia:EGL{{!}}EGL]] on kernel mode setting.
+| <tt>gbm</tt> || This enables support for the Graphics Buffer Manager for [[:Wikipedia:EGL_(API){{!}}EGL]] on kernel mode setting.
+|-
+| <tt>gles2</tt> || This enables [[:Wikipedia:OpenGL_ES|OpenGL for Embedded Systems]] (version 2) support.
+|-
+| {{Package|media-libs/cogl}} || <tt>gles2</tt> || Ditto.
+|-
+| {{Package|media-libs/clutter}} || <tt>egl</tt> || Enables the [[:Wikipedia:EGL_(API){{!}}EGL]] backend.
 |}
 
-As [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#second_virtual_console|before]], since some of the next steps will involve lengthy emerges, we'll use <tt>screen</tt>, and <span id="another_second_console">setup a second virtual console</span>, which will be let us monitor progress using <tt>showem</tt>. Issue:
+As [[../Building_the_Gentoo_Base_System_Minus_Kernel#second_virtual_console|before]], since some of the next steps will involve lengthy emerges, we'll use <tt>screen</tt>, and <span id="another_second_console">setup a second virtual console</span>, which will be let us monitor progress using <tt>showem</tt>. Issue:
 {{RootCmd
 |screen
 |export PS1{{=}}"(1) $PS1"
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to start <tt>screen</tt>. Then, press {{Key|Ctrl}}{{Key|a}} then {{Key|c}} to start a new virtual console, and in that new console enter:
 {{RootCmd
 |export PS1{{=}}"(2) $PS1"
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Now hit {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to get back to the original console.
 
-Now, since you have already set up the necessary [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#video_cards_variable|<tt>VIDEO_CARDS</tt>]] and [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#input_devices_variable|<tt>INPUT_DEVICES</tt>]] variables in {{Path|/etc/portage/make.conf}} [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#setup_make_conf|earlier]], we can now proceed to install the X-server itself. Issue:
+Now, since you have already set up the necessary [[../Installing_the_Gentoo_Stage_3_Files#video_cards_variable|<tt>VIDEO_CARDS</tt>]] and [[../Installing_the_Gentoo_Stage_3_Files#input_devices_variable|<tt>INPUT_DEVICES</tt>]] variables in {{Path|/etc/portage/make.conf}} [[../Installing_the_Gentoo_Stage_3_Files#setup_make_conf|earlier]], we can now proceed to install the X-server itself. Issue:
 {{RootCmd
 |emerge --ask --verbose --oneshot x11-base/xorg-server
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 ... additional output suppressed ...
 Would you like to merge these packages? [Yes/No] <press y, then press Enter>
@@ -140,7 +149,7 @@ Would you like to merge these packages? [Yes/No] <press y, then press Enter>
 </pre>
 }}
 and the X11 server will be downloaded and installed. Note that we use <tt>--oneshot</tt> here to avoid adding it to your [[World|@world]] set (this is slightly cleaner, as it will become a dependency of GNOME, once it is installed later).
-{{Note|Just as [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#use_showem|before]], you can temporarily switch to the second console to watch the progress with <tt>showem</tt>, if you like. Use {{Key|Ctrl}}{{Key|a}} then {{Key|n}} to switch to the second console, and {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to return back when done.}}
+{{Note|Just as [[../Building_the_Gentoo_Base_System_Minus_Kernel#use_showem|before]], you can temporarily switch to the second console to watch the progress with <tt>showem</tt>, if you like. Use {{Key|Ctrl}}{{Key|a}} then {{Key|n}} to switch to the second console, and {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to return back when done.}}
 
 == <span id="temp_install_twm">Temporarily Installing an X11 Window Manager and Applications</span> ==
 
@@ -154,7 +163,7 @@ To keep things simple here, we'll use the (minimalist) [[:Wikipedia:Twm|Tab Wind
 Issue:
 {{RootCmd
 |emerge --ask --verbose x11-wm/twm x11-terms/xterm x11-apps/xclock x11-apps/xsetroot
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 ... additional output suppressed ...
 Would you like to merge these packages? [Yes/No] <press y, then press Enter>
@@ -166,7 +175,7 @@ These are small programs, and shouldn't take long to download, compile or instal
 Next, we need to tell X11 what window manager and apps to use whenever it starts up. The <tt>.xinitrc</tt> file is used for this purpose. Also, as it's generally not a great idea to run an X server as root, we'll invoke it as the regular user [[#add_regular_user|we've just created]]. Still via <tt>ssh</tt>/<tt>screen</tt> console, issue:
 {{RootCmd
 |su --login sakaki
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 {{Note|Substitute the user name of the regular user you created in the [[#add_regular_user{{!}}earlier step]] for <tt>sakaki</tt> in the above command.}}
 
@@ -175,11 +184,11 @@ Next, we need to tell X11 what window manager and apps to use whenever it starts
 Next, edit the <tt>.xinitrc</tt> file in the regular user's home directory. Issue:
 {{Cmd
 |nano -w ~/.xinitrc
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 {{Note|Obviously, the name that you see in the prompt will reflect that of the regular user you added (and which you just <tt>su</tt>-d to).}}
 Put the following text in the <tt>.xinitrc</tt>:
-{{File|~/.xinitrc|A basic setup to start TWM and some simple applications|<pre>
+{{FileBox|filename=~/.xinitrc|title=A basic setup to start TWM and some simple applications|lang=bash|1=
 #!/bin/sh
 twm &
 xsetroot -solid CornflowerBlue &
@@ -187,7 +196,6 @@ xclock -geometry 100x100-1+1 &
 xterm -geometry 80x50+494+51 &
 xterm -geometry 80x20+494-0 &
 exec xterm -geometry 80x66+0+0 -name login
-</pre>
 }}
 Save and exit <tt>nano</tt>. 
 
@@ -205,7 +213,7 @@ Still on the <tt>ssh</tt>/<tt>screen</tt> console, issue:
 
 {{Cmd
 |startx
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 
 If all goes well, the screen of your target PC should now be displaying something like the below:
@@ -215,7 +223,7 @@ If all goes well, the screen of your target PC should now be displaying somethin
 Check that you can move the cursor around (using the target machine's mouse or touchpad), and try typing some simple commands (e.g. "<tt>ls /bin</tt>") into any of the three terminal windows. When done, move your cursor into the longest (leftmost) terminal, so that it receives the focus (its cursor will switch to a filled rectangle), and type (directly at the target machine's keyboard):
 {{Cmd
 |exit
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 On the <tt>ssh</tt>/<tt>screen</tt> console (at your helper PC), you should now see that the <tt>startx</tt> program has exited (and a lot of status output will have been written to the console too).
 {{Note|If you have problems, the X server can always be closed from the <tt>ssh</tt> window, by typing {{Key|Ctrl}}{{Key|c}}.}}
@@ -228,7 +236,7 @@ If, however, X failed to start up properly, continue reading.
 
 {{Note|This troubleshooting section is necessary ''only'' if you had problems starting X11. To reiterate: if the above X11 test worked for you, then you should just skip to [[#install_gnome3{{!}}the next section]] now.}}
 
-By far the most likely problem you will encounter with X is a missing graphics driver. Actually, if you've been following this tutorial, and have a reasonably modern machine, then it'll ''likely'' have happened to you. That's because the Gentoo minimal install image kernel (on which your current kernel's configuration has been [[EFI_Gentoo_End_to_End_Install/Configuring_and_Building_the_Kernel#kernel_opts_set_by_buildkernel|based]]) does not have many graphics device drivers configured (either built into the kernel, or as modules) - in order to keep the size of the image small.
+By far the most likely problem you will encounter with X is a missing graphics driver. Actually, if you've been following this tutorial, and have a reasonably modern machine, then it'll ''likely'' have happened to you. That's because the Gentoo minimal install image kernel (on which your current kernel's configuration has been [[../Configuring_and_Building_the_Kernel#kernel_opts_set_by_buildkernel|based]]) does not have many graphics device drivers configured (either built into the kernel, or as modules) - in order to keep the size of the image small.
 
 Two drivers that are conspicuous by their absence from the minimal install kernel configuration are:
 * the <tt>DRM_I915</tt> driver; this is needed for the integrated [[:Wikipedia:Intel_HD_and_Iris_Graphics|"HD Graphics"]] on many [[:Wikipedia:Ultrabook|Ultrabooks]] (such as the Panasonic CF-AX3);
@@ -248,25 +256,25 @@ then you know that you have a driver problem. In this case, it is complaining ab
 To rectify this, we need to <span id="make_menuconfig_intro">turn on the appropriate drivers</span> and rebuild our kernel. Ensure that the USB boot key is inserted into the target machine, and issue (from the <tt>ssh</tt>/<tt>screen</tt> virtual terminal):
 {{Cmd
 |exit
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 to drop back to the <tt>root</tt> user.
 {{Note|You may also find the content of the {{Path|/var/log/Xorg.0.log}} log file useful. Additionally, entering (as root):
 {{RootCmd
 |lspci {{!}} grep -i VGA
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 and
 {{RootCmd
 |hwinfo --gfxcard
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 can provide more information about your graphics card. Unfortunately, as of the time of writing, there is no reliable program which will query your hardware and generate an appropriate kernel configuration automatically.}}
 
 Then:
 {{RootCmd
 |buildkernel --menuconfig
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to start the kernel rebuild process going. Because you have not specified <tt>--ask</tt> here, but you ''have'' specified <tt>--menuconfig</tt>, the process will run through by itself (assuming no errors) to the point where you can modify the kernel configuration using the standard <tt>curses</tt>-based editor GUI.
 
@@ -360,7 +368,7 @@ And that's it, you're done. Hit {{Key|Esc}} then {{Key|Esc}} to come back out to
 [[File:Menuconfig_17.png|thumb|none|400px|Saving New Configuration and Exiting]]
 
 {{Note|<span id{{=}}"kernel_config_shorthand_note">It's useful to</span> relate the process just described to the 'kernel configuration shorthand' you will often see on the Gentoo wiki, and many other places on the web. For example, looking at the [[Intel{{!}}"intel"]] page on the wiki, we read that you need to enable the following kernel options:
-{{Kernel||<pre>
+{{KernelBox|<pre>
 Processor type and features  --->
     [*] MTRR (Memory Type Range Register) support
 Device Drivers  --->
@@ -379,29 +387,29 @@ Remember also that symbols do get dropped from (and obviously, added to) the ker
 
 There's some further information about the kernel configuration shorthand notation on the [[Kernel/Gentoo_Kernel_Configuration_Guide#Kernel_configuration_shorthand_notation{{!}}Gentoo wiki]].
 
-In the later part of this tutorial, I will assume that you are able to translate these 'shorthand' kernel configuration recipes, using <tt>buildkernel --menuconfig</tt>, without spelling out the process step-by-step. If in doubt, please re-read this section. (And if you are reading this now because you were jumped back to this section from a later chapter, you can [[EFI_Gentoo_End_to_End_Install/Final_Configuration_Steps#resume_after_menuconfig_tutorial{{!}}click here]] to return - otherwise, just continue reading!)
+In the later part of this tutorial, I will assume that you are able to translate these 'shorthand' kernel configuration recipes, using <tt>buildkernel --menuconfig</tt>, without spelling out the process step-by-step. If in doubt, please re-read this section. (And if you are reading this now because you were jumped back to this section from a later chapter, you can [[../Final_Configuration_Steps#resume_after_menuconfig_tutorial{{!}}click here]] to return - otherwise, just continue reading!)
 }}
 
 Once you have exited <tt>menuconfig</tt>, <tt>buildkernel</tt> will automatically create a kernel with the newly created configuration, sign it, and copy it over to the boot USB key. Wait for the process to complete (you get the message "<tt>All done!</tt>"). Then issue:
 
 {{RootCmd
 |exit
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 which will close the first <tt>screen</tt> terminal, then:
 
 {{RootCmd
 |exit
-|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to close the second one. Then, ensure the boot USB key is still inserted in the target machine and restart it, by issuing:
 {{RootCmd
 |systemctl reboot
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
-{{Note|If you have problems rebooting with this new kernel, you can follow the instructions [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#revert_to_previous_kernel{{!}}given earlier]] to revert back to the backup (previous) version on the boot USB key - which won't have your configuration changes - and try again.}}
+{{Note|If you have problems rebooting with this new kernel, you can follow the instructions [[../Configuring_systemd_and_Installing_Necessary_Tools#revert_to_previous_kernel{{!}}given earlier]] to revert back to the backup (previous) version on the boot USB key - which won't have your configuration changes - and try again.}}
 
-When the machine restarts, as before, you will need to enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard.
+When the machine restarts, as before, you will need to enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard.
 
 Once this has been completed successfully, and the target machine is restarted, from the helper PC, log back in again via <tt>ssh</tt>:
 
@@ -412,38 +420,38 @@ Once this has been completed successfully, and the target machine is restarted, 
 Password: <enter root password>
 ... additional output suppressed ...
 </pre>}}
-{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#post_reboot_ip{{!}}earlier]] for 192.168.1.106 in the above command. It is possible (although unlikely, with modern DHCP) that the target's IP address will have changed during the reboot. If so, log in directly at the target machine's keyboard, use <tt>ifconfig</tt> to find out the new address, then issue the above <tt>ssh</tt> command citing that address. As before, in such a case you may need to clean out any previous record of <tt>ssh</tt> connections to (other machines at) that new address (since the fingerprints will not match), using:
+{{Note|Substitute whatever IP address you got back from <tt>ifconfig</tt> [[../Configuring_systemd_and_Installing_Necessary_Tools#post_reboot_ip{{!}}earlier]] for 192.168.1.106 in the above command. It is possible (although unlikely, with modern DHCP) that the target's IP address will have changed during the reboot. If so, log in directly at the target machine's keyboard, use <tt>ifconfig</tt> to find out the new address, then issue the above <tt>ssh</tt> command citing that address. As before, in such a case you may need to clean out any previous record of <tt>ssh</tt> connections to (other machines at) that new address (since the fingerprints will not match), using:
 {{Cmd
 |sed -i '/^[^[:digit:]]*192.168.1.106[^[:digit:]]/d' ~/.ssh/known_hosts
 |prompt=user@pc2 $}}
-obviously substituting the new address for <tt>192.168.1.106</tt> in the above. Then, be sure to check the fingerprint when prompted (by the subsequent <tt>ssh</tt> command), against those you noted down [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#note_new_fingerprints{{!}}earlier]].
+obviously substituting the new address for <tt>192.168.1.106</tt> in the above. Then, be sure to check the fingerprint when prompted (by the subsequent <tt>ssh</tt> command), against those you noted down [[../Configuring_systemd_and_Installing_Necessary_Tools#note_new_fingerprints{{!}}earlier]].
 }}
-{{Note|If installing over WiFi, and you had to manually restart <tt>wpa_supplicant</tt> in the [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#manually_start_wpa_supplicant_systemd{{!}}previous two chapters]], then you'll need to do so again here (directly at the target machine's keyboard) before you'll be able to <tt>ssh</tt> in.}}
+{{Note|If installing over WiFi, and you had to manually restart <tt>wpa_supplicant</tt> in the [[../Configuring_systemd_and_Installing_Necessary_Tools#manually_start_wpa_supplicant_systemd{{!}}previous two chapters]], then you'll need to do so again here (directly at the target machine's keyboard) before you'll be able to <tt>ssh</tt> in.}}
 
 Then, re-establish <tt>screen</tt> (enter all commands via the <tt>ssh</tt> console from the helper PC, unless otherwise stated). Issue:
 {{RootCmd
 |screen
 |export PS1{{=}}"(1) $PS1"
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to start <tt>screen</tt>. Then, press {{Key|Ctrl}}{{Key|a}} then {{Key|c}} to start a new virtual console, and in that new console enter:
 {{RootCmd
 |export PS1{{=}}"(2) $PS1"
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Now hit {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to get back to the original console.
 Log back in as your regular user:
 {{RootCmd
 |su --login sakaki
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 {{Note|Substitute the user name of the regular user you created in the [[#add_regular_user{{!}}earlier step]] for <tt>sakaki</tt> in the above command.}}
 
 And now rejoin the tutorial from the [[#first_try_startx|point where you attempted to run <tt>startx</tt>, above]]. Hopefully, all should be well this time. Good luck!
 
-{{Note|If you are using the i915 driver, you may find that you cannot change the screen brightness, and that the screen appears dim. This issue is addressed [[EFI_Gentoo_End_to_End_Install/Final_Configuration_Steps#LCD_Screen_Backlight_.28Addressing_the_i915_Regression.29{{!}}later]] in the tutorial.}}
+{{Note|If you are using the i915 driver, you may find that you cannot change the screen brightness, and that the screen appears dim. This issue is addressed [[../Final_Configuration_Steps#LCD_Screen_Backlight_.28Addressing_the_i915_Regression.29{{!}}later]] in the tutorial.}}
 
-{{Note|If you still have problems, the Gentoo wiki page on [[Xorg/Configuration{{!}}X11 configuration]] may contain some useful pointers. With a modern X setup however, problems are almost always as a result of incorrect kernel configuration (or possibly incorrect [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#video_cards_variable{{!}}<tt>VIDEO_CARDS</tt>]] or [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#input_devices_variable{{!}}<tt>INPUT_DEVICES</tt>]] variables in {{Path|/etc/portage/make.conf}}), rather than incorrect X configuration.}}
+{{Note|If you still have problems, the Gentoo wiki page on [[Xorg/Configuration{{!}}X11 configuration]] may contain some useful pointers. With a modern X setup however, problems are almost always as a result of incorrect kernel configuration (or possibly incorrect [[../Installing_the_Gentoo_Stage_3_Files#video_cards_variable{{!}}<tt>VIDEO_CARDS</tt>]] or [[../Installing_the_Gentoo_Stage_3_Files#input_devices_variable{{!}}<tt>INPUT_DEVICES</tt>]] variables in {{Path|/etc/portage/make.conf}}), rather than incorrect X configuration.}}
 
 == <span id="install_gnome3">Installing GNOME 3</span> ==
 
@@ -452,7 +460,7 @@ Now that we know X works, we can install GNOME! Let's begin by removing the temp
 Issue (from the helper PC <tt>ssh</tt>/<tt>screen</tt> terminal):
 {{Cmd
 |exit
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 to get back to the <tt>root</tt> user, then:
 {{RootCmd
@@ -462,29 +470,29 @@ to get back to the <tt>root</tt> user, then:
 Would you like to unmerge these packages? [Yes/No] <press y, then press Enter>
 ... additional output suppressed ...
 </pre>
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
-{{Note|Using the <tt>--depclean</tt> option to <tt>emerge</tt> in this way is a common idiom to safely uninstall packages in Gentoo. If any of the specified [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#atoms_etc{{!}}atoms]] happens to be a dependency of another installed package (even transitively), it will not be removed.}}
+{{Note|Using the <tt>--depclean</tt> option to <tt>emerge</tt> in this way is a common idiom to safely uninstall packages in Gentoo. If any of the specified [[../Installing_the_Gentoo_Stage_3_Files#atoms_etc{{!}}atoms]] happens to be a dependency of another installed package (even transitively), it will not be removed.}}
 
-Now for GNOME itself. There are two minor license exceptions (to our license group (<tt>@FREE</tt>), which we set [[EFI_Gentoo_End_to_End_Install/Installing_the_Gentoo_Stage_3_Files#set_license|earlier]]), that we'll need to allow for GNOME. These are benign (the license in question, "<tt>CC-Sampling-Plus-1.0</tt>" is essentially a free-use license, but is not currently included in <tt>@FREE</tt>; it may be viewed at {{Path|/usr/portage/licenses/CC-Sampling-Plus-1.0}}). Issue:
+Now for GNOME itself. There are two minor license exceptions (to our license group (<tt>@FREE</tt>), which we set [[../Installing_the_Gentoo_Stage_3_Files#set_license|earlier]]), that we'll need to allow for GNOME. These are benign (the license in question, "<tt>CC-Sampling-Plus-1.0</tt>" is essentially a free-use license, but is not currently included in <tt>@FREE</tt>; it may be viewed at {{Path|/usr/portage/licenses/CC-Sampling-Plus-1.0}}). Issue:
 {{RootCmd
 |nano -w /etc/portage/package.license
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Then ''append'':
-{{File|/etc/portage/package.license|Append the following acceptable case-by-case licenses|<pre>
+{{FileBox|filename=/etc/portage/package.license|title=Append the following acceptable case-by-case licenses|1=
 # fairly harmless licenses required for GNOME
 >=x11-themes/gnome-icon-theme-3.10.0 CC-Sampling-Plus-1.0
 >=gnome-base/gdm-3.10.0.1 CC-Sampling-Plus-1.0
-</pre>
+>=x11-themes/adwaita-icon-theme-3.14.1 CC-Sampling-Plus-1.0
 }}
 Save and exit the <tt>nano</tt> editor.
 
 As of the time of writing, there is a circular dependency which will prevent the installation of GNOME 3. To solve this, issue:<ref>Gentoo Forums: [https://forums.gentoo.org/viewtopic-p-7557156.html#7556668 "emerge gnome won't compile"]</ref>
 {{RootCmd
 |USE{{=}}"-gnome" emerge --ask --verbose --oneshot virtual/notification-daemon
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 ... additional output suppressed ...
 Would you like to merge these packages? [Yes/No] <press y, then press Enter>
@@ -498,7 +506,7 @@ The {{Package|virtual/notification-daemon}} package will be replaced by one with
 Now we are ready to install GNOME! Issue:
 {{RootCmd
 |emerge --ask --verbose --keep-going gnome-base/gnome
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 ... additional output suppressed ...
 Would you like to merge these packages? [Yes/No] <press y, then press Enter>
@@ -507,10 +515,10 @@ Would you like to merge these packages? [Yes/No] <press y, then press Enter>
 }}
 
 {{Note|
-As [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#use_showem{{!}}before]], you can switch to the second <tt>screen</tt> console we prepared [[#another_second_console{{!}}earlier]], to watch the progress (as the files download, build etc.). Hit {{Key|Ctrl}}{{Key|a}} then {{Key|n}} to switch to the second console (you can do this while the <tt>emerge</tt> is running), and issue:
+As [[../Building_the_Gentoo_Base_System_Minus_Kernel#use_showem{{!}}before]], you can switch to the second <tt>screen</tt> console we prepared [[#another_second_console{{!}}earlier]], to watch the progress (as the files download, build etc.). Hit {{Key|Ctrl}}{{Key|a}} then {{Key|n}} to switch to the second console (you can do this while the <tt>emerge</tt> is running), and issue:
 {{RootCmd
 |showem
-|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 You can now switch back and forward between the two windows as you like (using {{Key|Ctrl}}{{Key|a}} then {{Key|n}} to cycle forwards, and {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to cycle backwards - identical in function here where we only have two windows active), which should give you a good overview of the emerge process as it progresses. You can exit the <tt>showem</tt> program at any time by issuing {{Key|Ctrl}}{{Key|c}}.
@@ -527,7 +535,7 @@ Most often, any failures will be caused by the high level of <tt>make</tt> paral
 then issue the following command, to re-attempt to build the failed packages, this time ''without'' <tt>make</tt> parallelism:
 {{RootCmd
 |MAKEOPTS{{=}}"-j1" emerge --ask --verbose --noreplace gnome-base/gnome
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 ... additional output suppressed ...
 Would you like to merge these packages? [Yes/No] <press y, then press Enter>
@@ -535,40 +543,39 @@ Would you like to merge these packages? [Yes/No] <press y, then press Enter>
 </pre>
 }}
 (Of course, if the original <tt>emerge</tt> completed successfully, there is no need to issue the above, but, due to the <tt>--noreplace</tt> flag, even if you do it will simply exit immediately, so it is always safe.)
-{{Note|If you ''still'' experience build errors emerging {{Package|gnome-base/gnome}}, you find it useful to refer to [[EFI_Gentoo_End_to_End_Install/Building_the_Gentoo_Base_System_Minus_Kernel#troubleshooting_failed_build{{!}}these earlier notes]].
+{{Note|If you ''still'' experience build errors emerging {{Package|gnome-base/gnome}}, you find it useful to refer to [[../Building_the_Gentoo_Base_System_Minus_Kernel#troubleshooting_failed_build{{!}}these earlier notes]].
 }}
 
 Once the process has completed, ensure you are back in the virtual terminal from where you issued the <tt>emerge</tt> command (i.e., not the <tt>showem</tt> terminal), and then issue the following to ensure your environment is up-to-date post-install:
 {{RootCmd
 |env-update && source /etc/profile && export PS1{{=}}"(1) $PS1"
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Hit {{Key|Ctrl}}{{Key|a}} then {{Key|n}} to go to the second <tt>screen</tt> console, and do the same there. Issue:
 {{RootCmd
 |source /etc/profile && export PS1{{=}}"(2) $PS1"
-|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 Then press {{Key|Ctrl}}{{Key|a}} then {{Key|p}} to switch back to the original console again.
 
 Next, we need to log back in as our regular user, and try out our new desktop! Issue:
 {{RootCmd
 |su --login sakaki
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 {{Note|Substitute the user name of the regular user you created in the [[#add_regular_user{{!}}earlier step]] for <tt>sakaki</tt> in the above command.}}
 
 Next, edit the <tt>.xinitrc</tt> file in the regular user's home directory. Issue:
 {{Cmd
 |nano -w ~/.xinitrc
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 {{Note|Obviously, as before, the name that you see in the prompt will reflect that of the regular user you added (and which you just <tt>su</tt>-d to).}}
 
 '''Delete''' the current contents of <tt>.xinitrc</tt> (you can use {{Key|Ctrl}}{{Key|k}} inside <tt>nano</tt> to delete a line at a time), and '''replace''' with the following text:
-{{File|~/.xinitrc|Replace existing text with the below to start GNOME|<pre>
+{{FileBox|filename=~/.xinitrc|title=Replace existing text with the below to start GNOME|lang=bash|1=
 export XDG_MENU_PREFIX=gnome-
 exec gnome-session
-</pre>
 }}
 Save and exit <tt>nano</tt>.
 {{Note|Don't forget the hyphen at the end of <tt>gnome-</tt> (as shown above). Also, note that there is no need to start the file with a [[:Wikipedia:Shebang_(Unix){{!}}shebang]] this time.}}
@@ -576,7 +583,7 @@ Save and exit <tt>nano</tt>.
 OK, time to try it out! Issue:
 {{Cmd
 |startx
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 
 And hopefully you should be greeted with a (rather startlingly empty!) GNOME 3 desktop, somewhat similar to the below, on the target machine:
@@ -592,31 +599,31 @@ Congratulations, GNOME 3 is now basically functional; we only need a few more st
 
 {{Cmd
 |exit
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 }}
 
-Next, we must enable the [[:Wikipedia:NetworkManager|<tt>NetworkManager</tt>]] service (which will handle all network interaction under GNOME), and disable the <tt>dhcpcd</tt> service, which we started [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#start_dhcpcd|earlier]] (and whose functionality <tt>NetworkManager</tt> supplants). First, issue:
+Next, we must enable the [[:Wikipedia:NetworkManager|<tt>NetworkManager</tt>]] service (which will handle all network interaction under GNOME), and disable the <tt>dhcpcd</tt> service, which we started [[../Configuring_systemd_and_Installing_Necessary_Tools#start_dhcpcd|earlier]] (and whose functionality <tt>NetworkManager</tt> supplants). First, issue:
 {{RootCmd
 |systemctl stop dhcpcd
 |systemctl disable dhcpcd
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 {{Note|As before, with <tt>systemd</tt>'s <tt>systemctl</tt> command, you use:
 * <tt>stop</tt> to stop a running service immediately;
 * <tt>disable</tt> to ensure a service doesn't start at boot time;
 * <tt>enable</tt> to ensure a service will (try to) start at boot time; and
 * <tt>start</tt> to run running a service immediately.}}
-Next, if you are using '''WiFi''' for the install, you'll also have explicitly set up a <tt>wpa_supplicant</tt> configuration file [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#start_wpa_supplicant|earlier in the tutorial]], and so you need to remove this again now (however, [[#start_nm|'''skip''' this step]] if installing over a '''wired Ethernet''' connection):
+Next, if you are using '''WiFi''' for the install, you'll also have explicitly set up a <tt>wpa_supplicant</tt> configuration file [[../Configuring_systemd_and_Installing_Necessary_Tools#start_wpa_supplicant|earlier in the tutorial]], and so you need to remove this again now (however, [[#start_nm|'''skip''' this step]] if installing over a '''wired Ethernet''' connection):
 {{RootCmd
 |mv -v /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa.conf
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 <span id="start_nm">Now we can fire up <tt>NetworkManager</tt></span>. Issue:
 {{RootCmd
 |systemctl enable NetworkManager
 |systemctl start NetworkManager
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 {{Note|If you are installing via WiFi, you will temporarily lose connectivity when bringing up <tt>NetworkManager</tt> in this manner, since it doesn't yet know your network settings. If that happens to you, enter the subsequent two commands (to enable and start <tt>gdm</tt>) as the <tt>root</tt> user ''directly'' at the target machine's keyboard (those installing over a wired connection can of course issue the commands via <tt>ssh</tt>, as usual). Once <tt>NetworkManager</tt> is configured (as described [[#gnome_network_settings{{!}}next]]), you should be able to re-establish the <tt>ssh</tt> connection.}}
 
@@ -624,7 +631,7 @@ That having being done, we need to make sure that the [[:Wikipedia:GNOME_Display
 {{RootCmd
 |systemctl enable gdm
 |systemctl start gdm
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 
 Assuming that worked, <span id="login_to_gnome">you should now</span> be able to see a GNOME login screen on the target machine, similar to the below:
@@ -649,7 +656,7 @@ You should now make sure that your network settings are correct under GNOME. Any
 
 To do that, simply click on the 'downwards pointing triangle' in very top right of the screen. This will show a drop-down menu, from which you can turn on WiFi, and select an access point (you'll be prompted for the passphrase). (Alternatively, you can press the {{Key|Windows Key}}, then type "<tt>settings</tt>" (and press {{Key|Enter}}), then click on the item titled 'Network' in the panel that appears.) It's a fairly self-explanatory interface, but if you need assistance, simply press {{Key|F1}}.
 
-{{Note|If you start playing around with your system now, you'll probably find that there are a few things, like Bluetooth for example, and possibly even WiFi (depending on your setup), that are not working yet. That's because we haven't yet enabled all necessary kernel drivers - but we will address this in the [[EFI_Gentoo_End_to_End_Install/Final_Configuration_Steps|next chapter]]!}}
+{{Note|If you start playing around with your system now, you'll probably find that there are a few things, like Bluetooth for example, and possibly even WiFi (depending on your setup), that are not working yet. That's because we haven't yet enabled all necessary kernel drivers - but we will address this in the [[../Final_Configuration_Steps|next chapter]]!}}
 {{Note|Some users have commented that GNOME (and in particular, WiFi) does not come up properly, until their machine is restarted with <tt>gdm</tt> enabled. Therefore, if you are experiencing any problems with GNOME at this stage (such as your WiFi passphrase being rejected), it may be worth waiting, and trying again once we have rebooted in the final configuration (which we'll do very shortly, [[#restart_to_gnome{{!}}below]]).}}  
 
 Once you have the network set up, you should be able to browse the web etc. Try this now: directly at the target machine's keyboard, press the {{Key|Windows Key}} and type 'Web', then press {{Key|Enter}} to start the first item shown. GNOME's default [[:Wikipedia:Web_(web_browser)|web browser]] will start up, initially full-screen. You can drag it down by the top bar to make it a normal-sized window, type in a URL etc.:
@@ -672,7 +679,7 @@ Once an item <span id{{=}}"input_source_menu">has been added</span>, it can be a
 You may find that although you can set sound levels using the 'speaker icon' menu in the GNOME top bar, these settings are lost on a reboot (and sound is muted each time). If this occurs on your system (it affects the CF-AX3), take the following steps. First, emerge {{Package|media-sound/alsa-utils}} (you can do this via the <tt>ssh</tt>/<tt>screen</tt> terminal on the helper PC):
 {{RootCmd
 |emerge --ask --verbose media-sound/alsa-utils
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 ... additional output suppressed ...
 Would you like to merge these packages? [Yes/No] <press y, then press Enter>
@@ -682,7 +689,7 @@ Would you like to merge these packages? [Yes/No] <press y, then press Enter>
 Once that completes, set the volume levels as you like them, then issue:
 {{RootCmd
 |alsactl store
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 The settings should now be preserved across a reboot.
 
@@ -693,54 +700,48 @@ The settings should now be preserved across a reboot.
 We are now ready to bid farewell to the services of the helper PC, as all further steps can now be done on the target machine directly. Close out the <tt>ssh</tt>/<tt>screen</tt> terminal. Issue:
 {{RootCmd
 |exit
-|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(1)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 which will close the first <tt>screen</tt> terminal, then:
 {{RootCmd
 |exit
-|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=<span style{{=}}"color:gray;">(2)</span> koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 to close the second one, then:
 {{RootCmd
 |exit
-|prompt=koneko <span style{{=}}"color:blue;">~ #</span>
+|prompt=koneko <span style{{=}}"color:royalblue;">~ #</span>
 }}
 which will close out the <tt>ssh</tt> session itself. Now, ensure that the USB boot key is inserted in the target PC, and reboot it, by clicking on the 'power' icon (in the top right of the screen), clicking on the 'power' button in the dropdown menu that then appears, and then clicking on the 'Restart' button in the dialog.
 
-The machine should then power cycle (you will be cleanly logged out of GNOME first). When the machine restarts, as before, you will need to enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[EFI_Gentoo_End_to_End_Install/Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard to unlock the LUKS partition. You should then be presented directly with a GNOME login page (as [[#login_to_gnome|above]]). Directly at the target machine, click on your (regular) user name then, when prompted, type in the (regular user) password you set up [[#setup_regular_user|earlier]] (ensure you have the correct keyboard settings, if relevant, as discussed [[#input_source_menu|above]]).
+The machine should then power cycle (you will be cleanly logged out of GNOME first). When the machine restarts, as before, you will need to enter your LUKS keyfile <tt>gpg</tt> passphrase (the one you created [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|earlier]]), directly at the target machine keyboard to unlock the LUKS partition. You should then be presented directly with a GNOME login page (as [[#login_to_gnome|above]]). Directly at the target machine, click on your (regular) user name then, when prompted, type in the (regular user) password you set up [[#setup_regular_user|earlier]] (ensure you have the correct keyboard settings, if relevant, as discussed [[#input_source_menu|above]]).
 
 Once logged in to GNOME, bring up a web browser: directly at the target machine's keyboard, press the {{Key|Windows Key}} and type 'Web', then press {{Key|Enter}} to start the first item shown. GNOME's default [[:Wikipedia:Web_(web_browser)|web browser]] will start up, initially full-screen. You can drag it down by the top bar to make it a normal-sized window. Do so, and type in the <span id="rejoin">[https://wiki.gentoo.org/wiki/EFI_Gentoo_End_to_End_Install/Setting_up_the_GNOME_3_Desktop#rejoin URL for this tutorial]</span>, so that you can continue to follow it there.
 {{Important|From this point on, all interaction with the target machine will be done directly (and not via the helper PC), unless otherwise noted.}}
-{{Note|Now that <tt>NetworkManager</tt> is running, even if you have been installing over WiFi, and had to manually restart <tt>wpa_supplicant</tt> in the [[EFI_Gentoo_End_to_End_Install/Configuring_systemd_and_Installing_Necessary_Tools#manually_start_wpa_supplicant_systemd{{!}}previous two chapters]], there should be no further need to do so. WiFi network access should now come online automatically after boot.}}
+{{Note|Now that <tt>NetworkManager</tt> is running, even if you have been installing over WiFi, and had to manually restart <tt>wpa_supplicant</tt> in the [[../Configuring_systemd_and_Installing_Necessary_Tools#manually_start_wpa_supplicant_systemd{{!}}previous two chapters]], there should be no further need to do so. WiFi network access should now come online automatically after boot.}}
 
 Now, <span id="open_gnome_terminal">bring up a terminal window</span> in GNOME. Press the {{Key|Windows Key}} again, and type 'terminal', then press {{Key|Enter}}. A standard-issue terminal window should open. As we have some final installation work to do, become root:
 {{Cmd
 |su --login root
-|prompt=sakaki@koneko <span style{{=}}"color:blue;">~ $</span>
+|prompt=sakaki@koneko <span style{{=}}"color:royalblue;">~ $</span>
 |output=<pre>
 Password: <enter root password>
 </pre>
 }}
-The password required here is the one you set up [[EFI_Gentoo_End_to_End_Install/Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
+The password required here is the one you set up [[../Final_Preparations_and_Reboot_into_EFI#setup_new_root_password|earlier]] in the tutorial (and have used when <tt>ssh</tt>-ing in).
 
 == <span id="next_steps">Next Steps</span> ==
 
-Congratulations - if you have followed through to this stage, you have a basically functioning system! There is some final driver configuration left still to do, so let's address that now. [[EFI_Gentoo_End_to_End_Install/Final_Configuration_Steps|Click here]] to go to the next chapter, "Final Configuration Steps".
+Congratulations - if you have followed through to this stage, you have a basically functioning system! There is some final driver configuration left still to do, so let's address that now. [[../Final_Configuration_Steps|Click here]] to go to the next chapter, "Final Configuration Steps".
 
 == <span id="notes">Notes</span> ==
 {{reflist}}
 
-== <span id="acknowledgements">Acknowledgements</span> ==
-
-We would like to thank the following authors and editors for their contributions to this guide:
-
-* {{Mail|sakaki@deciban.com|sakaki}}
-
 {| style="margin: 1em auto 1em auto;"
 |-
-| [[EFI_Gentoo_End_to_End_Install/Configuring_Secure_Boot|<]]
-| [[EFI_Gentoo_End_to_End_Install|Home]]
-| [[EFI_Gentoo_End_to_End_Install/Final_Configuration_Steps|>]]
+| [[../Configuring_Secure_Boot|<]]
+| [[../|Home]]
+| [[../Final_Configuration_Steps|>]]
 |}
 
 [[Category:Core system]]
