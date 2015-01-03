@@ -75,9 +75,9 @@ This should leave 3 files, foo.example.com_&#91;privatekey, csr, crt&#93;.pem. T
 Setting up [[Apache]] is already very well described elsewhere and yields a working SSL enabled webserver. Postfixadmin, if used externally, should ideally be secured such that it only works over https. Roundcube or webmail in general, can also be setup to be secured by SSL, but should or can be still open to plain http.
 
 Roundcube has one nice option for this however, to force all incoming requests over https. This means that when a users opens http://webmail.example.com, he will get immediately redirected to https://webmail.example.com. If using a proper SSL certificate this is strongly recommended. When using a self-signed certificate, or a CA-cert.org certificate that does not have the root installed to all users, this should remain off however.
-{{File|/var/www/webmail.example.com/htdocs/roundcube/config/main.inc.php|Force https|<pre>
+{{FileBox|filename=/var/www/webmail.example.com/htdocs/roundcube/config/main.inc.php|title=Force https|lang=php|1=
 $rcmail_config['force_https'] = true;
-</pre>}}
+}}
 
 == Courier-imap ==
 If anything, securing IMAP with SSL is extremly recommended. Using a secure connection for IMAP, means that if the password is sent in plain text, this is still done over the secured IMAP connection so no issue.
@@ -101,7 +101,7 @@ And to the end, are Diffie-Hellman parameters added.
 {{RootCmd|openssl gendh 1024 >> /etc/ssl/courier-imap/foo.example.com.pem}}
 
 The resulting file should have a contents like this.
-{{File|etc/ssl/courier-imap/foo.example.com.pem|imap certificate|<pre>
+{{FileBox|filename=/etc/ssl/courier-imap/foo.example.com.pem|title=imap certificate|1=
 -----BEGIN PRIVATE KEY-----
 MIIEvaasdfasdfSfasdfadfasdfasdfasdfasdfasdfasdfasdfasdsahdahhgfh
 <snip>
@@ -122,29 +122,29 @@ MIGHAoGBAPF7fJnfw+VPPev9FAkf2XJNFimn4ik+zkXXuHD5t9Oke1Yx224WTocq
 KJ+Zv9onecK0MPYRUj8PPqqy+Q00pScW9+qPSr9T2sEG/meKjLqqA3XQf4Gwzqco
 SUG0PEjiYNNfe966p9E1vp6yN5+gSyu6zv9Vn+cfYY2q7d3a4x9rAgEC
 -----END DH PARAMETERS-----
-</pre>}}
+}}
 
 === Configure SSL ===
 As noted above, the certificate entails both pop3 as imap hostnames and it is thus assumed pop3 and imap are running on the same IP/host. This is not required however, pop3 could be very well a different machine with the same (not advised) or its own certificate.
 ==== POP3 ====
-{{File|/etc/courier-imap/pop3d-ssl|Configure certificate|<pre>
+{{FileBox|filename=/etc/courier-imap/pop3d-ssl|title=Configure certificate|1=
 ##NAME: POP3DSSLSTART:0
 POP3DSSLSTART=YES
 
 ##NAME: TLS_CERTFILE:0
 TLS_CERTFILE=/etc/ssl/courier-imap/foo.example.com.pem
-</pre>}}
+}}
 
 Starting this server should allow pop3 to work through SSL.
 {{RootCmd|/etc/init.d/courier-pop3-ssl restart}}
 ==== IMAP ====
-{{File|/etc/courier-imap/imapd-ssl|Configure certificate|<pre>
+{{FileBox|filename=/etc/courier-imap/imapd-ssl|title=Configure certificate|1=
 ##NAME: IMAPDSSLSTART:0
 IMAPDSSLSTART=YES
 
 ##NAME: TLS_CERTFILE:0
 TLS_CERTFILE=/etc/ssl/courier-imap/foo.example.com.pem
-</pre>}}
+}}
 
 Starting this server should allow imap to work through SSL.
 {{RootCmd|/etc/init.d/courier-imapd-ssl restart}}
@@ -160,7 +160,7 @@ If SSL secured services now work as expected, they can be added to the default r
 == Securing SMTP with SSL ==
 The certificates for use with postfix should be stored in {{Path|/etc/ssl/postfix/}} or if using the same certificates as with courier-imap they should be stored in {{Path|/etc/ssl/postfix/}}. If using CACert.org, then it's root certificate needs to be used. Gentoo pre-installs the CACert.org root certificate and should be used.
 
-{{File|/etc/postfix/main.cf|Certificate configuration for SMTP|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Certificate configuration for SMTP|1=
 # SSL Authentication
 smtpd_tls_security_level = may
 smtpd_tls_auth_only = no
@@ -171,15 +171,14 @@ smtpd_tls_CAfile = /etc/ssl/certs/cacert.org.pem
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 tls_random_source = dev:/dev/urandom
-</pre>}}
+}}
 {{Note|For debugging purposes '''smtpd_tls_loglevel''' has been increased to ''3''. Also '''smtpd_tls_auth_only &#35; no''' means users (and webmail) can still log in insecurely. Putting this option to yes forces all clients to use only authenticated connections.}}
 
 Now '''STARTTLS''' can be used to use an authenticated connection over port 25. '''SSL/TLS''' support on port ''465'' (smtp'''s''') however should be enabled as well. Courier-imap did this automatically, postfix needs a change to {{Path|master.cf}}.
 
-{{File|/etc/postfix/master.cf|Enable smtps support|<pre>
-smtps     inet  n       -       n       -       -       smtpd
-  -o smtpd_tls_wrappermode=yes
-</pre>}}
+{{FileBox|filename=/etc/postfix/master.cf|title=Enable smtps support|1=
+smtps     inet  n       -       n       -       -       smtpd -o smtpd_tls_wrappermode=yes
+}}
 
 Restart postfix to start the SSL secured daemons.
 {{RootCmd|/etc/init.d/postfix restart}}
@@ -209,12 +208,12 @@ To test if all connections work as wanted, a recent version of Thunderbird works
 == Securing connections to other mail servers ==
 Postfix can try to use secure connections for sending mails to other SMTP servers. Although it may not be supported by all servers, it makes sense to activate it.
 
-{{File|/etc/postfix/main.cf|Try to use TLS for transferring mails|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Try to use TLS for transferring mails|1=
 # Enable TLS for sending mails if supported by other server
 smtp_tls_security_level = may
 smtp_tls_CApath = /etc/ssl/certs
 smtp_tls_loglevel = 3
-</pre>}}
+}}
 {{Note|For debugging purposes '''smtp_tls_loglevel''' has been increased to ''3''. '''smtp_tls_security_level''' can be set to "encrypt" to only send mails over TLS connections. But this is not recommended, because many mail servers on the internet do not support TLS at all or are not compatible.}}
 
 Restart postfix afterwards
@@ -229,9 +228,9 @@ postfix/smtp[15209]: Trusted TLS connection established to mx.example.com[x.x.x.
 
 == Wrapping it up ==
 Once everything is working as expected, logging can be disabled again.
-{{File|/etc/postfix/main.cf|Disable logging|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Disable logging|1=
 smtpd_tls_loglevel = 0
 smtp_tls_loglevel = 0
-</pre>}}
+}}
 
 [[Category:Mail Servers]]
