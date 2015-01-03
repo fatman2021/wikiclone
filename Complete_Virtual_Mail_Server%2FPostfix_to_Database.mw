@@ -28,7 +28,7 @@ GRANT SELECT ON mailbox TO postfix;
 If you use MySQL instead of PostgresSQL then follow this instruction.
 You'll need the [http://www.gentoo.org/doc/en/files/genericmailsql.sql genericmailsql.sql] dumpfile for this step. 
 
-{{Code|Installing and configuring MySQL|<pre>
+{{CodeBox|title=Installing and configuring MySQL|1=
 # emerge -av mysql
 
 # /usr/bin/mysql_install_db
@@ -53,7 +53,6 @@ mysql> quit
 ## (Verify that the new mailsql user can connect to the mysql server.)
 
 # mysql -u mailsql -p mailsql
-</pre>
 }}
 
 Your new database has default values and tables set up for two domains. The following tables are included: 
@@ -64,14 +63,13 @@ Your new database has default values and tables set up for two domains. The foll
 * users - all user account information
 * virtual - virtual domain email alias maps
 
-{{Code|alias table sample|<pre>
+{{CodeBox|title=alias table sample|1=
 id   alias      destination
 1    root       foo@bar.com
 2    postmaster foo@bar.com
-</pre>
 }}
 
-{{Code|user table sample|<pre>
+{{CodeBox|title=user table sample|1=
 ## (Line wrapped for clarity.)
 id email            clear     name     uid     gid     homedir     \
   maildir                                quota  postfix
@@ -79,22 +77,19 @@ id email            clear     name     uid     gid     homedir     \
   /home/vmail/virt-domain.com/foo/.maildir/        y
 13 foo@bar.com      $password realname localid localid /home/foo   \
   /home/foo/.maildir/                           y
-</pre>
 }}
 
 The values of the <code>virtid</code> uid and gid should be those of the <code>vmail</code> user and group. 
 
-{{Code|transport table sample|<pre>
+{{CodeBox|title=transport table sample|1=
 id   domain          destination
 1    bar.com         local:
 2    virt-domain.com virtual:
-</pre>
 }}
 
-{{Code|virtual table sample|<pre>
+{{CodeBox|title=virtual table sample|1=
 id   email                destination
 3    root@virt-domain.com other@email.address
-</pre>
 }}
 
 === Querying ===
@@ -109,14 +104,14 @@ Be aware that any errors in the configuration information in these files can be 
 {{Note|In the following files, the variable 'hosts' is commented on purpose. When no hosts are defined, the local unix socket is used.}}
 
 
-{{File|/etc/postfix/pgsql/virtual_mailbox_domains.cf|virtual_mailbox_domains|<pre>
+{{FileBox|filename=/etc/postfix/pgsql/virtual_mailbox_domains.cf|title=virtual_mailbox_domains|1=
 # virtual_mailbox_domains.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT description FROM domain WHERE domain = '%s' AND backupmx = '0' AND active = '1';
-</pre>}}
+}}
 It's best to test the query on the database (using copy paste) to ensure no typo's exist in the query.
 {{RootCmd|psql -U postfix postfix|output=<pre>
 postfix=> SELECT description FROM domain WHERE domain = 'example.com' AND backupmx = '0' AND active = '1';
@@ -128,14 +123,14 @@ postfix=> SELECT description FROM domain WHERE domain = 'example.com' AND backup
 {{Note|Postfix does not care about the result in this query, it is more of a yes/no answer.}}
 
 
-{{File|/etc/postfix/pgsql/virtual_mailbox_maps.cf|virtual_mailbox_maps|<pre>
+{{FileBox|filename=/etc/postfix/pgsql/virtual_mailbox_maps.cf|title=virtual_mailbox_maps|1=
 # virtual_mailbox_maps.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT maildir FROM mailbox WHERE local_part='%u' AND domain='%d' AND active='1';
-</pre>}}
+}}
 Also here, it's best again to execute the query on the database.
 {{RootCmd|psql -U postfix postfix|output=<pre>
 postfix=> SELECT maildir FROM mailbox WHERE local_part='testuser' AND domain='example.com' AND active='1';
@@ -146,14 +141,14 @@ postfix=> SELECT maildir FROM mailbox WHERE local_part='testuser' AND domain='ex
 </pre>}}
 
 
-{{File|/etc/postfix/pgsql/virtual_alias_maps.cf|virtual_alias_maps|<pre>
+{{FileBox|filename=/etc/postfix/pgsql/virtual_alias_maps.cf|title=virtual_alias_maps|1=
 # virtual_alias_maps.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT goto FROM alias WHERE address='%s' AND active='1';
-</pre>}}
+}}
 Run the query on the database to verify its output.
 {{RootCmd|psql -U postfix postfix|output=<pre>
 postfix=> SELECT goto FROM alias WHERE address='testuser@example.com' AND active='1';
@@ -167,10 +162,7 @@ postfix=> SELECT goto FROM alias WHERE address='testuser@example.com' AND active
 ==== MySQL  ====
 Set up the necessary configs for postfix to interract with the database for all its other transport needs. Remember to replace each value with the name of your own user, user id, password, alias, email address, and so on. 
 
-{{Code|/etc/postfix/mysql-aliases.cf|<pre>
-# nano -w /etc/postfix/mysql-aliases.cf
-# mysql-aliases.cf
-
+{{FileBox|filename=/etc/postfix/mysql-aliases.cf|1=
 user         = mailsql
 password     = $password
 dbname       = mailsql
@@ -178,13 +170,9 @@ table        = alias
 select_field = destination
 where_field  = alias
 hosts        = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
-{{Code|/etc/postfix/mysql-relocated.cf|<pre>
-# nano -w /etc/postfix/mysql-relocated.cf
-# mysql-relocated.cf
-
+{{FileBox|filename=/etc/postfix/mysql-relocated.cf|1=
 user         = mailsql
 password     = $password
 dbname       = mailsql
@@ -192,13 +180,9 @@ table        = relocated
 select_field = destination
 where_field  = email
 hosts        = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
-{{Code|/etc/postfix/mysql-transport.cf (optional)|<pre>
-# nano -w /etc/postfix/mysql-transport.cf
-# mysql-transport.cf
-
+{{FileBox|filename=/etc/postfix/mysql-transport.cf|title=(optional)|1=
 user         = mailsql
 password     = $password
 dbname       = mailsql
@@ -206,13 +190,9 @@ table        = transport
 select_field = destination
 where_field  = domain
 hosts        = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
-{{Code|/etc/postfix/mysql-virtual-gid.cf (optional)|<pre>
-# nano -w /etc/postfix/mysql-virtual-gid.cf
-# mysql-virtual-gid.cf
-
+{{FileBox|filename=/etc/postfix/mysql-virtual-gid.cf|title=(optional)|1=
 user            = mailsql
 password        = $password
 dbname          = mailsql
@@ -221,13 +201,9 @@ select_field    = gid
 where_field     = email
 additional_conditions = and postfix = 'y'
 hosts           = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
-{{Code|/etc/postfix/mysql-virtual-maps.cf|<pre>
-# nano -w /etc/postfix/mysql-virtual-maps.cf
-# mysql-virtual-maps.cf
-
+{{FileBox|filename=/etc/postfix/mysql-virtual-maps.cf|1=
 user            = mailsql
 password        = $password
 dbname          = mailsql
@@ -236,13 +212,9 @@ select_field    = maildir
 where_field     = email
 additional_conditions = and postfix = 'y'
 hosts           = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
-{{Code|/etc/postfix/mysql-virtual-uid.cf (optional)|<pre>
-# nano -w /etc/postfix/mysql-virtual-uid.cf
-# mysql-virtual-uid.cf
-
+{{FileBox|filename=/etc/postfix/mysql-virtual-uid.cf|title=(optional)|1=
 user            = mailsql
 password        = $password
 dbname          = mailsql
@@ -251,13 +223,9 @@ select_field    = uid
 where_field     = email
 additional_conditions = and postfix = 'y'
 hosts           = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
-{{Code|/etc/postfix/mysql-virtual.cf|<pre>
-# nano -w /etc/postfix/mysql-virtual.cf
-# mysql-virtual.cf
-
+{{FileBox|filename=/etc/postfix/mysql-virtual.cf|1=
 user         = mailsql
 password     = $password
 dbname       = mailsql
@@ -265,13 +233,11 @@ table        = virtual
 select_field = destination
 where_field  = email
 hosts        = unix:/var/run/mysqld/mysqld.sock
-</pre>
 }}
 
 Lastly, edit {{Path|/etc/postfix/main.cf}} one more time. 
 
-{{Code|/etc/postfix/main.cf|<pre>
-# nano -w /etc/postfix/main.cf
+{{FileBox|filename=/etc/postfix/main.cf|1=
 ## (Ensure that there are no other alias_maps definitions)
 alias_maps = mysql:/etc/postfix/mysql-aliases.cf
 relocated_maps = mysql:/etc/postfix/mysql-relocated.cf
@@ -281,7 +247,7 @@ local_recipient_maps = $alias_maps $virtual_mailbox_maps unix:passwd.byname
 
 virtual_transport = virtual
 ## (The domains listed by the mydestination should not be listed in
- the virtual_mailbox_domains parameter)
+##  the virtual_mailbox_domains parameter)
 virtual_mailbox_domains = virt-domain.com, $other-virtual-domain.com
 
 virtual_minimum_uid = 1000
@@ -293,24 +259,21 @@ virtual_alias_maps = mysql:/etc/postfix/mysql-virtual.cf
 virtual_uid_maps = static:$vmail-uid
 virtual_mailbox_base = /
 #virtual_mailbox_limit =
-</pre>
 }}
 
 For security reasons you should change the permissions of the various {{Path|/etc/mail/mysql-*.cf}} : 
 
-{{Code|Changing file permission|<pre>
+{{CodeBox|title=Changing file permission|1=
 # chmod 640 /etc/postfix/mysql-*.cf
 # chgrp postfix /etc/postfix/mysql-*.cf
-</pre>
 }}
 
 As of Postfix 2.0.x, there were a number of significant changes over the 1.1.x release. Notably the transport, virtual-gid, and virtual-uid tables are no longer necessary. The tables are still included if you wish to use them. 
 
 {{Note|It is recommended that you read VIRTUAL_README included with the postfix docs for more information.}}
 
-{{Code|Make postfix reload its tables|<pre>
+{{CodeBox|title=Make postfix reload its tables|1=
 # postfix reload
-</pre>
 }}
 
 Now, if all went well, you should have a functioning mailhost. Users should be able to authenticate against the sql database, using their full email address, for pop3, imap, and smtp. I would highly suggest that you verify that everything is working at this point. If you run into problems (with as many things as this setup has going on, it's likely that you will) check the troubleshooting section of this howto.
@@ -322,7 +285,7 @@ Only postfix should have access rights to these files, as they contain passwords
 === Connecting postfix to the queries ===
 
 ==== Postgres ====
-{{File|/etc/postfix/main.cf|Connect postfix to postgres|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Connect postfix to postgres|1=
 #
 # Settings required to support virtual mail delivery using lookups in
 # the Postgres database.
@@ -339,7 +302,7 @@ virtual_mailbox_maps = pgsql:/etc/postfix/pgsql/virtual_mailbox_maps.cf
 
 # Any aliases that are supported by this system
 virtual_alias_maps = pgsql:/etc/postfix/pgsql/virtual_alias_maps.cf
-</pre>}}
+}}
 
 === Testing the database connection ===
 Postfix needs to be restarted to make it connect to the database.
@@ -374,7 +337,7 @@ quit
 221 2.0.0 Bye
 Connection closed by foreign host.
 </pre>}}
-{{File|/var/log/mail.log|Verify test messages|<pre>
+{{FileBox|filename=/var/log/mail.log|title=Verify test messages|1=
 Mar 16 19:25:15 foo postfix/smtpd[32321]: connect from unknown[127.0.0.1]
 Mar 16 19:25:32 foo postfix/smtpd[32321]: EA94F164C7: client=unknown[127.0.0.1]
 Mar 16 19:25:42 foo postfix/cleanup[32330]: EA94F164C7: message-id=<>
@@ -386,7 +349,7 @@ Mar 16 19:26:14 foo postfix/cleanup[32330]: 3A276164C7: message-id=<>
 Mar 16 19:26:14 foo postfix/qmgr[31681]: 3A276164C7: from=<me@you.com>, size=199, nrcpt=1 (queue active)
 Mar 16 19:26:15 foo postfix/smtp[32338]: 3A276164C7: to=<test.user@example.com>, orig_to=<test.user@example.com>, relay=virtual, delay=23, delays=22/0.02/0.57/0.39, dsn=2.0.0, status=sent (delivered to maildir)
 Mar 16 19:26:15 foo postfix/qmgr[31681]: 3A276164C7: removed
-</pre>}}
+}}
 
 {{Warning|If the '''vda''' useflag is set, it may happen that test messages get (Soft) bounced due to too overdrawn diskspace quota. There are then two options. Re-merge without the '''vda''' useflag and re-merge with the '''vda''' useflag enabled once doing quota's. Or jump ahead to the quota support bit, follow those steps, then return here.}}
 
