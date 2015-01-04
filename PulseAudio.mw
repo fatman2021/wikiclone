@@ -17,18 +17,18 @@ PulseAudio uses either:
 
 === Kernel ===
 If you have an Intel HDA soundcard, you probably want the following kernel option to improve power-saving:
-{{Kernel||<pre>
+{{KernelBox|1=
 Device Drivers  --->
     <*> Sound card support  --->
         <*> Advanced Linux Sound Architecture  --->
             HD-Audio  --->
                 (2048) Pre-allocated buffer size for HD-audio driver
-</pre>}}
+}}
 
 === Software ===
 Portage knows the global USE flag ''pulseaudio'' for enabling support for PulseAudio in other packages. Enabling this USE flag will pull in {{Package|media-sound/pulseaudio}} automatically:
-{{File|/etc/portage/make.conf||
-USE{{=}}"... pulseaudio ..."
+{{FileBox|filename=/etc/portage/make.conf|lang=bash|1=
+USE="... pulseaudio ..."
 }}
 The recommend USE flags of pulseaudio are:
 {{USEflag|package=media-sound/pulseaudio
@@ -81,12 +81,12 @@ After setting this you want to update your system so the changes take effect:
 PulseAudio uses [[udev]] and [[ConsoleKit]] to dynamically give access to the soundcards to the currently "active" user. If you are running [[Systemd]] it will also take care of this without needing to use [[ConsoleKit]]. 
 
 To make this possible ACLs (Access Control  Lists) are required:
-{{Kernel||<pre>
+{{KernelBox|1=
 File systems  --->
    Pseudo filesystems  --->
       [*] Virtual memory file system support (former shm fs)
       [*]   Tmpfs POSIX Access Control List
-</pre>}}
+}}
 
 If you're not using a ''desktop'' [[profile]], check that {{Package|sys-auth/consolekit}} or {{Package|sys-apps/systemd}} are installed with enabled '''acl''' USE flag and that ConsoleKit is running if you are not running Systemd:
 {{RootCmd|/etc/init.d/consolekit status|output=<pre>
@@ -114,9 +114,9 @@ You need to install {{Package|media-plugins/alsa-plugins}} with ''pulseaudio'' U
 
 ;[[OSS]]
 You need to enable the following module in {{Path|/etc/pulse/default.pa}}:
-{{File|/etc/pulse/default.pa||<pre>
+{{FileBox|filename=/etc/pulse/default.pa|1=
 load-module module-oss
-</pre>}}
+}}
 
 ;GStreamer
 You need to set several GConf keys:
@@ -130,39 +130,39 @@ You need to set several GConf keys:
 
 ;ESD
 You need to enable the following module in {{Path|/etc/pulse/default.pa}}:
-{{File|/etc/pulse/default.pa||<pre>
+{{FileBox|filename=/etc/pulse/default.pa|1=
 load-module module-protocol-esound-unix
-</pre>}}
+}}
 Also you need to select with eselect the PulseAudio implementation:
 {{RootCmd|eselect esd set esdcompat}}
 
 ;libao
 You need to set the following in {{Path|/etc/libao.conf}}:
-{{File|/etc/libao.conf||<pre>
+{{FileBox|filename=/etc/libao.conf|1=
 default_driver=pulse
-</pre>}}
+}}
 
 ;OpenAL
 You need to set the following in {{Path|/etc/openal/alsoft.conf}}:
-{{File|/etc/openal/alsoft.conf||<pre>
+{{FileBox|filename=/etc/openal/alsoft.conf|1=
 drivers = pulse
-</pre>}}
+}}
 
 ;[[MPlayer]]
 You need to set the following in {{Path|/etc/mplayer/mplayer.conf}}:
-{{File|/etc/mplayer/mplayer.conf||<pre>
+{{FileBox|filename=/etc/mplayer/mplayer.conf|1=
 ao=pulse
-</pre>}}
+}}
 
 === Without udev/systemd ===
 {{Warning|Using PA without udev/systemd is '''not''' recommended. It should be noted that this not only breaks auto-detection but hot-plugging as whole needlessly making your life harder as well as disabling use of ConsoleKit essentially voiding the article. Please, if you have the possibility to use udev (and you most certainly have), just use it.}}
 
 In case that you are using ALSA as a PulseAudio sink (output) and routing ALSA apps to PA but not using udev, you must make sure to have set a specific device to be used. Else, PulseAudio will use ALSA device "default" as sink which may be routed back to PulseAudio, forming a loop. To avoid this, add the parameter ''device=hw:0,0'' (you can find the correct IDs by running ''aplay -l''). In the following example, we use two soundcards, of which card 0, device 0 is used as a sink (audio output, e.g. speakers) and card 1, device 0 as a source (audio input, e.g. microphone). PulseAudio will still be able to access other cards than these but it needs these settings to avoid looping the ''default'' device in this setup.
 
-{{File|/etc/pulse/default.pa|Using a specific ALSA device as PulseAudio sink/source|<pre>
+{{FileBox|filename=/etc/pulse/default.pa|title=Using a specific ALSA device as PulseAudio sink/source|1=
 load-module module-alsa-sink device=hw:0,0
 load-module module-alsa-source device=hw:1,0
-</pre>}}
+}}
 {{Note|If you forget to specify this when using the ALSA sink/source modules, you may not notice any problems until you restart PulseAudio (e.g. by logging out and back in or rebooting). You will be left with (obviously) no audio and a slowed down desktop environment and hanging applications until you resolve the loop, restart alsasound and kill all running pulseaudio processes.}}
 
 === Headless server ===
@@ -176,10 +176,10 @@ First configure USE flags and emerge the package. The system-wide USE flag is ma
 {{Emerge|params+=--oneshot|pulseaudio}}
 
 Add the following 2 lines somewhere in the system.pa file
-{{File|/etc/pulse/system.pa||<pre>
+{{FileBox|filename=/etc/pulse/system.pa|1=
 load-module module-native-protocol-tcp auth-ip-acl=1.2.3.0/24
 load-module module-alsa-sink
-</pre>}}
+}}
 ''Replace 1.2.3.0/24 with the network mask that you want to be able to access the server.''
 {{Note|If you have multiple ALSA devices, you will need to specify the device to use by adding <u>device</u> or <u>device_id</u> to the module-alsa-sink module}}
 
@@ -193,9 +193,9 @@ Tell the init script that we really do want to do this, and then start it up.
 {{Cmd|pacmd load-module module-tunnel-sink server{{=}}1.2.3.4|output=server (1.2.3.4) is the IP of the server.}}
 
 For a more permanent solution you can add the following to your default.pa file
-{{File|/etc/pulse/default.pa||<pre>
+{{FileBox|filename=/etc/pulse/default.pa|1=
 load-module module-tunnel-sink server=1.2.3.4
-</pre>}}
+}}
 
 Now in the pulse audio volume control you should see the remote server listed under <u>Output Devices</u>. Under playback you should have a button next to the ''Mute audio'' button that when clicked will let you switch that audio stream to whichever output you want.
 
@@ -208,17 +208,17 @@ If you have no sound while using ALSA, consider unmute the sound card. Launch al
 
 === Enable debug mode ===
 To get more informations you need to set the following in {{Path|/etc/pulse/daemon.conf}}:
-{{File|/etc/pulse/daemon.conf||
-log-level{{=}}debug
+{{FileBox|filename=/etc/pulse/daemon.conf|1=
+log-level=debug
 }}
 Afterwards restart the daemon:
 {{Cmd|pulseaudio -k}}
 
 === Audio/Video out of sync ===
 When using PulseAudio over your local network, you can experience out-of-sync problems. Solve this by adding '''tsched=0''':
-{{File|/etc/pulse/default.pa||<pre>
+{{FileBox|filename=/etc/pulse/default.pa|1=
 load-module module-udev-detect tsched=0
-</pre>}}
+}}
 This disables time scheduling. Afterwards restart the daemon:
 {{Cmd|pulseaudio -k}}
 
