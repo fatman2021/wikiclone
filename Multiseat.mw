@@ -35,7 +35,7 @@ Traditionally, a multiseat [[X server]] configuration was specified in a single 
 located in /etc/X11/. Additionally, all files in /etc/X11/xorg.conf.d/ are used when the X server starts; this directory can be used to specify options not specific to a seat.
 
 Here is an example for two seats:
-{{File|/etc/X11/xorg_left.conf|Left seat|<pre>
+{{FileBox|filename=/etc/X11/xorg_left.conf|title=Left seat|lang=xorg_conf|1=
 Section "Device"
         Identifier "gfx_left"
         Driver "radeon"
@@ -52,9 +52,9 @@ Section "InputClass"
     MatchTag "input_default"
     Option "Ignore" "no"
 EndSection
-</pre>}}
+}}
 
-{{File|/etc/X11/xorg_right.conf|Right seat|<pre>
+{{FileBox|filename=/etc/X11/xorg_right.conf|title=Right seat|lang=xorg_conf|1=
 Section "Device"
         Identifier "gfx_right"
         Driver "radeon"
@@ -71,7 +71,7 @@ Section "InputClass"
     MatchTag "input_right"
     Option "Ignore" "no"
 EndSection
-</pre>}}
+}}
 
 The device sections are self-explanatory: take the driver and bind it to a specific device. The PCI number can be obtained using the ''lspci'' tool. The "Identifier" stuff is superfluous, but provided anyway.
 
@@ -81,7 +81,7 @@ You may notice that the left seat uses the "input_default" tag. The section is s
 doesn't belong anywhere else, it is assigned to the left seat. But that is up to udev to decide, and has nothing to do with Xorg.
 
 Options common to all seats should reside in files in /etc/X11/xorg.conf.d. These files are always read after the main xorg.conf file. An example of such a setting could be keyboard layouts.
-{{File|/etc/X11/xorg.conf.d/00-keylayouts.conf|Default keyboard settings for all seats|<pre>
+{{FileBox|filename=/etc/X11/xorg.conf.d/00-keylayouts.conf|title=Default keyboard settings for all seats|lang=xorg_conf|1=
 Section "InputClass"
 	Identifier	"Default Layout"
 	MatchIsKeyboard	"yes"
@@ -89,14 +89,14 @@ Section "InputClass"
 	Option		"XkbLayout"	"us"
 	Option		"XkbOptions"	"terminate:ctrl_alt_bksp"
 EndSection
-</pre>}}
+}}
 
 In case xorg-server 1.13.0 and above is in use, the following must be used to maintain the gpu separation:
-{{File|/etc/X11/xorg.conf.d/01-gpu_separation.conf|Maintain GPU separation|<pre>
+{{FileBox|filename=/etc/X11/xorg.conf.d/01-gpu_separation.conf|title=Maintain GPU separation|lang=xorg_conf|1=
 Section "ServerFlags"
         Option "AutoAddGPU" "off"
 EndSection
-</pre>}}
+}}
 
 == udev ==
 udev is the component of modern Linux systems that allows automatic manipulation of devices according to a set of rules provided in /etc/udev/rules.d/. It is very versatile, which comes at the cost of considerable complexity. This section is a crash course of the bare minimum neccessary to assign tags to input devices. While it should be
@@ -291,10 +291,10 @@ The problem with using device paths is that they change if you plug the device i
 
 === Tagging ===
 The udev rules for this configuration are only two.
-{{File|/etc/udev/rules.d/99-seats.rules|udev rules for tagging input devices|<pre>
+{{FileBox|filename=/etc/udev/rules.d/99-seats.rules|title=udev rules for tagging input devices|1=
 SUBSYSTEM=="input", ENV{ID_INPUT.tags}="input_default"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:13.2/usb2/2-4/*", ENV{ID_INPUT.tags}="input_right"
-</pre>}}
+}}
 The first one simply assigns the "input_default" tag to all input devices. The second one overrides this in case that the path prefix matches the path of the hub. If there were useful attributes to identify it, we could copy-paste the relevant "ATTR" and/or "ATTRS" lines from udevadm output instead of using the "DEVPATH".
 
 === Sound cards detection and assignment ===
@@ -320,12 +320,12 @@ If one wants to assign a card per seat, it is doable even if one of the cards is
 /sys/devices/LNXSYSTM:00/LNXPWRBN:00/input/input1
 </pre>}}
 after matching the cards to the actual adapter, one can conclude that card0 is the O\B and card 2 is usb one (card 1 seem to be gpu hdmi card) so assuming that we decide to add the O\B card to input_right, /etc/udev/rules.d/99-seats.rules should look like this:
-{{File|/etc/udev/rules.d/99-seats.rules|udev rules for tagging input devices|<pre>
+{{FileBox|filename=/etc/udev/rules.d/99-seats.rules|title=udev rules for tagging input devices|1=
 SUBSYSTEM=="input", ENV{ID_INPUT.tags}="input_default"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:13.2/usb2/2-4/*", ENV{ID_INPUT.tags}="input_right"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:1b.0/sound/card0/*", ENV{ID_INPUT.tags}="input_right"
 SUBSYSTEM=="input", DEVPATH=="/devices/pci0000:00/0000:00:1b.0/input/*", ENV{ID_INPUT.tags}="input_right"
-</pre>}}
+}}
 
 == Desktop manager ==
 While it is possible to run a multiseat system without a DM, it is easier to have one. It has to be configured to start up an X server instance for each seat, and is also useful if other seat-specific configuration is to be done (cf. [[#PulseAudio|changing configuration at login]]).
@@ -333,7 +333,7 @@ While it is possible to run a multiseat system without a DM, it is easier to hav
 === KDM ===
 The KDE desktop manager's configuration resides in /usr/share/config/kdm/kdmrc. It contains lots of settings, but only those specific to a multiseat configuration are given here. Note that settings under <nowiki>[X-*-core]</nowiki> apply to all X servers, while those with headings such as <nowiki>[X-:0-core]</nowiki> are server specific.
 
-{{File|/usr/share/config/kdm/kdmrc|KDM configuration; only multiseat-specific settings are listed|<pre>
+{{FileBox|filename=/usr/share/config/kdm/kdmrc|title=KDM configuration; only multiseat-specific settings are listed|lang=ini|1=
 [General]
 ServerVTs=-12
 StaticServers=:0,:1
@@ -343,7 +343,7 @@ ServerCmd=/usr/bin/X -config xorg_left.conf -br -ac vt12
 
 [X-:1-Core]
 ServerCmd=/usr/bin/X -config xorg_right.conf -br -ac -sharevts vt12
-</pre>}}
+}}
 
 The settings under ''[General]'' specify that two servers are to be started, while the next two sections specify their command lines. Other settings are necessary to get a well-working KDM, but are omitted here. The important part of the X command line are the configuration file, the virtual terminal (all X servers must have the same terminal) and the -sharevts option for all but the first X server. The -ac option is useful in a collaborative environment as it disables access control and allows users to put windows to each other's screens, but you may wish to omit it.
 
@@ -361,7 +361,7 @@ Next, the default sound cards are configured to be routed to PulseAudio. Since e
 
 ==== ALSA ====
 The ALSA configuration is global and resides in /etc/asound.conf.
-{{File|/etc/asound.conf|ALSA configuration|<pre>
+{{FileBox|filename=/etc/asound.conf|title=ALSA configuration|1=
 pcm.pulse {
     type pulse
 }
@@ -435,7 +435,7 @@ pcm.right_sound {
     playback.pcm "righto"
     capture.pcm "rshare"
 }
-</pre>}}
+}}
 
 The first four blocks simply enable the PulseAudio plugin and set the defaults to go through it.
 
@@ -456,23 +456,23 @@ Each user runs their own PulseAudio server. This server needs to be configured a
 
 First, we prepare the seat-specific files in /etc/pulse. Change the example default.pa file provided by pulseaudio to disable the udev autodetection module, then add the sound cards as below.
 
-{{File|/etc/pulse/left_seat.pa|Left seat sound|<pre>
+{{FileBox|filename=/etc/pulse/left_seat.pa|title=Left seat sound|1=
 load-module module-alsa-sink device=left_sound
 load-module module-alsa-source device=left_sound
 load-module module-alsa-card device_id="1" name="pci-0000_01_00.1" card_name="alsa_card.pci-0000_01_00.1" tsched=yes ignore_dB=yes
-</pre>}}
+}}
 
-{{File|/etc/pulse/right_seat.pa|Right seat sound|<pre>
+{{FileBox|filename=/etc/pulse/right_seat.pa|title=Right seat sound|1=
 load-module module-alsa-sink device=right_sound
 load-module module-alsa-source device=right_sound
 load-module module-alsa-card device_id="2" name="pci-0000_05_00.1" card_name="alsa_card.pci-0000_05_00.1" tsched=yes ignore_dB=yes
-</pre>}}
+}}
 
 The specification is straightforward. The options for the HDMI sound cards can be obtained by runing a pulseaudio instance ''with'' autodetection and dumping its settings.
 
 Next, we configure the desktop manager to choose the right configuration at login. The XDM-based desktop managers such as KDM have an Xstartup file which runs after the X server starts but before the user's session is started. It runs as root, but points the $HOME variable to the user's home. More information is available in the XDM's [[man page]].
 
-{{File|/usr/share/config/kdm/Xstartup|Login configuration|<pre>
+{{FileBox|filename=/usr/share/config/kdm/Xstartup|title=Login configuration|lang=bash|1=
 #!/bin/sh
 case $DISPLAY in
     :0)
@@ -483,51 +483,51 @@ case $DISPLAY in
         ;;
 esac
 
-cd "$HOME"/.pulse/ || exit 0
-[ -h default.pa -o ! -e default.pa ] || exit 0
+cd "$HOME"/.pulse/ {{!}}{{!}} exit 0
+[ -h default.pa -o ! -e default.pa ] {{!}}{{!}} exit 0
 dest=$(readlink default.pa)
 if [ ! "$dest" = $pulseconfig ] ; then
     rm default.pa
-    ln -s $pulseconfig default.pa || exit 1
+    ln -s $pulseconfig default.pa {{!}}{{!}} exit 1
 fi
 su -l -c 'pulseaudio -k; pulseaudio -D' $USER
 true
-</pre>}}
+}}
 
 This script simply cheks whether the $HOME/.pulse/default.pa file is a symlink and whether it points to the correct config file. If not, it recreates the correct symlink. It then restarts the PulseAudio daemon;
 they tend to hang around.
 
 To prevent PulseAudio and possibly other user-launched audio servers such as Music Player Daemon from running while the user is logged in and preventing audio access to other users, we can stop them using the Xreset script.
-{{File|/usr/share/config/kdm/Xreset|Logout configuration|<pre>
+{{FileBox|filename=/usr/share/config/kdm/Xreset|title=Logout configuration|lang=bash|1=
 #!/bin/sh
 su -l -c 'mpd --kill; pulseaudio -k' $USER
-</pre>}}
+}}
 
 === Single sound card per seat ===
 For the ones who don't like PulseAudio and want to assign sound card per seat, here is possible way. First, make sure that aplay is installed or your system, second take note that the output of aplay -l will decide which card to attach to which seat so make sure you attach the cards in the right order.
 
 All users should have at least the following file in their home folder (thanks to the guys at alsa mailing list for the help):
-{{File|~/.asoundrc|asoundrc basic config|<pre>
+{{FileBox|filename=~/.asoundrc|title=asoundrc basic config|1=
 defaults.pcm.card 0
 defaults.ctl.card 0
-</pre>}}
+}}
 this file defines which sound card to use.
 
 Now under /etc/profile.d, put the next file:
-{{File|/etc/profile.d/define_sound_card.sh|logon seat sound card def script|<pre>
+{{FileBox|filename=/etc/profile.d/define_sound_card.sh|title=logon seat sound card def script|lang=bash|1=
 #!/bin/bash
 SOUND_CARD_ID=0
 
-if [ "$(whoami)" != "root" -a -f ~/.asoundrc -a $(who | grep "${USER}" | grep -cv "pts") -eq 1 ]; then
-        index=$(($(echo "${DISPLAY}" | cut -f2 -d:)+1))
-        line="$(arecord -L | grep -A1 sysdefault  |  tr '\n' ' ' | sed 's/ -- /\n/g' | sed ${index}'q;d')"
-        regex="$(echo "${line}" | sed -e 's/sysdefault:CARD=/\.\*/g;s/,/\.\*/g;s/[[:blank:]][[:blank:]][[:blank:]]*/\.\*/g')"
-        card="$(arecord -l | grep "device 0:" | grep "${regex}")"
-        SOUND_CARD_ID=$(echo "${card}" | sed 's/:.*$//g' | awk '{print $2}')
+if [ "$(whoami)" != "root" -a -f ~/.asoundrc -a $(who {{!}} grep "${USER}" {{!}} grep -cv "pts") -eq 1 ]; then
+        index=$(($(echo "${DISPLAY}" {{!}} cut -f2 -d:)+1))
+        line="$(arecord -L {{!}} grep -A1 sysdefault  {{!}}  tr '\n' ' ' {{!}} sed 's/ -- /\n/g' {{!}} sed ${index}'q;d')"
+        regex="$(echo "${line}" {{!}} sed -e 's/sysdefault:CARD=/\.\*/g;s/,/\.\*/g;s/[[:blank:]][[:blank:]][[:blank:]]*/\.\*/g')"
+        card="$(arecord -l {{!}} grep "device 0:" {{!}} grep "${regex}")"
+        SOUND_CARD_ID=$(echo "${card}" {{!}} sed 's/:.*$//g' {{!}} awk '{print $2}')
         sed -i "s/\.card [0-9]*/\.card ${SOUND_CARD_ID}/g" ~/.asoundrc
         export SOUND_CARD_ID=${SOUND_CARD_ID}
 fi
-</pre>}}
+}}
 now when ever a user logs in to a seat, his local .asoundrc will be updated to the seat's soundcard.
 
 there is another more user friendly option, this script: http://www.4shared.com/file/blo0ratQ/multi_seat_alsa_utils.html will allow user to assign a specific card to a seat. the script assumes that the num val of DISPLAY represents the seat's id.
@@ -544,14 +544,14 @@ As of early 2012, ConsoleKit fails to serve its purpose of identifying which use
 Implementing a good security policy governing local users is difficult. While it may be hoped that systemd will at some point provide a better solution, it is currently best to assume that all local users are trusted.
 
 Sadly, major desktops now depend on polkit and will force its installation. As a workaround, we can enable access to local devices to inactive users. Create a new policy file:
-{{File|/etc/polkit-1/rules.d/00-allow_mounting.rules|polkit workaround|<pre>
-polkit.addRule(function(action, subject) {                                       
-    if (action.id.indexOf("org.freedesktop.udisks") == 0 &&                      
-        subject.isInGroup("plugdev")) {                                          
-        return polkit.Result.YES;                                                
-    }                                                                            
+{{FileBox|filename=/etc/polkit-1/rules.d/00-allow_mounting.rules|title=polkit workaround|1=
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.udisks") == 0 &&
+        subject.isInGroup("plugdev")) {
+        return polkit.Result.YES;
+    }
 });
-</pre>}}
+}}
 This will allow those users that are in the plugdev group to perform actions in the udisks category. Available actions can be listed using the "pkaction" tool, so it is easy to add rules for other categories.
 
 [[Category:X.Org]]
