@@ -52,20 +52,18 @@ These errors can be quite troublesome. However, once you find them, what do you 
 === Introduction ===
 GDB, or the (G)NU (D)e(B)ugger, is a program used to find run time errors that normally involve memory corruption. First off, let's take a look at what debugging entails. One of the main things you must do in order to debug a program is to <code>emerge</code> the program with <code>FEATURES="nostrip"</code> . This prevents the stripping of debug symbols. Why are programs stripped by default? The reason is the same as that for having gzipped man pages -- saving space. Here's how the size of a program varies with and without debug symbol stripping. 
 
-{{Code|Filesize Comparison|<pre>
+{{CodeBox|title=Filesize Comparison|1=
 ## (debug symbols stripped)
 -rwxr-xr-x  1 chris users 3140  6/28 13:11 bad_code
 ## (debug symbols intact)
 -rwxr-xr-x  1 chris users 6374  6/28 13:10 bad_code
-</pre>
 }}
 
 Just for reference, ''bad_code'' is the program we'll be debugging with <code>gdb</code> later on. As you can see, the program without debugging symbols is 3140 bytes, while the program with them is 6374 bytes. That's close to double the size! Two more things can be done for debugging. The first is adding <code>ggdb</code> to your CFLAGS and CXXFLAGS. This flag adds more debugging information than is generally included. We'll see what that means later on. This is how {{Path|/etc/portage/make.conf}}  ''might'' look with the newly added flags. 
 
-{{Code|make.conf settings|<pre>
+{{FileBox|filename=/etc/portage/make.conf|title=make.conf settings|lang=bash|1=
 CFLAGS="-O1 -pipe -ggdb"
 CXXFLAGS="${CFLAGS}"
-</pre>
 }}
 
 You may also want to consider using "-Wall" and "-g".  "-Wall" prints compiler warnings, and "-g" produces debugging information in the operating system's native format which also works with gdb. See [http://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html#Debugging-Options GCC Debugging Options] for details.
@@ -167,14 +165,13 @@ This backtrace contains a large number of ?? marks. This is because without debu
 
 Here we see that a lot more information is available for developers. Not only is function information displayed, but even the exact line numbers of the source files. This method is the most preferred if you can spare the extra space. Here's how much the file size varies between debug, strip, and -ggdb enabled programs. 
 
-{{Code|Filesize differences With -ggdb flag|<pre>
+{{CodeBox|title=Filesize differences With -ggdb flag|1=
 ## (debug symbols stripped)
 -rwxr-xr-x  1 chris users 3140  6/28 13:11 bad_code
 ## (debug symbols enabled)
 -rwxr-xr-x  1 chris users 6374  6/28 13:10 bad_code
 ## (-ggdb flag enabled)
 -rwxr-xr-x  1 chris users 19552  6/28 13:11 bad_code
-</pre>
 }}
 
 As you can see, -ggdb adds about ''13178'' more bytes to the file size over the one with debugging symbols. However, as shown above, this increase in file size can be worth it if presenting debug information to developers. The backtrace can be saved to a file by copying and pasting from the terminal (if it's a non-x based terminal, you can use gpm. To keep this doc simple, I recommend you read up on the [[GPM]] documentation to see how to copy and paste with it). Now that we're done with <code>gdb</code>, we can quit. 
@@ -205,10 +202,9 @@ We make <code>strace</code> log the results of the system calls. To do this, we 
 
 This creates a file called {{Path|strace.log}} in the current directory. We check the file, and shown below are the relevant parts from the file. 
 
-{{Code|A Look At the strace Log|<pre>
+{{CodeBox|title=A Look At the strace Log|1=
 open(".foobar2/config", O_RDONLY)       = 3
 read(3, "bar", 3)                       = 3
-</pre>
 }}
 
 Aha! So There's the problem. Someone moved the configuration directory to {{Path|.foobar2}} instead of {{Path|.foobar}}. We also see the program reading in "bar" as it should. In this case, we can recommend the ebuild maintainer to put a warning about it. For now though, we can copy over the config file from {{Path|.foobar}} and modify it to produce the correct results.
@@ -249,7 +245,7 @@ make: *** [foobar2.o] Error 1
 The program is compiling smoothly when it suddenly stops and presents an error message. This particular error can be split into 3 different sections, the compile messages, the build error, and the emerge error message as shown below. 
 
 
-{{Code|Compilation Messages|<pre>
+{{CodeBox|title=Compilation Messages|1=
 gcc -D__TEST__ -D__GNU__ -D__LINUX__ -L/usr/lib -I/usr/include -L/usr/lib/nspr/ -I/usr/include/fmod \
  -c -o foobar2-7.o foobar2-7.c
 gcc -D__TEST__ -D__GNU__ -D__LINUX__ -L/usr/lib -I/usr/include -L/usr/lib/nspr/ -I/usr/include/fmod \
@@ -258,19 +254,18 @@ gcc -D__TEST__ -D__GNU__ -D__LINUX__ -L/usr/lib -I/usr/include -L/usr/lib/nspr/ 
  -c -o foobar2-9.o foobar2-9.c
 gcc -D__TEST__ -D__GNU__ -D__LINUX__ -L/usr/lib -I/usr/include -L/usr/lib/nspr/ -I/usr/include/fmod \
  -c -o foobar2.o foobar2.c
-</pre>}}
+}}
 
-{{Code|Build Error|<pre>
+{{CodeBox|title=Build Error|1=
 foobar2.c:1:17: ogg.h: No such file or directory
 make: *** [foobar2.o] Error 1
-</pre>}}
+}}
 
-{{Code|Emerge Error|<pre>
+{{CodeBox|title=Emerge Error|<pre>
 !!! ERROR: sys-apps/foobar2-1.0 failed.
 !!! Function src_compile, Line 19, Exitcode 2
 !!! Make failed!
 !!! If you need support, post the topmost build error, NOT this status message
-</pre>
 }}
 
 The compilation messages are what lead up to the error. Most often, it's good to at least include 10 lines of compile information so that the developer knows where the compilation was at when the error occurred. 
@@ -312,7 +307,7 @@ The log files have the format [category]:[package name]-[version]:[date].log. A 
 
 One of the most frustrating things for developers and bug-wranglers is finding duplicate bug reports. These cost them valuable time that they could otherwise use to work on more important bugs. Often, this can be prevented by a few simple search methods. So we're going to see how to search for bugs and find out if you have one that's similar. For this example, we're going to use the xclass emerge error that was used earlier. 
 
-{{Code|xclass emerge error|<pre>
+{{CodeBox|title=xclass emerge error|1=
 /usr/lib/gcc-lib/i686-pc-linux-gnu/3.3.2/include/g++-v3/backward/backward_warning.h:32:2:
 warning: #warning This file includes at least one deprecated or antiquated
 header. Please consider using one of the 32 headers found in section 17.4.1.2 of
@@ -340,7 +335,6 @@ make: *** [shared] Error 2
 !!! ERROR: x11-libs/xclass-0.7.4 failed.
 !!! Function src_compile, Line 29, Exitcode 2
 !!! 'emake shared' failed
-</pre>
 }}
 
 So to begin searching, we head over to the [https://bugs.gentoo.org/ Bugzilla Homepage]. 
@@ -354,11 +348,10 @@ Proceed by clicking on the "Advanced Search" link to bring up the Advanced Searc
 * The first field is the summary of the bug. Here we're simply going to put the name of the package that's crashing. If bugzilla doesn't return results, try removing the package name, just in case someone didn't put that in the summary (highly unlikely, but we've seen a fair share of strange bug reports). 
 * Product, Component, and Version should all be set to the default. This prevents us from being too specific and missing all the bugs. 
 * Comment is the important part. Use the comment field to list what appears to be a specific instance of the error. Basically, don't use anything like the beginning of the build error, find a line that's before it stating a true error. Also, you'll want to filter out any punctuation to prevent bugzilla from interpreting the results the comment the wrong way.<br>Let's look at our example from the xclass emerge error again, and notice that it is specific enough to where we'll find the bug without wading through other xclass compile failure candidates:<br>
-{{Code|Comment Line Content|<pre>
+{{CodeBox|title=Comment Line Content|1=
 menudef.h:78: error: brace-enclosed initializer used to initialize `OXPopupMenu'
 ## (Remove the quotes ' ')
 menudef.h 78 error brace-enclosed initializer used to initialize OXPopupMenu
-</pre>
 }}
 * URI, Whiteboard, and Keywords can all be left alone. What we've entered so far should be enough to find our bug. Let's take a look at what we have filled out. 
 
@@ -440,7 +433,7 @@ However, bug-wranglers (usually) won't fix our bugs, so we'll reassign it to som
 
 {{Note|You have to be the reporter of the bug or a member of certain Gentoo Bugzilla groups (like Gentoo Developers) to be able to reassign bugs.}}
 
-{{Code|metadata.xml|<pre>
+{{FileBox|filename=/usr/portage/category/package/metadata.xml|lang=xml|1=
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE pkgmetadata SYSTEM "http://www.gentoo.org/dtd/metadata.dtd">
 <pkgmetadata>
@@ -453,7 +446,6 @@ However, bug-wranglers (usually) won't fix our bugs, so we'll reassign it to som
 Foobar2 is a package that uses a configuration file to display a word.
 </longdescription>
 </pkgmetadata>
-</pre>
 }}
 
 Notice the maintainer section. This lists the maintainer of the package, which in this case is Chris White. The email listed is chriswhite@gentoo.org. We will use this to re-assign the bug to the proper person. To do this, click the bubble next to Reassign bug to, then fill in the email. 
@@ -474,7 +466,7 @@ Submit {{Path|strace.log}} and it is reflected on the bug report.
 
 We've mentioned before that sometimes ebuilds will tell you to attach a file in the emerge error. An example can be seen below. 
 
-{{Code|Example File Attachment Request|<pre>
+{{CodeBox|title=Example File Attachment Request|1=
 configure: error: PNG support requires ZLIB. Use --with-zlib-dir=<DIR>
 
 !!! Please attach the config.log to your bug report:
@@ -484,7 +476,6 @@ configure: error: PNG support requires ZLIB. Use --with-zlib-dir=<DIR>
 !!! Function econf, Line 485, Exitcode 0
 !!! econf failed
 !!! If you need support, post the topmost build error, NOT this status message.
-</pre>
 }}
 
 Please attach any file mentioned like this to your bug report. 
@@ -543,9 +534,8 @@ Let's say that you reported a bug for the foobar2 compile fix from earlier. Now 
 
 Some rather confusing vocabulary is used here. First off, let's see what an overlay is. An overlay is a special directory like {{Path|/usr/portage}}, the difference being that when you <code>emerge sync</code>, files contained within it will not be deleted. Luckily, a special {{Path|/usr/local/portage}} directory is created for that purpose. Let's go ahead and set our portage overlay in {{Path|/etc/portage/make.conf}} . Open {{Path|make.conf}} up in your favorite editor and add this towards the end. 
 
-{{Code|Setting Up PORTDIR_OVERLAY|<pre>
+{{CodeBox|title=Setting Up PORTDIR_OVERLAY|lang=bash|1=
 PORTDIR_OVERLAY="/usr/local/portage"
-</pre>
 }}
 
 Now we'll want to create the appropriate directories to put our test ebuild files in. In this case, we're supposed to put them in {{Path|sys-apps/foobar2}}. You'll notice that the second comment asks for a {{Path|files}} directory for the patch. This directory holds other required files that aren't included with the standard source archive (patches, init.d scripts, etc). This is a subdir in the package directory called {{Path|files}}. Go ahead and create these directories: 
