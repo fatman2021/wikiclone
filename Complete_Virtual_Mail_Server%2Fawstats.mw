@@ -17,24 +17,26 @@ AWStats comes with reasonable defaults, but some need to be changed nevertheless
 For one, awstats assumes that vhosts aren't used. When using apache's default combined vhost logs for example, awstats will fail to run.
 
 Assuming apache's combined LogFormat is setup as follows.
-{{Code|Apache's LogFormat|<pre>LogFormat "%v %h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" VLOG=%{VLOG}e" vhost</pre>}}
+{{CodeBox|title=Apache's LogFormat|1=
+LogFormat "%v %h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" VLOG=%{VLOG}e" vhost
+}}
 
 The following changes needs to be made.
-{{File|/etc/awstats/awstats.example.com.conf|Match Logformat to apache's.|<pre>
+{{FileBox|filename=/etc/awstats/awstats.example.com.conf|title=Match Logformat to apache's.|1=
 LogFormat = "%virtualname %host %other %logname %time1 %methodurl %code %bytesd %refererquot %uaquot"
-</pre>}}
+}}
 
 Next awstats needs to know about the domains and aliases to filter from the log file.
-{{File|/etc/awstats/awstats.example.com.conf|Make awstats listen to the domains|<pre>
+{{FileBox|filename=/etc/awstats/awstats.example.com.conf|title=Make awstats listen to the domains|<nowiki>
 SiteDomain="example.com"
 
 HostAliases="localhost 127.0.0.1 REGEX[example\.com)$] REGEX[example\.(org|net)$]
-</pre>}}
+</nowiki>}}
 
 Also, awstats needs to store its database somewhere. Gentoo has created {{Path|/var/lib/awstats}} for this use, but can be stored anywhere. Make sure the permissions are set so that the apache user can write to it.
-{{File|/etc/awstats/awstats.example.com.conf|AWStats database storage|<pre>
+{{FileBox|filename=/etc/awstats/awstats.example.com.conf|title=AWStats database storage|1=
 DirData="/var/lib/awstats"
-</pre>}}
+}}
 
 Any other changes to the configuration file are optional, but interesting to look into.
 {{Note|When using the graphapplet plugin, the java applet may not display, see {{Bug|400589}} for more information.}}
@@ -50,15 +52,15 @@ This should list any issues and missing domain names from the config.
 ==== Cron ====
 
 If everything is working perfectly, it can then be added to cron.hourly.
-{{File|/etc/cron.hourly/awstats|AWstats cronjob|<pre>
+{{FileBox|filename=/etc/cron.hourly/awstats|title=AWstats cronjob|lang=bash|1=
 #!/bin/sh
 awstats.pl -config=stats.example.com -update > /dev/null 2>&1
-</pre>}}
+}}
 Remember to make the script executeable if needed.
 
 ==== Logrotate ====
 Awstats will process the log file every hour, but when logrotate rotates apache's log, some entries may be missing. This is easily solved however.
-{{File|/etc/logrotate.d/apache2|Diff of pre-init script|<pre>
+{{FileBox|filename=/etc/logrotate.d/apache2|title=Diff of pre-init script|lang=diff|1=
 # Apache2 logrotate snipet for Gentoo Linux
 # Contributes by Chuck Short
 #
@@ -70,31 +72,30 @@ Awstats will process the log file every hour, but when logrotate rotates apache'
 +  /etc/cron.hourly/awstats > /dev/null 2>&1
 +  endscript
   postrotate
-  /etc/init.d/apache2 reload > /dev/null 2>&1 || true
+  /etc/init.d/apache2 reload > /dev/null 2>&1 {{!}}{{!}} true
   endscript
 }
-</pre>}}
+}}
 
 === Apache ===
 For awstats to be used from apache, the webhost needs to properly setup. In the alias section, the following needs to be added.
-{{File|/etc/apache2/vhosts.d/stats.example.com|Aliases for awstats|<pre>
+{{FileBox|filename=/etc/apache2/vhosts.d/stats.example.com|title=Aliases for awstats|1=
         Alias /awstats/classes "/usr/share/awstats/wwwroot/classes"
         Alias /awstats/css "/usr/share/awstats/wwwroot/css"
         Alias /awstats/icon "/usr/share/awstats/wwwroot/icon"
         ScriptAlias /awstats/ "/usr/share/awstats/wwwroot/cgi-bin/"
         ScriptAlias /awstats "/usr/share/awstats/wwwroot/cgi-bin/awstats.pl"
-</pre>
 }}
 
 Finally, awstats needs the correct permissions to be accessable.
-{{File|/etc/apache2/vhosts.d/stats.example.com|Aliases for awstats|<pre>
+{{FileBox|filename=/etc/apache2/vhosts.d/stats.example.com|title=Aliases for awstats|lang=apache|1=
 <Directory "/usr/share/awstats/wwwroot">
         AllowOverride None
         Options None
         Order allow,deny
         Allow from all
 </Directory>
-</pre>}}
+}}
 
 After a restart of apache, awstats should be available via ''http://stats.example.com/awstats/awstats.pl?config=stats.example.com''. If no config option is passed to awstats, it uses the current hostname, which means in this case could have been omitted.
 
@@ -103,9 +104,9 @@ AWStats is known for being an apache log parser. However it can also be used to 
 
 === Configuration ===
 After copying {{Path|awstats.stats.example.com.conf}} to {{Path|awstats.mail.example.com.conf}} quite a few changes are required to turn awstats into a mail log parser.
-{{File|/etc/awstats.mail.example.com.conf|Log mail.log instead of access.log (diff -u, only additions and deletions)|<pre>
+{{FileBox|filename=/etc/awstats.mail.example.com.conf|title=Log mail.log instead of access.log (diff -u, only additions and deletions)|lang=diff|1=
 -LogFile="/var/log/apache2/access_log"
-+LogFile="perl /usr/bin/awstats_maillogconvert.pl standard < /var/log/mail.log |"
++LogFile="perl /usr/bin/awstats_maillogconvert.pl standard < /var/log/mail.log {{!}}"
 
 -LogType=W
 +LogType=M
@@ -118,13 +119,13 @@ After copying {{Path|awstats.stats.example.com.conf}} to {{Path|awstats.mail.exa
 
 
 -HostAliases="localhost 127.0.0.1 REGEX[myserver\.com$]"
-+HostAliases="localhost 127.0.0.1 REGEX[example\.(net|org)$]"
++HostAliases="localhost 127.0.0.1 REGEX[example\.(net{{!}}org)$]"
 
 -DirData="."
 +DirData="/var/lib/awstats"
 
 -LevelForBrowsersDetection=2         # 0 disables Browsers detection.
-+LevelForBrowsersDetection=0        # 0 disables Browsers detection.
++LevelForBrowsersDetection=0         # 0 disables Browsers detection.
                                      # 2 reduces AWStats speed by 2%
                                      # allphones reduces AWStats speed by 5%
 -LevelForOSDetection=2               # 0 disables OS detection.
@@ -195,7 +196,7 @@ After copying {{Path|awstats.stats.example.com.conf}} to {{Path|awstats.mail.exa
 
 -ShowSMTPErrorsStats=0
 +ShowSMTPErrorsStats=1
-</pre>}}
+}}
 
 With those changes in place, a manual run should work without any issues.
 {{Cmd|awstats run from the CLI|<pre>
@@ -204,12 +205,12 @@ awstats.pl -config=mail.example.com -showcorrupted -showdropped
 
 === Logging ===
 To scan the mail log every hour, the existing awstats script in {{Path|cron.hourly}} can be appended with the following.
-{{File|/etc/cron.hourly/awstats|Add parsing of the mail log|<pre>
+{{FileBox|filename=/etc/cron.hourly/awstats|title=Add parsing of the mail log|lang=bash|1=
 awstats.pl -config=mail.example.com -update > /dev/null 2>&1
-</pre>}}
+}}
 
 Also syslog is getting rotated and thus awstats needs to parse the mail log file before the mail log is being rotated.
-{{File|/etc/logrotate.d/syslog-ng|Modify mail log entry in syslog|<pre>
+{{FileBox|filename=/etc/logrotate.d/syslog-ng|title=Modify mail log entry in syslog|<nowiki>
 # Mail system
 /var/log/mail.log /var/log/mail.info /var/log/mail.err /var/log/mail.warn {
     sharedscripts
@@ -221,7 +222,7 @@ Also syslog is getting rotated and thus awstats needs to parse the mail log file
         /etc/init.d/syslog-ng reload > /dev/null 2>&1 || true
     endscript
 }
-</pre>}}
+</nowiki>}}
 
 {{Note|The ''/var/log/mail.log'' file does not have to be on the same server. AWStats will have to have access to it. This could be via nfs, or having syslog do remote logging.}}
 
