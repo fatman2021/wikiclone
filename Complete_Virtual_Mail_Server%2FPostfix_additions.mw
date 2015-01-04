@@ -8,12 +8,12 @@ Mail submission is often incorrectly done on port 25 of the [[Wikipedia:Mail tra
 
 === Configuration ===
 The submissionb port is enabled in postfix's {{Path|master.cf}} it is commented by default including its options.
-{{File|/etc/postfix/master.cf|Mail submission by postfix|<pre>
+{{FileBox|filename=/etc/postfix/master.cf|title=Mail submission by postfix|1=
 submission inet n       -       n       -       -       smtpd
 -o smtpd_tls_security_level=may
 -o smtpd_sasl_auth_enable=yes
 -o smtpd_client_restrictions=permit_sasl_authenticated,reject
-</pre>}}
+}}
 After restarting postfix, this lets the client know, there is STARTTLS availablity, but it is not required (set this to ''smtpd_tls_security_level=encrypt'' to enforce encryption) and rejects all mail, except for authenticated users.
 {{RootCmd|/etc/init.d/postfix restart}}
 
@@ -29,41 +29,41 @@ For redundancy postfix offers the feature of ''backup mx''. Backup mx allows ano
 
 === Configuring backup-mx ===
 The database already knows about backup domains. If a domain ''has'' a backup mail server, the '''backupmx''' field is set to '''1''' in the '''domain''' table. Connecting postfix to the database requires a file with connection information.
-{{File|/etc/postfix/pgsql/relay_domains.cf|Setup relay domains|<pre>
+{{FileBox|filename=/etc/postfix/pgsql/relay_domains.cf|title=Setup relay domains|1=
 # relay_domains.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT description FROM domain WHERE domain='%s' AND backupmx='1' AND active='1';
-</pre>}}
+}}
 This then needs to be configured into postfix.
 
-{{File|/etc/postfix/main.cf|Modify postfix for relay domains|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Modify postfix for relay domains|1=
 # The relay_domains parameter restricts what destinations this system will
 # relay mail to.  See the smtpd_recipient_restrictions description in
 # postconf(5) for detailed information.
 relay_domains = pgsql:/etc/postfix/pgsql/relay_domains.cf
-</pre>}}
+}}
 
 To make proper use of ''relay_domains''
-{{File|/etc/postfix/pgsql/relay_recipient_maps.cf|Setup relay recipients|<pre>
+{{FileBox|filename=/etc/postfix/pgsql/relay_recipient_maps.cf|title=Setup relay recipients|1=
 # relay_recipient_maps.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT goto FROM alias WHERE address='%s' AND active='1';
-</pre>}}
+}}
 
 Also this needs to be configured into postfix.
-{{File|/etc/postfix/main.cf|Modify postfix for relay recipients|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Modify postfix for relay recipients|1=
 # REJECTING UNKNOWN RELAY USERS
 #
 # The relay_recipient_maps parameter specifies optional lookup tables
 # with all addresses in the domains that match $relay_domains.
 relay_recipient_maps = pgsql:/etc/postfix/pgsql/relay_recipient_maps.cf
-</pre>}}
+}}
 
 After restarting postfix, the mail server is now a less-open relay, relaying mail to only approved domains and approved users.
 
@@ -78,18 +78,18 @@ Quotas are a tool to help a user monitor their mailbox. They are very easily abu
 The database supports mail quotas however postfix requires a patch to support these mailquotas. The ''vda'' USEFlag enables this patch for postfix and allows the use of quotas.
 
 First, the data needs to be obtained from the database.
-{{File|/etc/postfix/pgsql/virtual_mailbox_limit_maps.cf|Query the database for quotas|<pre>
+{{FileBox|filename=/etc/postfix/pgsql/virtual_mailbox_limit_maps.cf|title=Query the database for quotas|1=
 # virtual_alias_maps.cf
 user            = postfix
 password        = $password
 dbname          = postfix
 #hosts          = localhost
 query           = SELECT quota FROM mailbox WHERE local_part='%u' AND domain='%d' AND active='1';
-</pre>}}
+}}
 
 There are a few things that need to be configured in postfix, next to the database query.
 The ''Trash'' folder for example, should not be counted when automatically deleting Trash after a fixed amount of time. This can (and has) be done in courier-imap.
-{{File|/etc/postfix/main.cf|Setup postfix to use quotas|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Setup postfix to use quotas|1=
 # Support for Postfix VDA quotas
 virtual_mailbox_limit_maps = pgsql:/etc/postfix/pgsql/virtual_mailbox_limit_maps.cf
 virtual_mailbox_limit_inbox = no
@@ -101,7 +101,7 @@ virtual_maildir_limit_message = "Sorry, the recipients mailbox is currently full
 virtual_trash_count = no
 virtual_trash_name = ".Trash"
 virtual_maildir_filter = no
-</pre>}}
+}}
 {{Warning|According to the postgresql manual the maximum value of a bigint (the quota) would be ''9223372036854775807''. However only ''9223372036854774784'' can be successfully used. If for some reason however '''8 Exabytes''' is required as the quota, it is probably wiser to just turn it off by setting the quota to 0 bytes.}}
 
 === Testing ===
@@ -138,53 +138,53 @@ The following table should give an idea how mail will get rejected from the vari
 {{Note|Notice that reject_unknown_hostname not only rejects fake FQDNs, but it also rejects IP addresses. By prepending the restriction list by ''permit_nakid_ip_address'' it will allow just IP addresses.}}
 
 On a properly configured network the following will be tight and should work.
-{{File|/etc/postfix/main.cf|HELO Restrictions|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=HELO Restrictions|1=
 # HELO Restrictions
 smtpd_helo_restrictions = permit_sasl_authenticated, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname
 smtpd_helo_required = yes
-</pre>}}
+}}
 
 {{Warning|Internal servers '''or''' internal mail clients may have trouble sending messages as they do not have a valid hostname setup and so local hostnames need to be configured properly in the internal DNS servers and thus become valid hostnames. If internal servers or clients do not have proper hostnames, a safe restriction list would be ''smtpd_helo_restrictions &#61; permit_naked_ip_address, reject_invalid_hostname''. If tight control is required and setting up of proper internal hostnames is not possible, another option would be to permit mynetworks brining the restriction to ''smtpd_helo_restrictions &#61; permit_mynetworks, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname'' and then either extending ''mynetworks'' with the internal systems or internal network.}}
 
 == Deny local username farming ==
 Normally postfix, or general MTA's allow to verify whether a mailbox exists or not. This command may have been useful in the early days of mail, but is almost exclusively used by peole who maintain bulk mailing lists and search if accounts are still valid. This command can be disabled by postfix.
-{{File|/etc/postfix/main.cf|Disable verify|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Disable verify|1=
 # Do not respond to the VRFY command
 disable_vrfy_command = yes
-</pre>}}
+}}
 
 After a restart of postfix, telnet to port 25 will no longer show '''250-VRFY'''.
 
 == SMTPD Banner ==
 Another oftenly abused feature is the SMTP header. Also some countries require senders to honor the NO UCE greeting message (No Unsolicited Commercial E-mail). Also it is wise not to tell any outsiders what MTA is being used or what version thereof. Postfix allows for changing the SMTP header quite easily. Find the ''smtpd_banner'' section in main.cf.
-{{File|/etc/postfix/main.cf|Change the SMTPD Banner|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Change the SMTPD Banner|1=
 # SHOW SOFTWARE VERSION OR NOT
 smtpd_banner = $myhostname ESMTP NO UCE
-</pre>}}
+}}
 {{Note|''NO UCE'' is technically a comment, '''ESMTP''' needs to be the before any comments.}}
 
 == Message size ==
 For years the default message size amongst MTA's has been 10MiB. Google raised the bar with their gmail service to 20MiB per message. If bandwidth isn't an issue this can easily be accomplished with postfix.
-{{File|/etc/postfix/main.cf|Change allowed message size limit|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Change allowed message size limit|1=
 # Increase maximum message size
 message_size_limit = 20971520
-</pre>}}
+}}
 
 == Postfix Performance ==
 
 === Biff ===
 For compatibility reasons postfix's local mail notification is enabled by default. With many users this can be a performance drain and since there are no local users to use the biff command anyway this can safely be disabled.
-{{File|/etc/postfix/main.cf|Disable biff|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Disable biff|1=
 # Disable biff notifications
 biff = no
-</pre>}}
+}}
 
 === Processes ===
 The amount of concurrent processes of any of postfix's applications is limited to 50. The first bump in high load environments can be very quickly be the amount of active daemons. Smaller setups should not need to worry about this setting.
-{{File|/etc/postfix/main.cf|Increase postfix processes|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Increase postfix processes|1=
 # Increase number of allowed processes
 default_process_limit = 75
-</pre>}}
+}}
 
 {{Warning|Before increasing the amount of processes it needs to be carefully examined if the server can handle the additional load. The '''ps aux''' and '''top''' commands can be of great help here. The percentage of memory used by each process should be inspected. If for example the memory usage per postfix process nears 2% on a process limit of 50, increasing the limit to 100 would mean that double the memory would be required. Afterall, 2% *50process would be 100% of the available memory. If the server would also have other processes running consuming memory, the amount of memory used by postfix would have to be less. The same can be said about CPU usage. If CPU utilization is nearing 70% doing mostly mail delivery and postfix is the only service on the server, a faster CPU or clustered setup would need to be considered. If there are other services running on the server using larger amounts of CPU time, they could be relocated to other, less busy servers.}}
 
