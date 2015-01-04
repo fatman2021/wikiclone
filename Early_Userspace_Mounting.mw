@@ -30,14 +30,14 @@ Make sure that these two are executable:
 |chmod +x usr/gen_init_cpio scripts/gen_initramfs_list.sh}}
 
 Make sure that your running kernel is built with the ''devtmpfs'' option enabled. It is required by the init script below and [[udev]]:
-{{Kernel||<pre>
+{{KernelBox|<pre>
 Device Drivers  --->
     Generic Driver Options  --->
         [*] Maintain a devtmpfs filesystem to mount at /dev
 </pre>}}
 
 Next up is the {{Path|initramfs_list}} file which will tell '''gen_initramfs_list.sh''' how to construct the initramfs:
-{{File|/usr/src/initramfs/initramfs_list||<pre>
+{{FileBox|filename=/usr/src/initramfs/initramfs_list|1=
 # directory structure
 dir /proc       755 0 0
 dir /usr        755 0 0
@@ -70,11 +70,11 @@ file    /sbin/fsck.ext4         /sbin/fsck.ext4                     755 0 0
 
 # our init script
 file    /init                   /usr/src/initramfs/init             755 0 0
-</pre>}}
+}}
 Copy and save the contents of the above to {{Path|/usr/src/initramfs/initramfs_list}}.
 
 Last up is the actual {{Path|init}} file which will execute the initramfs:
-{{File|/usr/src/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/initramfs/init|lang=bash|1=
 #!/bin/busybox sh
 
 rescue_shell() {
@@ -88,13 +88,13 @@ uuidlabel_root() {
     for cmd in $(cat /proc/cmdline) ; do
         case $cmd in
         root=*)
-            type=$(echo $cmd | cut -d= -f2)
+            type=$(echo $cmd {{!}} cut -d= -f2)
             echo "Mounting rootfs"
-            if [ $type == "LABEL" ] || [ $type == "UUID" ] ; then
-                uuid=$(echo $cmd | cut -d= -f3)
+            if [ $type == "LABEL" ] {{!}}{{!}} [ $type == "UUID" ] ; then
+                uuid=$(echo $cmd {{!}} cut -d= -f3)
                 mount -o ro $(findfs "$type"="$uuid") /mnt/root
             else
-                mount -o ro $(echo $cmd | cut -d= -f2) /mnt/root
+                mount -o ro $(echo $cmd {{!}} cut -d= -f2) /mnt/root
             fi
             ;;
         esac
@@ -126,7 +126,7 @@ check_filesystem() {
     case $? in
         0)      return 0;;
         1)      echo "Filesystem repaired"; return 0;;
-        2|3)    if [ "$RC_UNAME" = Linux ]; then
+        2{{!}}3)    if [ "$RC_UNAME" = Linux ]; then
                         echo "Filesystem repaired, but reboot needed"
                         reboot -f
                 else
@@ -157,7 +157,7 @@ echo 0 > /proc/sys/kernel/printk
 clear
 
 # mounting rootfs on /mnt/root
-uuidlabel_root || rescue_shell "Error with uuidlabel_root"
+uuidlabel_root {{!}}{{!}} rescue_shell "Error with uuidlabel_root"
 
 # space separated list of mountpoints that ...
 mountpoints="/usr"
@@ -171,10 +171,10 @@ for m in $mountpoints ; do
 
     echo "Mounting $m"
     # mount the device and ...
-    mount $m || rescue_shell "Error while mounting $m"
+    mount $m {{!}}{{!}} rescue_shell "Error while mounting $m"
 
     # ... move the tree to its final location
-    mount --move $m "/mnt/root"$m || rescue_shell "Error while moving $m"
+    mount --move $m "/mnt/root"$m {{!}}{{!}} rescue_shell "Error while moving $m"
 done
 
 echo "All done. Switching to real root."
@@ -186,7 +186,7 @@ umount /dev
 
 # switch to the real root and execute init
 exec switch_root /mnt/root /sbin/init
-</pre>}}
+}}
 Copy and save the contents of the above to {{Path|/usr/src/initramfs/init}}.
 
 == Generating the Initramfs ==
@@ -196,22 +196,22 @@ Run the '''gen_initramfs_list.sh''' script with the ''-o'' argument pointing to 
 
 == System Preparation ==
 In fstab, we must set the sixth field for the ''/usr'' entry to ''0'', this will prevent the [[OpenRC]] fsck init script to try to check the filesystem for the already mounted {{Path|/usr}}:
-{{File|/etc/fstab||<pre>
+{{FileBox|filename=/etc/fstab|1=
 /dev/sdb3   /usr    ext4   noatime  0 0
-</pre>}}
+}}
 
 == Configuring GRUB ==
 Add the ''initrd'' line to {{Path|grub.conf}}:
-{{File|grub.conf||<pre>
+{{FileBox|filename=grub.conf|1=
 title Gentoo Linux
 root ...
 kernel ...
 initrd /boot/initrd.cpio.gz
-</pre>}}
+}}
 
 == Result ==
 When booting, the output looks like this:
-{{Code|output of the initramfs when booting|<pre>
+{{CodeBox|title=output of the initramfs when booting|1=
 Mounting rootfs
 Checking local filesystem :  /usr
 /dev/sdb3: clean, 285754/1640160 files, 1663220/6556528 blocks
@@ -223,7 +223,7 @@ INIT: version 2.88 booting
 
 Press I to enter interactive boot mode
 [...]
-</pre>}}
+}}
 
 == External resources ==
 * http://jootamam.net/howto-initramfs-image.htm
