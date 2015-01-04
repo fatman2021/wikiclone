@@ -3,10 +3,10 @@ Spam is becoming more and more of an issue on the internet and a robust and soli
 
 == Postfix ==
 The first line of defense, is postfix itself. Postfix offers a few basic means to block spam, or rather spammers. Using ''smtpd_client_restrictions'' it is possible to use public DNS blacklists. There are 3 popular DNS blacklists of which one is incorporated into the other. These two lists are also the [http://www.intra2net.com/en/support/antispam/ most accurate] ones. The most important one is [http://zen.spamhaus.org zen.spamhaus.org] and as a backup [http://bl.spamcop.net bl.spamcop.net] can be used. Using them with postfix is very simple. Add these domains as ''reject_rbl_client'' in {{Path|main.cf}}.
-{{File|/etc/postfix/main.cf|Use DNS blacklists|<pre>
+{{FileBox|filename=/etc/postfix/main.cf|title=Use DNS blacklists|1=
 # Block spam using DNS blacklists
 smtpd_client_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_rbl_client zen.spamhaus.org, reject_rbl_client bl.spamcop.net
-</pre>}}
+}}
 {{Note|''permit_mynetworks'' and ''permit_sasl_authenticated'' are added for good measure. If other restrictions are required or already in use, keep them in place.}}
 
 == Amavis ==
@@ -28,7 +28,7 @@ For this example amavisd will be running on host foo but this could be any other
 
 The first step, is to disable all actual checks and to enable logging. Also some default values should be setup.
 
-{{File|/etc/amavisd.conf|Disable anti-spam, enable logging|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=Disable anti-spam, enable logging|1=
 @bypass_virus_checks_maps = (1);  # controls running of anti-virus code
 @bypass_spam_checks_maps  = (1);  # controls running of anti-spam code
 # $bypass_decode_parts = 1;         # controls running of decoders&dearchivers
@@ -37,7 +37,7 @@ $mydomain = 'example.com';
 $myhostname = 'foo.example.com';
 
 $log_level = 5;              # verbosity 0..5, -d
-</pre>}}
+}}
 
 {{Note|''virusalert@example.com'' and ''spam.police@example'' can be renamed to ''undef'' if not wanting to receive any information on breaches. If not, these e-mail addresses should exist.}}
 
@@ -48,7 +48,7 @@ Normally restarting postfix should restart aswell, for now, only amavisd should 
 With amavisd working in bare skeletal mode, it should theoretically just pass mail through. Perfect for testing the postfix -> amavisd -> postfix binding.
 
 First, a second postfix transport, where amavis will inject its mail, is added. A lot of options are defaulted to empty, since either they have been checked already, or interfere otherwise.
-{{File|/etc/postfix/master.cf|Filter mail through amavisd|<pre>
+{{FileBox|filename=/etc/postfix/master.cf|title=Filter mail through amavisd|1=
 localhost:10025 inet n  -       n       -       2       smtpd
   -o disable_dns_lookup=yes
   -o content_filter=
@@ -69,21 +69,21 @@ localhost:10025 inet n  -       n       -       2       smtpd
   -o smtpd_client_connection_rate_limit=0
   -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks
   -o smtpd_authorized_xforward_hosts=127.0.0.0/8
-</pre>}}
+}}
 With this transport in place, it should only listen on localhost and only accept mail from localhost. This should be extended if amavis is run elsewhere, but keep in mind anything is accepted.
 {{Note|''maxproc' is set to '''2''' above. This can be increased if more listening daemons are requried. However this number needs to match amavis's ''$max_servers''.}}
 
 Next another transport is added for, which could be considers 'being' amavis in a sense.
 
-{{File|/etc/postfix/master.cf|amavis transport|<pre>
+{{FileBox|filename=/etc/postfix/master.cf|title=amavis transport|1=
 amavis    unix  -       -       n       -       2       lmtp
   -o disable_dns_lookups=yes
   -o lmtp_send_xforward_command=yes
   -o lmtp_data_done_timeout=1200
-</pre>}}
+}}
 
 After the transport for amavis has been added, smtp should be told to route all mail through amavis. For this two option need to be added to smtpd and change the maxproc to match amavis's.
-{{File|/etc/postfix/master.cf|relay to amavis|<pre>
+{{FileBox|filename=/etc/postfix/master.cf|title=relay to amavis|1=
 smtp       inet  n       -       n       -       2       smtpd
   -o content_filter=amavis:[127.0.0.1]:10024
   -o receive_override_options=no_address_mappings
@@ -91,7 +91,7 @@ smtps     inet  n       -       n       -       2       smtpd
   -o smtpd_tls_wrappermode=yes
   -o content_filter=amavis:[127.0.0.1]:10024
   -o receive_override_options=no_address_mappings
-</pre>}}
+}}
 
 Restarting both amavisd and postfix then should pass all mail through amavisd.
 {{RootCmd|/etc/init.d/amavisd restart|/etc/init.d/postfix restart}}
@@ -101,7 +101,7 @@ Sending a message to ''testuser@example.com'' remotely and locally should work f
 {{Note|When doing this test, either use webmail or a remote client using a different mailserver or mail through port 25 or 465. Do not test using mail submission on port 587 as that bypasses amavisd.}}
 
 Looking at the mail headers, it should be noticed that it was sent through amavisd and re-deliverd to postfix.
-{{Code|Mail header|<pre>
+{{CodeBox|title=Mail header|1=
 Received: from localhost (localhost [127.0.0.1])
     by foo.example.com (Postfix) with ESMTP id 03ABA22E4C
     for <testuser@example.com>; Wed, 28 Dec 2011 11:41:05 +0100 (CET)
@@ -113,7 +113,7 @@ Received: from ext.example.net (ext.example.net [1.2.3.4])
     (No client certificate requested)
     by foo.example.com (Postfix) with ESMTPS id C136021F97
     for <testuser@example.com>; Wed, 28 Dec 2011 11:41:04 +0100 (CET)
-</pre>}}
+}}
 Examining the above it is clearly visible that the mail was received by postfix via SMTPS even. It was then forwarded to amavisd on port 10024 via LMTP and finally redelivered to postfix using SMTP again.
 
 == ClamAV ==
@@ -135,14 +135,14 @@ To be able to communicate, clamav needs to be part of amavisd's group.
 {{RootCmd|gpasswd -a clamav amavis}}
 
 It always helps to allow clamd to output some debug information.
-{{File|/etc/clamd.conf|Enable Debug options|<pre>
+{{FileBox|filename=/etc/clamd.conf|title=Enable Debug options|1=
 # Enable debug messages in libclamav.
 # Default: no
 Debug yes
-</pre>}}
+}}
 
 Also clamd needs some settings setup in its configuration file so that amavis can talk to it.
-{{File|/etc/clamd.conf|Allow amavis to conenct to clamd|<pre>
+{{FileBox|filename=/etc/clamd.conf|title=Allow amavis to conenct to clamd|1=
 # Path to a local socket file the daemon will listen on.
 # Default: disabled (must be specified by a user)
 LocalSocket /var/run/clamav/clamd.sock
@@ -150,14 +150,14 @@ LocalSocket /var/run/clamav/clamd.sock
 # Initialize supplementary group access (clamd must be started by root).
 # Default: no
 AllowSupplementaryGroups yes
-</pre>}}
+}}
 {{Note|These options appear to be the default nowadays.}}
 
 Next starting clamd from the init scripts may produce an error message about an outdated virus database. This is normal, as the virus database has not yet been updated. Freshclam takes care of that and should be started before clamd is.
 {{RootCmd|/etc/init.d/clamd start}}
 
 The log file can be examined for any configuration problems.
-{{File|/var/log/clamav/clamd.log|ClamAV startup log|<pre>
+{{FileBox|filename=/var/log/clamav/clamd.log|title=ClamAV startup log|1=
 Wed Dec 28 13:15:09 2011 -> +++ Started at Wed Dec 28 13:15:09 2011
 Wed Dec 28 13:15:09 2011 -> clamd daemon 0.97.3 (OS: linux-gnu, ARCH: x86_64, CPU: x86_64)
 Wed Dec 28 13:15:09 2011 -> Running as user clamav (UID 104, GID 997)
@@ -181,13 +181,13 @@ Wed Dec 28 13:15:15 2011 -> OLE2 support enabled.
 Wed Dec 28 13:15:15 2011 -> PDF support enabled.
 Wed Dec 28 13:15:15 2011 -> HTML support enabled.
 Wed Dec 28 13:15:15 2011 -> Self checking every 600 seconds.
-</pre>}}
+}}
 {{Note|{{Path|/var/log/clamav/freshclam.log}} can be examine for any updating problems.}}
 
 === Linking amavisd to clamav ===
 Amavisd should connect to the socketed clamd and thus clamav needs to be enabled as one of the main antivirus scanners. The fallback of invoking clamav from the commandline should not be changed. Also the virus check bypass needs to be disabled to be effective.
 
-{{File|/etc/amavisd.conf|Enable clamav|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=Enable clamav|1=
 # @bypass_virus_checks_maps = (1);  # controls running of anti-virus code
 
 # ### http://www.clamav.net/
@@ -195,7 +195,7 @@ Amavisd should connect to the socketed clamd and thus clamav needs to be enabled
    \&ask_daemon, ["CONTSCAN {}\n", "/var/run/clamav/clamd.sock"],
    qr/\bOK$/m, qr/\bFOUND$/m,
    qr/^.*?: (?!Infected Archive)(.*) FOUND$/m ],
-</pre>}}
+}}
 {{Warning|clamd and amavisd use incompatible socket definitions by default. clamd lists {{Path|/var/run/clamav/clamd.sock}} as its socket. amavisd however wants to use {{Path|/var/run/clamav/clamd}} as its socket. clamd's definition sounds more sane and should be used, and thus besides uncommenting the clamav section, the socket needs to be named accordingly. See {{Bug|396293}}.}}
 
 After restarting clamd Virusses should be able to detected and blocked.
@@ -203,16 +203,16 @@ After restarting clamd Virusses should be able to detected and blocked.
 
 === Testing ===
 To test whether the virus filter works, an [http://www.eicar.org/86-0-Intended-use.html anti-malware testfile] exists, sending an e-mail using this string should trigger the virus scanner.
-{{Code|EICAR-STANDARD-ANTIVIRuS-TEST-FILE|<pre>
+{{CodeBox|title=EICAR-STANDARD-ANTIVIRuS-TEST-FILE|<nowiki>
 X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
-</pre>}}
+</nowiki>}}
 {{Note|Again, it should be ensured that this is message is passed through the sending mailserver, and only be blocked by the receiving server (foo.example.com). Using a client that connects to port 25 and is allowed to relay should suffice.}}
 
 Looking at the {{Path|mail.log}} file, the following should be revealed.
-{{File|/var/log/mail.log|Virus infection test|<pre>
+{{FileBox|filename=/var/log/mail.log|title=Virus infection test|1=
 Dec 28 14:05:33 7of9 amavis[7554]: (07554-01) Blocked INFECTED (Eicar-Test-Signature) {DiscardedInternal,Quarantined}, MYNETS LOCAL [10.0.0.2]:41144 [10.0.0.2] <root@test.example.net> -> <testuser@example.com>, quarantine: virus-WYHuLpwdzPVr, Queue-ID: 7FC7B22DF6, mail_id: WYHuLpwdzPVr, Hits: -, size: 407, 166 ms
 Dec 28 14:05:33 7of9 postfix/lmtp[15452]: 7FC7B22DF6: to=<testuser@example.com>, relay=127.0.0.1[127.0.0.1]:10024, delay=0.41, delays=0.21/0.02/0.01/0.16, dsn=2.7.0, status=sent (250 2.7.0 Ok, discarded, id=07554-01 - INFECTED: Eicar-Test-Signature)
-</pre>}}
+}}
 
 In theory, the virus scanner should be fully functional now.
 
@@ -246,11 +246,11 @@ Once these updates have completed they need to be compiled for use with Spam Ass
 {{RootCmd|sa-compile}}
 
 Unlike clamav, there is no 'freshassassin' and a cronjob is required to do updates. To keep Spam Assassin up to date, a cronjob should be created for the tas.
-{{File|/etc/cron.daily/sa-updates|Update Spam Assassin filter rules|<pre>
+{{FileBox|filename=/etc/cron.daily/sa-updates|title=Update Spam Assassin filter rules|1=
 #!/bin/sh
 sa-update --allowplugins --gpgkey D1C035168C1EBC08464946DA258CDB3ABDE9DC10  --channel saupdates.openprotect.com --channel updates.spamassassin.org
 sa-compile
-</pre>}}
+}}
 Making the cronjob executable ensures it runs regularly.
 {{RootCmd|chmod +x /etc/cron.daily/sa-updates}}
 
@@ -259,21 +259,21 @@ Making the cronjob executable ensures it runs regularly.
 === Linking amavisd to Spam Assassin ===
 Actually, Spam Assassin does not need to be linked to amavisd, it is an integral part of amavisd. Enabling the spamfilter in amavisd does spam filtering.
 
-{{File|/etc/amavisd.conf|Enable Spam Assassin|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=Enable Spam Assassin|1=
 # @bypass_spam_checks_maps  = (1);  # controls running of anti-spam code
-</pre>}}
+}}
 
 And amavisd needs to be restarted.
 {{RootCmd|/etc/init.d/amavisd restart}}
 
 === Testing ===
 Testing is done again via a client connecting to port 25 that does not have its own spamfilter. For content [http://spamassassin.apache.org/gtube/ GTUBE] can be used. On that site there is also a suitable mail message in RFC-822 format.
-{{Code|Sample spam body|<pre>
+{{CodeBox|title=Sample spam body|1=
 XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X
-</pre>}}
+}}
 
 Checking in the testusers inbox, or junkbox more likly, the message can be found and its header examined.
-{{Code|Spam Header|<pre>
+{{CodeBox|title=Spam Header|1=
 Received: from localhost (localhost [127.0.0.1])
     by foo.example.com (Postfix) with ESMTP id B7EDA22F62
     for <testuser@example.com>; Wed, 28 Dec 2011 16:02:46 +0100 (CET)
@@ -286,7 +286,7 @@ X-Spam-Status: Yes, score=1000.907 required=6.2 tests=[ALL_TRUSTED=-1,
     FH_FROMEML_NOTLD=0.18, GTUBE=1000, MISSING_HEADERS=1.207,
     MISSING_MID=0.14, NO_DNS_FOR_FROM=0.379, TVD_SPACE_RATIO=0.001]
     autolearn=no
-</pre>}}
+}}
 
 == Finetuning Amavisd ==
 Amavis has a few more settings that can be changed to do some fine-tuning.
@@ -294,10 +294,10 @@ Amavis has a few more settings that can be changed to do some fine-tuning.
 === Recipient delimiter ===
 When using postfix with the ''recipient_delimiter'' amavisd can be told to make use of this feature.
 
-{{File|/etc/amavisd.conf|recipient_delimiters for amavis|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=recipient_delimiters for amavis|1=
 # Delimiter must match the equivalent (final) MTA delimiter setting.
 $recipient_delimiter = '+';		# (default is undef, i.e. disabled)
-</pre>}}
+}}
 
 === Disperse quarantine ===
 It is possible to disperse the quarantine over several sub-directories. 
@@ -313,18 +313,18 @@ chmod -R gu+rwX /var/amavis/quarantine/*;
 chmod -R o-rwx /var/amavis/quarantine/*
 </pre>}}
 
-{{File|/etc/amavisd.conf|Disperse quarantine|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=Disperse quarantine|1=
 #$clean_quarantine_method          = 'local:clean/%m';
 $virus_quarantine_method          = 'local:virus/%m';
 $spam_quarantine_method           = 'local:spam/%m.gz';
 $banned_files_quarantine_method   = 'local:banned/%m';
 $bad_header_quarantine_method     = 'local:badh/%m';
-</pre>}}
+}}
 
 Also, setting a spam cutoff level helps in reducing stored spam. The cutoff level makes it that no spam is stored above a certain spam-score.
-{{File|/etc/amavisd.conf|set a cutoff level for spam|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=set a cutoff level for spam|1=
 $sa_quarantine_cutoff_level = 25; # spam level beyond which quarantine is off
-</pre>}}
+}}
 {{Note|'''25''' is the default. This value, aswell as the other levels can and should be tuned to organizational needs.}}
 
 === Spam Delivery ===
@@ -332,13 +332,13 @@ $sa_quarantine_cutoff_level = 25; # spam level beyond which quarantine is off
 
 === Bayes database path ===
 Set the bayes_path option in SpamAssassin's configuration file so tools such as sa-learn write to the correct database location.
-{{File|/etc/spamassassin/local.cf|set bayes_path to be within Amavisd's home directory|<pre>
+{{FileBox|filename=/etc/spamassassin/local.cf|title=set bayes_path to be within Amavisd's home directory|1=
 bayes_path /var/amavis/.spamassassin/bayes
-</pre>}}
+}}
 
 == Cleanup ==
 With Spam Assassin and ClamAV working as expected, debugging information can be reduced to the normal minimal.
-{{File|/etc/amavisd.conf|Disable debugging in amavsd|<pre>
+{{FileBox|filename=/etc/amavisd.conf|title=Disable debugging in amavsd|1=
 # Section III - Logging
 # true (e.g. 1) => syslog;  false (e.g. 0) => logging to file
 $do_syslog = 1;                   # (defaults to 0)
@@ -348,12 +348,12 @@ $log_level = 0;		   # (defaults to 0), -d
 
 # Turn on SpamAssassin debugging (output to STDERR, use with 'amavisd debug')
 #$sa_debug = '1,all';  # defaults to false
-</pre>}}
+}}
 
-{{File|/etc/clamd.conf|Disable debugging in clamav|<pre>
+{{FileBox|filename=/etc/clamd.conf|title=Disable debugging in clamav|1=
 # Enable debug messages in libclamav.
 # Default: no
 #Debug yes
-</pre>}}
+}}
 
 [[Category:Mail Servers]]
