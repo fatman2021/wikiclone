@@ -7,43 +7,43 @@ Distcc는 네트워크를 통해 호스트가 참여하여 분산 컴파일 작�
 |{{InfoBox wikipedia}}
 }}
 
-[http://distcc.samba.org Distcc] 는 네트워크를 통해 호스트가 참여하여 분산 컴파일 작업을 수행하도록 설계한 프로그램입니다.  <code>distccd</code> 서버와 <code>distcc</code> 클라이언트로 구성되어 있습니다. Distcc는 [http://ccache.samba.org ccache], Portage, 약간의 설정 과정을 거치는 automake로 눈에 보이지 않도록 작업을 수행할 수 있습니다. 
+[https://code.google.com/p/distcc/ Distcc] is a program designed to distribute compiling tasks across a network to participating hosts. It is comprised of a server, <tt>distccd</tt>, and a client program, <tt>distcc</tt>. Distcc can work transparently with [http://ccache.samba.org ccache], [[Portage]], and Automake with a little setup. 
 
-젠투 설치 초기에 도움을 받기 위해 distcc를 사용하려 한다면, [[#Using_Distcc_to_Bootstrap|설치 초기에 distcc 사용하기]] 섹션을 읽어보십시오. 
+When planning on using <tt>distcc</tt> to help bootstrap a Gentoo installation, make sure to read [[#Using_distcc_to_bootstrap|Using distcc to bootstrap]]. 
 
 == 설치 ==
 
 === 의존성 ===
 
-distcc를 사용하려면 네트워크상의 모든 컴퓨터에 같은 gcc 버전이 있어야 합니다. 예를 들어 3.3.x(x는 바뀔 수 있음)는 괜찮지만 3.3.x와 3.2.x를 같이 사용하면 '''아마도''' 컴파일 오류 또는 실행시간 오류가 나타날것입니다. 
+In order to use <tt>distcc</tt>, all of the computers on the network need to have the same GCC versions. For example, mixing 3.3.x (where the x varies) is okay, but mixing 3.3.x with 3.2.x may result in compilation errors or runtime errors. 
 
 === Installing distcc ===
 
-distcc에는 컴파일 작업을 보내는 컴퓨터의 작업을 지켜볼 때 사용하는 그래픽 감시 프로그램이 있으며 <code>gtk</code> <code>USE</code> 플래그로 활성화 합니다.
+Distcc ships with a graphical monitor to monitor tasks that a computer is sending away for compilation. This monitor is enabled when the <code>gtk</code> <code>USE</code> flag is set.
 
 After configuring the <code>USE</code> setting, install the {{Package|sys-devel/distcc}} package:
 
 {{Emerge|distcc}}
 
-{{Important/ko|여러분의 모든 컴퓨터에 distcc가 설치되어 있는지 확인하는 것을 잊지 마십시오.}}
+{{Important|Remember to install {{Package|sys-devel/distcc}} on all of the participating machines.}}
 
-=== Distcc를 사용하도록 포티지 설정하기 ===
+=== Setting up Portage to use distcc ===
 
-distcc를 사용하도록 portage를 설정하는 것은 쉽습니다. 각 시스템이 분산 컴파일 작업에 참여하도록 하려면 다음 단계를 실행하십시오:
+Setting up [[Portage]] to use <tt>distcc</tt> is easy. Execute the following steps on each system that should participate in the distributed compiling.
 
 First, make sure that {{Package|sys-devel/distcc}} is installed:
 
 {{Emerge|distcc}}
 
-이제 <code>MAKEOPTS</code> 변수와 <code>FEATURES</code> 변수를 아래처럼 설정하십시오.
-일반적인 전략은 CPU 전체(로컬+원격) 갯수 + 1 을 N의 값으로 설정하고 로컬 CPU의 갯수를 M으로 설정하는 것입니다. distcc 호스트를 사용할 수 없거나, ebuild에서 로컬 전용 컴파일(gcc)을 필요로 한다면, <code>-IM</code> 플래그를 적용하여 과도한 작업을 분담하지 않도록 막으십시오.
+Next, set the <code>MAKEOPTS</code> variable and <code>FEATURES</code> variable as shown below.
+A common strategy is to set <code>N</code> to ''twice'' the number of ''total'' (local + remote) CPU cores + 1 and <code>M</code> as number of ''local'' CPU cores. In case participating hosts are not available, or when the ebuild that is being installed requires a local-only compile (e.g. gcc), then the <code>-lM</code> flag will prevent the spawning of too many tasks.
 
 {{FileBox|filename=/etc/portage/make.conf|title=Setting MAKEOPTS and FEATURES|lang=bash|1=
 MAKEOPTS="-jN -lM"
 FEATURES="distcc"
 }}
 
-예컨대, <code>distcc</code>를 실행 중인 두 대의 쿼드코어 호스트 PC에 듀얼 코어 로컬 PC를 연결했다면, <code>MAKEOPTS</code> 변수값은 다음과 같이 설정합니다:
+For instance, when there are two quad-core host PCs running <tt>distccd</tt> and the local PC has a dual core CPU, then the <code>MAKEOPTS</code> variable could look like this:
 
 {{FileBox|filename=/etc/portage/make.conf|title=MAKEOPTS example for 2 quad-core (remote) and one dual core (local) PC|lang=bash|1=
 # 2 remote hosts with 4 cores each = 8 cores remote
@@ -58,9 +58,9 @@ While editing the {{Path|make.conf}} file, make sure that it does not have <code
 
 See [http://blogs.gentoo.org/mgorny/2014/06/23/inlining-marchnative-for-distcc/ Inlining -march=native for distcc] for more information.
 
-=== 참여 호스트 지정 ===
+=== Specifying participating hosts ===
 
-호스트의 목록을 설정하려면 <code>distcc-config</code> 명령을 사용하십시오. 설정값이 될 몇가지 호스트 예제가 있습니다. 
+Use the <kbd>distcc-config</kbd> command to set the list of hosts. 
 
 The following is an example list of host definitions. In most cases, variants of lines 1 and 2 suffice. More information about the syntax used in lines 3 and 4 can be found in the [http://distcc.googlecode.com/svn/trunk/doc/web/man/distcc_1.html distcc manual page].
 
@@ -71,40 +71,40 @@ The following is an example list of host definitions. In most cases, variants of
 @192.168.0.1         @192.168.0.2:/usr/bin/distccd     192.168.0.3
 }}
 
-호스트를 설정하는데 다른 여러가지 방법도 있습니다. 자세한 내용은 distcc 맨페이지를 보십시오.
+There are also several other methods of setting up hosts.  See the <tt>distcc</tt> man page (<kbd>man distcc</kbd>) for more details.
 
-만약 여러분들이 지역 장치에서 컴파일 하기를 원한다면 여러분들은 'localhost'를 호스트 목록에 추가해야 합니다. 반대로 지역 장치가 컴파일을 하기를 원치 않으신다면(대부분의 경우) 호스트 목록에서 생략해야 합니다. 느린 장치에서 로컬호스트를 사용하는 것은 실제로 컴파일을 느리게 만듭니다. 성능을 위해 설정을 시험하여 확인하십시오.
+If compilations should also occur on the local machine, put <code>localhost</code> in the hosts list.  Conversely if the local machine is not to be used to compile, omit it from the hosts list.  On a slow machine using localhost may actually slow things down. Make sure to test the settings for performance.
 
-예를 들어 앞의 예제에서 첫 줄을 설정한다면:
+Let's configure <tt>distcc</tt> to use the hosts mentioned on the first line in the example:
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "192.168.0.1 192.168.0.2 192.168.0.3"}}
 
-여러분의 필요에 따라 {{Path|/etc/conf.d/distccd}} 를 편집하십시오. 그리고 여러분이 신뢰하는 호스트들만 허용하도록 <code>--allow</code> 지시자를 설정하였는지 확인하십시오. 보안성을 더하기 위해, 여러분은 distcc 데몬이 (여러 군데에 위치한 시스템들에 대해) 어떤 IP로 수신받고 있는지 알려줄 <code>--listen</code> 지시자를 사용할 수 있습니다. distcc 보안에 대한 더 많은 정보는 [http://distcc.samba.org/security.html Distcc 보안 설계]에서 찾을 수 있습니다. 
+Edit {{Path|/etc/conf.d/distccd}} and be sure to set the <code>--allow</code> directive to allow only trusted hosts. For added security, use the <code>--listen</code> directive to tell the <tt>distccd</tt> daemon what IP to listen on (for multi-homed systems). More information on <tt>distcc</tt> security can be found at [http://distcc.googlecode.com/svn/trunk/doc/web/security.html Distcc security notes]. 
 
-{{Important/ko|--allow와 --listen 지시자의 사용은 중요합니다. 더 많은 내용은 distccd 맨페이지나 상위의 보안 문서를 읽어주십시오.}}
+{{Important|It is important to use <code>--allow</code> and <code>--listen</code>. Please read the <tt>distccd</tt> man page or the above security document for more information.}}
 
-이제 distcc 데몬을 모든 참여 머신에서 시작하십시오: 
+Now start the <tt>distccd</tt> daemon on all the participating computers: 
 
 {{RootCmd|rc-update add distccd default
-|/etc/init.d/distccd start}}
+|rc-service distccd start}}
 
-=== automake가 동작하도록 Distcc 설정 ===
+=== Setting up distcc to work with automake ===
 
-이 경우 포티지 설정보다 쉽습니다. 여러분이 해야 할 일은 여러분의 <code>PATH</code> 변수에 gcc를 포함하는 디렉터리({{Path|/usr/bin}})앞에 {{Path|/usr/lib/distcc/bin}} 을 포함하도록 업데이트 하는 것입니다. 하지만 여기서 주의할 점이 있습니다. 만약 여러분이 ccache를 사용한다면 여러분들은 ccache 다음에 distcc를 놓아야 합니다: 
+This is, in some cases, easier than the Portage setup. All that is needed is to update the <code>PATH</code> variable to include {{Path|/usr/lib/distcc/bin/}} in front of the directory that contains <tt>gcc</tt> ({{Path|/usr/bin/}}). However, there is a caveat. If <tt>ccache</tt> is used, then put the distcc location after the ccache one: 
 
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
-로그인 할 때마다 PATH를 설정하기 위해 ~/.bashrc같은 파일에 추가할 수 있습니다.
+Put this in the user's {{Path|~/.bashrc}} or equivalent file to have the <code>PATH</code> set every time the user logs in, or set it globally through an {{Path|/etc/env.d/}} file.
 
-그런 다음, 여러분이 보통 <code>make</code>라고 입력하는 바와 같이, <code>make -jN</code>(N은 정수형 숫자)을 입력합니다. N의 값은 여러분의 네트워크와 여러분이 컴파일에 사용하는 컴퓨터의 형식에 달려있습니다. 최고의 성능을 부여할 숫자를 찾기 위해 여러분의 설정을 시험해보십시오.
+Instead of calling just <kbd>make</kbd>, add in <kbd>-jN</kbd> (where <code>N</code> is an integer). The value of <code>N</code> depends on the network and the types of computers that are used to compile. A heuristic approach to the right value is given earlier in this article.
 
-=== distcc가 ssh와 동작하도록 설정 ===
+=== Setting up distcc to work with ssh ===
 
-ssh를 통한 distcc 설정에 몇가지 함정이 있습니다. 먼저 암호 설정을 뺀 상태의 ssh 키 쌍을 만들어야 합니다. portage 사용자가 포티지로 프로그램을 컴파일 함을 잊지 마십시오. portage 사용자 폴더는 {{Path|/var/tmp/portage}}이며 ssh 키를 {{Path|/var/tmp/portage/.ssh}}에 저장해야 함을 의미합니다.
+Setting up distcc via ssh includes some pitfalls. First, generate an SSH key pair without password setup. Be aware that portage compiles programs as the <tt>portage</tt> user. The home folder of the <tt>portage</tt> user is {{Path|/var/tmp/portage/}}, which means the keys need to be stored in {{Path|/var/tmp/portage/.ssh/}}
 
 {{RootCmd|ssh-keygen -b 2048 -t rsa -f /var/tmp/portage/.ssh/id_rsa}}
 
-두번째로, ssh 설정 파일에 각 호스트에 대한 섹션을 만드십시오:
+Second, create a section for each host in the SSH configuration file:
 
 {{FileBox|filename=/var/tmp/portage/.ssh/config|title=Add per-host sections|1=
 Host test1
@@ -118,21 +118,21 @@ Host test2
     User UserName
 }}
 
-{{Path|known_hosts}}파일에 존재하는 각각의 호스트가 있는지 확인하시고 호스트의 {{Path|authorized_keys}} 파일에 공용키를 추가하십시오. test1과 test2 호스트를 설정하려면 다음 명령을 실행하십시오
+Also make sure that each host is available in the {{Path|known_hosts}} file and append the public key to the {{Path|authorized_keys}} file of the hosts. To set up the hosts <tt>test1</tt> and <tt>test2</tt>, run:
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "@test1 @test2"}}
 
-'@'  기호는 <code>distcc</code>에 대한 ssh 호스트를 지정할 때 사용하는 기호임을 참고하십시오.
+Please note the <tt>@</tt> (@ sign), which specifies ssh hosts for distcc.
 
-== Cross-Compiling ==
+== Cross-compiling ==
 
-어떤 아키텍처에서 다른 아키텍처에 대해 프로그램을 빌드할 때 사용하는 방법이 크로스 컴파일입니다. 애슬론(i686)에서 K6-2에 대해, 또는 스파크 머신에서 파워PC에 대한 프로그램을 빌드하는 것 만큼 간단합니다. 이 방법은 [[Distcc/Cross-Compiling/ko|DistCC 크로스 컴파일 안내서]] 에 있습니다.
+Cross-compiling is using one architecture to build programs for another architecture. This can be as simple as using an Athlon (i686) to build a program for a K6-2 (i586), or using a SPARC to build a program for a PowerPC. This is documented in the [[Distcc/Cross-Compiling|DistCC Cross-compiling guide]].
 
-== Using Distcc to Bootstrap ==
+== Using distcc to bootstrap ==
 
-=== 1단계: 포티지 설정 ===
+=== Step 1: configure Portage ===
 
-젠투리눅스 LiveCD가 들어간 새 컴퓨터를 부팅하고 부트스트랩 부분까지 [http://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=1 설치 과정]을 따라하십시오(부트스트랩에 대한 더 많은 정보를 얻고자 하신다면 [http://www.gentoo.org//doc/en/faq.xml#stage12 젠투 FAQ]를 보십시오). 다음 distcc를 사용하도록 포티지를 설정하십시오: 
+Boot the new box with a Gentoo Linux LiveCD and follow the [[Handbook:AMD64|installation instructions]], while keeping track of the instructions in the [[FAQ|Gentoo FAQ]] for information about bootstrapping). Then configure Portage to use <tt>distcc</tt>: 
 
 {{FileBox|filename=/etc/portage/make.conf|title=Configure Portage to use distcc|lang=bash|1=
 FEATURES="distcc"
@@ -143,41 +143,41 @@ Update the <code>PATH</code> variable in the installation session as well:
 
 {{RootCmd|export PATH{{=}}"/usr/lib/ccache/bin:/usr/lib/distcc/bin:${PATH}"}}
 
-=== 2단계: distcc 가져오기 ===
+=== Step 2: getting distcc ===
 
-distcc를 설치하십시오: 
+Install {{Package|sys-devel/distcc}}: 
 
 {{RootCmd|USE{{=}}'-*' emerge --nodeps sys-devel/distcc}}
 
-=== 3단계: distcc 설정 ===
+=== Step 3: setting up distcc ===
 
-distcc를 설정하려면 <code>distcc-config --install</code>을 실행하십시오. <code>host*</code>를 참여하는 distcc 노드의 IP주소 또는 호스트 이름으로 바꾸십시오.
+Run <kbd>distcc-config --install</kbd> to setup distcc; substitute the <code>host#</code> in the example with the IP addresses or hostnames of the participating nodes.
 
 {{RootCmd|/usr/bin/distcc-config --set-hosts "localhost host1 host2 host3 ..."}}
 
-이제 distcc 부트스트랩을 설정했습니다! 공식 설치 설명서 내용에 따라 계속 진행하시고, <code>emerge system</code>을 실행한 후에 distcc를 다시 이머지 하는 것을 ''잊지 마십시오''. 이 절차는 원한 바대로 설치한 그대로의 모든 의존성을 확인하는 절차입니다. 
+Distcc is now set up to bootstrap! Continue with the proper installation instructions and do ''not'' forget to run <kbd>emerge distcc</kbd> after running <kbd>emerge @system</kbd>. This is to make sure that all of the necessary dependencies are installed. 
 
-{{Note/ko|부트스트랩과 <code>emerge system</code>을 처리하는 동안 distcc를 사용하지 않는 것으로 나타납니다. 일부 ebuild가 distcc와 제대로 동작하지 않는 것으로 보이기 때문에, 일부러 distcc를 사용하지 않습니다.}}
+{{Note|During bootstrap and <kbd>emerge @system</kbd> <tt>distcc</tt> may not appear to be used. This is expected as some ebuilds do not work well with distcc, so they intentionally disable it.}}
 
 == 문제 해결 ==
 
-=== 일부 패키지가 distcc를 활용할 수 없습니다 ===
+=== Some packages don't use distcc ===
 
-다양한 패키지를 emerge 하면서, 패키지중 일부를 분산처리하지 않는다는 점(그리고 병렬로 빌드하지 않는다는 점)을 주의하셔야 합니다. 이것은 패키지의 Makefile이 병렬 처리를 지원하지 않거나 ebuild의 관리자가 알려진 문제점때문에 확실하게 병렬 처리를 사용하지 않도록 했기 때문입니다. 
+As various packages are installed, users will notice that some of them aren't being distributed (and aren't being built in parallel). This may happen because the package' {{Path|Makefile}} doesn't support parallel operations, or the maintainer of the ebuild has explicitly disabled parallel operations due to a known problem. 
 
-때때로 distcc는 컴파일에 실패하는 요인이 되기도 합니다. 만약 이런 일이 여러분들에게 일어난다면, 저희에게 [http://bugs.gentoo.org 알려주십시오].
+Sometimes <tt>distcc</tt> might cause a package to fail to compile. If this happens, please [https://bugs.gentoo.org/ report] it.
 
-=== 혼합 GCC 버전 ===
+=== Mixed GCC versions ===
 
-각기 다른 GCC 버전이 호스트에 존재한다면 이상한 문제를 야기할 수 있습니다. 해결 방법은 모든 호스트의 GCC 버전을 같게 하는 것입니다. 
+If the environment hosts different GCC versions, there will likely be very weird problems. The solution is to make certain all hosts have the same GCC version. 
 
-최근 포티지에서는 <code>gcc</code> 대신 <code>${CHOST}-gcc</code>를 사용하도록 업데이트 했습니다.  이는 i686 머신을 다른 형식(i386, i586)의 머신과 혼용해서 사용한다면 문제에 직면함을 의미합니다. 이에 대한 해결책은 <code>export CC='gcc' CXX='c++'</code> 명령을 입력하거나 이 변수값을 {{Path|/etc/portage/make.conf}}에 넣는 것입니다.
+Recent Portage updates have made Portage use <code>${CHOST}-gcc</code> (minus gcc) instead of <code>gcc</code>. This means that if i686 machines are mixed with other types (i386, i586) then the builds will run into troubles. A workaround for this may be to run <kbd>export CC='gcc' CXX='c++'</kbd> as root in a terminal, or put it in {{Path|/etc/portage/make.conf}}.
 
-{{Important/ko|이 설정 행위는 명백하게 포티지의 몇가지 동작을 재정의하는 것이며 나중에 이상한 결과가 나타날지도 모릅니다. 오로지 CHOST 값을 섞어 쓸 때에만 설정하십시오.}}
+{{Important|Doing this explicitly redefines some behavior of Portage and may have some weird results in the future. Only do this if mixing CHOSTs is unavoidable.}}
 
 === -march=native ===
 
-GCC 4.3.0부터, GCC가 동작하는 프로세서에서 CPU 자동 감지 및 최적화를 활성화 하는 <code>-march=native</code> 스위치를 지원합니다. (AMD 애슬론과 인텔 펜티움과 같은) 각기 다른 프로세서에서 최적화 한 코드가 섞일 수 있기 때문에 <code>distcc</code>에는 문제가 될 수 있습니다. <code>distcc</code>로 컴파일 할때 <code>CFLAGS</code> 또는 <code>CXXFLAGS</code>에 <code>-march=native</code> 또는 <code>-mtune=native</code> 스위치를 ''사용하지 마십시오''.
+Starting with GCC 4.3.0, the compiler supports the <code>-march=native</code> option which turns on CPU auto-detection and optimizations that are worth being enabled on the processor on which GCC is running. This creates a problem when using <tt>distcc</tt> because it allows the mixing of code optimized for different processors. For example, running <tt>distcc</tt> with <code>-march=native</code> on a system that has an AMD Athlon processor and doing the same on ''another'' system that has an Intel Pentium processor will mix code compiled on both processors together.
 
 Heed the following warning:
 
@@ -193,25 +193,24 @@ GCC를 <code>-march=native</code>로 호출할 때 사용하는 플래그를 알
   --param l1-cache-line-size=64 --param l2-cache-size=6144 -mtune=corei7-avx
 </pre>}}
 
-== Distcc Extras ==
+== Distcc extras ==
 
-=== distcc 감시 프로그램 === 
+=== Distcc monitors === 
 
-distcc에는 두가지 감시 프로그램이 들어있습니다. 항상 빌드하는 텍스트 기반 프로그램을 <code>distccmon-text</code>라고 합니다. 처음 실행하는게 약간 혼동스러울 수도 있지만, 사용 방법은 아주 쉽습니다. 프로그램을 아무런 매개 변수없이 실행한다면 처음 한 번만 실행합니다. 하지만, 숫자를 전달한다면 매 N초마다 업데이트 합니다. 여기에서 N은 여러분이 전달하는 숫자 인자입니다.
+Distcc ships with two monitoring utilities. The text-based monitoring utility is always built and is called <tt>distccmon-text</tt>. Running it for the first time can be a bit confusing, but it is really quite easy to use. If the program is run with no parameter it will run just once. However, if it is passed a number it will update every <code>N</code> seconds, where <code>N</code> is the argument that was passed.
 
 {{Cmd|distccmon-text 10}}
 
-다른 감시 프로그램은 여러분들이 <code>gtk</code>나 <code>gnome</code>을 여러분의 <code>USE</code> 플래그에 두었을 때에만 실행할 수 있습니다. GTK+ 기반의 프로그램이며, X환경에서 구동되고 정말 사랑스럽습니다. 젠투에서의 GUI 감시 프로그램은 혼동을 피하기 위해 <code>distccmon-gui</code>로 불립니다. 이 감시 프로그램은 다른 프로그램에서 <code>distccmon-gnome</code>으로 참조합니다.
+The other monitoring utility is only enabled when the <code>gtk</code> <code>USE</code> flag is set.  This one is GTK+ based, runs in an X environment, and it is quite lovely.  For Gentoo, the GUI monitor has been renamed to <tt>distccmon-gui</tt> to make it less confusing (it is originally called <tt>distccmon-gnome</tt>).
 
-{{RootCmd|distccmon-gui}}
+{{Cmd|distccmon-gui}}
 
-포티지의 distcc 사용 상태를 감시한다면 다음 명령을 사용할 수 있습니다:{{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text N
-|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
+To monitor Portage's <tt>distcc</tt> usage:
 
 {{RootCmd|DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text 10
 |DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-gui}}
 
-{{Important/ko|distcc 디렉터리가 어디에도 없다면, DISTCC_DIR 변수를 적절하게 바꾸십시오.}}
+{{Important|If the distcc directory is elsewhere, change the <code>DISTCC_DIR</code> variable accordingly.}}
 
 == External resources ==
 
