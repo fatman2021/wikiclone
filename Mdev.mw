@@ -32,9 +32,9 @@ x11-libs/cairo-1.10.2-r3 (drm ? >=virtual/udev-136)
 </pre>}}
 
 To {{Path|/etc/portage/package.mask/mdev}}, add the line
-{{File|/etc/portage/package.mask/mdev|Mask away udev|<pre>
+{{FileBox|filename=/etc/portage/package.mask/mdev|title=Mask away udev|1=
 sys-fs/udev
-</pre>}}
+}}
 
 Disable udev USE flag globally in make.conf:
 {{RootCmd|euse -D udev}}
@@ -59,17 +59,17 @@ This solution may result in a not boot-able linux.
 
 === Setting up your kernel for devtmpfs ===
 Set up your kernel to support and automount a devtmpfs [[filesystem]] at {{Path|/dev}}:
-{{Kernel||<pre>
+{{KernelBox|1=
 Device Drivers --->
     Generic Driver Options --->
         [*] Maintain a devtmpfs filesystem to mount at /dev
         [*] Automount devtmpfs at /dev, after the kernel mounted the rootfs
-</pre>}}
+}}
 Once you've made the changes, rebuild the kernel. Do '''NOT''' reboot yet.
 
 === Emerging busybox ===
 For our circumstance, you will need the ''mdev'' USE flag set for {{Package|sys-apps/busybox}}. The ''static'' USE flag is probably also a good idea. In the {{Path|/etc/portage/package.use/mdev}} file, add the line:
-{{File|/etc/portage/package.use/mdev||<pre>sys-apps/busybox static mdev</pre>}}
+{{FileBox|filename=/etc/portage/package.use/mdev|1=sys-apps/busybox static mdev}}
 Now, you may run
 {{Emerge|params+=--oneshot|busybox}}
 If you're using a distro other than Gentoo, or building Busybox manually, do whatever necessary in your situation to enable the mdev option.
@@ -79,11 +79,11 @@ devpts exhibits non-standard behaviour. It does not automount, at bootup, or wit
 
 Another side-effect of not using udev-mount is that /dev/shm is only writeable by root. The command '''chmod 1777 /dev/shm''' is required to restore the standard behaviour. This command will also be run from a script at startup.
 
-{{File|/etc/local.d/000.start|Mount of devpts at bootup and change /dev/shm permissions| <pre>
+{{FileBox|filename=/etc/local.d/000.start|title=Mount of devpts at bootup and change /dev/shm permissions|lang=bash|1=
 #!/bin/bash
 mount devpts
 chmod 1777 /dev/shm
-</pre>}}
+}}
 
 Notes regarding scripts used in {{Path|/etc/local.d/}}
 * the files must be executable
@@ -92,9 +92,9 @@ Notes regarding scripts used in {{Path|/etc/local.d/}}
 
 Editing {{Path|/etc/fstab}} is a optional step only for linux 3.5.7. It is not needed for newer kernels.
 {{Note|As of approximately kernel 3.5.7, devpts has to be included in {{Path|/etc/fstab}} with the following parameters:}}
-{{File|/etc/fstab|Entry for devpts| <pre>
+{{FileBox|filename=/etc/fstab|title=Entry for devpts|1=
 devpts     /dev/pts      devpts      defaults 0 0
-</pre>}}
+}}
 
 === Replace the udev service ===
 Remove udev from the services list, replacing it with mdev:
@@ -118,12 +118,12 @@ You should now have a completely udev-free machine.
 
 === Rebuild the kernel ===
 For libusb (and hence CUPS) to see the USB ports, set <tt>CONFIG_USB_DEVICE_CLASS=y</tt> and <tt>CONFIG_USB_DEVICEFS=y</tt> in your kernel configuration.  You will also need to enable <tt>CONFIG_USB_PRINTER</tt>, despite the injunction in the cups-1.5.2 ebuild to disable it.  If you use '''make menuconfig''', these items are found here:
-{{Kernel|Enabling generation of USB devices at boot time|<pre>
+{{KernelBox|title=Enabling generation of USB devices at boot time|1=
   Device Drivers --->
     [*] Support for Host-side USB
       [*] USB device filesystem [DEPRECATED]
       [*] USB device class-devices [DEPRECATED]
-    [*] USB Printer support</pre>}}
+    [*] USB Printer support}}
 (Don't worry about the "DEPRECATED"s.)
 
 === Configure the new kernel into your bootloader and reboot into it ===
@@ -140,11 +140,11 @@ If linux modules are required and not loaded on boot after migration, you might 
 * add linux modules to {{Path|/etc/conf.d/modules}}
 * compile modules into linux kernel, without the need of loading them on demand.
 * write your own module loader:
-{{File|/sbin/hotplug||<pre>
+{{FileBox|filename=/sbin/hotplug|lang=bash|1=
 #!/bin/sh
 test -n "$MODALIAS" && modprobe "$MODALIAS";
 exec /sbin/mdev
-</pre>}}
+}}
 
 Install it as your hotplug handler instead of mdev.  Note that the earlier you get this installed, the better.  You might consider naming this script {{Path|/sbin/hotplug}}, since that is the default value of {{Path|/proc/sys/kernel/hotplug}}  (or, change the default value in your kernel)
 
