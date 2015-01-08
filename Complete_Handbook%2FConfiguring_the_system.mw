@@ -2,7 +2,7 @@
 
 === The fstab file ===
 {{Path|fstab}} stands for ''file system table''; when you would take a look at a fully configured {{Path|/etc/fstab}} file you can easily see why:
-{{File|/etc/fstab||<pre>
+{{FileBox|filename=/etc/fstab|1=
 /dev/sda8               /             ext3    defaults,noatime          0 0
 /dev/sda5               none          swap    sw                        0 0
 /dev/sda6               /boot         ext2    noauto,noatime            0 0
@@ -11,7 +11,7 @@
 
 none                    /proc         proc    defaults                  0 0
 none                    /dev/shm      tmpfs   defaults                  0 0
-</pre>}}
+}}
 
 Each line declares what storage location (first field) is mounted at a certain location (second field) using a file system (third field) and mounted with one or more options (fourth field). The last two numbers are not that actively used anymore so you can safely set them to {{Path|0 0}}.
 
@@ -97,22 +97,22 @@ All its configuration goes into {{Path|/etc/dhcpcd.conf}} but for most installat
 ==== Wireless ====
 Dhcpcd comes with a built-in hook for wpa_supplicant, so it's best choice to install this for wireless.  The necessary wireless device drivers<ref>[[Wifi|Setup of a Wifi network device]]</ref> in your kernel need to be installed.  Also note that the older versions (≤2.0-r2) of wpa_supplicant need "env wpa_supplicant_driver=nl80211" in {{Path|/etc.dhcpcd.conf}}.<ref>https://forums.gentoo.org/viewtopic-p-7617004.html#7617004</ref><br />
 Create the configuration file, put the content shown below, install wpa_supplicant and restart dhcpcd:
-{{File|/etc/wpa_supplicant/wpa_supplicant.conf||<pre># Allow users in the 'wheel' group to control wpa_supplicant
+{{FileBox|filename=/etc/wpa_supplicant/wpa_supplicant.conf|1=# Allow users in the 'wheel' group to control wpa_supplicant
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=wheel
 
 # Make this file writable for wpa_gui
-update_config=1</pre>}}
+update_config=1}}
 {{RootCmd|echo 'net-wireless/wpa_supplicant qt4 wps' >> /etc/portage/package.use|emerge  --ask net-wireless/wpa_supplicant|/etc/init.d/dhcpcd restart}}{{Important|Don't add wpa_supplicant to any runlevel.}}
 For any questions or problems with wpa_supplicant see the references.<ref>[[Wpa_supplicant#Setup]]</ref><ref>[http://hostap.epitest.fi/wpa_supplicant/ wpa_supplicant homepage]</ref><ref>See also [[Handbook:Parts/Networking/Wireless]]</ref>
 
 ==== Static IP address ====
 In case the network interface card should be configured with a static IP address, add their data to the configuration file as shown for the following example.<ref name=manpage>http://roy.marples.name/man/html5/dhcpcd.conf.html</ref>
-{{File|/etc/dhcpcd.conf||<pre>Here is an example which configures a static address, routes and dns.
+{{FileBox|filename=/etc/dhcpcd.conf|title=Here is an example which configures a static address, routes and dns.|1=
 
    interface eth0
    static ip_address=192.168.0.10/24
    static routers=192.168.0.1
-   static domain_name_servers=192.168.0.1</pre>}}
+   static domain_name_servers=192.168.0.1}}
 <!-- End of copy -->
 
 === Managing network with Gentoo net.* scripts ===
@@ -120,17 +120,17 @@ To configure your wired network, Gentoo uses the {{Path|/etc/conf.d/net}} file. 
 
 ==== Automatic IP retrieval ====
 If your network interface(s) should retrieve their configuration automatically (using DHCP) you don't need to do anything in this file - you can leave it empty. You will find that Gentoo gives a cosmetical warning that it assumes DHCP since you haven't provided anything. If you don't want any warning, explicitly enable DHCP for each interface:
-{{File|/etc/conf.d/net|Default DHCP setting for network configuration|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=Default DHCP setting for network configuration|lang=bash|1=
 config_eth0="dhcp"
-</pre>}}
+}}
 
 Don't forget to install a DHCP client. Available ones are '''dhcpcd''', '''dhclient''' (in the '''dhcp''' package), '''udhcpc''' (in the '''udhcp''' package) and '''pump'''.
 {{Emerge|net-misc/dhcpcd}}
 
 If you want to pass additional options to the DHCP client (we refer you to the [[man page]] of each DHCP client for more information about the available options) use the '''<client>_<interface>''' directive. For instance, to set the time out to 10 seconds (the default for most clients is 1 minute) for the '''dhcpcd''' client:
-{{File|/etc/conf.d/net|Setting additional DHCPd options|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=Setting additional DHCPd options|lang=bash|1=
 dhcpcd_eth0="-t 10"
-</pre>}}
+}}
 
 ==== Static IP address ====
 If the network interface card should be configured with a static IP address, following
@@ -140,24 +140,24 @@ information is needed:
 * the Domain Name Server, where hostname lookups are forwarded to
   
 For instance, suppose that your IP address is 192.168.0.2 and you're part of a network where all IP addresses start with 192.168.0, then you specify:
-{{File|/etc/conf.d/net|Static IP configuration|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=Static IP configuration|lang=bash|1=
 config_eth0="192.168.0.2/24"
-</pre>}}
+}}
 
 The '''/24''' tells the configuration that the first three numbers (each number uses 8 bits, so 24 bits in total) define the network and the last number the host. If all of your IP addresses start with 192.168, then the configuration would read '''192.168.0.2/16'''.
 
 Next, we need to define where IP packets should go to if they aren't meant for the internal network: the ''gateway''. For instance, if 192.168.0.1 would be the gateway:
-{{File|/etc/conf.d/net|Default gateway information|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=Default gateway information|lang=bash|1=
 route_eth0="default via 192.168.0.1"
-</pre>}}
+}}
 
 The last setting defines which Domain Name Service server your system has to "ask" if it needs to lookup an IP address to a particular host in the internet. These DNS servers ''translate'' domain names as '''www.google.com''' to an IP address such as '''66.249.93.104'''. Save {{Path|/etc/conf.d/net}} first and then open {{Path|/etc/resolv.conf}}:
-{{File|/etc/resolv.conf||<pre>
+{{FileBox|filename=/etc/resolv.conf|1=
 ## # Substitute the IP addresses with your DNS server addresses
 # Contact your network administrator or ISP if you don't know what to enter.
 nameserver 195.130.130.133
 nameserver 195.130.131.10
-</pre>}}
+}}
 ==== Automatically starting the network at boot ====
 With the configuration in place, your next step would be to assure that the configuration is loaded when you boot your system. Go to {{Path|/etc/init.d}} and make symbolic link from the {{Path|net.lo}} init script to the interfaces you need. For instance, if you have one interface
 (called '''eth0'''):
@@ -175,24 +175,24 @@ These commands might need some explanation:
 
 === The hosts file ===
 The {{Path|/etc/hosts}} file is a small table the system uses to make immediate translations between hostnames and IP addresses. This file should at least contain one line:
-{{File|/etc/hosts||<pre>
+{{FileBox|filename=/etc/hosts|1=
 127.0.0.1       localhost
-</pre>}}
+}}
 
 All other lines should be set under that line using the following syntax:
-{{File|/etc/hosts||<pre>
+{{FileBox|filename=/etc/hosts|1=
 <ip address> <fully qualified hostname> <aliases>
-</pre>}}
+}}
 
 For instance, if you want to assing the host name '''gentoobox''' to your eth0 interface address (for instance, 192.168.0.2):
-{{File|/etc/hosts||<pre>
+{{FileBox|filename=/etc/hosts|1=
 192.168.0.2     gentoobox
-</pre>}}
+}}
 
 If you use a domainname for your network (like '''boxes''', but it can also be a real reserved domain name like '''company.com'''), you should set it like so:
-{{File|/etc/hosts||<pre>
+{{FileBox|filename=/etc/hosts|1=
 192.168.0.2     gentoobox.boxes     gentoobox
-</pre>}}
+}}
 
 Next to the host names assigned to your interfaces, you can also add in the IP address and hostname information for the other hosts on your system if they aren't known to the DNS servers you've specified (in {{Path|/etc/resolv.conf}}, perhaps automatically with DHCP).
 
