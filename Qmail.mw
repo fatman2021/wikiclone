@@ -27,24 +27,24 @@ The default 16MB of memory for qmail is a little sparse, so let's update the mem
 ==== Setting up non-root account for mail ====
 The design of qmail has been completely around the focus of security. To this end, e-mail is never sent to the user 'root'. So now you have to select a user on your machine to receive mail that would normally be destined for 'root'. From now on in this guide, I will refer to that user as I have it in my setup, 'myusername'. 
 
-{{File|/var/qmail/alias/.qmail-root| qmail-root |myusername}}
-{{File|/var/qmail/alias/.qmail-postmaster|qmail-postmaster|myusername}}
-{{File|/var/qmail/alias/.qmail-mailer-daemon|qmail-mailer-daemon|myusername}}
+{{FileBox|filename=/var/qmail/alias/.qmail-root|title=qmail-root|1=myusername}}
+{{FileBox|filename=/var/qmail/alias/.qmail-postmaster|title=qmail-postmaster|1=myusername}}
+{{FileBox|filename=/var/qmail/alias/.qmail-mailer-daemon|title=qmail-mailer-daemon|1=myusername}}
 
 Or if you'd like this email to be sent elsewhere, simply put the full address in:
-{{File|/var/qmail/alias/.qmail-root| qmail-root |myusername@gmail.com}}
-{{File|/var/qmail/alias/.qmail-postmaster|qmail-postmaster|myusername@gmail.com}}
-{{File|/var/qmail/alias/.qmail-mailer-daemon|qmail-mailer-daemon|myusername@gmail.com}}
+{{FileBox|filename=/var/qmail/alias/.qmail-root|title=qmail-root |1=myusername@gmail.com}}
+{{FileBox|filename=/var/qmail/alias/.qmail-postmaster|title=qmail-postmaster|1=myusername@gmail.com}}
+{{FileBox|filename=/var/qmail/alias/.qmail-mailer-daemon|title=qmail-mailer-daemon|1=myusername@gmail.com}}
 
 ==== Fully Qualified Domain Name (FQDN) ====
 Though not entirely related, for a MTA to function properly, it is imperative that its hostname is set up correctly. Under Gentoo '''/etc/conf.d/hostname''' and '''/etc/conf.d/net''' are the files responsible for this. In this example, the mail server is named <tt>foo</tt> on the domain <tt>example.com</tt>.
 
-{{File|/etc/conf.d/net|Setup domain name|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=Setup domain name|lang=bash|1=
 dns_domain_lo="example.com"
-</pre>}}
-{{File|/etc/conf.d/hostname|Setup hostname|<pre>
+}}
+{{FileBox|filename=/etc/conf.d/hostname|title=Setup hostname|lang=bash|1=
 hostname="foo"
-</pre>}}
+}}
 
 {{Note|Do not use <tt>mail.example.com</tt> just because it may be externally known as such. Use the actual name of the system.}}
 
@@ -75,9 +75,9 @@ Move to the qmail control directory:
 Upgrade the Cert Info to create a 2048bit key:
 {{RootCmd|sed -i 's/1024/2048/' /var/qmail/control/servercert.cnf}}
 Update the Cert Info with information pertinent to you.  CN is your fully qualified domain name ie. foo.domain.com
-{{File|/var/qmail/control/servercert.cnf|Be certain that you put in the correct CN|<pre>
+{{FileBox|filename=/var/qmail/control/servercert.cnf|title=Be certain that you put in the correct CN|1=
 CN=foo.domain.com
-</pre>}}
+}}
 
 create the pem files and key 
 {{RootCmd|openssl req -new -nodes -out req.pem -config /var/qmail/control/servercert.cnf  -keyout /var/qmail/control/servercert.pem}}
@@ -102,9 +102,9 @@ start and add netqmail to the default run level
 vpopmail will handle virtual domains, adding, deleting mail domains, accounts, storing passwords etc.  vpopmail uses mysql in this setup, so if you don't have it running please install it.
 
 First we need to tell qmail to use vpopmail when checking smtp passwords: 
-{{File|/var/qmail/control/conf-smtpd|tell qmail to use vpopmail for auth|<pre>
+{{FileBox|filename=/var/qmail/control/conf-smtpd|title=tell qmail to use vpopmail for auth|lang=bash|1=
 QMAIL_SMTP_CHECKPASSWORD="/var/vpopmail/bin/vchkpw"
-</pre>}}
+}}
 
 Let's install and setup {{Package|net-mail/vpopmail}}:
 {{RootCmd|echo 'net-mail/vpopmail clearpasswd mysql' >> /etc/portage/package.use}}
@@ -118,11 +118,11 @@ mysql> flush privileges;
 mysql> quit}}
 
 Edit /etc/vpopmail.conf and update the mysql password for the vpopmail user:
-{{File|/etc/vpopmail.conf|set the vpopmail user password|<pre># Read-only DB
+{{FileBox|filename=/etc/vpopmail.conf|title=set the vpopmail user password|<nowiki># Read-only DB
 localhost|0|vpopmail|mypassword|vpopmail
 # Write DB
 localhost|0|vpopmail|mypassword|vpopmail
-</pre>}}
+</nowiki>}}
 
 == dovecot ==
 Finally we'll add {{Package|net-mail/dovecot}} to talk to our email clients:
@@ -135,23 +135,23 @@ Add vpopmail uid info to the default dovecot config:
 |echo 'last_valid_uid {{=}} 89' >> /etc/dovecot/dovecot.conf}}
 
 Edit dovecot ssl configs to pass our ssl certificate to email clients when the login to get mail securely:
-{{File|/etc/dovecot/conf.d/10-ssl.conf|set the location of your certs|<pre>
+{{FileBox|filename=/etc/dovecot/conf.d/10-ssl.conf|title=set the location of your certs|1=
 ssl_cert = </var/qmail/control/servercert.pem
 ssl_key = </var/qmail/control/myserver.domain.com.key
-</pre>}}
+}}
 
-{{File|/etc/dovecot/conf.d/10-auth.conf|edit the dovecot auth configs|<pre>
+{{FileBox|filename=/etc/dovecot/conf.d/10-auth.conf|title=edit the dovecot auth configs|1=
 disable_plaintext_auth = no
 auth_mechanisms = plain cram-md5
 
 #!include auth-system.conf.ext  comment this out, don't need it
 !include auth-vpopmail.conf.ext
-</pre>}}
+}}
 
-{{File|/etc/dovecot/conf.d/auth-vpopmail.conf.ext|comment out these two vpopmail lines |<pre>
+{{FileBox|filename=/etc/dovecot/conf.d/auth-vpopmail.conf.ext|title=comment out these two vpopmail lines |1=
 # [quota_template=<template>] - %q expands to Maildir++ quota
-#  args = quota_template=quota_rule=*:backend=%q}}
-</pre>}}
+#  args = quota_template=quota_rule=*:backend=%q<nowiki>}}</nowiki>
+}}
 
 Start dovecot and add to the default runlevel:
 {{RootCmd|/etc/init.d/dovecot start
