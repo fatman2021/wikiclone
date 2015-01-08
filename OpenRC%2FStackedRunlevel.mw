@@ -1,10 +1,10 @@
 This page documents a tutorial for setting up complicated networking with the help of stacked runlevel. Along the tutorial other tricked for [[OpenRC]] are also expected.
 
 The short version is that
-{{File|rc-update manpage|stack runlevel|<pre>
+{{FileBox|filename=rc-update manpage|title=stack runlevel|
 If the -s, --stack option is given then we either add or remove the runlevel from the runlevel. 
 This allows inheritance of run‐levels.
-</pre>}}
+}}
 
 == Scenario ==
 We have a university library providing wireless network, with the following steps to use:
@@ -36,11 +36,11 @@ Add our default runlevel into it:
 
 === iPhone tethering ===
 Documented at [[Iphone USB Tethering]] and we use static configuration instead of dhcp.
-{{File|/etc/conf.d/net|static config eth1|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=static config eth1|lang=bash|1=
 config_eth1="172.20.10.2/28"
 routes_eth1="zzz.xxx.xxx.xxx/yy via 172.20.10.1"
 dns_servers_eth1="zzz.xxx.xxx.xxx zzz.xxx.xxx.xxx"
-</pre>}}
+}}
 The entry in '''routes_eth1''' is the network of cellular mobile, which can be identified by [[whois]] containing '''dns_servers_eth1'''. We set this up because there is no other easily reachable DNS server. Tinc, in later step, needs DNS to query IP address of its entry node.
 
 Now associate the library wifi with iPhone, and dial PPTP VPN. Consult your iPhone manual for details.
@@ -55,7 +55,7 @@ There are many methods to set up a socks proxy in iPhone. One way to achieve is 
 * Next, use public key to access the sshd. Details [http://www.gentoo.org/doc/en/articles/openssh-key-management-p1.xml here].
 
 * Finally, write a OpenRC initscript file.
-{{File|/etc/init.d/socksIphone|OpenRC initscript ssh socks|<pre>
+{{FileBox|filename=/etc/init.d/socksIphone|title=OpenRC initscript ssh socks|lang=bash|1=
 #!/sbin/runscript
 # Copyright 1999-2012 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
@@ -79,7 +79,7 @@ stop() {
         start-stop-daemon --stop --pidfile /run/socksIphone.pid
         eend $?
 }
-</pre>}}
+}}
 
 and add it to our runlevel
 {{RootCmd|rc-update add socksIphone lwifi}}
@@ -90,7 +90,7 @@ We are in an interesting realm: an http proxy is behind a socks proxy. Hopefully
 {{Emerge|net-misc/proxychains}}
 
 and set up its config file.
-{{File|/etc/proxychains.conf|proxy chain setup|<pre>
+{{FileBox|filename=/etc/proxychains.conf|title=proxy chain setup|1=
 # proxychains.conf  VER 3.1
 #
 #        HTTP, SOCKS4, SOCKS5 tunneling proxifier with DNS.
@@ -130,12 +130,12 @@ tcp_connect_time_out 500
 # defaults set to "tor"
 socks5  127.0.0.1       1080
 http    172.24.30.15    8080
-</pre>}}
+}}
 In the ProxyList, the first one is our socks proxy in the previous section, the second one happens to be http proxy provided by the library.
 
 === tinc initscript ===
 We need to adjust tinc initscript to make use of proxychains.
-{{File|/etc/init.d/tincd.manifold-lwifi|tinc initscript with proxychains|<pre>
+{{FileBox|filename=/etc/init.d/tincd.manifold-lwifi|title=tinc initscript with proxychains|lang=bash|1=
 #!/sbin/runscript
 # Copyright 1999-2012 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
@@ -146,7 +146,7 @@ EXEC="${EXEC:-$EPREFIX/usr/sbin/tincd}"
 NETNAME="${RC_SVCNAME#*.}"
 PIDFILE="$EPREFIX/run/tinc.${NETNAME}.pid"
 CONFIG="$EPREFIX/etc/tinc/${NETNAME}/tinc.conf"
-[ "x${SYSLOG}" = "xyes" ] && LOG="" || LOG=" --logfile=/var/log/tinc.${NETNAME}.log"
+[ "x${SYSLOG}" = "xyes" ] && LOG="" {{!}}{{!}} LOG=" --logfile=/var/log/tinc.${NETNAME}.log"
 OPTS_EXEC="--net=${NETNAME}${LOG} --pidfile ${PIDFILE}"
 OPTS_FOREGROUND="-D"
 
@@ -170,13 +170,13 @@ reload() {
                         eend $?
         fi
 }
-</pre>}}
+}}
 {{Note|this runscript file is written to work with OpenRC's [http://www.awa.tohoku.ac.jp/~benda/projects/runit.html runit template]. It is a working in progress and the interfaces are subject to change.}}
 
 The keyidea, though, is to set proxychains in LD_PRELOAD. Write you own version if necessary.
-{{File|/etc/conf.d/tincd.manifold-lwifi|LD_PRELOAD proxychains|<pre>
+{{FileBox|filename=/etc/conf.d/tincd.manifold-lwifi|title=LD_PRELOAD proxychains|lang=bash|1=
 EXEC_ENV="LD_PRELOAD=libproxychains.so.3"
-</pre>}}
+}}
 
 Add this one into our runlevel.
 {{RootCmd|rc-update add tincd.manifold-lwifi}}
