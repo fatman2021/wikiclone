@@ -11,13 +11,17 @@ This document details how to turn an old Gentoo machine into a router for connec
 == Introduction == <!--T:2-->
 
 <!--T:3-->
-Building a personal router out of old spare parts has many advantages over buying a pre-made canned router by say Linksys. The biggest one by far is control over the connection. The other advantages are left up to your imagination; just about anything can be done in this scenario, it's just a matter of needing it. 
+Building a personal router out of old spare parts has many advantages over buying a pre-made router built by big companies (Linksys, D-Link, Netgear, etc). The biggest advantage by far is control over the connection. The other advantages can be left up to the user's imagination; just about anything can be done in this scenario, it is simply a matter of need. 
 
 <!--T:4-->
-This guide will show you how to setup Network Address Translation (NAT) on the router (kernel and iptables), add and configure common services (Domain Name System (DNS) via dnsmasq, dhcp via dhcpcd, ADSL via ppp), and conclude with more elaborate and fun things that can be done (port forwarding, traffic shaping, proxies/caching, etc...). 
+This guide will provide instructions on how to setup Network Address Translation (NAT) on a custom router (kernel and iptables), add and configure common services (Domain Name System (DNS) via {{Package|net-dns/dnsmasq}}, dhcp via {{Package|net-misc/dhcpcd}}, ADSL via {{Package|net-dialup/ppp}}), and conclude with some elaborate and fun things custom routers are capable of (port forwarding, traffic shaping, proxies/caching, etc...). 
 
 <!--T:5-->
-Before getting started, there's a few basic requirements you must meet. First, you'll need a computer that has at least 2 Network Interface Cards (NICs) in it. Next, you'll need the configuration settings for your internet connection (may include things like IP/DNS/Gateway/username/password). You optionally need a wifi card which supports master mode. It is recommended to avoid NICs with a bypass feature as some of them require proprietary drivers. If you don't have access to that driver, the card will remain in bypass mode permanently and will not be usable. Finally, you'll need a bit of spare time and some Gentoo loving in order to succesfully follow this guide and implement a well functioning home router.
+Before getting started, please review the list of basic requirements:
+# A computer that has at least 2 Network Interface Cards (NICs) installed.
+# The configuration settings for an internet connection (may include things like IP/DNS/Gateway/username/password).
+# (Optionally) a wifi card that supports master mode. Master mode is recommended to avoid NICs with a bypass feature since some NICs require proprietary drivers. Without access to the proprietary driver the card will remain in bypass mode permanently and will not be usable.
+# A bit of spare time and Gentoo loving in order to successfully follow this guide and implement a well functioning home router.
 
 <!--T:6-->
 The conventions used in this guide are: 
@@ -26,16 +30,16 @@ The conventions used in this guide are:
 * eth0 - NIC connected to the Local Area Network (LAN) or network bridge consisting of multiple NICs
 * eth1 - NIC connected to the Wide Area Network (WAN)
 * LAN utilizes the private 192.168.0.xxx network
-* router is hardcoded to the standard 192.168.0.1 IP
-* router is running Linux 2.4 or 2.6; you're on your own with 2.0/2.2
+* Router is hardcoded to the standard 192.168.0.1 IP address
+* Router is running Linux 2.4 or 2.6; other versions of the kernel are not supported by this guide).
 
 <!--T:8-->
-{{Important|Due to security precautions, I would highly suggest you shut down any unneeded services on the router until we have a chance to get the firewall up and rolling. To view the currently running services, just run <code>rc-status</code>.}}
+{{Important|Due to security precautions, it is highly suggested to shut down any unneeded services on the router until the firewall is up. To view the currently running services run <kbd>rc-status</kbd>.}}
 
 == Kernel setup (know thyself first) == <!--T:9-->
 
 <!--T:10-->
-Your kernel needs to have the drivers running for both your NICs. To see if your cards are already setup, just run <code>ifconfig</code>. Your output may differ slightly from the following, that's fine. What matters is that the interface shows up at all. 
+The kernel needs to have the drivers installed for both NICs present on the system. To see if the cards are already setup, run <kbd>ifconfig</kbd>. The output may differ slightly from the following example. What matters is that the interface shows up. 
 
 <!--T:11-->
 {{RootCmd|ifconfig -a|output=<pre>
@@ -58,10 +62,10 @@ eth1      Link encap:Ethernet  HWaddr 00:60:F5:07:07:B9
 }}
 
 <!--T:12-->
-If you do not see your two cards showing up and you're not sure what kind of cards you have, try running <code>lspci | grep Ethernet</code>. You can get that from <code>emerge pciutils</code>. Once you have this information, go into your kernel and add support for the correct drivers. 
+If only one (or none) of the two cards show up try running <kbd>lspci | grep Ethernet</kbd>. The lspci utility is part of the {{Package|sys-apps/pciutils}} package and can be installed by running <kbd>emerge sys-apps/pciutils</kbd>. Once the make(s)/model(s) of the NIC(s) has been obtained, configure the kernel with support for the correct drivers. For more information on kernel configuration see the [[Kernel/Gentoo_Kernel_Configuration_Guide|Kernel Configuration Guide]].
 
 <!--T:13-->
-The next thing you'll need is support for iptables and NAT (and packet shaping if you want). The following list is split up into always required (*), required only for adsl via PPPoE (a), suggested for everyone (x), and only for shaper (s) features. It does not matter whether you build the features into the kernel or as a module so long as when the feature is needed, the correct module(s) are loaded (module loading is left to the reader as a fun exercise however). 
+The next thing needed is support for iptables and NAT (and packet shaping if desired). The following list is split up into always required (*), required only for adsl via PPPoE (a), suggested for everyone (x), and only for shaper (s) features. It does not matter whether the features are built into the kernel or as modules as long as when the feature is needed, the correct module(s) are loaded. For more information on loading modules see the 
 
 <!--T:14-->
 {{KernelBox|title=Network Options|<pre>
@@ -69,7 +73,10 @@ Networking options  --->
    [*] TCP/IP networking
       [*] IP: advanced router
    [*] Network packet filtering (replaces ipchains)
-If you use 2.4.x, you have to enable the following for DHCP:
+}}
+While using a 2.4.x kernel, the following must be enabled for DHCP:
+
+{{KernelBox|title=Network Options|<pre>
    [*] Socket Filtering
   
    IP: Netfilter Configuration  --->
@@ -105,22 +112,22 @@ If you use 2.4.x, you have to enable the following for DHCP:
 }}
 
 <!--T:15-->
-{{Note|Some things may be slightly different in a 2.4 vs 2.6 kernel, but you should be able to figure it out :). Even among 2.6 kernels, these options have a tendency to move around. Good luck!}}
+{{Note|Some things may be slightly different in a 2.4.x vs. a 2.6.x kernel, however things should not be too difficult to figure out. Even among 2.6 kernels, these options have a tendency to move around. Good luck!}}
 
 == Hug the WAN (a.k.a. The Internet) == <!--T:16-->
 
 === Intro === <!--T:17-->
 
 <!--T:18-->
-There are many ways to connect to the internet so I'll just cover the ones I'm familiar with. That leaves us with ADSL (PPPoE) and cable modems (static/dynamic). If there are other methods out there, feel free to write up a little blurb and e-mail me. Feel free to skip any of the following sections in this chapter that don't apply to you. This chapter is just about getting the router connected to the internet via eth1. 
+There are ''many'' ways to connect to the internet, however there are generally only a couple of ways that are used by most of the public. ADSL (PPPoE) and cable modems (static/dynamic) are the two most common methods ISP (Internet Service Providers) provide. If there are other methods available, feel free to add them to this wiki article. Skip any of the following sections in this chapter that are not applicable to the needed use case. This chapter addresses getting the router connected to the internet via eth1. 
 
 === ADSL and PPPoE === <!--T:19-->
 
 <!--T:20-->
-All the fancy PPPoE software that used to be provided by rp-pppoe ([http://www.roaringpenguin.com/ Roaring Penguin]) has been integrated into the [http://samba.org/ppp/ standard PPP package]. Simply <code>emerge ppp</code> and you'll be on your way. Remember how I said you'll need username/password information? Well I wasn't lying so I hope you have it now! Load up {{Path|/etc/conf.d/net}} in your favorite editor and set it up. 
+All the fancy PPPoE software that used to be provided by rp-pppoe ([http://www.roaringpenguin.com/ Roaring Penguin]) has been integrated into the [http://samba.org/ppp/ standard PPP package]. Simply <kbd>emerge ppp</kbd> to install PPPoE. Remember how username and password information was a requirement listed above? Load up {{Path|/etc/conf.d/net}} in a favorite text editor and configure it accordingly. 
 
 <!--T:21-->
-Replace 'vla9h924' in the following example with your username and 'boogie' with your password.
+Replace "<username>" and "<user_password>" in the following example with the required username with the password:
 
 <!--T:22-->
 {{FileBox|filename=/etc/conf.d/net|title=Use adsl over eth1 for ppp0|lang=bash|1=
@@ -131,8 +138,8 @@ pppd_ppp0="
   defaultroute
   usepeerdns
 "
-username_ppp0="vla9h924"
-password_ppp0="boogie"
+username_ppp0="<username>"
+password_ppp0="<user_password>"
 }}
 
 <!--T:23-->
@@ -141,24 +148,24 @@ password_ppp0="boogie"
 |/etc/init.d/net.ppp0 start}}
 
 <!--T:24-->
-{{Warning|When the DSL interface comes up, it will create ppp0. Although your NIC is called eth1, the IP is actually bound to ppp0. From now on, when you see examples that utilize 'eth1', substitute with 'ppp0'.}}
+{{Warning|When the DSL interface comes up, it will create a "ppp0" entry to the output of <kbd>ifconfig</kbd> command. Although the NIC is called eth1, the IP address is actually bound to ppp0. From now on substitute 'eth1' with 'ppp0'.}}
 
 <!--T:25-->
-{{Warning|Make sure you change the permissions of the {{Path|/etc/conf.d/net}} file so that only root can read/write it since you're sticking your username/password in it.}}
+{{Warning|Be sure to change the permissions of the {{Path|/etc/conf.d/net}} file so that only users with ''root'' privileges can read/write to it. This important because the a username and password have been entered to the file in plain text format.}}
 
 <!--T:26-->
-{{Warning|For people transitioning from the <code>rp-pppoe</code> package, or for people who hit weird connection resets, see the MTU section in the Troubleshooting chapter.}}
+{{Warning|For users transitioning from the {{Package|net-dialup/rp-pppoe}} package, or for users who experience weird connection resets, see the MTU section in the Troubleshooting chapter below.}}
 
 === Cable and/or dynamic/static IP === <!--T:27-->
 
 <!--T:28-->
-If you have a static IP then you will need a few more details than if you have a dynamic IP. For static users, you will need your IP, gateway, and DNS servers. 
+If a static IP is necessary then additional configuration details will be required. Static users IP users will need to add the IP address, gateway address, and DNS server addresses. 
 
 <!--T:29-->
 Dynamic IP Users:
 
 <!--T:30-->
-{{Emerge|dhcpcd}}
+{{Emerge|net-misc/dhcpcd}}
 
 <!--T:31-->
 {{FileBox|filename=/etc/conf.d/net|title=Dynamic IP addresses|lang=bash|1=
@@ -188,18 +195,18 @@ Dynamic and Static Setup:
 |/etc/init.d/net.eth1 start}}
 
 <!--T:37-->
-You should be all set to go now. 
+After working through the changes above the system should be ready to continue. 
 
 == Hug the LAN (bring along some friends) == <!--T:38-->
 
 <!--T:39-->
-This step is a breeze compared to the previous one. However, if you want to use more than two devices (one for LAN and one for WAN), you will have to set up a [[Network bridge]] between all NICs you plan to use on a LAN. This will allow multiple NICs to be reached by the same IP address. 
+This step is a breeze compared to the previous one. To use ''more'' than two devices (more than the one for LAN and the one for WAN), a [[Network bridge]] will need to be setup between all NICs using the LAN. This will allow multiple NICs to be reached by the same IP address. 
 
 <!--T:178-->
-If you decide to do so, follow instructions to set up [[Network bridge]]. The name of your bridge (default br0) will then replace eth0 for the LAN device in the steps in this wiki. If you have a large number of network devices in your router, you may consider renaming them via udev to make administration easier. Setting up a bridge and renaming devices is completely optional but recommended for larger home networks. 
+If a network bridge will be necessary, follow [[Network bridge|the instructions to set up a Network bridge]]. The name of the bridge (default br0) will then replace eth0 for the LAN device in the steps in this wiki. If a large number of network devices in the home router, consider renaming them via udev to make administration easier. Setting up a bridge and renaming devices is completely optional but recommended for larger home networks. 
 
 <!--T:179-->
-If you plan on creating a wifi access point, you will need to make sure your wifi card supports master mode and you will have to set up [[Hostapd]].
+When creating a wifi access point make sure the wifi card supports master mode and set up [[Hostapd]].
 
 <!--T:40-->
 {{FileBox|filename=/etc/conf.d/net|lang=bash|1=
@@ -215,16 +222,16 @@ config_eth0="192.168.0.1/24 brd 192.168.0.255"
 === DHCP Server === <!--T:43-->
 
 <!--T:44-->
-I bet it'd be nice if everyone else in your house could just plug their computers into the network and things would just work. No need to remember mind-numbing details or make them stare at confusing configuration screens! Life would be grand eh? Introducing the Dynamic Host Configuration Protocol (DHCP) and why you should care. 
+It would be nice if everyone in the house could plug their computers into the network and things would just work. No need to remember mind-numbing details or make them stare at confusing configuration screens! Life would be grand, eh? Introducing the Dynamic Host Configuration Protocol (DHCP) and why everyone should care.
 
 <!--T:45-->
-DHCP is exactly what its name implies. It's a protocol that allows you to dynamically configure other hosts automatically. You run a DHCP server on the router, give it all the information about your network (valid IPs, DNS servers, gateways, etc...), and then when the other hosts start up, they run a DHCP client to automatically configure themselves. No fuss, no muss! For more information about DHCP, you can always visit [[Wikipedia:DHCP|Wikipedia]]. 
+DHCP is exactly what its name implies: a protocol that allows dynamic configuration of hosts automatically. Run a DHCP server on the router, give it all the information about the network (valid IPs, DNS servers, gateways, etc...), then when the other hosts start up, they can run a DHCP ''client'' to automatically configure themselves. No fuss, no muss! For more information about DHCP, visit [[Wikipedia:DHCP|Wikipedia's DHCP article]]. 
 
 <!--T:46-->
-We'll use a package called dnsmasq which provides both DHCP and DNS services. For now lets just focus on the DHCP aspect. Note that if you want to run a different DHCP server, you can find another example in the Fun Things chapter. Also, if you wish to tinker with the DHCP server settings, just read the comments in {{Path|/etc/dnsmasq.conf}}. 
+This HowTo article will use the {{Package|net-dns/dnsmasq}} package which will provide both DHCP and DNS services. For now lets focus on the DHCP aspect. Note: to run a different DHCP server, another example can be found in the Fun Things chapter below. Also, to tinker with the DHCP server settings read the comments in the {{Path|/etc/dnsmasq.conf}} file. 
 
 <!--T:47-->
-{{Emerge|dnsmasq}}
+{{Emerge|net-dns/dnsmasq}}
 
 <!--T:48-->
 {{FileBox|filename=/etc/dnsmasq.conf|1=
@@ -237,18 +244,18 @@ interface=eth0
 |/etc/init.d/dnsmasq start}}
 
 <!--T:50-->
-Setting the interface is very important. Using default dnsmasq settings will open up your router to DNS amplification attacks, and you may get a scary email from your ISP. You can check to make sure your router is not allowing for DNS amplification attacks by using [http://openresolver.com].
+Setting the interface is very important. Using default dnsmasq settings will open the router to DNS amplification attacks which could create some scary email from the ISP providing the connection. Check to make sure the router is not allowing for DNS amplification attacks by using [http://openresolver.com].
 
 <!--T:180-->
-Now your little router is a bona-fide DHCP server! Plugin those computers and watch them work! With Windows systems you should go into the TCP/IP Properties and select the 'Obtain an IP address automatically' and 'Obtain DNS server address automatically' options. Sometimes the changes aren't instantaneous, so you may have to open a command prompt and run <code>ipconfig /release</code> and <code>ipconfig /renew</code>. But enough about Windows, let's get back to our favorite penguin.
+Now the little router is a bona-fide DHCP server! Plugin those computers and watch them work! With Windows systems navigate to the {{Path|TCP/IP Properties}} and select the {{Path|Obtain an IP address automatically}} and {{Path|Obtain DNS server address automatically}} options. Sometimes the changes are not instantaneous, so opening a command prompt and running <kbd>ipconfig /release</kbd> and <kbd>ipconfig /renew</kbd> might be necessary. But enough about Windows, time to get back to everyone's favorite penguin!
 
 === DNS Server === <!--T:51-->
 
 <!--T:52-->
-When people want to visit a place on the internet, they remember names, not a string of funky numbers. After all, what's easier to remember, ebay.com or 66.135.192.87? This is where the DNS steps in. DNS servers run all over the internet, and whenever someone wants to visit 'ebay.com', these servers turn 'ebay.com' (what we understand) into '66.135.192.87' (what our computers understand). For more information about DNS, you can always visit [[Wikipedia:DNS|Wikipedia]]. 
+When people want to visit a place on the internet, they remember names, not a string of funky numbers. After all, what is easier to remember, ebay.com or 66.135.192.87? This is where the DNS steps in. DNS servers run all over the internet, and whenever someone wants to visit 'ebay.com', these servers turn 'ebay.com' (what we understand) into '66.135.192.87' (what computers understand). For more information about DNS visit [[Wikipedia:DNS|Wikipedia]]. 
 
 <!--T:53-->
-Since we're using dnsmasq for our DHCP server, and it includes a DNS server, you've got nothing left to do here! Your little router is already providing DNS to its DHCP clients. Bet you wish everything was this easy ;). 
+Since dnsmasq is being used for the DHCP server, and it includes a DNS server, there is nothing left to do here! The little router is already providing DNS to its DHCP clients. Shouldn't everything be this easy? ;) 
 
 <!--T:54-->
 You're welcome to choose other DNS servers if you're more comfortable with them, but the reason dnsmasq is great is because it was designed to do exactly what we want and nothing more. It's a little DNS caching/forwarding server for local networks. We're not looking to provide DNS for our own domain here, just offer simple DNS services to everyone else on our LAN. 
