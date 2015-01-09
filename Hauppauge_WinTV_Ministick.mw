@@ -5,7 +5,7 @@ This tutorial show how to use the Hauppauge WinTV Ministick for DVB-T TV. I will
 === Kernel ===
 You need [[USB]] and [[Evdev]] support.
  
-{{Kernel||<pre>
+{{KernelBox|1=
 Device Drivers  --->
     Multimedia support --->
         <M>   DVB for Linux
@@ -16,7 +16,7 @@ Device Drivers  --->
     <M>   Remote Controller adapters  --->
         <M>   Compile Remote Controller keymap modules
         <M>   Enable IR raw decoder for the RC-5 protocol
-</pre>}}
+}}
 
 === Firmware ===
 The firmware isn't integrated into the {{Package|sys-kernel/linux-firmware}} package yet, but you can download them from the official [http://www.hauppauge.de/site/support/support_linux.html hauppauge website].
@@ -24,7 +24,7 @@ The firmware isn't integrated into the {{Package|sys-kernel/linux-firmware}} pac
 === Check Kernel Configuration ===
 When you have compiled the needed modules and the firmware was correct loaded so you see something like the output here from my dmesg.
 
-{{File|/var/log/dmesg||<pre>
+{{FileBox|filename=/var/log/dmesg|1=
 smscore_set_device_mode: firmware download success: sms1xxx-hcw-55xxx-dvbt-02.fw
 [   21.580730] sms_ir_init: Allocating rc device
 [   21.580759] sms_ir_init: IR port 0, timeout 100 ms
@@ -46,7 +46,7 @@ smscore_set_device_mode: firmware download success: sms1xxx-hcw-55xxx-dvbt-02.fw
 [   22.581617] lirc_dev: IR Remote Control driver registered, major 250 
 [   22.626457] rc rc0: lirc_dev: driver ir-lirc-codec (smsmdtv) registered at minor = 0
 [   22.626471] IR LIRC bridge handler initialized
-</pre>}}
+}}
 
 To check the event devices you can use the '''lsinput''' tool out of the {{Package|sys-apps/input-utils}} package. 
 {{RootCmd|lsinput|output=<pre>
@@ -107,9 +107,9 @@ E: XKBVARIANT=nodeadkeys
 ==== LIRCd ====
 <!-- TODO: Later we should use the LIRC_DEVICES template if it exists. {{LIRC_DEVICES|devinput}} -->
 
-{{File|/etc/make.conf||<pre>
+{{FileBox|filename=/etc/portage/make.conf|1=
 LIRC_DEVICES="devinput"
-</pre>}}
+}}
 
 Install {{Package|app-misc/lirc}}:
 {{Emerge|params+=--oneshot|lirc}}
@@ -170,7 +170,7 @@ VLC also knows to handle EPG data. You find the '''Programm Guide''' under '''Ex
 Here you will find the steps to use the remote control PT# R-005.
 
 === Keymap ===
-{{File|/etc/rc_keymaps/hauppauge_novaTD||<pre>
+{{FileBox|filename=/etc/rc_keymaps/hauppauge_novaTD|1=
 # table hauppauge_novaTD_usb type: RC5
 0x1c25 KEY_SELECT
 0x1c3d KEY_POWER
@@ -209,7 +209,7 @@ Here you will find the steps to use the remote control PT# R-005.
 0x1c0a KEY_TEXT
 0x1c00 KEY_0
 0x1c0e KEY_SUBTITLE
-</pre>}}
+}}
 
 === Load the keymap at boot ===
 
@@ -220,60 +220,60 @@ Normally it should be enough to add CONFIG_RC_MAP support in your kernel. This p
 
 The trigger to load our new IR keymap comes from udev when the CONFIG_RC_MAP support is enabled.
 
-{{File|/lib/udev/rules.d/40-ir-keytable.rules||<pre> 
+{{FileBox|filename=/lib/udev/rules.d/40-ir-keytable.rules|1=
 # Automatically load the proper keymaps after the Remote Controller device
 # creation.
 # The keycode tables rules should be at /etc/rc_maps.cfg
 
 ACTION=="add", SUBSYSTEM=="rc", RUN+="/usr/bin/ir-keytable -a /etc/rc_maps.cfg -s $name"
-</pre>}}
+}}
 
 Here we simply add or edit the '''rc-hauppauge''' line as shown in the box below.
 
-{{File|/etc/rc_maps.conf||<pre>
+{{FileBox|filename=/etc/rc_maps.conf|1=
 *       rc-hauppauge             /lib/udev/rc_keymaps/hauppauge
-</pre>}}
+}}
 
 Replace '''/lib/udev/rc_keymaps/hauppauge''' with '''/etc/rc_keymaps/hauppauge_novaTD'''.
 
 ==== Option2: Manual with /etc/local.d/ir-keytable.start ====
 {{Note|Do not add the lircd to default runlevel. The daemon will started through the '''/etc/local.d/ir-keytable.start''' script. And also note that the script need the executable flag '''chmod u+x /etc/local.d/ir-keytable.start'''}}
 
-{{File|/etc/local.d/ir-keytable.start||<pre>
+{{FileBox|filename=/etc/local.d/ir-keytable.start|lang=bash|1=
 ir-keytable -c --protocol=rc-5 -w /etc/rc_keymaps/hauppauge_novaTD
 ir-keytable --delay=500
 ir-keytable --period=50
 /etc/init.d/lircd start 
-</pre>}}
+}}
 
 === Xorg ===
 Ignore the remote control devices in Xorg. 
 
 {{Note|If you plan to use the MCE IR Keyboard/Mouse you need to remove the MCE string from '''MatchProduct'''}}
 
-{{File|/etc/X11/xorg.conf||<pre>
+{{FileBox|filename=/etc/X11/xorg.conf|lang=xorg_conf|1=
 Section "InputClass"
 	Identifier	"Ignore Hauppauge WinTV MiniStick IR Devices"
-	MatchProduct	"SMS IR (Hauppauge WinTV MiniStic|MCE IR Keyboard/Mouse (smsmdtv)"
+	MatchProduct	"SMS IR (Hauppauge WinTV MiniStic{{!}}MCE IR Keyboard/Mouse (smsmdtv)"
 	Option		"Ignore"	"true"
 EndSection
-</pre>}}
+}}
 
 === LIRC ===
-{{File|/etc/lirc/hardware.conf||<pre>
+{{FileBox|filename=/etc/lirc/hardware.conf|1=
 REMOTE="Nova-TD"
 REMOTE_MODULES=""
 REMOTE_DRIVER="devinput"
 REMOTE_DEVICE="phys=usb-*/ir*"
 REMOTE_SOCKET="/var/run/lirc/lircd"
 REMOTE_LIRCD_CONF=""
-</pre>}}
+}}
 
-{{File|/etc/lirc/lircd.conf||<pre>
+{{FileBox|filename=/etc/lirc/lircd.conf|1=
 include "/usr/share/lirc/extras/more_remotes/hauppauge/lircd.conf.hauppauge_novaTD_usb"
-</pre>}}
+}}
 
-{{File|/usr/share/lirc/extras/more_remotes/hauppauge/lircd.conf.hauppauge_novaTD_usb||<pre>
+{{FileBox|filename=/usr/share/lirc/extras/more_remotes/hauppauge/lircd.conf.hauppauge_novaTD_usb|1=
 #
 # brand:                       Hauppauge NOVA-TD
 # model no. of remote control: Hauppage Nova-TD R-005
@@ -356,19 +356,19 @@ begin remote
      end codes
 
 end remote
-</pre>}}
+}}
 
 === Test the LIRCd ===
 To test your current lircd configuration you can use the '''irw''' tool.
 
 === Example .lircrc ===
-{{File|~/.lircrc||<pre>
+{{FileBox|filename=~/.lircrc|1=
 include ~/.lirc/irexec
 include ~/.lirc/vlc 
 include ~/.lirc/audacious
-</pre>}}
+}}
 
-{{File|~/.lirc/irexec||<pre>
+{{FileBox|filename=~/.lirc/irexec|1=
 begin irexec
 begin
     remote = NOVA-TD
@@ -390,9 +390,9 @@ begin
     delay = 0
 end
 end irexec
-</pre>}}
+}}
 
-{{File|~/.lirc/vlc||<pre>
+{{FileBox|filename=~/.lirc/vlc|1=
 begin vlc
 begin
     remote = NOVA-TD
@@ -584,9 +584,9 @@ begin
     delay = 0
 end
 end vlc
-</pre>}}
+}}
 
-{{File|~/.lirc/audacious||<pre>
+{{FileBox|filename=~/.lirc/audacious|1=
 begin audacious
 
 begin
@@ -668,6 +668,6 @@ begin
 end
 
 end audacious
-</pre>}}
+}}
 
 [[Category:TV tuners]]
