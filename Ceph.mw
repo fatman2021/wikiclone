@@ -116,7 +116,7 @@ Total: 14 packages (1 upgrade, 13 new), Size of downloads: 10,793 kB
 ==== Kernel Config ====
 If you want to use the RADOS block device, you will need to put that into your kernel .config as either a module or baked in.  Ceph itself will want to have FUSE support enabled if you want to work with the POSIX filesystem component and you will also want to include the driver for that in Network File Systems.  For your backend object stores, you will want to have xfs support because of the xattr limitations in Ext4 and btrfs because it really is becoming stable now.
 
-{{Kernel||<pre>
+{{KernelBox|1=
 Device Drivers
   Block devices
     Rados block device (RBD)
@@ -128,7 +128,7 @@ File systems
   FUSE (Filesystem in Userspace) support
 Network File Systems
   Ceph distributed file system
-</pre>}}
+}}
 
 
 ==== Network Config ====
@@ -145,7 +145,7 @@ Ceph is sensitive to IP address changes, so you should make sure that all of you
 We will be using four hosts in our Example implementation.  All four will be MON servers with an initial quorum of 3 so that we can safely avoid a "split-brain" situation and still be able to run the cluster when a single server is rebooted.
 
 
-{{File|/etc/conf.d/net|Example with a multi-homed eth0 for host kroll1|<pre>
+{{FileBox|filename=/etc/conf.d/net|title=Example with a multi-homed eth0 for host kroll1|1=
 #
 #  An example multi-homed eth0 where 192.168.1 subnet is the entire LAN and access to the outside world
 #  The 192.168.2 subnet is dedicated to the ceph cluster
@@ -155,10 +155,10 @@ routes_eth0="default via 192.168.1.1"
 dns_domain_eth0="example.com"
 dns_servers_eth0="192.168.1.2 192.168.1.3"
 dns_search-eth0="example.com"
-</pre>}}
+}}
 
 
-{{file|/etc/hosts|Example of a 4 node ceph cluster with hosts kroll1-4|<pre>
+{{fileBox|filename=/etc/hosts|title=Example of a 4 node ceph cluster with hosts kroll1-4|1=
 # /etc/hosts: Local Host Database
 #
 # This file describes a number of aliases-to-address mappings for the for 
@@ -175,7 +175,7 @@ dns_search-eth0="example.com"
 192.168.2.2     kroll2
 192.168.2.3     kroll3
 192.168.2.4     kroll4
-</pre>}}
+}}
 
 ==== Our Example Ceph Cluster ====
 We have chosen to roll out Ceph on a portion of our home network.  The four kroll hosts are as follows:
@@ -191,7 +191,7 @@ Thufir, Mater and Tube run a gentoo stable desktop profile and are currently on 
 ==== Editing the ceph config file ====
 We will be following the [http://ceph.com/docs/master/install/manual-deployment/ manual guide] for ceph installation on their site.  There is also a python based script call ceph-deploy which is packaged for a number of distros but not directly available for gentoo.  If you can manage to get it working, it would automate a good bit of the process of rolling out a server from your admin node.
 
-{{File|/etc/ceph/ceph.conf|Initial ceph config file|<pre>
+{{FileBox|filename=/etc/ceph/ceph.conf|title=Initial ceph config file|lang=ini|1=
 [global]
         # For version 0.54 and earlier, you may enable
         # authentication with the following setting.
@@ -227,7 +227,7 @@ We will be following the [http://ceph.com/docs/master/install/manual-deployment/
         #osd mkfs type = {fs-type}
         #osd mkfs options {fs-type} = {mkfs options}   # default for xfs is "-f"
         #osd mount options {fs-type} = {mount options} # default mount option is "rw, noatime"
-</pre>}}
+}}
 
 
 We use <code>uuidgen</code> to generate a new random uuid for the entire cluster.  We will rename the cluster name from the default <code>ceph</code> to <code>kroll</code> to match our host naming scheme.  We specify the 192.168.2 network to be the "public" network for the cluster.  Other default settings come from the manual install url mentioned earlier, including a default to replicate two copies of each object with a minimum of 1 copy allowed when the cluster is in "degraded" state.
@@ -246,7 +246,7 @@ The rest of the <code>ceph.conf</code> file consists of subsections for the vari
 </pre>}}
 
 
-{{File|/etc/ceph/ceph.conf|Customized ceph config file|<pre>
+{{FileBox|filename=/etc/ceph/ceph.conf|title=Customized ceph config file|lang=ini|1=
 [global]
         # For version 0.54 and earlier, you may enable
         # authentication with the following setting.
@@ -337,7 +337,7 @@ The rest of the <code>ceph.conf</code> file consists of subsections for the vari
 
 [mds.0]
         host = kroll2
-</pre>}}
+}}
 
 
 After editing the file, we copy it around to the other cluster members from our admin node kroll1 using <code>scp</code>
@@ -355,19 +355,19 @@ ceph.conf                                                         100% 2408     
 ==== /etc/conf.d/ceph file ====
 There is also a conf file for the ceph service, but as of the Firefly release, there is only the location of the conf file to specify.  This is because in previous releases, there was only an /etc/init.d/ceph script that needed to be worked with.  The single script would start up or shut down all of the services enabled for the site at once.  The ebuild maintainer changed this for Firefly to use renamed softlinks of <code>/etc/init.d/ceph</code> in order to specify the running of individual Ceph services.  It is somewhat similar to what gentoo does with <code>net.lo</code> when enabling network devices.
 
-{{File|/etc/conf.d/ceph|Barebones ceph file for Firefly release|<pre>
+{{FileBox|filename=/etc/conf.d/ceph|title=Barebones ceph file for Firefly release|1=
 # Example
 
 # default ceph conf file
 ceph_conf="/etc/ceph/ceph.conf"
-</pre>}}
+}}
 
 
 
 ====/etc/init.d/ceph script====
 As noted earlier when discussing MON servers, Ceph is dependent on clocks that are synchronized across the cluster.  Until the ebuild maintainers update the script, consider editing your <code>/etc/init.d/ceph</code> script's depend function to include whatever service you may have running that has synched your clock.  In this example edit to the firefly version of the script, we have added "after ntp-client" since we use the standard ntp ebuild and have ntp-client and ntp services in our default runlevel.
 
-{{File|/etc/init.d/ceph|openrc ceph script for firefly edited to depend on ntp-client|<pre>
+{{FileBox|filename=/etc/init.d/ceph|title=openrc ceph script for firefly edited to depend on ntp-client|lang=bash|1=
 #!/sbin/runscript
 
 ceph_conf="${ceph_conf:-/etc/ceph/ceph.conf}"
@@ -387,7 +387,7 @@ depend() {
 
 is_type_valid() {
         case ${type} in
-                mon|mds|osd) return 0;;
+                mon{{!}}mds{{!}}osd) return 0;;
                 *) return 1;;
         esac
 }
@@ -417,7 +417,7 @@ reload() {
         start-stop-daemon --signal 1 --pidfile ${pidfile}
         eend $?
 }
-</pre>}}
+}}
 
 ==== Creating Keyrings For MON rollout====
 Ceph uses its own shared secret concept when handling communications among cluster members.  We must generate keyring files that will then be distributed out to the servers that will be set up among the cluster members.  The keyrings are generated by the <code>ceph-authtool</code> command.  The first keyring is for the mon servers.  The manual install url has it going to a file on <code>/tmp</code>, but we are more inclined to keep it around by parking it in <code>/etc/ceph</code>
@@ -429,11 +429,11 @@ creating /etc/ceph/ceph.mon.keyring
 
 The result is a readable text file:
 
-{{File|/etc/ceph/ceph.mon.keyring|ceph-authtool generated file|<pre>
+{{FileBox|filename=/etc/ceph/ceph.mon.keyring|title=ceph-authtool generated file|lang=ini|1=
 [mon.]
         key = (redacted key text)
         caps mon = "allow *"
-</pre>}}
+}}
 
 
 Next we create an admin keyring file which goes into <code>/etc/ceph/ceph.client.admin.keyring</code>.  
@@ -445,14 +445,14 @@ creating /etc/ceph/ceph.client.admin.keyring
 
 The resulting text file may actually be shorter than the complicated command line used to create it.  The redacted key here is the same as the one that appears in our mon keyring, so it must be based on the uuid we parked in the <code>/etc/ceph/ceph.conf</code> config file.
 
-{{File|/etc/ceph/ceph.client.admin.keyring|ceph-authtool generated admin file|<pre>
+{{FileBox|filename=/etc/ceph/ceph.client.admin.keyring|title=ceph-authtool generated admin file|lang=ini|1=
 [client.admin]
         key = (redacted key text)
         auid = 0
         caps mds = "allow"
         caps mon = "allow *"
         caps osd = "allow *"
-</pre>}}
+}}
 
 
 {{Note|The default ownership for the client.admin.keyring file is <code>root:root</code> and mode <code>600</code>.  You might consider changing the mode to either <code>660</code> or <code>640</code> and then changing the group to something like <code>disk</code>.  This will allow non-root users who you trust to do disk maintenance (ie mount/unmount) to use ceph admin commands.}}
@@ -465,7 +465,7 @@ importing contents of /etc/ceph/ceph.client.admin.keyring into /etc/ceph/ceph.mo
 </pre>}}
 
 
-{{File|/etc/ceph/ceph.mon.keyring|mon keyring with client admin contents|<pre>
+{{FileBox|filename=/etc/ceph/ceph.mon.keyring|title=mon keyring with client admin contents|lang=ini|1=
 [mon.]
         key = (redacted)
         caps mon = "allow *"
@@ -475,7 +475,7 @@ importing contents of /etc/ceph/ceph.client.admin.keyring into /etc/ceph/ceph.mo
         caps mds = "allow"
         caps mon = "allow *"
         caps osd = "allow *"
-</pre>}}
+}}
 
 
 We push the mon and client keyrings out to <code>/etc/ceph</code> on the other kroll hosts.
@@ -924,13 +924,13 @@ ceph_osd_0  raid
 
 We add the new subvolume to our <code>/etc/fstab</code> and take the liberty of turning on automatic defragmentation and on-the-fly lzo compression for the subvolume.  The osd will actually manage some subvolumes of its own underneath this mountpoint (<code>current</code> and <code>snap.N</code> rolling snapshots).
 
-{{File|/etc/fstab|Adding ceph_osd_0 to the fstab|<pre>
+{{FileBox|filename=/etc/fstab|title=Adding ceph_osd_0 to the fstab|1=
 LABEL=boot	/boot		ext3		noauto,noatime	1 2
 LABEL=root	/		ext4		defaults,noatime,discard		0 1
 /dev/sdb	/thufirraid	btrfs		defaults,noatime,compress=lzo,autodefrag		0 0
 /dev/sdb	/raid		btrfs		defaults,noatime,compress=lzo,autodefrag,subvol=raid	0 0
 /dev/sdb	/var/lib/ceph/osd/ceph-0  btrfs defaults,noatime,compress=lzo,autodefrag,subvol=ceph_osd_0	0 0
-</pre>}}
+}}
 
 {{RootCmd|mkdir -p /var/lib/ceph/osd/ceph-0}}
 {{RootCmd|mount /var/lib/ceph/osd/ceph-0}}
@@ -1108,13 +1108,13 @@ Create subvolume './ceph_osd_1'
 </pre>}}
 
 
-{{File|/etc/fstab|Edited to add ceph_osd_1 subvolume|<pre>
+{{FileBox|filename=/etc/fstab|title=Edited to add ceph_osd_1 subvolume|1=
 LABEL=SAMBOOT	/boot		ext4		defaults,noatime,discard	1 2
 LABEL=SAMROOT	/		ext4		defaults,noatime,discard		0 1
 /dev/sdb	/materraid	btrfs		defaults,noatime,compress=lzo,autodefrag		0 0
 /dev/sdb	/raid		btrfs		defaults,noatime,compress=lzo,autodefrag,subvol=raid	0 0
 /dev/sdb	/var/lib/ceph/osd/ceph-1 btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=ceph_osd_1	0 0
-</pre>}}
+}}
 
 
 {{RootCmd|mkdir -p /var/lib/ceph/osd/ceph-1}}
@@ -1227,7 +1227,7 @@ We will now add our final (for the moment) object store as osd.2 on kroll4.  Its
 Create subvolume './ceph_osd_2'
 </pre>}}
 
-{{File|/etc/fstab|updated with ceph_osd_2 mount|<pre>
+{{FileBox|filename=/etc/fstab|title=updated with ceph_osd_2 mount|1=
 /dev/sda3     	/systemraid	    btrfs   defaults,noatime,ssd	0 0
 /dev/sda2	/boot  	  	    btrfs   defaults,noatime,ssd	0 0
 /dev/sda3	/		    btrfs   defaults,noatime,ssd,compress=lzo,subvol=activeroot	0 0
@@ -1239,7 +1239,7 @@ Create subvolume './ceph_osd_2'
 /dev/sdb3      /mythtv		btrfs   subvol=mythtv,autodefrag,defaults,noatime		0 0
 /dev/sdb3      /vm		btrfs	subvol=vm,compress=lzo,autodefrag,default,noatime	0 0
 /dev/sdb3      /var/lib/ceph/osd/ceph-2	 btrfs	subvol=ceph_osd_2,compress=lzo,autodefrag,default,noatime 0 0
-</pre>}}
+}}
 
 
 {{RootCmd|mkdir -p /var/lib/ceph/osd/ceph-2}}
@@ -1321,7 +1321,7 @@ It suddenly strikes us that we are the almost assuredly the first kid in our nei
 ==== Setting up mds.0 on kroll2 ====
 The Ceph site wants us to use ceph-deploy to set up the mds servers, but that script has yet to be ported and packaged for Gentoo.  We found enough information from a [http://www.sebastien-han.fr/blog/2013/05/13/deploy-a-ceph-mds-server/ bloggers site] to do a manual install for Gentoo.  The <code>/etc/ceph/ceph.conf</code> needs an edit to introduce a global <code>[mds]</code> section for the default location of the mds server and the keyring that it needs.
 
-{{File|/etc/ceph/ceph.conf|edited for new [mds] global section|<pre>
+{{FileBox|filename=/etc/ceph/ceph.conf|title=edited for new [mds] global section|lang=ini|1=
 [global]
         # For version 0.54 and earlier, you may enable
         # authentication with the following setting.
@@ -1416,7 +1416,7 @@ The Ceph site wants us to use ceph-deploy to set up the mds servers, but that sc
 
 [mds.0]
         host = kroll2
-</pre>}}
+}}
 
 
 The rest of the file stays untouched including the [mds.0] section that we had put in much earlier.  We pass around the updated conf file to the other hosts.
@@ -1508,18 +1508,18 @@ libceph               114568  1 ceph
 
 If you remember, the ceph.client.admin.keyring you created back in the beginning of the install included allow for mds operations.  However the format of that keyring file will not work with mount.ceph.  We need to copy only the key value itself as the contents of an <code>/etc/ceph/admin.secret</code> file.
 
-{{File|/etc/ceph.client.admin.keyring|existing generated file|<pre>
+{{FileBox|filename=/etc/ceph.client.admin.keyring|title=existing generated file|lang=ini|1=
 [client.admin]
         key = (redacted key text)
         auid = 0
         caps mds = "allow"
         caps mon = "allow *"
         caps osd = "allow *"
-</pre>}}
+}}
 
-{{File|/etc/admin.secret|hacked up copy of ceph.client.admin with just the key|<pre>
+{{FileBox|filename=/etc/admin.secret|title=hacked up copy of ceph.client.admin with just the key|1=
 (redacted key text)
-</pre>}}
+}}
 
 Because we are using nfs4, we will create an <code>/export/kroll</code> and then use mount.ceph to mount to that.  The user specified is just "admin", not "client.admin".  Since we have four mons up, we will go ahead and specify all of them to mount the root ceph object namespace.
 {{RootCmd|mkdir /export/kroll}}
@@ -1536,13 +1536,13 @@ cgroup_root                                             10240           0       
 
 And now we have a gi-normous empty filesystem hanging off of /export/kroll.  The 46% capacity filled there are from the non-ceph btrfs subvolumes that are currently in the three arrays that are providing our object stores.  We will modify our /etc/exports and then update the sharing to put out /export/kroll.
 
-{{File|/etc/exports|modified nfs exports map|<pre>
+{{FileBox|filename=/etc/exports|title=modified nfs exports map|1=
 # /etc/exports: NFS file systems being exported.  See exports(5).
 /export         *(rw,sync,fsid=0,no_subtree_check,no_root_squash,crossmnt)
 /export/home    *(rw,sync,no_subtree_check,no_root_squash)
 /export/raid    *(rw,sync,no_subtree_check,no_root_squash)
 /export/kroll   *(rw,sync,no_subtree_check,no_root_squash)
-</pre>}}
+}}
 {{RootCmd|exportfs -a -v|output=<pre>
 exporting *:/export/kroll
 exporting *:/export/raid
