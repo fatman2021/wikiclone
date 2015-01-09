@@ -239,10 +239,10 @@ We do the usual prelims to allow GRUB to find things when installing.
 
 
 Edit your mtab to look something like this
-{{File|/mnt/newroot/etc/mtab|the new root and boot as they will look to grub|<pre>
+{{FileBox|filename=/mnt/newroot/etc/mtab|title=the new root and boot as they will look to grub|1=
 /dev/sdc3 / btrfs rw,noatime,compress=lzo,autodefrag,subvol=activeroot 0 0
 /dev/sdc2 /boot btrfs rw,noatime 0 0
-</pre>}}
+}}
 
 
 {{RootCmd|chroot /mnt/newroot /bin/bash}}
@@ -253,7 +253,7 @@ Edit your mtab to look something like this
 
 ===Updating fstab===
 We edit our new fstab to make it look something like this.
-{{File|/etc/fstab|edited in the chroot so is actually /mnt/newroot/etc/fstab|<pre>
+{{FileBox|filename=/etc/fstab|title=edited in the chroot so is actually /mnt/newroot/etc/fstab|1=
 # /etc/fstab: static file system information.
 #
 # noatime turns off atimes for increased performance (atimes normally aren't 
@@ -285,7 +285,7 @@ LABEL=BTROOT	/vm			btrfs	defaults,noatime,compress=lzo,autodefrag,subvol=vm		0 0
 LABEL=BTROOT	/vmcrypt		btrfs	defaults,noatime,autodefrag,subvol=vmcrypt			0 0
 
 LABEL=BTBOOT	/boot			btrfs	defaults,noatime						0 0
-</pre>}}
+}}
 
 
 
@@ -297,7 +297,7 @@ As we noted in the introduction, the current kernel and GRUB2 combination appear
 
 
 Run menuconfig to use devtmpfs and to specify an initramfs_list that will be used to put an initramfs into the bzImage
-{{Kernel||<pre>
+{{KernelBox|1=
 General setup  --->
     [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support
     (/usr/src/linux/initramfs/initramfs_list) Initramfs source file(s)
@@ -305,14 +305,14 @@ Device Drivers  --->
     Generic Driver Options  --->
         -*- Maintain a devtmpfs filesystem to mount at /dev
         [*]  Automount devtmpfs at /dev, after the kernel mounted the rootfs 
-</pre>}}
+}}
 
 {{RootCmd|cd initramfs}}
 
 ====initramfs_list====
 We don't want to bloat the bzImage too much so only add the essential busybox, filesystem tools and the nano editor.  Use ldd to figure out any dependencies of additional commands that you might add to yours.
 
-{{File|/usr/src/linux/initramfs/initramfs_list|File and attributes list to be used by kernel when doing the embed|<pre>
+{{FileBox|filename=/usr/src/linux/initramfs/initramfs_list|title=File and attributes list to be used by kernel when doing the embed|1=
 # directory structure
 dir /proc       755 0 0
 dir /usr        755 0 0
@@ -393,7 +393,7 @@ file    /init                   /usr/src/linux/initramfs/init             755 0 
 #  fstab
 #
 file	/etc/fstab		/usr/src/linux/initramfs/fstab	644 0 0
-</pre>}}
+}}
 
 ====init script Alternatives====
 We started with the init script from the previous exercise but have modified it to create two alternatives.  The first should parse the /proc/cmdline to pull the information needed to mount root.  It thus doesn't need to use the embedded fstab, but you can place a copy of your normal one in the initramfs directory in case you are dumped to the rescue shell.
@@ -403,7 +403,7 @@ The second is a basic mount script that uses an embedded fstab to explicitly spe
 =====/proc/cmdline parsing init script=====
 This has not yet been shown to work during an actual boot, but the logic was tested against busybox on a running system.
 
-{{File|/usr/src/linux/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/linux/initramfs/init|lang=bash|1=
 #!/bin/busybox sh
 
 
@@ -418,7 +418,7 @@ rescue_shell() {
 
 
 get_opt() {
-	echo "$@" | cut -d "=" -f 2
+	echo "$@" {{!}} cut -d "=" -f 2
 }
 
 
@@ -502,7 +502,7 @@ clear
 #
 # mount rootfs on /mnt/root
 #
-mount_root || rescue_shell "Error mounting root with /proc/cmdline=$(cat /proc/cmdline)"
+mount_root {{!}}{{!}} rescue_shell "Error mounting root with /proc/cmdline=$(cat /proc/cmdline)"
 
 #
 #  If you are curious about the environment in effect at root, uncomment out these.
@@ -526,13 +526,13 @@ umount /dev
 # switch to the real root and execute init
 #
 exec switch_root /mnt/root /sbin/init
-</pre>}}
+}}
 
 
 =====Basic mount init script=====
 This basic fstab based mount version and the accompanying fstab appears to work.
 
-{{File|/usr/src/linux/initramfs/init||<pre>
+{{FileBox|filename=/usr/src/linux/initramfs/init|lang=bash|1=
 #!/bin/busybox sh
 
 rescue_shell() {
@@ -567,7 +567,7 @@ echo 0 > /proc/sys/kernel/printk
 clear
 
 # mounting rootfs on /mnt/root
-mount_root || rescue_shell "Error with uuidlabel_root"
+mount_root {{!}}{{!}} rescue_shell "Error with uuidlabel_root"
 
 cat /proc/mounts >/mnt/root/root/mounts.txt
 ls -l / >/mnt/root/root/lsroot.txt
@@ -582,25 +582,25 @@ umount /dev
 
 # switch to the real root and execute init
 exec switch_root /mnt/root /sbin/init
-</pre>}}
+}}
 
-{{File|/usr/src/linux/initramfs/fstab|very specific fstab|<pre>
+{{FileBox|filename=/usr/src/linux/initramfs/fstab|title=very specific fstab|1=
 /dev/sda3	/mnt/root	btrfs	device=/dev/sda3,device=/dev/sdb3,defaults,noatime,compress=lzo,autodefrag,subvol=activeroot		0 0
 /dev/sda2	/mnt/boot	btrfs	device=/dev/sda2,device=/dev/sdb2,defaults,noatime		0 0
-</pre>}}
+}}
 
 =====Debug boot environment files=====
 It was interesting to see what the environment inside the kernel looks like.
 
-{{File|/root/mounts.txt|Result of "cat /proc/mounts"|<pre>
+{{FileBox|filename=/root/mounts.txt|title=Result of "cat /proc/mounts"|1=
 rootfs / rootfs rw 0 0
 none /proc proc rw,relatime 0 0
 none /sys sysfs rw,relatime 0 0
 none /dev devtmpfs rw,relatime,size=12328636k,nr_inodes=3082159,mode=755 0 0
 /dev/sda3 /mnt/root btrfs rw,noatime,compress=lzo,space_cache,autodefrag 0 0
-</pre>}}
+}}
 
-{{File|/root/lsroot.txt|Result of "ls -l /" shows our initramfs as root|<pre>
+{{FileBox|filename=/root/lsroot.txt|title=Result of "ls -l /" shows our initramfs as root|1=
 total 24
 drwxr-xr-x    2 0        0                0 Feb 20 22:21 bin
 drwxr-xr-x    8 0        0             3480 Mar  5 21:48 dev
@@ -616,9 +616,9 @@ drwxr-xr-x    2 0        0                0 Feb 20 22:21 sbin
 dr-xr-xr-x   12 0        0                0 Mar  5 21:48 sys
 drwxr-xr-x    2 0        0                0 Feb 20 22:21 usr
 drwxr-xr-x    2 0        0                0 Feb 20 22:21 var
-</pre>}}
+}}
 
-{{File|/root/lsdev.txt|what devtmpfs gives us for device tree"|<pre>
+{{FileBox|filename=/root/lsdev.txt|title=what devtmpfs gives us for device tree"|1=
 total 0
 crw-------    1 0        0          14,   4 Mar  5 21:48 audio
 crw-------    1 0        0          10, 235 Mar  5 21:48 autofs
@@ -792,14 +792,14 @@ crw-------    1 0        0           7, 128 Mar  5 21:48 vcsa
 crw-------    1 0        0           7, 129 Mar  5 21:48 vcsa1
 crw-------    1 0        0          10,  63 Mar  5 21:48 vga_arbiter
 crw-rw-rw-    1 0        0           1,   5 Mar  5 21:48 zero
-</pre>}}
+}}
 
-{{File|/root/env.txt|barebones root environment|<pre>
+{{FileBox|filename=/root/env.txt|title=barebones root environment|1=
 HOME=/
 TERM=linux
 BOOT_IMAGE=/kernel-3.10.25-gentoo
 PWD=/
-</pre>}}
+}}
 
 ====Rebuilding kernel====
 {{RootCmd|cd /usr/src/linux}}
@@ -855,7 +855,7 @@ This will also cause grub2-install to error out unless we uncomment and specify 
 We also uncomment and force GRUB_TERM=console since other pages suggest that there may be issues with grub2 using a framebuffer and then running the proprietary nvidia-driver for X11 later on.  This may also be true for recent xf86-video-ati driver versions where we are activating a framebuffer before the GPU firmware gets loaded later on from {{Path|/lib/firmware}}.
 
 
-{{File|/etc/default/grub|Edited /mnt/newroot/etc/default/grub config file|<pre>
+{{FileBox|filename=/etc/default/grub|title=Edited /mnt/newroot/etc/default/grub config file|1=
 # Copyright 1999-2013 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 # $Header: /var/cvsroot/gentoo-x86/sys-boot/grub/files/grub.default-2,v 1.4 2013/09/21 18:10:55 floppym Exp $
@@ -956,7 +956,7 @@ GRUB_TERMINAL=console
 
 # Uncomment to disable generation of recovery mode menu entries
 #GRUB_DISABLE_RECOVERY=true
-</pre>}}
+}}
 
 
 After the edit the mkconfig now runs without any issues.
@@ -984,7 +984,7 @@ Label: BTBOOT  uuid: 3dd38cf0-7591-4d26-9334-84e9f2dafddf
 Btrfs v3.12
 </pre>}}
 
-{{File|/boot/grub/grub.cfg|generated /mnt/newroot/boot/grub/grub.cfg file|<pre>
+{{FileBox|filename=/boot/grub/grub.cfg|title=generated /mnt/newroot/boot/grub/grub.cfg file|lang=bash|1=
 #
 # DO NOT EDIT THIS FILE
 #
@@ -1122,7 +1122,7 @@ elif [ -z "${config_directory}" -a -f  $prefix/custom.cfg ]; then
   source $prefix/custom.cfg;
 fi
 ### END /etc/grub.d/41_custom ###
-</pre>}}
+}}
 
 
 The set root='hd2,gpt2' statements in the grub.cfg will be wrong once we remove the original drive set and make the new set {{Path|/dev/sda}} and {{Path|/dev/sdb}}.  However the if-then-else statements right after do a search for the correct uuid for the BTBOOT filesystem and thus will correct the root.
