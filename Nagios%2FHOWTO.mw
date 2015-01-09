@@ -44,21 +44,19 @@ For this purpose, we introduce two access restrictions: one on IP level (from wh
 
 First, edit {{Path|/etc/apache2/modules/99_nagios3.conf}} and edit the <code>allow from</code> definitions: 
 
-{{Code|Allow from definitions|<pre>
+{{CodeBox|title=Allow from definitions|1=
 ## (Example allowing access from the local host and the local network)
 Order allow,deny
 Allow from 127.0.0.1 192.168.1.1/24
-</pre>
 }}
 
 Next, create an Apache authorization table where you define the users who have access to the interface as well as their authorizations. The authentication definition file is called {{Path|.htaccess}} and contains where the authentication information itself is stored. 
 
-{{Code|Example .htaccess file|<pre>
+{{CodeBox|title=Example .htaccess file|1=
 AuthName "Nagios Access"
 AuthType Basic
 AuthUserFile /etc/nagios/auth.users
 Require valid-user
-</pre>
 }}
 
 Place this file inside the {{Path|/usr/share/nagios/htdocs}} and {{Path|/usr/lib/nagios/cgi-bin}} directories. 
@@ -106,24 +104,22 @@ Finally, we need to configure the main Nagios system to connect to this particul
 
 First, edit {{Path|/etc/nagios/nagios.cfg}} and place a <code>cfg_dir</code> directive. This will tell Nagios to read in all object configuration files in the said directory - in our example, the directory will contain the definitions for remote systems. 
 
-{{Code|Editing /etc/nagios/nagios.cfg|<pre>
+{{FileBox|filename=/etc/nagios/nagios.cfg|1=
 cfg_dir=/etc/nagios/objects/remote
-</pre>
 }}
 
 Create the directory and start with the first file, {{Path|nrpe-command.cfg}} . In this file, we configure a Nagios command called <code>check_nrpe</code> which will be used to trigger a plugin (identified by the placeholder <code>$ARG1$</code> ) on the remote system (identified by the placeholder <code>$HOSTADDRESS$</code> ). The <code>$USER1$</code> variable is a default pointer to the Nagios installation directory (for instance, {{Path|/usr/nagios/libexec}} ). 
 
-{{File|/etc/nagios/objects/remote/nrpe-command.cfg|Configuration example 1|<pre>
+{{FileBox|filename=/etc/nagios/objects/remote/nrpe-command.cfg|title=Configuration example 1|1=
 define command {
   command_name check_nrpe
   command_line $USER1$/check_nrpe -H $HOSTADDRESS$ -c $ARG1$
 }
-</pre>
 }}
 
 Next, create a file {{Path|nrpe-hosts.cfg}} where we define the remote host(s) to monitor. In this example, we define two remote systems: 
 
-{{File|/etc/nagios/objects/remote/nrpe-hosts.cfg|Configuration example 2|<pre>
+{{FileBox|filename=/etc/nagios/objects/remote/nrpe-hosts.cfg|title=Configuration example 2|1=
 define host {
   use linux-server
   host_name webber
@@ -137,12 +133,11 @@ define host {
   alias Gentoo Linux RSync server
   address 192.168.2.2
 }
-</pre>
 }}
 
 Finally, define the service(s) you want to check on these hosts. As a prime example, we run the system load test and disk usage plugins: 
 
-{{File|/etc/nagios/objects/remote/nrpe-services.cfg|Configuration example 3|<pre>
+{{FileBox|filename=/etc/nagios/objects/remote/nrpe-services.cfg|title=Configuration example 3|1=
 define service {
   use generic-service
   host_name webber,isync
@@ -156,7 +151,6 @@ define service {
   service_description Root Partition
   check_command check_nrpe!check_disk
 }
-</pre>
 }}
 
 That's it. If you now check the service details on the Nagions monitoring site you'll see that the remote hosts are connected and are transmitting their monitoring metrics to the Nagios server.
@@ -180,23 +174,22 @@ Start SNMP daemon on remote node
 ====Configuring polling server====
 On server configure {{Path|/etc/nagios/resources.cfg}}, add the '''SNMP community''' used on remote nodes:
 
-{{File|/etc/nagios/resources.cfg||<pre>
+{{FileBox|filename=/etc/nagios/resources.cfg|1=
 [...]
 USER161$=my-own-SNMP-community
 [...]
-</pre>
 }}
 
 emerge {{Package|net-analyzer/nagios-plugins}}
 {{Emerge|net-analyzer/nagios-plugins}}
 
 Define a SNMP check for remote hosts, getting the usage of remote hard disk. notice the usage of '''$USER161$''' in that check:
-{{File|/etc/nagios/objects/commands/chec_snmp_disk.cfg||<pre>
+{{FileBox|filename=/etc/nagios/objects/commands/chec_snmp_disk.cfg|1=
 define command{
         command_name    check_snmp_disk
         command_line    $USER1$/check_snmp_disk.pl -H $HOSTADDRESS$ -C $USER161$ -m $ARG1$ -s
         }
-</pre>}}
+}}
 
 Test the previously defined check, as nagios user
 {{Note|Don't gather SNMP data as root, not even once, in normal nagios operation it could lead not being able to write temporary files and folders using a SNMP check as user ''nagios''}}
