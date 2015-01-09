@@ -10,13 +10,13 @@ On the Raspberry Pi and on all build servers install {{Package|sys-devel/distcc}
 {{Emerge|distcc}}
 
 Edit the distcc config file to ensure it is on the right subnet for your network configuration, for example:
-{{File|/etc/conf.d/distccd||<pre>
+{{FileBox|filename=/etc/conf.d/distccd|1=
 DISTCCD_OPTS="${DISTCCD_OPTS} --allow 192.168.1.0/24"
-</pre>}}
+}}
 If you are using systemd, edit instead the config file for the systemd service:
-{{File|/etc/systemd/system/distccd.service.d/00gentoo.conf||<pre>
+{{FileBox|filename=/etc/systemd/system/distccd.service.d/00gentoo.conf|1=
 Environment="ALLOWED_SERVERS=192.168.1.0/24"
-</pre>}}.
+}}.
 
 Then register and start the distcc daemon:
 {{RootCmd|rc-update add distccd default
@@ -27,22 +27,22 @@ or for systemd
 
 === Raspberry Pi only ===
 Tell portage to use distcc:
-{{File|/etc/portage/make.conf||<pre>
+{{FileBox|filename=/etc/portage/make.conf|1=
 FEATURES="distcc"
-</pre>}}
+}}
 
 (Optional) Also add to FEATURES "buildpkg" to tell the Raspberry Pi to build package files for everything it builds (if you want to use the same setup on multiple Raspberry Pis without recompiling).
 
 
 Edit the distcc host file to tell your Raspberry Pi to submit compile jobs to your server:
-{{File|/etc/distcc/hosts||<pre>
+{{FileBox|filename=/etc/distcc/hosts|1=
 # --- /etc/distcc/hosts -----------------------
 # See the "Hosts Specification" section of
 # "man distcc" for the format of this file.
 #
 # By default, just test that it works in loopback mode.
 [YOUR HOSTS HERE - first host is first preference] 127.0.0.1 
-</pre>}}
+}}
 
 Now you will need to tell distcc the specific compiler name to use instead of just "gcc":<ref>See [[Distcc/Cross-Compiling#Configuring_distcc_to_cross-compile_correctly|here]] for an explanation.</ref>
 {{RootCmd|cd /usr/lib/distcc/bin
@@ -58,10 +58,10 @@ lrwxrwxrwx  1 root root 15 Dec 23 20:13 armv6j-hardfloat-linux-gnueabi-gcc -> /u
 </pre>}}
 
 We need to replace those symlinks with the following script: 
-{{File|/usr/lib/distcc/bin/armv6j-hardfloat-linux-gnueabi-wrapper|Distcc crossdev wrapper file|<pre>
+{{FileBox|filename=/usr/lib/distcc/bin/armv6j-hardfloat-linux-gnueabi-wrapper|title=Distcc crossdev wrapper file|lang=bash|1=
 #!/bin/bash
 exec /usr/lib/distcc/bin/armv6j-hardfloat-linux-gnueabi-g${0:$[-2]} "$@"
-</pre>}}
+}}
 
 {{RootCmd|rm c++ g++ gcc cc
 |chmod a+x /usr/lib/distcc/bin/armv6j-hardfloat-linux-gnueabi-wrapper
@@ -85,14 +85,14 @@ lrwxrwxrwx 1 root root 38 Dec  8 01:04 gcc -> armv6j-hardfloat-linux-gnueabi-wra
 </pre>}}
 
 You can now check what is being dispatched to your build machines while doing an emerge operation with this script:
-{{File|/usr/sbin/distcc-watch|Portage distcc monitor|<pre>
+{{FileBox|filename=/usr/sbin/distcc-watch|title=Portage distcc monitor|lang=bash|1=
 #!/bin/bash
 # This script will only print non-blank results from distccmon-text
 N=1 # seconds to sleep in between checks
 
 while true; do
 	task=`DISTCC_DIR="/var/tmp/portage/.distcc/" distccmon-text`
-	taskshort=`echo $task | tr -d ' '`
+	taskshort=`echo $task {{!}} tr -d ' '`
 	len=${#taskshort}
 	if [ $len -ne 0 ];then
 		echo "$task"
@@ -100,7 +100,7 @@ while true; do
 
 	sleep $N
 done
-</pre>}}
+}}
 
 Or simpler with:
 {{RootCmd|watch -n1 DISTCC_DIR{{=}}"/var/tmp/portage/.distcc/" distccmon-text}}
@@ -113,7 +113,7 @@ Install {{Package|sys-devel/crossdev}}:
 
 You will need to maintain separate portage profiles for the Raspberry Pi and your server's default, so you must convert your existing profile files to folders.
 Copy the following file to {{Path|~/convert-profile-to-files.sh}}, and then run it as root:
-{{File|~/convert-profile-to-files.sh|Convert profile files to folders|<pre>
+{{FileBox|filename=~/convert-profile-to-files.sh|title=Convert profile files to folders|lang=bash|1=
 #!/bin/bash
 PROFILE_DIR="/etc/portage"
 
@@ -135,7 +135,7 @@ for PACK_DIR in package.accept_keywords package.keywords package.use package.unm
 done
 
 echo "Completed!"
-</pre>}}
+}}
 
 Create a cross toolchain for ARM: (drop ''-S'' if you plan to run an unstable system):
 {{RootCmd|crossdev -S -v -t armv6j-hardfloat-linux-gnueabi}}
