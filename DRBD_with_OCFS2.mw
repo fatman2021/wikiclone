@@ -21,7 +21,7 @@ Samba Team don't suggest to use this solution, so this is '''''purely experiment
 
 = Prerequisite =
 Below are the kernel need.
-{{kernel|3.10.25-gentoo|<pre>
+{{kernelBox|title=3.10.25-gentoo|1=
 File systems --->   
     [*] OCFS2 file system support
     [*]   O2CB Kernelspace Clustering
@@ -33,7 +33,7 @@ Device Drivers  --->
     [*] Block devices  --->
         [*]   DRBD Distributed Replicated Block Device support
         [ ]     DRBD fault injection
-</pre>}}
+}}
 
 = Packages =
 Please emerge the following package 
@@ -71,7 +71,7 @@ This is a Global DRBD configuration.
 It will need to change according to your DRBD need.
 Please check the on the manual for more info.
 
-{{File|/etc/drdb.d/global_common.conf||<pre>
+{{FileBox|filename=/etc/drdb.d/global_common.conf|1=
 global {
         usage-count yes;
         # minor-count dialog-refresh disable-ip-verification
@@ -118,7 +118,7 @@ common {
                 # allow-two-primaries yes;
         }
 }
-</pre>}}
+}}
 {{Note|DRBD manual don't recommended to set the allow-two-primaries option to yes until the initial resource synchronization has completed.}}
 
 {{Warning|By configuring auto-recovery policies, you are configuring effectively configuring automatic data-loss! Be sure you understand the implications. - By DRBD Manual}}
@@ -128,7 +128,7 @@ If you have multiple resource setup, you can do it one resource per files to avo
 
 Below files is a 2 Node Resource example.
 Note on the Comment Part, they will need to be uncomment at a much later part when we enable dual primary.
-{{File|/etc/drdb.d/r0.res|Resource name r0 DRBD |<pre>
+{{FileBox|filename=/etc/drdb.d/r0.res|title=Resource name r0 DRBD |1=
 resource r0 {
         handlers {
                 split-brain "/usr/lib64/drbd/notify-split-brain.sh root";
@@ -156,7 +156,7 @@ resource r0 {
                 # allow-two-primaries yes;
         }
 }
-</pre>}}
+}}
 
 In plain English, we will use {{Path|/dev/sda5}} on serverNode01 (IP 192.168.11.23) and {{Path|/dev/sda5}} on serverNode02 (IP 192.168.11.27) to create a drbd node {{Path|/dev/drbd1}} respectively on both server. Both drbd node will store the metadata on internally.
 
@@ -185,7 +185,7 @@ We will now continue with OCFS2 Setup.<br />
 Unfortunately ocfs2 configuration don't include the cluster files example and thus you will need to copy the files below as an example.<br />
 Please change what even which suit your needm
 
-{{File|/etc/ocfs2/cluster.conf|Create this files|<pre>
+{{FileBox|filename=/etc/ocfs2/cluster.conf|title=Create this files|lang=yaml|1=
 cluster:
         node_count = 2
         name = ocfs2cluster
@@ -203,7 +203,7 @@ node:
         ip_port = 7777
         ip_address = 192.168.11.27
         name = serverNode02
-</pre>}}
+}}
 
 {| class="wikitable"
 |-
@@ -233,20 +233,20 @@ Now it is time to change {{Path|/etc/conf.d/ocfs2}} files.
 There are a lot of configurable parameters there but we will only make one change.
 <code>OCFS2_CLUSTER</code> and change it to ocfs2 cluster name.
 
-{{File|/etc/conf.d/ocfs2|Change OCFS2 Cluster Name|<pre>
+{{FileBox|filename=/etc/conf.d/ocfs2|title=Change OCFS2 Cluster Name|1=
 OCFS2_CLUSTER="ocfs2cluster"
-</pre>}}
+}}
 
 It is also time we add the required mount to {{Path|/etc/fstab}}. Please add the following.
 
-{{File|/etc/fstab|add the following|<pre>
+{{FileBox|filename=/etc/fstab|title=add the following|1=
 # Needed by ocfs2
 none                    /sys/kernel/config            configfs        defaults                                  0 0
 none                    /sys/kernel/dlm               ocfs2_dlmfs     defaults                                  0 0
 
 # Our DRBD and OCFS2 mount
 /dev/drbd1              /ocfs2cluster/                ocfs2            _netdev,nointr,user_xattr,acl            0 0
-</pre>}}
+}}
 
 = DRBD Initialization and Setup =
 After we have all this.<br />
@@ -389,7 +389,7 @@ mkfs.ocfs2 successful
 == Enable Dual-Primary Mode == 
 To enable Dual-Primary mode is easy, just uncomment the resources files we have made on top.
 
-{{File|/etc/drdb.d/r0.res|Resource name r0 DRBD Dual Primary |<pre>
+{{FileBox|filename=/etc/drdb.d/r0.res|title=Resource name r0 DRBD Dual Primary |1=
 resource r0 {
         handlers {
                 split-brain "/usr/lib64/drbd/notify-split-brain.sh root";
@@ -417,7 +417,7 @@ resource r0 {
                 allow-two-primaries yes;
         }
 }
-</pre>}}
+}}
 
 Than time to make change on both node, in sequence primary then only secondary.
 {{RootCmd
