@@ -25,11 +25,11 @@ Some of the desktop environments provide their own replacements for ''startx''. 
 === Starting X11 on console login ===
 To avoid having to type the ''startx'' command over and over again, you may decide that a login to a specific vt should start X11. One of the ways to achieve that is to put a code like the following into your shell's RC (e.g. ''~/.bashrc''):
 
-{{File|~/.bashrc|X11 autostart with login on vt8|<pre>
+{{FileBox|filename=~/.bashrc|title=X11 autostart with login on vt8|lang=bash|1=
 if [[ ! ${DISPLAY} && ${XDG_VTNR} == 8 ]]; then
     exec startx
 fi
-</pre>}}
+}}
 
 The ''XDG_VTNR'' variables specifies the VT number. If you'd like to use another VT, adjust the number accordingly.
 
@@ -45,7 +45,7 @@ The ''exec'' command causes the login shell to be replaced by the X11 session. T
 In order to obtain complete X11 autologin, you can use the getty/login autologin feature along with the fore-mentioned trick.
 
 First, create a new service file like the following:
-{{File|/etc/systemd/system/x11.service|An example service file for X11 autologin|<pre>
+{{FileBox|filename=/etc/systemd/system/x11.service|title=An example service file for X11 autologin|lang=ini|1=
 [Unit]
 After=systemd-user-sessions.service
 
@@ -54,7 +54,7 @@ ExecStart=/sbin/mingetty --autologin username --noclear tty8 38400
 
 [Install]
 WantedBy=multi-user.target
-</pre>}}
+}}
 
 with ''username'' replaced by your username, and ''tty8'' being the tty you want the X11-starting login to be performed on. It should be noted that this tty will be used for login & console output, and X11 can be started on any other tty.
 
@@ -66,14 +66,14 @@ Afterwards, add the fore-mentioned snippet to your bashrc (with the same vt spec
 In order to avoid relying on the ''DISPLAY+XDG_VTNR'' trick to determine whether to start X11, we can extend the two above approaches by using a dedicated environment variable to distinguish the specific shell where X11 is to be started.
 
 First, create a dedicated ''login'' wrapper:
-{{File|/usr/local/sbin/x11login|X11 vt login wrapper|<pre>
+{{FileBox|filename=/usr/local/sbin/x11login|title=X11 vt login wrapper|lang=bash|1=
 #!/bin/sh
 exec /bin/login "${@}" START_X11=1
-</pre>}}
+}}
 
 This causes the user to be logged in with ''START_X11=1'' environment variable set. Then, tell getty to use that file instead of the default ''/bin/login'':
 
-{{File|/etc/systemd/system/x11.service|X11 autologin service using login wrapper|<pre>
+{{FileBox|filename=/etc/systemd/system/x11.service|title=X11 autologin service using login wrapper|lang=ini|1=
 [Unit]
 After=systemd-user-sessions.service
 
@@ -82,15 +82,15 @@ ExecStart=/sbin/mingetty --autologin username --loginprog=/usr/local/sbin/x11log
 
 [Install]
 WantedBy=multi-user.target
-</pre>}}
+}}
 
 Finally, modify bashrc (or equivalent) to use the variable rather than guessing:
-{{File|~/.bashrc|X11 autostart checking dedicated variable|<pre>
+{{FileBox|filename=~/.bashrc|title=X11 autostart checking dedicated variable|lang=bash|1=
 if [[ ${START_X11} == 1 ]]; then
     unset START_X11
     exec startx
 fi
-</pre>}}
+}}
 
 Remember to unset the variable before starting X11 -- otherwise all the X11 terminals would have it set and try to spawn another X11 session.
 
@@ -100,7 +100,7 @@ In another way, you can use su and xinit for direct login in X.
 
 Service example:
 
-{{File|/etc/systemd/system/xinit-login.service|An example service file for X11 autologin using su and xinit|<pre>
+{{FileBox|filename=/etc/systemd/system/xinit-login.service|title=An example service file for X11 autologin using su and xinit|lang=ini|1=
 [Unit]
 After=systemd-user-sessions.service
 
@@ -109,7 +109,7 @@ ExecStart=/bin/su username -l -c /usr/bin/xinit -- VT08
 
 [Install]
 WantedBy=multi-user.target
-</pre>}}
+}}
 
 You can use startx rather than xinit.
 
