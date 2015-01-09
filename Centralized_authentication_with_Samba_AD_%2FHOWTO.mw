@@ -12,10 +12,10 @@ There are a few method.
 
 = nslcd or nss_pam_ldapd = 
 If you are using 64 bit system, you will need to unmask it.
-{{Code|Add these line to /etc/portage/package.keywords|<pre>
+{{FileBox|filename=/etc/portage/package.accept_keywords|
 #nss-pam-ldapd replacement of both nss_ldap and nss_pam
-sys-auth/nss-pam-ldapd ~amd64
-</pre>}}
+sys-auth/nss-pam-ldapd
+}}
 
 This package will provide what is currently provide by nss_ldap and also nss_pam thus the 2 package have to be removed.
 {{Emerge
@@ -44,7 +44,7 @@ Assuming that:<br />
 * Samba AD is running locally and accessible via 127.0.0.1
 * LDAP Base DN is dc=headoffice,dc=location1,dc=company,dc=com
 
-{{File|/etc/nslcd.conf|Change some line below|<pre>
+{{FileBox|filename=/etc/nslcd.conf|title=Change some line below|1=
 # The uri pointing to the LDAP server to use for name lookups.
 # Multiple entries may be specified. The address that is used
 # here should be resolvable without using LDAP (obviously).
@@ -82,7 +82,7 @@ filter shadow (&(objectClass=user)(!(objectClass=computer))(uidNumber=*)(unixHom
 map    shadow uid              sAMAccountName
 map    shadow shadowLastChange pwdLastSet
 filter group  (objectClass=group)
-</pre>}}
+}}
 
 === Method 2:  Connecting to AD via Kerberos ===
 This method are very similar with the 1st method specially in the configuration you will still need to change the configure {{Path|/etc/nslcd.conf}} to make LDAP connection to an AD Server with the help of Kerberos. But you don't need to specified a bind account and also the communication with AD with this setup is encrypted.
@@ -122,7 +122,7 @@ You will need {{Package|app-crypt/kstart}} so the Kerberos ticket and key will b
 
 Now we can change our {{Path|nslcd.conf}} to suit Kerberos setup.
 
-{{File|/etc/nslcd.conf|Change some line below|<pre>
+{{FileBox|filename=/etc/nslcd.conf|title=Change some line below|1=
 # The uri pointing to the LDAP server to use for name lookups.
 # Multiple entries may be specified. The address that is used
 # here should be resolvable without using LDAP (obviously).
@@ -152,14 +152,14 @@ filter shadow (&(objectClass=user)(!(objectClass=computer))(uidNumber=*)(unixHom
 map    shadow uid              sAMAccountName
 map    shadow shadowLastChange pwdLastSet
 filter group  (objectClass=group)
-</pre>}}
+}}
 
 {{Warning|k5start don't have an startup script with Gentoo, and I cannot make a script the will work. Someone please help.}}
 
 == Editing /etc/init.d/nslcd to start k5start together ==
 We need to make some change to start k5strt with nslcd so the kerberos ticket will work.
 
-{{File|/etc/init.d/nslcd|Add the 2 k5start line below.|<pre>
+{{FileBox|filename=/etc/init.d/nslcd|title=Add the 2 k5start line below.|lang=bash|1=
 #!/sbin/runscript
 # Copyright 1999-2013 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
@@ -183,7 +183,7 @@ checkconfig() {
 }
 start() {
     checkpath -q -d /var/run/nslcd -o nslcd:nslcd
-        checkconfig || return $?
+        checkconfig {{!}}{{!}} return $?
 
         ebegin "Starting nslcd"
         start-stop-daemon --start --pidfile /var/run/nslcd/nslcd.pid \
@@ -199,17 +199,17 @@ stop() {
         start-stop-daemon --stop --pidfile /var/run/nslcd/nslcd.k5start.pid
         eend $? "Failed to stop nslcd"
 
-</pre>}}
+}}
 
 
 
 == nssswitch.conf connfiguration ==
 You will need to edit your {{Path|/etc/nsswitch.conf}} according to the following.
 This meant that nsswitch will use the new nss-pam-ldapd module.
-{{Code|/etc/nsswitch.conf|<pre>
+{{FileBox|filename=/etc/nsswitch.conf|1=
 passwd:      compat ldap
 group:       compat ldap
-</pre>}}
+}}
 
 == Executing ==
 We can now start nslcd daemon
