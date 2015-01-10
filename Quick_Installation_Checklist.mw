@@ -3,14 +3,14 @@
 In this example we create 3 partitions. 128MB /boot, 1024MB swap and rest for /.
 {{RootCmd|cfdisk /dev/sda}}
 Format partitions.
-{{RootCmd|mkfs.ext4 /dev/sda1}}
-{{RootCmd|mkfs.ext4 /dev/sda3}}
-{{RootCmd|mkswap /dev/sda2 && swapon /dev/sda2}}
+{{RootCmd
+|mkfs.ext4 /dev/sda1
+|mkfs.ext4 /dev/sda3
+|mkswap /dev/sda2 && swapon /dev/sda2}}
 
 === UEFI/GPT ===
 In this example we create 4 partitions. 128MB /boot, 32MB UEFI, 1024MB swap and rest for /.
-{{RootCmd|gdisk /dev/sda}}
-
+{{RootCmd|gdisk /dev/sda|output=
 <pre>Create GPT partition table:
 Command: o ↵
 This option deletes all partitions and creates a new protective MBR.
@@ -46,24 +46,24 @@ Hex Code: ↵
 
 Write Partition Table To Disk:
 Command: w ↵
-Do you want to proceed? (Y/N): Y ↵</pre>
+Do you want to proceed? (Y/N): Y ↵</pre>}}
 
 Format partitions.
-{{RootCmd|mkfs.ext4 /dev/sda1}}
-{{RootCmd|mkfs.ext4 /dev/sda4}}
-{{RootCmd|mkswap /dev/sda3 && swapon /dev/sda3}}
+{{RootCmd|mkfs.ext4 /dev/sda1
+|mkfs.ext4 /dev/sda4
+|mkswap /dev/sda3 && swapon /dev/sda3}}
 
 == Mount partitions ==
 === BIOS/MBR ===
-{{RootCmd|mkdir -p /mnt/gentoo}}
-{{RootCmd|mount /dev/sda3 /mnt/gentoo}}
-{{RootCmd|mkdir /mnt/gentoo/boot}}
-{{RootCmd|mount /dev/sda1 /mnt/gentoo/boot}}
+{{RootCmd|mkdir -p /mnt/gentoo
+|mount /dev/sda3 /mnt/gentoo
+|mkdir /mnt/gentoo/boot
+|mount /dev/sda1 /mnt/gentoo/boot}}
 === UEFI/GPT ===
-{{RootCmd|mkdir -p /mnt/gentoo}}
-{{RootCmd|mount /dev/sda4 /mnt/gentoo}}
-{{RootCmd|mkdir /mnt/gentoo/boot}}
-{{RootCmd|mount /dev/sda1 /mnt/gentoo/boot}}
+{{RootCmd|mkdir -p /mnt/gentoo
+|mount /dev/sda4 /mnt/gentoo
+|mkdir /mnt/gentoo/boot
+|mount /dev/sda1 /mnt/gentoo/boot}}
 
 == Install stage3 ==
 Find nearest mirror from: http://www.gentoo.org/main/en/mirrors2.xml
@@ -75,37 +75,38 @@ Unpack stage.
 
 == Chroot ==
 Chroot into gentoo stage.
-{{RootCmd|cd /mnt/gentoo}}
-{{RootCmd|mount -t proc none proc}}
-{{RootCmd|mount --rbind /sys sys}}
-{{RootCmd|mount --rbind /dev dev}}
-{{RootCmd|cp /etc/resolv.conf etc}}
-{{RootCmd|chroot . bash}}
+{{RootCmd|cd /mnt/gentoo
+|mount -t proc none proc
+|mount --rbind /sys sys
+|mount --rbind /dev dev
+|cp /etc/resolv.conf etc
+|chroot . bash}}
 
 == Download portage tree ==
-{{RootCmd|mkdir /usr/portage}}
-{{RootCmd|emerge-webrsync}}
+{{RootCmd|mkdir /usr/portage
+|emerge-webrsync}}
 
 == Create user accounts ==
 Change root password.
 {{RootCmd|passwd}}
 Create user. Note, there are no spaces allowed between the groups.
-{{RootCmd|useradd -g users -G wheel,portage,audio,video,usb,cdrom -m username}}
-{{RootCmd|passwd username}}
+{{RootCmd|useradd -g users -G wheel,portage,audio,video,usb,cdrom -m username
+|passwd username}}
 
 == Configure system ==
 Configure fstab to match your partitioning.
-{{File|/etc/fstab||<pre>
+{{FileBox|filename=/etc/fstab|1=
 /dev/sda1		/boot		ext4		noauto,noatime	1 2
 /dev/sda3		/		ext4		noatime		0 1
 /dev/sda2		none		swap		sw		0 0
 /dev/cdrom		/mnt/cdrom	auto		noauto,ro	0 0
-</pre>}}
+}}
 
 Set portage options.
-{{File|/etc/portage/make.conf||<pre>
+{{FileBox|filename=/etc/portage/make.conf|1=
 CFLAGS="-march=native -O2 -pipe"
 CXXFLAGS="${CFLAGS}"
+# Don't change the CHOST
 CHOST="x86_64-pc-linux-gnu"
 
 # choose USE flags you need
@@ -114,13 +115,13 @@ USE="alsa usb"
 PORTDIR="/usr/portage"
 DISTDIR="${PORTDIR}/distfiles"
 PKGDIR="${PORTDIR}/packages"
-</pre>}}
+}}
 
 Set locale settings.
-{{File|/etc/env.d/02locale||<pre>
+{{FileBox|filename=/etc/env.d/02locale|title=Example locale|1=
 LANG="en_US.UTF-8"
 LC_COLLATE="C"
-</pre>}}
+}}
 
 Also edit {{Path|/etc/conf.d/hostname}}, {{Path|/etc/conf.d/keymaps}} and {{Path|/etc/conf.d/hwclock}}.
 
@@ -130,8 +131,8 @@ Set timezone.
 == Install kernel ==
 === Emerge ===
 Gentoo-sources is vanilla kernel with gentoo patchset. You could also use vanilla-sources. Linux-firmware contains binary blobs needed for some hardware like wlan cards.
-{{RootCmd|emerge -av gentoo-sources linux-firmware}}
-{{RootCmd|cd /usr/src/linux}}
+{{RootCmd|emerge -av gentoo-sources linux-firmware
+|cd /usr/src/linux}}
 
 === Configure ===
 ==== Manual ====
@@ -150,33 +151,45 @@ Build kernel and modules.
 
 === Install ===
 Now you can install kernel and modules.
-{{RootCmd|make modules_install}}
-{{RootCmd|make install}}
+{{RootCmd|make modules_install
+|make install}}
 
 == Install bootloader ==
-{{RootCmd|emerge -av grub}}
-{{RootCmd|grub2-install /dev/sda}}
+{{FileBox|filename=/etc/portage/make.conf|UEFI settings for grub|1=
+# Specify the correct setting for your system PC BIOS is "pc", UEFI on x86_64 is "efi-64"
+GRUB_PLATFORMS="efi-64"
+}}
+
+{{RootCmd
+|emerge -av grub
+|grub2-install /dev/sda # PC BIOS
+|grub2-install --target{{=}}x86_64-efi /dev/sda # UEFI on PC}}
 Edit grub config.
 {{RootCmd|nano /boot/grub/grub.cfg}}
 Here is simple example config.
-{{File|/boot/grub/grub.cfg||<pre>
+{{FileBox|filename=/boot/grub/grub.cfg|title=Example manual config|1=
 set default=0
 set timeout=1
 
 menuentry "Gentoo" {
-linux (hd0,1)/vmlinuz-3.14.4 root=/dev/sda3 rootfstype=ext4 net.ifnames=0 quiet ro
+linux (hd0,1)/vmlinuz-3.14.4-gentoo root=/dev/sda3 rootfstype=ext4 net.ifnames=0 quiet ro
 }
+}}
+
+Alternatively, you can use ''grub2-mkconfig'':
+{{RootCmd|grub2-mkconfig -o /boot/grub/grub.cfg|output=<pre>
+Found vmlinuz-3.14.4-gentoo
 </pre>}}
 
 == Install network tools ==
 Install tools to configure network interfaces.
-{{RootCmd|emerge -av iproute2 dhcpcd wireless-tools iw wpa_supplicant}}
+{{Emerge|iproute2 dhcpcd wireless-tools iw wpa_supplicant}}
 
 == Exit chroot, unmount and reboot ==
-{{RootCmd|exit}}
-{{RootCmd|cd /mnt}}
-{{RootCmd|umount -l gentoo}}
-{{RootCmd|reboot}}
+{{RootCmd|exit
+|cd /mnt
+|umount -R gentoo
+|reboot}}
 
 == External resources ==
 
