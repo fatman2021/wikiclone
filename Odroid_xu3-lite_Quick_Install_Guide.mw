@@ -63,7 +63,7 @@ I used the kernel 3.10.63 with date 31 de diciembre del 2014. Yes, I was working
 
 {{RootCmd
 |cd /mnt/repository
-|wget http://mirror.gentoo/releases/arm/autobuilds/current-stage3-armv7a_hardfp/stage3-armv7a_hardfp-XXXXXXXX.tar.bz2
+|wget http://mirror.gentoo/releases/arm/autobuilds/current-stage3-armv7a_hardfp/stage3-armv7a_hardfp-YYYYMMDD.tar.bz2
 |wget http://mirror.gentoo/snapshots/portage-latest.tar.bz2
 |wget http://builder.mdrjr.net/kernel-3.10/00-LATEST/odroidxu3.tar.xz
 |git clone --depth 1 https://github.com/hardkernel/linux.git -b odroidxu3-3.10.y linux-odroidxu3-3.10
@@ -73,7 +73,7 @@ I used the kernel 3.10.63 with date 31 de diciembre del 2014. Yes, I was working
 {{RootCmd
 |mkdir gentoo
 |cd gentoo
-|tar -xvjpf ../stage3-armv7a_hardfp-XXXXXXXX.tar.bz2
+|tar -xvjpf ../stage3-armv7a_hardfp-YYYYMMDD.tar.bz2
 |cd usr
 |tar xjvf tar xjvf ../../portage-latest.tar.bz2
 |cd /mnt/repository
@@ -92,6 +92,7 @@ I used the kernel 3.10.63 with date 31 de diciembre del 2014. Yes, I was working
 }}
 
 ==== Preparing make.conf ====
+
 #nano -w /etc/portage/make.conf
 {{FileBox|filename=/etc/portage/make.conf| related settings|lang=bash|1=
 # Please consult /usr/share/portage/config/make.conf.example for a more
@@ -116,9 +117,45 @@ GENTOO_MIRRORS="http://mirror1.com/gentoo/ http://mirror2.com/gentoo/"
 LINGUAS="en"
 }}
 
-==== Configuring NTP ====
+==== Installing our gentoo ====
+
+We will emerge some key packages, the rest you can doit later.
+
+{{RootCmd|emerge syslog-ng vixie-cron dhcp ntp}}
+
+===== Configuring NTP =====
 
 This is really important!!!.
 
+This motherbord does not have any real time clock, so we will need some software to do de job. 
 
-I will be back :-)
+{{RootCmd
+|emerge ntp
+|echo "Europe/Zurich" >  /etc/timezone
+|emerge --config timezone-data
+|nano -w /etc/ntp.conf
+}}
+{{FileBox|filename=/etc/ntp.conf| ntp related settings|lang=bash|1=
+server mi.servidor.de.tiempo.com
+}}
+{{RootCmd|nano -w /etc/conf.d/ntp-client}}
+{{FileBox|filename=/etc/conf.d/ntp-client| ntp-client related settings|lang=bash|1=
+NTPCLIENT_OPTS="-s -b -u mi.servidor.de.tiempo.com"
+}}
+
+In may case, dhclient, set up my ntp.conf. ntp-client is not essential, but for me it helps a lot ;-)
+
+==== Other tools and configurations ====
+
+
+
+
+
+-La interfaz de red
+# nano -w /etc/udev/rules.d/70-persistent-net.rules
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="00:1e:06:61:7a:39", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="localnet"
+# cd /etc/init.d
+# ln -s net.lo net.localnet
+# nano -w /etc/conf.d/net
+config_localnet="dhclient"                                                                                                                                                      
+dhclient_localnet="-q"
