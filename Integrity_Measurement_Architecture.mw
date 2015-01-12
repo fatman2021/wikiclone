@@ -33,7 +33,7 @@ We are working on fine-tuning the default policies so that measurements only occ
 
 First of all, enable the IMA subsystem in the Linux kernel configuration. IMA is supported in the main tree since 2.6.30, and IMA appraisal (needed when you want the system to stop if it detects an off-line modified file) is merged in the main tree since 3.7. 
 
-{{Kernel|Linux kernel configuration for IMA|<pre>
+{{KernelBox|title=Linux kernel configuration for IMA|1=
 CONFIG_INTEGRITY=y
 CONFIG_IMA=y
 CONFIG_IMA_MEASURE_PCR_IDX=10
@@ -43,19 +43,17 @@ CONFIG_IMA_LSM_RULES=y
 # Since 3.7:
 CONFIG_INTEGRITY_SIGNATURE=y
 CONFIG_IMA_APPRAISE=y
-</pre>
 }}
 
 === Bootloader configuration ===
 
 Next, configure the bootloader to enable the TCB policy: 
 
-{{Code|Bootloader configuration to enable IMA TCB policy|<pre>
+{{CodeBox|title=Bootloader configuration to enable IMA TCB policy|1=
 kernel /boot/vmlinuz root=/dev/vda1 ima_tcb
   
 # Only if IMA appraisal is wanted:
 kernel /boot/vmlinuz root=/dev/vda1 ima_tcb ima_appraise=fix ima_appraise_tcb
-</pre>
 }}
 
 We currently set <code>ima_appraise=fix</code> because the integrity hashes have not been stored yet. If we would run with <code>ima_appraise=enforce</code> immediately, the system would simply refuse to boot properly as all file accesses would be denied. We will switch to <code>ima_appraise=enforce</code> later. 
@@ -73,18 +71,16 @@ securityfs on /sys/kernel/security type securityfs (rw,nosuid,nodev,noexec,relat
 
 Mount all file systems with the ''i_version'' support (which, sadly, means you need to mount it with <code>iversion</code> mount option - without the underscore). This is needed for IMA to detect changes on files, allowing it to remeasure the hash of the file. 
 
-{{Code|Enabling i_version on all mounts|<pre>
+{{CodeBox|title=Enabling i_version on all mounts|1=
 # Example for a single partition, in /etc/fstab:
 /dev/vda1  /  ext4  noatime,iversion  1 2
-</pre>
 }}
 
 For the root file system, you might want to enable it through the <code>rootflags</code> kernel parameter as well so that it gets mounted immediately with i_version support when the Linux kernel mounts the root file system. 
 
-{{Code|Using rootflags in the bootloader configuration|<pre>
+{{CodeBox|title=Using rootflags in the bootloader configuration|1=
 # Example kernel line for a GRUB setup
 kernel /boot/kernel root=/dev/vg/root rootflags=i_version dolvm ima_tcb ima_appraise=enforce ima_appraise_tcb
-</pre>
 }}
 
 === Registering the file hashes for the system ===
@@ -265,7 +261,7 @@ You can load in an IMA policy by <code>cat</code> 'ing it into {{Path|/sys/kerne
 
 Below is an example custom policy, taken from the default one with one addition: ask it not to measure and appraise log files (through the use of the SELinux <code>logfile</code> attribute). 
 
-{{Code|Example IMA custom policy|<pre>
+{{CodeBox|title=Example IMA custom policy|1=
 # Magics can be found in kernel/include/uapi/linux/magic.h
 # Default can be found in security/integrity/ima/ima_policy.c
 # PROC_SUPER_MAGIC = 0x9fa0
@@ -336,7 +332,6 @@ dont_appraise obj_type=auditd_log_t
 # Remainder of the defaults
 measure func=FILE_CHECK mask=MAY_READ uid=0
 appraise fowner=0
-</pre>
 }}
 
 
@@ -346,7 +341,7 @@ Make sure no empty lines are in the policy; if not, it will be refused. You can 
 
 Have the policy be loaded in as soon as possible, either in an initramfs or early in the boot process through an init script in the ''sysinit'' runlevel. I keep my policy in {{Path|/etc/ima}} and use the following small init script to load it early on: 
 
-{{Code|Init script to load a custom ima policy|<pre>
+{{CodeBox|title=Init script to load a custom ima policy|lang=bash|1=
 #!/sbin/runscript
 # Copyright 1999-2012 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
@@ -363,7 +358,6 @@ start() {
         cat /etc/ima/policy.conf > /sys/kernel/security/ima/policy
         eend $?
 }
-</pre>
 }}
 
 {{Warning|If you use an initramfs, then you might notice that {{Path|/usr}} is not properly mounted. This is because busybox mount does not support the iversion mount option which is required. Update the initramfs to mount without iversion, and remount it as soon as possible later.}}
