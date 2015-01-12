@@ -222,7 +222,7 @@ Seems ''flags'' is a data variable local to {{Path|mmxflags_asm.S}} which functi
 
 If we analyze the ''IDCT_mmx'' function, we find a similar trend. 
 
-{{Code|IDCT_mmx snippets|<pre>
+{{CodeBox|title=IDCT_mmx snippets|lang=asm|1=
 ## [Local variables]
 .data
     .align 8
@@ -257,14 +257,13 @@ scratch1:
     movq 8*3(%esi), %mm7
     psraw $4, %mm4
     movq %mm2, scratch1     /* out1 */
-</pre>
 }}
 
 === libSDL source dive ===
 
 Again, before we jump into how to fix these, lets analyze a few more source files to get a better handle on identifying problematic code. 
 
-{{Code|Broken _ConvertMMXpII32_24RGB888 in libSDL code|<pre>
+{{CodeBox|title=Broken _ConvertMMXpII32_24RGB888 in libSDL code|lang=asm|1=
 ## [objdump of _ConvertMMXpII32_24RGB888 memory reference]
 0004e210 <_ConvertMMXpII32_24RGB888>:
    4e210:       0f 6f 35 50 55 05 00    movq   0x55550,%mm6
@@ -281,12 +280,11 @@ _ConvertMMXpII32_24RGB888: ## start of function 0x4E210
         ; set up mm6 as the mask, mm7 as zero
         movq mm6, qword [mmx32_rgb888_mask] ## memory reference 0x4E213
         pxor mm7, mm7
-</pre>
 }}
 
 Simple enough, the ''_ConvertMMXpII32_24RGB888'' function refers to the ''mmx32_rgb888_mask'' variable. 
 
-{{Code|Broken SDL_SoftStretch in libSDL code|<pre>
+{{CodeBox|title=Broken SDL_SoftStretch in libSDL code|lang=c|1=
 ## [SDL_SoftStretch is defined in src/video/SDL_stretch.c]
 int SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect,
                     SDL_Surface *dst, SDL_Rect *dstrect)
@@ -299,7 +297,6 @@ int SDL_SoftStretch(SDL_Surface *src, SDL_Rect *srcrect,
             : "0" (dstp), "1" (srcp)
             : "memory" );
 #else
-</pre>
 }}
 
 Another straight forward bug. An absolute reference to the ''_copy_row'' variable in assembly. If we were to let gcc handle the ''_copy_row'' reference instead though... 
@@ -357,7 +354,7 @@ Or, if the assembly uses an instruction which always clobbers ''ebx'' (e.g. ''cp
 
 If all else fails, you can fall back to the slow push/pop ''ebx'' on the stack method. 
 
-{{Code|Just don't use the PIC register|<pre>
+{{CodeBox|title=Just don't use the PIC register|lang=c|1=
 ## /* change this code from */
 asm("
     mov %0, %%eax
@@ -371,10 +368,9 @@ asm("
     mov %1, %%ecx
     add %%eax, %%ecx
     " : : "m"(input1), "m"(input2) : "eax" "ecx");
-</pre>
 }}
 
-{{Code|Let gcc allocate registers|<pre>
+{{CodeBox|title=Let gcc allocate registers|lang=c|1=
 ## /* change this code from */
 asm("
     mov %2, %%eax
@@ -388,10 +384,9 @@ asm("
     mov %3, %1
     add %0, %1
     " : "=r"(output1) "=r"(output2) : "m"(input1), "m"(input2));
-</pre>
 }}
 
-{{Code|Hide the PIC register|<pre>
+{{CodeBox|title=Hide the PIC register|lang=c|1=
 asm("cpuid" : : : "eax", "ebx", "ecx", "edx");
   
 ## /* can be written to hide ebx */
@@ -407,7 +402,6 @@ asm("
     cpuid
     popl %%ebx
     " : : : "eax", "ecx", "edx");
-</pre>
 }}
 
 === MMX/SSE masks ===
@@ -416,7 +410,7 @@ A lot of x86 MMX/SSE code loads bitmasks from local variables since they need to
 
 One way to get around this is by being creative with the stack. Rather than use an absolute memory reference for the mask, push a bunch of 32bit values onto the stack and use the address specified by the ''esp'' register. Once you're finished, just add a constant to ''esp'' rather than popping off since you don't care about the actual values once they are loaded into the MMX/SSE registers. 
 
-{{Code|Load masks into registers via stack|<pre>
+{{CodeBox|title=Load masks into registers via stack|lang=asm|1=
 ## /* Load masks from memory (causes TEXTRELs) */
 	.data
 m0X000000: .byte   0,   0,   0,   0,   0,   0, 255,   0
@@ -428,14 +422,13 @@ pushl	$0x00FF0000
 pushl	$0x00000000
 movq	(%esp), %mm5
 addl	8, %esp
-</pre>
 }}
 
 === Let gcc worry about it ===
 
 A lot of inline assembly is written with the symbol names placed right in the code. Rather than trying to write custom code to handle PIC in assembly, just let gcc worry about it. Pass in the symbol via the input operand list as a memory constraint ("m") and gcc will handle all the rest. 
 
-{{Code|How to make gcc worry about it|<pre>
+{{CodeBox|title=How to make gcc worry about it|lang=c|1=
 unsigned long long a_mmx_mask = 0xf8007c00ffea0059ULL;
 void somefunction()
 {
@@ -445,7 +438,6 @@ void somefunction()
 	## /* The correct way is to let gcc do it */
 	asm("pmullw %0, %%mm0" : : "m"(a_mmx_mask));
 }
-</pre>
 }}
 
 If your get a warning/error about one of the memory inputs needing to be an lvalue, then this usually means you're trying to pass in a pointer to an array/structure rather than the memory location itself. Fixing this may be as simple as dereferencing the variable in the constraint list rather than in the assembly itself. 
@@ -456,7 +448,7 @@ Hand written assembly sometimes need to access variables (whether they be local 
 
 Also keep in mind that using @GOTOFF will return the variable while using @GOT will return a pointer to the variable. So accessing a variable with @GOT will require two steps. 
 
-{{Code|How to refer to variables via the GOT|<pre>
+{{CodeBox|title=How to refer to variables via the GOT|lang=c|1=
 #ifdef __PIC__
   
 # undef __i686 /* gcc builtin define gets in our way */
@@ -497,7 +489,6 @@ __i686.get_pc_thunk.bx:
 	movl (%esp), %ebx
 	ret
 #endif
-</pre>
 }}
 
 {{Note|Usage of ''ebx'' as the register to do relative addressing is not required, it is just common convention. The above examples could just as easily be done by using ''ecx'' or ''edx''.}}
@@ -512,7 +503,7 @@ So if the previous code snippets were broken, what should they look like you may
 
 === Fix libsmpeg ===
 
-{{Code|Fixing cpu_flags in libsmpeg by rewriting it|<pre>
+{{CodeBox|title=Fixing cpu_flags in libsmpeg by rewriting it|lang=asm|1=
 ## [Non-PIC Version]
 .type flags,@object
 flags: .long 0
@@ -531,10 +522,9 @@ flags: .long 0
 	cpuid
 	movl %edx,%eax
 	popl %ebx
-</pre>
 }}
 
-{{Code|Fixing IDCT_mmx in libsmpeg by using relative addressing|<pre>
+{{CodeBox|title=Fixing IDCT_mmx in libsmpeg by using relative addressing|lang=asm|1=
 ## [Non-PIC Version]
 	pmulhw x5a825a825a825a82, %mm1
   
@@ -557,12 +547,11 @@ __i686.get_pc_thunk.bx:
 	movl (%esp), %ebx
 	ret
 #endif
-</pre>
 }}
 
 === Fix libSDL ===
 
-{{Code|Fixing _ConvertMMXpII32_24RGB888 in libSDL|<pre>
+{{CodeBox|title=Fixing _ConvertMMXpII32_24RGB888 in libSDL|lang=asm|1=
 ## [Non-PIC Version]
 mmx32_rgb888_mask dd 00ffffffh,00ffffffh
 ...
@@ -582,10 +571,9 @@ mmx32_rgb888_mask dd 00ffffffh,00ffffffh
 ...
 	load_immq mm6, mmx32_rgb888_mask
 	CLEANUP_IMMQ_LOADS(1)
-</pre>
 }}
 
-{{Code|Fixing SDL_SoftStretch in libSDL|<pre>
+{{CodeBox|title=Fixing SDL_SoftStretch in libSDL|lang=asm|1=
 ## [Non-PIC Version]
 	__asm__ __volatile__ (
 		"call _copy_row"
@@ -600,7 +588,6 @@ mmx32_rgb888_mask dd 00ffffffh,00ffffffh
 		: "=&D" (u1), "=&S" (u2)
 		: "0" (dstp), "1" (srcp), "r" (&_copy_row)
 		: "memory" );
-</pre>
 }}
 
 == References ==
