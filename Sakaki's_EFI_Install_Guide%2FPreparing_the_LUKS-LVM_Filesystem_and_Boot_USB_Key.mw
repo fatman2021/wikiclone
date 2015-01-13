@@ -196,13 +196,15 @@ This isn't a cryptography primer ([[:Wikipedia:Disk_encryption_theory|see this a
 * for security, we'll use the longest supported key length for Serpent, which is 256 bits (see the following point, however);
 * we will use [[:Wikipedia:XEX-TCB-CTS#XEX-based_tweaked-codebook_mode_with_ciphertext_stealing_.28XTS.29|XTS]] mode to both extend the cipher over multiple blocks within a sector, and perform the by-sector-index 'tweaking'; this approach overcomes the security weakness in the more conventional [[:Wikipedia:Cipher_block_chaining#Cipher-block_chaining_.28CBC.29|CBC]] / [[:Wikipedia:ESSIV|ESSIV]] methodology, whereby an attacker, although unable to read the encrypted material, can yet, if they know the cleartext for that sector (possible for some system files), arbitrarily modify alternating blocks to inject shellcode<ref>Lell, Jakob. [http://www.jakoblell.com/blog/2013/12/22/practical-malleability-attack-against-cbc-encrypted-luks-partitions/ "Practical malleability attack against CBC-encrypted LUKS partitions"]</ref>; this is a non-trivial concern for a dual-boot machine where the Windows side of things is untrusted (and has access to the encrypted contents of the LUKS partition when running). Note that since XTS mode actually requires ''two'' keys, we must pass an effective key length of 512 (= 2 x 256) bits to <tt>cryptsetup</tt>;
 * as XTS is a ''counter'' mode, we will simply pass pass the untransformed ("plain") 64-bit sector index to it (using a 64-bit index will allow for disks > 2TiB);<ref>dm-crypt Mailing List: [http://www.saout.de/pipermail/dm-crypt/2010-July/001039.html "Using plain64/plain IV (initialisation vector) in dm-crypt"]</ref>
-* we will use [[:Wikipedia:Whirlpool_(cryptography)|Whirlpool]] as the user key hashing function for LUKS' PBKDF2 processing; it is a 512 bit hash that has been recommended by the [[:Wikipedia:NESSIE|NESSIE]] project. Note that Whirlpool hash will appear in the output from {{Path|/proc/crypto}} as <tt>wp512</tt> (if loaded).
+* we will use [[:Wikipedia:SHA512|SHA-512]] as the user key hashing function for LUKS' PBKDF2 processing; it is a robust 512 bit hash.
+
+{{Warning|Do not use the [[:Wikipedia:Whirlpool_(cryptography)|Whirlpool]] hash algorithm for now, as there is a problem with the implementation of this hash in {{Package|/dev-libs/libgcrypt}} versions < 1.6 (the stable variants in Gentoo at the time of writing), when processing data in chunks (as happens with LUKS). This can cause you to lose the ability to open your LUKS volume, if you upgrade libgcrypt subsequently to version >{{=}} 1.6 (where the bug is fixed).<br>If you have a LUKS volume that uses the Whirlpool hash, see [http://www.saout.de/pipermail/dm-crypt/2014-February/003956.html this link] for some details about how to fix it, using <code>cryptsetup-reencrypt</code>.}}
 
 We decrypt our keyfile from the USB key (using <tt>gpg</tt>) and pipe it to <tt>cryptsetup</tt>, to avoid the unencrypted keyfile having to be saved to disk. The <tt>--cipher</tt> and <tt>--hash</tt> strings instruct <tt>cryptsetup</tt> to use the settings just discussed.
 
 {{Warning|The step below will '''destroy''' existing data on the partition; please double check to ensure you have the correct device path (e.g., {{Path|/dev/sda5}} etc.) before continuing. When you pipe the keyfile in this way, <tt>cryptsetup</tt> will ''not'' ask you if you are sure prior to formatting.}}
 {{RootCmd
-|gpg --decrypt /tmp/efiboot/luks-key.gpg {{!}} cryptsetup --cipher serpent-xts-plain64 --key-size 512 --hash whirlpool --key-file - luksFormat /dev/sdZn
+|gpg --decrypt /tmp/efiboot/luks-key.gpg {{!}} cryptsetup --cipher serpent-xts-plain64 --key-size 512 --hash sha512 --key-file - luksFormat /dev/sdZn
 |prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
 |output=<pre>
 Enter passphrase
@@ -212,7 +214,6 @@ Enter passphrase
 }}
 {{Note|Replace {{Path|/dev/sdZn}} in the above command with the device path for the partition we just created, e.g., {{Path|/dev/sda5}}.}}
 {{Note|By default, <tt>cryptsetup</tt> uses {{Path|/dev/random}} as its random number generator (RNG); this ''may'' run out of entropy when formatting the partition and print a warning; if this happens, just run your finger over the touchpad of the target machine (or move its mouse, if attached) until the process completes.}}
-{{Note|If you use the Whirlpool hash (as we have done), be aware that you will not be able to open the LUKS container using cryptsetup < v1.6.0, because of a bug in those earlier versions when writing data to the Whirlpool hash function in chunks.<ref>dm-crypt Mailing List: [http://www.saout.de/pipermail/dm-crypt/2014-January/003813.html "Whirlpool in gcrypt <= 1.5.3 broken (if writes in chunks)?"]</ref>}}
 {{Note|If you'd rather use a vanilla approach, omit the <tt>--cipher</tt> and <tt>--hash</tt> arguments; <tt>cryptsetup</tt> will then revert to its compiled-in defaults (which you can see using)
 {{RootCmd
 |cryptsetup --help
