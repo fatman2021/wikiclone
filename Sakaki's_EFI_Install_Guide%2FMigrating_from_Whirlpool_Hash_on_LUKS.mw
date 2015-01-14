@@ -1,0 +1,149 @@
+<!-- Page: Migrating_from_Whirlpool_Hash_on_LUKS -->
+
+Previous versions of this [[../|install guide]] recommended the [[:Wikipedia:Whirlpool_(cryptography)|Whirlpool]] hash algorithm for use, when creating the [[:Wikipedia:LUKS|LUKS]] partition on your system's hard drive.
+
+Unfortunately, there is a bug in the implementation of Whirlpool in the library {{Package|dev-libs/libgcrypt}} (versions < 1.6), which <code>cryptsetup</code> uses. As a result (per [https://bugs.archlinux.org/task/38550 this Arch Linux bug report]), if you update <code>libgcrypt</code> to version >= 1.6 (for example, by running <code>genup</code> after 1.6.2 has been stabilized), you will no longer be able to open the LUKS partition (since the correct implementation in the new version will not match the incorrect one used in the LUKS header).
+
+The install guide has been [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#format_luks_partition|modified]] to reflect this bug, and now recommends the use of [[:Wikipedia:SHA-512|SHA-512]] hashing instead (which is correctly implemented in both version 1.5 and 1.6 of {{Package|dev-libs/libgcrypt}}).
+
+However, '''existing users will need to migrate their LUKS header to use a different hash'''. The below guide provides short form instructions for doing this (when using a [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|GPG-encrypted keyfile]], per the guide). It is patterned on the advice in [http://www.saout.de/pipermail/dm-crypt/2014-February/003956.html this email] from the <code>dm-crypt</code> archives.
+
+This migration process should leave all your LUKS data and software intact. Also, although best done pre-emptively, even if you have ''already'' upgraded {{Package|dev-libs/libgcrypt}} to >= 1.6, and thereby locked yourself out, you should still be able to use the instructions below to recover. However, proceed at your own risk!
+
+{{Important|Obviously, you need only do this if you have used the Whirlpool hash in your LUKS setup. If you used another hash (such as the SHA-512 now recommended), you should ''not'' carry out the procedure below.}}
+
+== Prerequisites ==
+
+To carry this out, you will need:
+# your [[../Installation_Prerequisites#two_usb_keys|'''boot USB key''']] (on which the file <code>luks-key.gpg</code> has been stored);
+# the target PC, on which the LUKS partition (created using the buggy {{Package|dev-libs/libgcrypt}} (< 1.6) implementation of Whirlpool) resides; and
+# a second USB key (of at least 300MB capacity), which we'll use to hold a Gentoo minimal-install disk image (this will let us access your LUKS partition in its closed state); I'll refer to this as the '''ISO USB key''' in the below.
+
+We'll be using tools downloaded from [https://github.com/sakaki-/migrate-luks-hash this GitHub repository] to facilitate the migration. There are digital signatures there you can check if you wish to do so; I will omit that process in what follows, for brevity.
+
+== Migration ==
+
+On an appropriate PC (as root), insert your ISO USB key, unmount any partitions of it that may have automounted (using <code>umount</code>), and then issue the following to download and write the appropriate Gentoo minimal install ISO:
+{{RootCmd
+|wget -c https://github.com/sakaki-/migrate-luks-hash/releases/download/1.0.0/install-amd64-minimal-20141113.iso
+|dd if{{=}}install-amd64-minimal-20141113.iso of{{=}}/dev/sdX bs{{=}}8192k && sync
+}}
+{{Warning|Substitute the correct path for the USB device for {{Path|/dev/sdX}} in the above. Make '''sure''' you have the correct device path! As these are short-form instructions, I'm not going to repeat these warnings each time. The process is essentially similar to that describe in [[../Creating_and_Booting_the_Minimal-Install_Image_on_USB|this chapter]] of the install guide, so please refer to that for hints, should any of the below be unclear.}}
+{{Warning|You can use another ISO to boot your machine, but it needs to have all the correct library versions (including a ''buggy'' version of {{Package|dev-libs/libgcrypt}}).}}
+
+Remove the ISO USB key, and insert it into your (powered down) target PC. Make sure your boot USB key is not inserted at this point. Power up the target, enter the BIOS, set legacy / CSM boot (and ensure secure boot is off), and choose to boot from USB (essentially, exactly as per [[../Creating_and_Booting_the_Minimal-Install_Image_on_USB#Booting_the_ISO_Image|these instructions]]). Press {{Key|Enter}} at the ISOLINUX boot prompt as usual, and set an appropriate keymap when asked. You should now be looking at the familiar livecd prompt.
+
+Now bring networking up (as per [[../Setting_Up_Networking_and_Connecting_via_ssh#Getting_Networking_Running|these instructions]]). Once you have done this, download the (prebuilt) <code>cryptsetup-reencrypt</code> utility:
+{{RootCmd
+|wget -c https://github.com/sakaki-/migrate-luks-hash/releases/download/1.0.0/cryptsetup-reencrypt
+|chmod +x cryptsetup-reencrypt
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+You're now ready to go. Insert your boot USB key (which has the <code>luks-key.gpg</code> encrypted keyfile on it), and determine its device path (you can use <code>lsblk</code> to help you do this). In what follows, I'm going to use:
+* {{Path|/dev/sdY1}} to refer to the first partition of the boot USB key (where <code>luks-key.gpg</code> resides, it will probably be something like {{Path|/dev/sdb1}}), and
+* {{Path|/dev/sdZn}} to refer to your LUKS partition (e.g. {{Path|/dev/sda5}}).
+Substitute appropriate values for your system in the following commands.
+
+Begin by setting up <code>GPG</code> so that we can decrypt the keyfile. Issue:
+{{RootCmd
+|gpg-agent --daemon
+|output=<pre>
+  ... additional output suppressed ...
+GPG_AGENT_INFO=/tmp/gpg-ESgBbB/S.gpg-agent:11818:1; export GPG_AGENT_INFO;
+</pre>
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+Your output will differ from the above, but whatever is shown, copy and paste it at the command prompt, and press {{Key|Enter}}:
+{{RootCmd
+|GPG_AGENT_INFO{{=}}/tmp/gpg-ESgBbB/S.gpg-agent:11818:1; export GPG_AGENT_INFO;
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+Mount the boot USB key, so we can use the keyfile:
+{{RootCmd
+|mkdir bootusb
+|mount /dev/sdY1 bootusb
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+Now check that you can indeed open your existing LUKS partition:
+{{RootCmd
+|gpg --decrypt bootusb/luks-key.gpg {{!}} cryptsetup luksOpen --key-file - /dev/sdZn gentoo
+|output=<pre>
+  ... enter your GPG passphrase when prompted ...
+</pre>
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+{{Note|The necessary passphrase is the one you set up [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#create_gpg_luks_keyfile|here]] in the tutorial. If you have problems, double-check you set the keymap correctly when booting the ISO.}}
+
+{{Note|Don't worry about any output of the form:
+{{GenericCmd|device-mapper: remove ioctl on temporary-cryptsetup-xxxxx failed: Device or resource busy}}
+such warnings can safely be ignored (for our purposes) both here, and if they occur subsequently during the process.}}
+
+Look at the device mapper, to verify that our <code>gentoo</code> LUKS device is now present:
+{{RootCmd
+|ls /dev/mapper
+|output=<pre>
+control gentoo
+</pre>
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+If you see something similar to the above, you should be good to go. Close the LUKS partition again:
+{{RootCmd
+|cryptsetup luksClose gentoo
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+One last preliminary: let's make a header backup of your LUKS partition, so we can get it back if something should go wrong:
+{{RootCmd
+|gpg --decrypt bootusb/luks-key.gpg {{!}} cryptsetup luksHeaderBackup --key-file - /dev/sdZn --header-backup-file bootusb/prevluks.bak
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+{{Note|Don't be surprised if you aren't prompted for your keyfile passphrase here or subsequently, as <code>gpg-agent</code> will have temporarily cached it (however, if you are, type it in again, of course).}}
+
+Right, let's do the migration!
+{{RootCmd
+|gpg --decrypt bootusb/luks-key.gpg {{!}} ./cryptsetup-reencrypt --keep-key --key-file - --key-slot 0 --hash sha512 /dev/sdZn
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+{{Important|Don't miss out that <code>--keep-key</code>, or you'll actually re-encrypt the whole LUKS partition, not just re-write the header. Also, note that when using a keyfile in this way, only one slot can be used, so if you have [[../Preparing_the_LUKS-LVM_Filesystem_and_Boot_USB_Key#add_fallback_luks_passphrase|set up a fallback LUKS passphrase]], you'll have to redo that (which is easiest when booted back in your main system, so you can safely leave it until then - you ''can'' add passphrases to an open LUKS partition).}}
+
+When that returns, check that the hash is now reported as <code>sha512</code>; issue:
+{{RootCmd
+|cryptsetup luksDump /dev/sdZn
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+If good, check that you can still open the LUKS partition:
+{{RootCmd
+|gpg --decrypt bootusb/luks-key.gpg {{!}} cryptsetup luksOpen --key-file - /dev/sdZn gentoo
+|ls /dev/mapper
+|output=<pre>
+control gentoo
+</pre>
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+Assuming that worked, congratulations, you have migrated your LUKS hash successfully! Close the LUKS partition again, and unmount your boot USB key:
+{{RootCmd
+|cryptsetup luksClose gentoo
+|sync
+|umount /dev/sdY1
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+That's it! Reboot:
+{{RootCmd
+|reboot
+|prompt=livecd <span style{{=}}"color:royalblue;">~ #</span>
+}}
+
+Enter the BIOS, and reset (if you have got to the appropriate stage in the tutorial) EFI and secure boot. Remove the ISO USB key, it can be reformatted now if you like. Select (in the BIOS) the EFI boot key as the boot device, and restart.
+
+You should now be able to unlock the disk as usual (entering your GPG passphrase), and then log in.
+
+== Final Steps ==
+
+If you added <code>>=dev-libs/libgcrypt-1.6</code> (or similar) to {{Path|/etc/portage/package.mask}}, you can safely remove that now - your LUKS system will work even with updated (>=1.6) versions of {{Package|dev-libs/libgcrypt}}.
