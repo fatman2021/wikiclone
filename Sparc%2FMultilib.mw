@@ -1,0 +1,285 @@
+This guide will help you to migrate your existing Gentoo Linux SPARC installation from a non-multilib profile to a multilib profile.
+== Overview ==
+
+This guide will help you to migrate your existing Gentoo Linux SPARC installation from a non-multilib profile to a multilib profile. 
+
+
+{{Important|Multilib is still experimental, do not use it if you have to rely on a fully working machine.}}
+Multlib has advantages but it also has some disadvantages, these are the facts: 
+
+
+{| class="wikitable" style="text-align: left;"
+
+! Advantages
+| 
+* You can compile and run 64 bit binaries
+* Gcc can handle -m32 and -m64 (biarch)
+* One compiler for both kernel and userland
+
+
+! Drawbacks
+| 
+* Compiling gcc takes twice as long as it did before
+* Compiling glibc takes twice as long as it did before
+
+
+|-
+|}
+
+== Migration ==
+
+
+=== Update the make.profile symlink ===
+
+Because the profile is still in an experimental state you have to create/change the {{Path|/etc/make.profile}} symlink manually. 
+
+The multilib profile also provides these three sub-profiles for your convenience, just like 2008.0 does: 
+
+
+* desktop
+* developer
+* server
+
+
+
+{{Code|Update the make.profile symlink|<pre>
+$ rm /etc/make.profile
+
+$ ln -s /usr/portage/profiles/default/linux/sparc/experimental/multilib /etc/make.profile
+or
+$ ln -s /usr/portage/profiles/default/linux/sparc/experimental/multilib/desktop /etc/make.profile
+or
+$ ln -s /usr/portage/profiles/default/linux/sparc/experimental/multilib/developer /etc/make.profile
+or
+$ ln -s /usr/portage/profiles/default/linux/sparc/experimental/multilib/server /etc/make.profile
+</pre>
+}}
+
+
+
+=== Confirm that you read this guide ===
+
+If someone would switch to the multilib profile without reading this guide, his/her system would break. To prevent that you need to confirm that you read this by adding ''I_READ_THE_MULTILIB_MIGRATION_GUIDE'' to your {{Path|/etc/make.conf}} . 
+
+
+
+{{Code|Edit make.conf|<pre>
+$ nano -w /etc/make.conf
+(Add this at the end of the file)
+I_READ_THE_MULTILIB_MIGRATION_GUIDE="yes"
+</pre>
+}}
+
+
+
+=== Rename lib to lib32 ===
+
+Though it is not fully compliant with FHS, common practice in Gentoo is to store 32 bit libraries in ''lib32'' , 64 bit libraries in ''lib64'' and to have ''lib'' as a symlink to the default library directory. 
+
+The 2008.0 profile stores libraries in ''lib'' . These commands will rename all ''lib'' directories to ''lib32'' and create a symlink ''lib'' to ''lib32'' . Additionally they will create empty ''lib64'' directories. 
+
+
+{{Warning|Do not exit your shell while doing this! You would not be able to login again and would have to boot a livecd to recover.}}
+
+
+{{Code|Rename lib to lib32|<pre>
+$ mv /lib /lib32
+# sln is a statically linked version of ln
+$ sln lib32 /lib
+$ mkdir -p /lib64
+$ touch /lib64/.keep
+$ for dir in /usr/qt/*/lib /usr/kde/*/lib /usr/local/lib /usr/lib
+  do
+    if [ -d ${dir} ]
+    then
+      mv ${dir} ${dir}32
+      ln -sf lib32 ${dir}
+      mkdir -p ${dir}64
+      touch ${dir}64/.keep
+    fi
+  done
+$ ldconfig
+</pre>
+}}
+
+
+
+=== Remerge baselayout ===
+
+For multilib profiles, <code>sys-apps/baselayout</code> installs additional files, like {{Path|/etc/env.d/04multilib}} . To get these you need to remerge it. 
+
+
+
+{{Code|Remerge baselayout|<pre>
+$ emerge --oneshot sys-apps/baselayout
+$ env-update && source /etc/profile
+</pre>
+}}
+
+
+
+=== Install a multilib glibc ===
+
+To compile a multilib glibc you need a biarch gcc but to compile a biarch gcc you need a multilib glibc. You ''could'' compile glibc using a cross-compiler such as <code>sys-devel/kgcc64</code> but that is not something you would enjoy... 
+
+Therefore we will install a binary packages of glibc first and afterwards, once the migration is complete, remerge it with your USE- and CFLAGS. 
+
+
+
+{{Code|Install binary glibc package|<pre>
+# Note: We set PKGDIR to a temporary directory to avoid picking up local PKGs
+$ PKGDIR="`mktemp -d`" PORTAGE_BINHOST="http://dev.gentoo.org/~bluebird/sparc-multilib/packages" emerge --getbinpkgonly --usepkgonly --oneshot sys-libs/glibc
+</pre>
+}}
+
+If you get ''All ebuilds that could satisfy "sys-libs/glibc" have been masked.'' try using a different version of glibc, these two are available as binary packages: 
+
+
+* <code>=sys-libs/glibc-2.8_p20080602-r1</code>
+* <code>=sys-libs/glibc-2.9_p20081201-r2</code>
+
+
+
+=== Install a biarch gcc ===
+
+With a multilib glibc installed you can simply compile a biarch gcc using portage. 
+
+
+
+{{Code|Install biarch gcc|<pre>
+$ emerge --oneshot sys-devel/gcc
+</pre>
+}}
+
+Now you need to configure your system to use the newly installed gcc using gcc-config. Replace ''4.3.2'' with the version you just installed. 
+
+
+
+{{Code|Set native-compiler|<pre>
+$ gcc-config sparc-unknown-linux-gnu-4.3.2
+$ source /etc/profile
+</pre>
+}}
+
+
+
+=== Remerge glibc with your preferred settings ===
+
+Remerge glibc with your system specific settings(USE-flags, CFLAGS and such). 
+
+
+
+{{Code|Remerge glibc|<pre>
+$ emerge --oneshot sys-libs/glibc
+</pre>
+}}
+
+If the glibc compilation finishes without any strange error messages it means that your multilib setup is working. You can use <code>file</code> to verify this by checking the contents of {{Path|/lib64}} . 
+
+
+
+{{Code|Verify multilib glibc installation|<pre>
+$ file /lib64/libc-*.so
+/lib64/libc-2.7.so: ELF 64-bit MSB shared object, SPARC V9, version 1 (SYSV), for GNU/Linux 2.6.9, stripped
+</pre>
+}}
+
+
+
+=== Unmerge kgcc64 ===
+
+<code>sys-devel/gcc</code> can compile the kernel now, therefore you don't need<code>sys-devel/kgcc64</code> anymore to do it. If you have some scripts that need it, just replace ''sparc64-unknown-linux-gnu-gcc'' with ''sparc-unknown-linux-gnu-gcc -m64'' . 
+
+
+
+{{Code|Unmerge kgcc64|<pre>
+$ emerge --unmerge sys-devel/kgcc64
+</pre>
+}}
+
+
+
+=== Remerge world ===
+
+
+{{Note|This step is optional.}}
+Your system was build with ''lib'' as library directory, now it's ''lib32'' . Though you will not notice anything because there is a symlink in place but if you have a lot of spare cpu time and like your system clean... 
+
+Or in other words: If you are one of those guys who uses portage's multilib-strict feature just for the fun of it...this is for you! 
+
+
+
+{{Code|Remerge world|<pre>
+$ emerge --emptytree world
+</pre>
+}}
+
+
+== Closing-off ==
+
+
+=== Usage example ===
+
+Here's a simple example how to compile a hello world programm in both 32 and 64 bit. 
+
+
+
+{{Code|Sample hello world program, hello_world.c|<pre>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char** argv) {
+  printf("hello, world\n");
+  return EXIT_SUCCESS;
+}
+</pre>
+}}
+
+
+
+{{Code|Compile it as 32 bit binary|<pre>
+$ sparc-unknown-linux-gnu-gcc -m32 -o hello_world hello_world.c
+or
+$ sparc-unknown-linux-gnu-gcc -o hello_world hello_world.c
+</pre>
+}}
+
+
+{{Note|If you specify neigther -m32 nor -m64 the compiler will default to -m32.}}
+
+
+{{Code|Compile it as 64 bit binary|<pre>
+$ sparc-unknown-linux-gnu-gcc -m64 -o hello_world hello_world.c
+</pre>
+}}
+
+
+
+=== Things you shouldn't do ===
+
+So now you have a multlib installation and you are thinking about adding -m64 to CFLAGS in /etc/make.conf and recompiling your entire userland in 64 bit? PLEASE DO NOT! 
+
+
+{{Warning| ''Doing this will render your system unusable!'' Any bugs you report will just be closed without any further action.}}
+While compiling everything in 64 bit may be a good idea on other 64 bit architectures, like AMD64, on SPARC it is not. There are good reasons why we have been using a pure 32 bit userland until now, some of these are: 
+
+
+* 32 bit is faster than 64 bit
+* 32 bit is well tested, 64 bit isn't tested at all
+* 2039 is still long way off
+
+The only reasons why it ''might'' be appropriate to compile an application in 64 bit are: 
+
+
+* It needs to access more than 4GB of memory. In the real world this only applies to huge databases.
+* It needs to talk to the kernel directly. Some applications, like <code>net-firewall/iptables</code> , contain ugly hacks to support the 64 bit kernel/32 bit userland thing.
+* It is a kernel.
+
+If you would like to read more about the differences between 32 and 64 bit, there are dozens of webpages about it on the internet, one of them is [http://www.superlogic.net/downloads/pub/docs/64bit.htm http://www.superlogic.net/downloads/pub/docs/64bit.htm] . 
+
+
+== Acknowledgements ==
+
+We would like to thank the following authors and editors for their contributions to this guide:
+
+* bluebird
