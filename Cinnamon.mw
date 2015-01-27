@@ -1,0 +1,183 @@
+Cinnamon is a traditional and modern desktop environment: traditional desktop metaphor as Gnome 2, [[LXDE]] or [[Xfce]], with very good graphical and fonctional features. It is forked from Gnome Shell and developed for Linux Mint. It is provided for Gentoo as a Gnome package: [http://packages.gentoo.org/package/gnome-extra/cinnamon gnome-extra/cinnamon].
+
+
+== With/Without Systemd ==
+
+=== Without Systemd ===
+
+Cinnamon works great without systemd. For that, select a profile without Gnome, as this one: '''default/linux/amd64/13.0/desktop''' (platform and version can be different). To get your profiles list:
+{{RootCmd|eselect profile list}}
+And to set your profile:
+{{RootCmd|eselect profile set n}}
+where '''n''' is profile number.
+
+Also, you need to follow [[Gentoo_Without_systemd|Gentoo Without Systemd]] wiki page indications.
+
+=== With Systemd ===
+
+For Cinnamon with systemd you can select a profile as '''default/linux/amd64/13.0/desktop/gnome/systemd''' (again, platform and version can be different).
+
+
+== Installing ==
+
+Of course, [[Xorg/Configuration|Xorg]] must be first installed for Cinnamon to work.
+
+Cinnamon needs some USE flags: <code>icu</code> and <code>pulseaudio</code>. You can add them in your make.conf:
+{{FileBox|filename=/etc/portage/make.conf|lang=bash|1=
+USE="… icu pulseaudio …"
+}}
+
+You also can set them just for Cinnamon install, see below.
+
+For Cinnamon, and other applications to be translated, also add your language in make.conf:
+{{FileBox|filename=/etc/portage/make.conf|lang=bash|1=
+LINGUAS="fr" # or en, de, it, es… etc.
+}}
+
+Cinnamon also needs other packages to work properly: [http://packages.gentoo.org/package/x11-libs/gtk+extra x11-libs/gtk+extra], [http://packages.gentoo.org/package/gnome-extra/polkit-gnome gnome-extra/polkit-gnome] and [http://packages.gentoo.org/package/x11-drivers/xf86-video-modesetting x11-drivers/xf86-video-modesetting].
+
+So, let's go to install!
+
+If you added <code>icu</code> and <code>pulseaudio</code> to make.conf:
+{{RootCmd|emerge --ask cinnamon gtk+extra polkit-gnome xf86-video-modesetting}}
+
+And if you didn't:
+{{RootCmd|USE{{=}}"pulseaudio icu" emerge --ask cinnamon gtk+extra polkit-gnome xf86-video-modesetting}}
+
+
+== Settings ==
+
+=== Services ===
+
+Xorg server & Cinnamon need dbus & consolekit services, Cinnamon needs NetworkManager:
+{{RootCmd|rc-update add dbus default|rc-update add consolekit default|rc-update add NetworkManager default}}
+
+And if you want to run these services before restart:
+{{RootCmd|/etc/init.d/consolekit start|/etc/init.d/dbus start|/etc/init.d/NetworkManager start}}
+
+=== Sudo ===
+
+For an ordinary user to reboot or shutdown, we need sudo and some settings, first we install '''sudo''':
+{{RootCmd|emerge --ask sudo}}
+
+Then we set parameters with visudo:
+
+{{RootCmd|visudo}}
+
+This run your default text editor, we edit for a named user:
+
+{{CodeBox|lang=bash|1=
+userName  ALL=(root) NOPASSWD: /sbin/reboot
+userName  ALL=(root) NOPASSWD: /sbin/halt
+userName  ALL=(root) NOPASSWD: /sbin/poweroff
+userName  ALL=(root) NOPASSWD: /sbin/shutdown
+}}
+	
+Or for the '''wheel''' group users:
+{{CodeBox|lang=bash|1=
+%wheel  ALL=(root) NOPASSWD: /sbin/reboot
+%wheel  ALL=(root) NOPASSWD: /sbin/halt
+%wheel  ALL=(root) NOPASSWD: /sbin/poweroff
+%wheel  ALL=(root) NOPASSWD: /sbin/shutdown
+}}
+
+=== Polkit Rules and Actions ===
+
+For an ordinary user to perform root only actions, we need to put a javascript file in '''/etc/polkit-1/rules.d''', for example named '''55-allowing-actions.rules'''.
+
+We get the list of actions with '''pkaction''', their names are quite self-explaining:
+{{RootCmd|pkaction}}
+
+We authorize an user belonging to '''wheel''' group to suspend, hibernate, shutdown and restart like this:
+{{FileBox|filename=/etc/polkit-1/rules.d/55-allowing-actions.rules|lang=javascript|1=
+polkit.addRule (function (action, subject)
+{
+  if (action.id == "org.freedesktop.upower.hibernate" {{!}}{{!}}
+      action.id == "org.freedesktop.upower.suspend" {{!}}{{!}}
+      action.id == "org.freedesktop.consolekit.system.stop" {{!}}{{!}}
+      action.id == "org.freedesktop.consolekit.system.restart" &&
+      subject.isInGroup ("wheel"))
+      {
+        return polkit.Result.YES;
+      }
+});
+}}
+
+You can add to this file all actions you need, to change color profiles, use nano (Cinnamon files manager) as root, mount and eject medias, set screen backlight, use network manager etc. Just don't make javascript mistakes…! Several <code>polkit.addRule (function (action, subject){ … }</code> blocks can be used.
+
+
+== Starting Cinnamon ==
+
+If you don't use a login/display manager, make a '''.xinitrc''' file in your home directory with this content:
+{{FileBox|filename=~/.xinitrc|lang=bash|1=
+exec cinnamon-session
+}}
+Then to start Xorg & Cinnamon, once logged:
+{{GenericCmd|startx}}
+With a [[display manager]] you can follow their wiki pages indications.
+
+
+== Theming ==
+
+=== Mint-X Icons ===
+
+By default, Cinnamon comes with gnome icons. Mint-X icons are on [https://github.com/linuxmint/mint-x-icons GitHub]. You can unzip and put the icon set you want in '''/usr/share/icons''', then make a cache for it (sample for Mint-X icons, there are also colored sets):
+
+{{RootCmd|gtk-update-icon-cache /usr/share/icons/Mint-X}}
+
+=== Desktop Icons Text Color ===
+
+Text color in Cinnamon desktop is grey by default, not very readable, you can get white text by adding css rules in '''/usr/share/themes/Adwaita/gtk-3.0/gtk.css''' (Adwaita is the default theme coming with Cinnamon install): 
+
+{{FileBox|filename=/usr/share/themes/Adwaita/gtk-3.0/gtk.css|lang=css|1=
+@import url("resource:///org/gnome/adwaita/gtk-main.css");
+
+/* added css rules */
+.nemo-desktop.nemo-canvas-item {
+  color: #fff;
+  text-shadow: 1px 1px @desktop_item_text_shadow;
+}
+
+.nemo-desktop.nemo-canvas-item:selected {
+  background-color: alpha(#fff, 0.2);
+  background-image: none;
+  color: #FFFFFF;
+ text-shadow: none;
+}
+}}
+
+
+== Debugging ==
+
+If problems you can launch Xorg server via ssh to get error messages, with <code>--debug</code> parameter for cinnamon-session:
+
+{{FileBox|filename=~/.xinitrc|lang=bash|1=
+exec cinnamon-session --debug
+}}
+
+Alternatively you can have a look at <code>/var/log/Xorg.0.log</code>.
+
+If Cinnamon can't launch, deleting <code>.cinnamon</code> in your home directory is not enought, other Cinnamon items into other directories must be deleted too before X restart: <code>.cache</code>, <code>.config</code>, <code>.local</code> & <code>.gnome2</code>.
+
+
+== Installing Common Applications ==
+
+Some usual Gnome, or not Gnome applications install.
+
+=== Terminal ===
+
+Lxterminal requires no dependencies, gnome-terminal needs systemd, mate-terminal should install all Mate desktop environment.
+
+==== Without systemd ====
+
+{{RootCmd|emerge --ask lxterminal}}
+
+==== With systemd ====
+
+{{RootCmd|emerge --ask gnome-terminal}}
+
+=== Others ===
+
+For example calculator, screen copy utility, pictures & PDF display, system monitor, archive manager…
+
+{{RootCmd|emerge --ask eog gnome-calculator gnome-screenshot gnome-system-monitor file-roller evince}}
