@@ -28,7 +28,7 @@ In this section you will learn the ''easy and straightforward way to initramfs c
 
 Create a basic ''initramfs'' directory structure that will later become your ''initramfs'' root. For consistency. we'll work in {{Path|/usr/src/initramfs}}, but any location would do. 
 
-{{RootCmd|<nowiki>mkdir -p /usr/src/initramfs/{bin,dev,etc,lib,lib64,mnt/root,proc,root,sbin,sys,usr/bin,usr/sbin}</nowiki>}}
+{{RootCmd|<nowiki>mkdir -p /usr/src/initramfs/{bin,dev,etc,lib,lib64,mnt/root,proc,root,sbin,sys}</nowiki>}}
 
 ==== Device Nodes ====
 
@@ -73,9 +73,6 @@ The following example realizes this executable as a minimalistic shell script, b
 {{FileBox|filename=/usr/src/initramfs/init|title=minimalistic /init example|lang=bash|1=
 #!/bin/busybox sh
 
-# Install busybox applets first.
-/bin/busybox --install -s
-
 # Mount the /proc and /sys filesystems.
 mount -t proc none /proc
 mount -t sysfs none /sys
@@ -117,7 +114,7 @@ Also enable all drivers, filesystems, and other settings that are required for b
 
 ==== Embedding into the Kernel ====
 
-If you want the ''initramfs'' to be embedded into the kernel image, edit your kernel config and set ''Initramfs source file(s)'' to the root of your ''initramfs'', (e.g {{Path|/usr/src/initramfs}}):
+If you want the ''initramfs'' to be embedded into the kernel image, edit your kernel config and set ''Initramfs source file(s)'' to the root of your ''initramfs'', (e.g. {{Path|/usr/src/initramfs}}):
 
 {{KernelBox|title=<nowiki>CONFIG_INITRAMFS_SOURCE="/usr/src/initramfs"</nowiki>|1=<pre>
 General setup  --->
@@ -568,11 +565,24 @@ Alternatively, you could also {{Highlight|make clean}}, but then the entire kern
 
 === Command not found ===
 
-Gentoo recently changed the default configuration of Busybox so it is no longer configured as Standalone Shell. As a result, Busybox commands (mkdir, mount, ...) no longer work unless there is explicitly a symlink created for them.
+In Gentoo, busybox is configured as Standalone Shell by default, which allows busybox to execute its own applets directly. Without this setting, Busybox commands (mkdir, mount, ...) won't work unless there is explicitly a symlink created for them. You can do this at the top of your {{Highlight|color=darkgreen|'''/init'''}} script:
 
-In order to create the symlinks, create the directories {{Path|/usr/src/initramfs/{usr/sbin,usr/bin,sbin,bin}}}, and run <kbd>/bin/busybox --install -s</kbd> at the top of your {{Highlight|color=darkgreen|'''/init'''}} script.
+{{FileBox|filename=/usr/src/initramfs/init|title=install busybox symlinks|lang=bash|
+#!/bin/busybox sh
 
-The sections [[#Directory_Structure|Directory Structure]], [[#Init|Init]] and [[#Rescue_Shell|Rescue Shell]] have been updated accordingly.
+# Install symlinks to all busybox applets first.
+/bin/busybox mkdir -p /usr/sbin /usr/bin /sbin /bin
+/bin/busybox --install -s
+
+# ...everything else below...
+}}
+
+Alternatively, you can create the symlinks directly in {{Path|/usr/src/initramfs}} so they will already be included in your ''initramfs''.
+
+{{RootCmd
+|mkdir -p /usr/src/initramfs/{usr/sbin,usr/bin,sbin,bin}
+|chroot /usr/src/initramfs /bin/busybox --install -s
+}}
 
 == Examples ==
 
