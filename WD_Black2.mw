@@ -7,8 +7,53 @@ Unfortunately, physical access to a machine running Microsoft Windows is require
 
 # Connect the '''WD Black2''' to a system with a free SATA port and boot into Microsoft Windows
 ## Use a system that is already running Microsoft Windows and connect drive as a slave
-## Install Microsoft Windows onto the drive from scratch.
+## OR install Microsoft Windows onto the drive from scratch.
 # Run the WD Black2 installer which can be downloaded from the [http://www.wdc.com/en/products/products.aspx?id=1190 product page]
 # Confirm that you are able to see 1120GB capacity in the BIOS
 
 == Partitioning the drive ==
+Once the drive is unlocked, it may technically be used on any system or configuration as long as read/write commands do not cross over from the SSD to the HDD. This is why the tool available from Western Digital partitions the drive automatically, to protect itself from receiving a read/write command that would cross the boundary.
+
+The partitioning scheme after running the installer may look something like this if setup as an MBR drive
+{{RootCmd|parted -a optimal /dev/sda|output=<pre>
+GNU Parted 2.3
+Using /dev/sdd
+Welcome to GNU Parted! Type 'help' to view a list of commands.
+(parted) unit mib                                                         
+(parted) p                                                                
+Model: ATA WDC WD1001X06X-0 (scsi)
+Disk /dev/sdd: 1068343MiB
+Sector size (logical/physical): 512B/512B
+Partition Table: msdos
+
+Number  Start      End         Size       Type     File system  Flags
+ 1      1.00MiB    351MiB      350MiB     primary  ntfs         boot
+ 2      351MiB     114472MiB   114121MiB  primary  ntfs
+ 3      114474MiB  1068343MiB  953869MiB  primary        
+</pre>}}
+
+The important piece of information from the table is the boundary between partitions 2 and 3. The installer tool creates a partition at 1144474 MiB which would signal the read/write boundary somewhere inbetween 114472MiB and 114474MiB. However, during the installation process, you may run into problems with an unresponsive drive if this exact partition scheme is followed. It is safer to increase the boundary some more in case there is some calculation error in determining where the real boundary lies.
+
+A recommended partitioning scheme for Gentoo is as follows:
+
+{{RootCmd|parted -a optimal /dev/sda|output=<pre>
+GNU Parted 2.3
+Using /dev/sdb
+Welcome to GNU Parted! Type 'help' to view a list of commands.
+(parted) unit mib                                                         
+(parted) p                                                                
+Model: ATA WDC WD1001X06X-0 (scsi)
+Disk /dev/sdb: 1068343MiB
+Sector size (logical/physical): 512B/512B
+Partition Table: gpt
+
+Number  Start      End         Size       File system     Name          Flags
+ 1      1.00MiB    512MiB      511MiB     fat32           SP            boot
+ 2      513MiB     114472MiB   113959MiB  ext4            rootfs
+ 3      131072MiB  135168MiB   4096MiB    linux-swap(v1)  swap
+ 4      135169MiB  176129MiB   40960MiB   ext4            /var/tmp
+ 5      176130MiB  217090MiB   40960MiB   ext4            /usr/portage
+ 6      217090MiB  1068343MiB  851253MiB  ext4            /home    
+</pre>}}
+
+Partitions 1 and 2 are located on the SSD while partitions 3-6 are on the HDD. There is about 8GB of space between partitions 2 and 3 to serve as a boundary. This could be reduced, but is used as an example for simplicity's sake. You may choose to partition however you like, but it recommended
