@@ -5,11 +5,15 @@ Les fournisseurs de matériels fournissent souvent des mises à jour pour leur B
 == Obtenir le  BIOS ==
 Vous devez d'abord identifier le fabricant de la carte mère et son modèle. Consultez le manuel fourni avec votre ordinateur (ou votre carte mère). En général vous y trouverez l'information nécessaire.
 
+First you should find the motherboard's manufacturer and the model. Check the user's Manual that comes with your computer, usually there you'll find all needed information.
+
 Vous pouvez aussi utiliser le paquet  {{package|sys-apps/dmidecode}} pour récupérer quelques informations.
 
 {{RootCmd|dmidecode -t bios -t baseboard}}
 
 Pour finir, si vous y avez accès physiquement, vous pouvez trouver l'information directement sur la carte mère. {{Warning/fr|Accéder à la carte mère d'un ordinateur peut rendre la garantie caduque !}}
+
+{{Warning|Accessing the motherboard of a computer may cause loss of warranty!}}
 
 Après quelques recherches sur le site du fabricant, vous pouvez obtenir la mise à jour du BIOS sous forme de fichier zip-, exe- ou fichier iso. 
 
@@ -25,30 +29,53 @@ inflating: 7235v1A/W7235IMS.1A0
 == Option du BIOS  ==
 De nombreux BIOS possèdent une option pour lire la nouvelle image binaire depuis une clé USB ou depuis un disque. Tout ce que vous avez à faire, c'est aller dans la configuration du BIOS et rechercher cette option.
 
+Many BIOS have an option to read the new binary image from an external memory stick or floppy disk. All you need to do is to go into your BIOS setup and look for the option.
+
 == CD de démarrage ==
 Souvent le fabricant met à disposition un image de CD à télécharger et à graver comme médium de démarrage. Le fichier doit posséder une extension .iso, pour pouvoir être gravé sur un CD-R vierge :
 {{RootCmd|cdrecord BOOT-CD.iso}}
 {{Note|cdrecord est fourni par deux paquets (il vous suffit d'en installer un): {{Package|app-cdr/cdrtools}} et {{Package|app-cdr/cdrkit}}}}
 À partir de là, vous pouvez choisir dans votre BIOS de démarrer à partir du CD et puis suivre les instructions données sur le site Internet du fabricant.
 
+Often the manufaturer offers a CD-Rom image to download as a boot medium. The file should have the extension .iso, to burn the image to an empty CD-R:
+
+{{RootCmd|cdrecord BOOT-CD.iso}}
+
+{{Note|cdrecord is provided by two packages (you only need to install one of them): {{Package|app-cdr/cdrtools}} and {{Package|app-cdr/cdrkit}}}}
+
+Now you can choose in your BIOS to boot from CD and follow the instructions on your manufacturers website.
+
 == Environnement FreeDOS  ==
 Vous pouvez utiliser FreeDOS pour exécuter l'utilitaire BIOS basé sur le DOS de votre fabricant. Vous devez d'abord créer une image FreeDOS personnalisée qui inclut les outils du BIOS nécessaires, puis démarrer sur cette image selon l'une des méthodes décrites ici.
+
+You can use FreeDOS to run the DOS-based BIOS utility from your manufacturer.  You must first create a custom FreeDOS image which includes the necessary BIOS tools, and then boot this image via one of the methods shown here.
 
 Télécharger  FreeDOS et les outils :
 * [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - téléchargez le fichier fdboot.img 
 * [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - téléchargez le fichier sys-freedos-linux.zip
 * Le programme  DOS-Flash et le nouveau BIOS depuis le site de votre fabricant.
 
-=== Créer une image  FreeDOS personnalisée  ===
-Vous devez d'abord télécharger et installer les logiciels requis et activer le périphérique de boucle de retour (loopback device) dans votre noyau :
-{{Kernel|enable loopback device|<pre>
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - download the fdboot.img file
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - download the file sys-freedos-linux.zip
+* The DOS-Flash program and new BIOS from your manufacturers website
+
+=== Create Custom FreeDOS Image ===
+
+First we need to install and download the required software and enable the loopback device in our kernel:
+
+{{KernelBox|title=enable loopback device|1=
 Device Drivers  --->
     [*] Block devices  --->
-        <M>   Loopback device support</pre>}}
-Si le module n'est pas encore chargé :
+        <M>   Loopback device support
+}}
+
+If the module isn't loaded yet:
+
 {{RootCmd|modprobe loop}}
 
 Installer le logiciel requis :
+{{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
+
 {{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
 
 Créez un fichier image de ~20 Mo en utilisant dd (le nom doit être freedos.img si vous voulez remplacer celui du CD SystemRescueCD):
@@ -72,68 +99,147 @@ Démontez les deux images:
 {{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
 {{Note|DOS peut seulement afficher les noms dont la longueur n'excède pas 8 caractères. Vous devrez probablement renommer certains des fichiers.}}
 
+{{RootCmd|dd if{{=}}/dev/null of{{=}}freedos.img bs{{=}}1024 seek{{=}}20480}}
+
+Write a file system to the image:
+
+{{RootCmd|mkfs.msdos freedos.img}}
+
+Write the bootsector to the image file:
+
+{{RootCmd|unzip sys-freedos-linux.zip && ./sys-freedos.pl --disk{{=}}freedos.img}}
+
+Now we need to copy the FreeDOS files to our new image.<br>
+Create the mountpoints:
+
+{{RootCmd|mkdir -p /mnt/freedos /mnt/freedos_new}}
+
+Mount the original image:
+
+{{RootCmd|mount -o loop fdboot.img /mnt/freedos}}
+
+Mount the new image:
+
+{{RootCmd|mount -o loop freedos.img /mnt/freedos_new}}
+
+Copy the FreeDOS system files to our new image:
+
+{{RootCmd|cp -ar /mnt/freedos/* /mnt/freedos_new/}}
+
+Now you should also copy your flash program and the new BIOS to the image file:
+
+{{RootCmd|cp -ar FLASH-PROGRAM BIOS-UPDATE /mnt/freedos_new}}
+
+Unmount both images:
+
+{{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
+
+{{Note|DOS can only display names up to a length of 8 characters, you probably want to rename some of the files}}
+
 === Utiliser  SystemRescueCD pour démarrer sur FreeDOS ===
 Le CD SystemRescueCD est fourni avec une version de FreeDOS. Nous pouvons remplacer l'image originale et créer une clé USB amorçable qui contient les programmes nécessaires à l'écriture (flash) de votre BIOS.
+
+The SystemRescueCD comes with a version of FreeDOS, we can replace the original image and create a bootable memory stick which contains the needed programs to flash our BIOS.
 
 ==== Télécharger le  SystemRescueCD et préparer une clé LiveUSB ====
 * [http://www.sysresccd.org/Download SystemRescueCD] - téléchargez l'image ISO normale.
 
-Create Bootable Memory Stick
+* [http://www.sysresccd.org/Download SystemRescueCD] - download the normal ISO image
+
+==== Create Bootable Memory Stick ====
+
 We use the default method to create the SystemRescueCD boot medium, the script {{Path|usb_inst.sh}} will guide through the installation.
+
 {{Warning|This will delete any data on the memory stick}}
+
 Create the folder in {{Path|/mnt}}:
+
 {{RootCmd|mkdir /mnt/SysRescueCD}}
+
 Mount the CD image:
+
 {{RootCmd|mount -o loop systemrescuecd-x86-VERSION.iso /mnt/SysRescueCD}}
+
 Start the installation script:
+
 {{RootCmd|/mnt/SysRescueCD/usb_inst.sh}}
+
 Unmount the CD image:
+
 {{RootCmd|umount /mnt/SysRescueCD}}
 
 ==== Replace the FreeDOS image ====
+
 We are going to replace the original FreeDOS image on the SystemRescueCD memory stick.<br>
 Mount the SystemRescueCD memory stick ({{Path|/dev/sdX1}} needs to be replaced by the device name of your memory stick):
+
 {{RootCmd|mount /dev/sdX1 /mnt/SysRescueCD}}
+
 Replace the {{Path|freedos.img}} file:
+
 {{RootCmd|cp freedos.img /mnt/SysRescueCD/bootdisk/}}
+
 Unmount the SystemRescueCD memory stick:
+
 {{RootCmd|umount /mnt/SysRescueCD}}
 
 === Booting the FreeDOS image from GRUB directly ===
+
 If you would like to boot FreeDOS without any external media, you can use the "memdisk" tool from syslinux to allow grub (or another bootloader) to boot your FreeDOS image directly.
+
 {{Emerge|sys-boot/syslinux}}
+
 Mount your {{Path|/boot}} partition (if needed):
+
 {{RootCmd|mount /boot}}
+
 Copy the memdisk binary, and your newly built FreeDOS image to {{Path|/boot}}:
+
 {{RootCmd|cp /usr/share/syslinux/memdisk /boot}}
 {{RootCmd|cp freedos.img /boot}}
+
 Edit {{Path|/boot/grub/grub.conf}} and add an entry for FreeDOS:
+
 {{FileBox|filename=/boot/grub/grub.conf|title=Example grub.conf entry|1=
 title FreeDOS (BIOS update)
 kernel /boot/memdisk floppy
 initrd /boot/freedos.img
 }}
 
-=== Mise à jour du BIOS  ===
-Redémarrez et choisissez de démarrer depuis la clé USB OU depuis votre nouvelle entrée du grub. Si vous utilisez  SystemRescueCD, dans la ligne de commande de GRUB tapez :
-{{Code||freedos}}
-Ceci vous fera démarrer dans votre nouvelle image FreeDOS et vous serez accueilli par l'invite de commande de DOS :
-{{Code||C:\}}
-Maintenant vous pouvez démarrer votre mise à jour du BIOS en suivant les instructions du fabricant. Quelques commandes utiles dans DOS :
-;cd <dir> : changer de répertoire
-;dir : lister les fichiers du répertoire courant
-;type : afficher le contenu d'un fichier
+=== BIOS Update ===
+
+Restart and choose to boot from the USB memory stick OR your new grub entry. If using SystemRescueCD, in the GRUB command line type:
+
+{{CodeBox|freedos}}
+
+This should boot you into our new FreeDOS image and you are greeted by the DOS prompt:
+
+{{CodeBox|C:\}}
+
+Now you can start your BIOS update by following the manufacturers instructions. Some useful commands in DOS:
+;cd <dir> : change to the directory
+;dir : list the files in the current directory
+;type : display the contents of a file
 
 == Le paquet flashrom ==
 Votre carte mère accepte l'écriture du BIOS via le paquet {{package|sys-apps/flashrom}} directement depuis votre système. Dans ce cas, vous n'avez besoin que d'une image du BIOS. Vérifiez d'abord la liste des [http://flashrom.org/Supported_hardware matériels pris en charge].
 
+<!--T:88->
+Your motherboard can support flashing via {{package|sys-apps/flashrom}} directly from your system. In this case only what you need is BIOS image. Please check first list of [http://flashrom.org/Supported_hardware supported hardware].
+
 Vérifiez d'abord votre nouvelle image du BIOS :
+{{RootCmd|flashrom -v W7235IMS.1A0}}
+
 {{RootCmd|flashrom -v W7235IMS.1A0}}
 
 Si tout est OK, écrivez le BIOS :
 {{RootCmd|flashrom -vw W7235IMS.1A0}}
 
+{{RootCmd|flashrom -vw W7235IMS.1A0}}
+
 == Voir aussi ==
 * [[Bootable DOS USB stick| clé USB amorçable]]
+
+* [[Bootable DOS USB stick]]
 
 [[Category:Core system]]
