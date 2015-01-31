@@ -262,6 +262,47 @@ lxc.network.link = br0
 
 If, like me, you are using dhcp inside the container to get an IP address, then run it once as shown.  LXC will generate a random MAC address for the interface.  To keep your DHCP server from getting confused, you will want to use that MAC address all the time.  So find out what it is, and then uncomment the 'lxc.network.hwaddr' line and specify it there.
 
+
+=== Using a static IP for the container with a bridge-setup ===
+
+The guest configuration on the host must not specify an IP address for the container.  Otherwise, the routing inside the container will be wrong.  Instead, create /etc/conf.d/net with suitable entries for the container and link /etc/init.d/net.lo appropriately (as you did when installing the host) to have the container bring up its interface(s) by itself.
+
+For the host:
+
+
+{{FileBox|filename=/etc/lxc/guest.conf|lang=bash||1=
+# HOST!
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = br_dmz
+lxc.network.name = eth0
+}}
+
+
+For the guest:
+
+
+{{FileBox|filename=/etc/conf.d/net|lang=bash||1=
+# GUEST!
+config_eth0="192.168.1.2 netmask 255.255.255.0 brd 192.168.1.255"
+routes_eth0="default via 192.168.1.1"
+dns_servers_eth0="192.168.3.20"
+}}
+
+
+The guest will have 192.168.1.2 as its IP and use 192.168.1.1 as the gateway, which is the IP address of the bridge created on the host.  (It's also given an address for the DNS-server to use.)
+
+To create the bridge on the host:
+
+
+{{FileBox|filename=/etc/lxc/guest.conf|lang=bash||1=
+# HOST!
+config_br_dmz="192.168.1.1 netmask 255.255.255.0 brd 192.168.1.255"
+brctl_br_dmz="setfd 0 sethello 10 stp off"
+}}
+
+[[User:Lee|Lee]] ([[User talk:Lee|talk]]) 13:50, 31 January 2015 (UTC)
+
 == Guest Setup ==
 
 === Template scripts ===
