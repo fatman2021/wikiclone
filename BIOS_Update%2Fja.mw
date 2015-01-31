@@ -4,11 +4,15 @@
 == BIOSの入手 ==
 まず、マザーボードの製造業者と該当モデルを調べます。通常は、コンピュータの取扱説明書を調べれば、必要な情報がわかります。
 
+First you should find the motherboard's manufacturer and the model. Check the user's Manual that comes with your computer, usually there you'll find all needed information.
+
 {{package|sys-apps/dmidecode}} を利用しても、いくらかの情報が得られます。
 
 {{RootCmd|dmidecode -t bios -t baseboard}}
 
 最終的には、マザーボードを物理的に確認すれば、必要な情報がマザーボード自体に見つかります。{{Warning/ja|マザーボードを確認するためにコンピュータを開けてしまうと、製品保証がなくなる場合があります。}}
+
+{{Warning|Accessing the motherboard of a computer may cause loss of warranty!}}
 
 つぎに、製造業者のサイトを探して、ファイル自体はzipであったりexeであったりisoであったりしますが、BIOSアップデートを入手しましょう。 
 
@@ -24,18 +28,34 @@ inflating: 7235v1A/W7235IMS.1A0
 == BIOS 更新方法 ==
 多くのBIOSでは、外付けのフラッシュメモリやフロッピーディスクから新しいバイナリイメージを読み込ませる方法があります。BIOSセットアップの記述を見て確認してください。
 
+Many BIOS have an option to read the new binary image from an external memory stick or floppy disk. All you need to do is to go into your BIOS setup and look for the option.
+
 == CDブート ==
 製造業者によっては、CD-ROMのブートイメージで提供しています。このファイルは拡張子が .iso で、空きのCD-Rディスクにイメージを書き込まなければなりません:
 {{RootCmd|cdrecord BOOT-CD.iso}}
 {{Note/ja|cdrecord には2種類のパッケージがあります（どちらか一方だけをインストールしてください）: {{Package|app-cdr/cdrtools}} または {{Package|app-cdr/cdrkit}}}}
 
+Often the manufaturer offers a CD-Rom image to download as a boot medium. The file should have the extension .iso, to burn the image to an empty CD-R:
+
+{{RootCmd|cdrecord BOOT-CD.iso}}
+
+{{Note|cdrecord is provided by two packages (you only need to install one of them): {{Package|app-cdr/cdrtools}} and {{Package|app-cdr/cdrkit}}}}
+
+Now you can choose in your BIOS to boot from CD and follow the instructions on your manufacturers website.
+
 == FreeDOS 環境 ==
 DOSベースのBIOSユーティリティが製造業者から提供されているならば、その実行にはFreeDOSを利用することができます。まず、BIOSツールも入ったカスタム FreeDOS イメージを作成しなければなりません。そして、以下の方法でイメージをブートしましょう。
+
+You can use FreeDOS to run the DOS-based BIOS utility from your manufacturer.  You must first create a custom FreeDOS image which includes the necessary BIOS tools, and then boot this image via one of the methods shown here.
 
 FreeDOS とツール類のダウンロードは:
 * [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - fdboot.img ファイルをダウンロード
 * [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - sys-freedos-linux.zip ファイルをダウンロード
 * DOSベースのBIOS更新用プログラムと新しいBIOSを、製造業者のウェブサイトからダウンロード
+
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - download the fdboot.img file
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - download the file sys-freedos-linux.zip
+* The DOS-Flash program and new BIOS from your manufacturers website
 
 === カスタム FreeDOS イメージの作成 ===
 まず、必要なソフトウェアのインストールやダウンロードをすることと、カーネルのループバックデバイスのサポートを有効にします:
@@ -46,7 +66,21 @@ Device Drivers  --->
 さらに、もしモジュールがロードされていないようならば:
 {{RootCmd|modprobe loop}}
 
+First we need to install and download the required software and enable the loopback device in our kernel:
+
+{{KernelBox|title=enable loopback device|1=
+Device Drivers  --->
+    [*] Block devices  --->
+        <M>   Loopback device support
+}}
+
+If the module isn't loaded yet:
+
+{{RootCmd|modprobe loop}}
+
 必要なソフトウェアをインストール:
+{{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
+
 {{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
 
 20MB以下のイメージファイルを dd で作成（SystemRescueCD のものと置き換えるには、ファイル名は freedos.img である必要があります）:
@@ -70,11 +104,52 @@ FreeDOS のシステムファイルを新たなイメージにコピー:
 {{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
 {{Note/ja|DOS では、8文字以下の長さのファイル名しか表示することができません。そこで、いくつかのファイルは、名前を短いものに変更してもよいかもしれません。}}
 
+{{RootCmd|dd if{{=}}/dev/null of{{=}}freedos.img bs{{=}}1024 seek{{=}}20480}}
+
+Write a file system to the image:
+
+{{RootCmd|mkfs.msdos freedos.img}}
+
+Write the bootsector to the image file:
+
+{{RootCmd|unzip sys-freedos-linux.zip && ./sys-freedos.pl --disk{{=}}freedos.img}}
+
+Now we need to copy the FreeDOS files to our new image.<br>
+Create the mountpoints:
+
+{{RootCmd|mkdir -p /mnt/freedos /mnt/freedos_new}}
+
+Mount the original image:
+
+{{RootCmd|mount -o loop fdboot.img /mnt/freedos}}
+
+Mount the new image:
+
+{{RootCmd|mount -o loop freedos.img /mnt/freedos_new}}
+
+Copy the FreeDOS system files to our new image:
+
+{{RootCmd|cp -ar /mnt/freedos/* /mnt/freedos_new/}}
+
+Now you should also copy your flash program and the new BIOS to the image file:
+
+{{RootCmd|cp -ar FLASH-PROGRAM BIOS-UPDATE /mnt/freedos_new}}
+
+Unmount both images:
+
+{{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
+
+{{Note|DOS can only display names up to a length of 8 characters, you probably want to rename some of the files}}
+
 === FreeDOS を起動するために SystemRescueCD を使用する  ===
 SystemRescueCDは、FreeDOS から作られています。オリジナルのイメージから置き換えて、必要なBIOS更新用プログラムを含むフラッシュメモリスティックを作成することができます。
 
+The SystemRescueCD comes with a version of FreeDOS, we can replace the original image and create a bootable memory stick which contains the needed programs to flash our BIOS.
+
 ==== SystemRescueCD のダウンロードと LiveUSBメモリの作成 ====
 * [http://www.sysresccd.org/Download SystemRescueCD] - 通常の ISO イメージをダウンロード
+
+* [http://www.sysresccd.org/Download SystemRescueCD] - download the normal ISO image
 
 ブート可能なメモリスティックを作成します。
 SystemRescueCDのブートメディア作成に、デフォルトの方法を利用します。{{Path|usb_inst.sh}} のスクリプトファイルがインストール手順を案内します。
@@ -88,6 +163,26 @@ CDイメージをマウント:
 CDイメージのアンマウント:
 {{RootCmd|umount /mnt/SysRescueCD}}
 
+We use the default method to create the SystemRescueCD boot medium, the script {{Path|usb_inst.sh}} will guide through the installation.
+
+{{Warning|This will delete any data on the memory stick}}
+
+Create the folder in {{Path|/mnt}}:
+
+{{RootCmd|mkdir /mnt/SysRescueCD}}
+
+Mount the CD image:
+
+{{RootCmd|mount -o loop systemrescuecd-x86-VERSION.iso /mnt/SysRescueCD}}
+
+Start the installation script:
+
+{{RootCmd|/mnt/SysRescueCD/usb_inst.sh}}
+
+Unmount the CD image:
+
+{{RootCmd|umount /mnt/SysRescueCD}}
+
 ==== FreeDOS イメージの置換 ====
 SystemRescueCDのメモリスティックにあるオリジナルの FreeDOS イメージから置き換えます。<br />
 SystemRescueCDのメモリスティックをマウント ({{Path|/dev/sdX1}} は、実際のメモリスティックのブロックデバイス名に置き換えて読んでください):
@@ -95,6 +190,19 @@ SystemRescueCDのメモリスティックをマウント ({{Path|/dev/sdX1}} は
 {{Path|freedos.img}} ファイルの置換:
 {{RootCmd|cp freedos.img /mnt/SysRescueCD/bootdisk/}}
 SystemRescueCD のメモリスティックのアンマウント:
+{{RootCmd|umount /mnt/SysRescueCD}}
+
+We are going to replace the original FreeDOS image on the SystemRescueCD memory stick.<br>
+Mount the SystemRescueCD memory stick ({{Path|/dev/sdX1}} needs to be replaced by the device name of your memory stick):
+
+{{RootCmd|mount /dev/sdX1 /mnt/SysRescueCD}}
+
+Replace the {{Path|freedos.img}} file:
+
+{{RootCmd|cp freedos.img /mnt/SysRescueCD/bootdisk/}}
+
+Unmount the SystemRescueCD memory stick:
+
 {{RootCmd|umount /mnt/SysRescueCD}}
 
 === GRUB から直接に、FreeDOS イメージを起動する ===
@@ -111,6 +219,27 @@ title FreeDOS (BIOS update)
 kernel /boot/memdisk floppy
 initrd /boot/freedos.img}}
 
+If you would like to boot FreeDOS without any external media, you can use the "memdisk" tool from syslinux to allow grub (or another bootloader) to boot your FreeDOS image directly.
+
+{{Emerge|sys-boot/syslinux}}
+
+Mount your {{Path|/boot}} partition (if needed):
+
+{{RootCmd|mount /boot}}
+
+Copy the memdisk binary, and your newly built FreeDOS image to {{Path|/boot}}:
+
+{{RootCmd|cp /usr/share/syslinux/memdisk /boot}}
+{{RootCmd|cp freedos.img /boot}}
+
+Edit {{Path|/boot/grub/grub.conf}} and add an entry for FreeDOS:
+
+{{FileBox|filename=/boot/grub/grub.conf|title=Example grub.conf entry|1=
+title FreeDOS (BIOS update)
+kernel /boot/memdisk floppy
+initrd /boot/freedos.img
+}}
+
 === BIOS の更新 ===
 マシンを再起動させ、USBメモリスティックなり新たな grub エントリなりを選んでブートします。SystemRescueCDを使用している場合には、GRUB のコマンドラインで以下を入力:
 {{CodeBox|freedos}}
@@ -121,16 +250,38 @@ initrd /boot/freedos.img}}
 ;dir : カレントディレクトリのファイルリストの表示
 ;type : ファイルの内容の表示
 
+Restart and choose to boot from the USB memory stick OR your new grub entry. If using SystemRescueCD, in the GRUB command line type:
+
+{{CodeBox|freedos}}
+
+This should boot you into our new FreeDOS image and you are greeted by the DOS prompt:
+
+{{CodeBox|C:\}}
+
+Now you can start your BIOS update by following the manufacturers instructions. Some useful commands in DOS:
+;cd <dir> : change to the directory
+;dir : list the files in the current directory
+;type : display the contents of a file
+
 == flashrom ==
 マザーボードによっては、システム起動中に、{{package|sys-apps/flashrom}} を通じて更新することができます。この場合に必要なのはBIOS イメージだけです。まずは[http://flashrom.org/Supported_hardware 対応ハードウェア]のリストを確認してください。
 
+<!--T:88->
+Your motherboard can support flashing via {{package|sys-apps/flashrom}} directly from your system. In this case only what you need is BIOS image. Please check first list of [http://flashrom.org/Supported_hardware supported hardware].
+
 まず、新たな BIOS イメージをチェック:
+{{RootCmd|flashrom -v W7235IMS.1A0}}
+
 {{RootCmd|flashrom -v W7235IMS.1A0}}
 
 問題が全くなければ、これを書き込みましょう:
 {{RootCmd|flashrom -vw W7235IMS.1A0}}
 
+{{RootCmd|flashrom -vw W7235IMS.1A0}}
+
 == 参考 ==
+* [[Bootable DOS USB stick]]
+
 * [[Bootable DOS USB stick]]
 
 [[Category:Core system]]
