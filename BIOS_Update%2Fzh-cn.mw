@@ -5,12 +5,16 @@
 == 获取 BIOS ==
 首先你需要确认主板生产商和型号。请检查计算机随附的用户手册，通常有你会发现所有需要的信息。
 
+First you should find the motherboard's manufacturer and the model. Check the user's Manual that comes with your computer, usually there you'll find all needed information.
+
 你也可以用 {{package|sys-apps/dmidecode}} 来获取一些信息。
 
 {{RootCmd|dmidecode -t bios -t baseboard}}
 
 最后，如果你可以直接查看主板，你也许会在主板上找到需要的信息。
 {{Warning/zh-cn|直接查看电脑主板可能会导致失去保修！}}
+
+{{Warning|Accessing the motherboard of a computer may cause loss of warranty!}}
 
 在硬件厂商的网站进行搜索你会得到BIOS的更新文件，类型为zip，exe或者iso。 
 
@@ -26,30 +30,53 @@ inflating: 7235v1A/W7235IMS.1A0
 == BIOS 选项 ==
 很多BIOS有一个选项可以从外部记忆棒或者软盘读取二进制映像。你要做的就是进入BIOS设置，查找选项。
 
+Many BIOS have an option to read the new binary image from an external memory stick or floppy disk. All you need to do is to go into your BIOS setup and look for the option.
+
 == 引导光盘 ==
 通常硬件厂商会提供一个光盘镜像的下载，作为引导媒介。该文件应该以.iso为后缀，将此镜像刻录到一张空白的CD-R：
 {{RootCmd|cdrecord BOOT-CD.iso}}
 {{Note/zh-cn|两个包都提供cdrecord命令 （你只需要安装其中的一个）: {{Package|app-cdr/cdrtools}} 和 {{Package|app-cdr/cdrkit}}}}
 现在你可以在BIOS中选择从光盘启动，按照你的硬件厂商网站上的说明进行更新。
 
+Often the manufaturer offers a CD-Rom image to download as a boot medium. The file should have the extension .iso, to burn the image to an empty CD-R:
+
+{{RootCmd|cdrecord BOOT-CD.iso}}
+
+{{Note|cdrecord is provided by two packages (you only need to install one of them): {{Package|app-cdr/cdrtools}} and {{Package|app-cdr/cdrkit}}}}
+
+Now you can choose in your BIOS to boot from CD and follow the instructions on your manufacturers website.
+
 == FreeDOS 环境 ==
 你可以用FreeDOS运行你的硬件厂商提供的基于DOS的BIOS工具。你必须首先创建一个定制的FreeDOS镜像，包含必要的BIOS工具，然后通过下面的方法用这个镜像启动。
+
+You can use FreeDOS to run the DOS-based BIOS utility from your manufacturer.  You must first create a custom FreeDOS image which includes the necessary BIOS tools, and then boot this image via one of the methods shown here.
 
 下载 FreeDOS 和工具:
 * [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - 下载 fdboot.img 文件
 * [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - 下载 sys-freedos-linux.zip 文件
 * DOS-Flash 程序和你的硬件厂商网站提供的新的BIOS
 
-=== 定制 FreeDOS 镜像 ===
-首先我们需要下载安装必要的软件，在内核中启用loopback device：
-{{Kernel|启用 loopback device|<pre>
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.0/ FreeDOS] - download the fdboot.img file
+* [http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/sys/sys-freedos-linux/ FreeDOS bootsector] - download the file sys-freedos-linux.zip
+* The DOS-Flash program and new BIOS from your manufacturers website
+
+=== Create Custom FreeDOS Image ===
+
+First we need to install and download the required software and enable the loopback device in our kernel:
+
+{{KernelBox|title=enable loopback device|1=
 Device Drivers  --->
     [*] Block devices  --->
-        <M>   Loopback device support</pre>}}
-如果模块还没有加载：
+        <M>   Loopback device support
+}}
+
+If the module isn't loaded yet:
+
 {{RootCmd|modprobe loop}}
 
 安装必要的软件：
+{{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
+
 {{Emerge|dev-lang/nasm|app-arch/unzip|sys-fs/dosfstools}}
 
 使用 dd 命令创建一个大约20M的镜像文件（如果你要替换SystemRescueCD中的FreeDOS，文件名必须是 freedos.img）：
@@ -73,11 +100,52 @@ Device Drivers  --->
 {{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
 {{Note/zh-cn|DOS下文件名最多只能显示8个字符，你可能想要重命名某些文件}}
 
+{{RootCmd|dd if{{=}}/dev/null of{{=}}freedos.img bs{{=}}1024 seek{{=}}20480}}
+
+Write a file system to the image:
+
+{{RootCmd|mkfs.msdos freedos.img}}
+
+Write the bootsector to the image file:
+
+{{RootCmd|unzip sys-freedos-linux.zip && ./sys-freedos.pl --disk{{=}}freedos.img}}
+
+Now we need to copy the FreeDOS files to our new image.<br>
+Create the mountpoints:
+
+{{RootCmd|mkdir -p /mnt/freedos /mnt/freedos_new}}
+
+Mount the original image:
+
+{{RootCmd|mount -o loop fdboot.img /mnt/freedos}}
+
+Mount the new image:
+
+{{RootCmd|mount -o loop freedos.img /mnt/freedos_new}}
+
+Copy the FreeDOS system files to our new image:
+
+{{RootCmd|cp -ar /mnt/freedos/* /mnt/freedos_new/}}
+
+Now you should also copy your flash program and the new BIOS to the image file:
+
+{{RootCmd|cp -ar FLASH-PROGRAM BIOS-UPDATE /mnt/freedos_new}}
+
+Unmount both images:
+
+{{RootCmd|umount /mnt/freedos_new /mnt/freedos}}
+
+{{Note|DOS can only display names up to a length of 8 characters, you probably want to rename some of the files}}
+
 === 使用 SystemRescueCD 启动 FreeDOS ===
 SystemRescueCD 自带一个版本的 FreeDOS，我们可以替换掉原有的镜像，创建一个包含刷新我们的BIOS必须得程序的，可以启动的记忆棒。
 
+The SystemRescueCD comes with a version of FreeDOS, we can replace the original image and create a bootable memory stick which contains the needed programs to flash our BIOS.
+
 ==== 下载 SystemRescueCD 并准备 LiveUSB ====
 * [http://www.sysresccd.org/Download SystemRescueCD] - 下载ISO镜像
+
+* [http://www.sysresccd.org/Download SystemRescueCD] - download the normal ISO image
 
 创建可启动的记忆棒
 我们使用默认的方法创建 SystemRescueCD 启动媒介, 脚本 {{Path|usb_inst.sh}} 会引导安装过程。
@@ -91,6 +159,26 @@ SystemRescueCD 自带一个版本的 FreeDOS，我们可以替换掉原有的镜
 卸载 CD 镜像:
 {{RootCmd|umount /mnt/SysRescueCD}}
 
+We use the default method to create the SystemRescueCD boot medium, the script {{Path|usb_inst.sh}} will guide through the installation.
+
+{{Warning|This will delete any data on the memory stick}}
+
+Create the folder in {{Path|/mnt}}:
+
+{{RootCmd|mkdir /mnt/SysRescueCD}}
+
+Mount the CD image:
+
+{{RootCmd|mount -o loop systemrescuecd-x86-VERSION.iso /mnt/SysRescueCD}}
+
+Start the installation script:
+
+{{RootCmd|/mnt/SysRescueCD/usb_inst.sh}}
+
+Unmount the CD image:
+
+{{RootCmd|umount /mnt/SysRescueCD}}
+
 ==== 替换 FreeDOS 镜像 ====
 我们将要替换掉记忆棒中的SystemRescueCD原有的FreeDOS镜像。
 
@@ -101,40 +189,75 @@ SystemRescueCD 自带一个版本的 FreeDOS，我们可以替换掉原有的镜
 卸载SytemRescueCD记忆棒：
 {{RootCmd|umount /mnt/SysRescueCD}}
 
-=== 在 GRUB 中直接启动 FreeDOS 镜像 ===
-如果你不想借助其他媒介，直接从 grub （或者其他启动器）中直接启动你的FreeDOS镜像，你可以使用 syslinux 中的 “memdisk” 工具。
+We are going to replace the original FreeDOS image on the SystemRescueCD memory stick.<br>
+Mount the SystemRescueCD memory stick ({{Path|/dev/sdX1}} needs to be replaced by the device name of your memory stick):
+
+{{RootCmd|mount /dev/sdX1 /mnt/SysRescueCD}}
+
+Replace the {{Path|freedos.img}} file:
+
+{{RootCmd|cp freedos.img /mnt/SysRescueCD/bootdisk/}}
+
+Unmount the SystemRescueCD memory stick:
+
+{{RootCmd|umount /mnt/SysRescueCD}}
+
+=== Booting the FreeDOS image from GRUB directly ===
+
+If you would like to boot FreeDOS without any external media, you can use the "memdisk" tool from syslinux to allow grub (or another bootloader) to boot your FreeDOS image directly.
+
 {{Emerge|sys-boot/syslinux}}
-挂载你的 {{Path|/boot}} 分区 （如果需要的话）：
+
+Mount your {{Path|/boot}} partition (if needed):
+
 {{RootCmd|mount /boot}}
-拷贝 memdisk 和你新建的 FreeDOS 镜像到 {{Path|/boot}}:
+
+Copy the memdisk binary, and your newly built FreeDOS image to {{Path|/boot}}:
+
 {{RootCmd|cp /usr/share/syslinux/memdisk /boot}}
 {{RootCmd|cp freedos.img /boot}}
-编辑 {{Path|/boot/grub/grub.conf}} 文件， 给FreeDOS添加一条：
-{{File|/boot/grub/grub.conf|grub.conf 条目示例|<pre>
+
+Edit {{Path|/boot/grub/grub.conf}} and add an entry for FreeDOS:
+
+{{FileBox|filename=/boot/grub/grub.conf|title=Example grub.conf entry|1=
 title FreeDOS (BIOS update)
 kernel /boot/memdisk floppy
-initrd /boot/freedos.img</pre>}}
+initrd /boot/freedos.img
+}}
 
-=== BIOS 升级 ===
-重启并选择从 USB 启动或者你新加大的grub启动项。如果使用SystemRescueCD，在 GRUB 命令行中输入：
-{{Code/zh-cn||freedos}}
-这将启动到我们新的FreeDOS镜像，你会看到DOS提示符：
-{{Code||C:\}}
-现在你可以按照生产商的提示升级 BIOS。一些有用的DOS命令：
-;cd <dir> : 更换目录
-;dir : 列出当前目录的文件
-;type : 显示文件内容
+=== BIOS Update ===
+
+Restart and choose to boot from the USB memory stick OR your new grub entry. If using SystemRescueCD, in the GRUB command line type:
+
+{{CodeBox|freedos}}
+
+This should boot you into our new FreeDOS image and you are greeted by the DOS prompt:
+
+{{CodeBox|C:\}}
+
+Now you can start your BIOS update by following the manufacturers instructions. Some useful commands in DOS:
+;cd <dir> : change to the directory
+;dir : list the files in the current directory
+;type : display the contents of a file
 
 == flashrom ==
 你的主板也许支持通过 {{package|sys-apps/flashrom}} 直接升级。 这种情况下你需要的只是 BIOS 镜像。请先检查[http://flashrom.org/Supported_hardware 支持的硬件]。
 
+<!--T:88->
+Your motherboard can support flashing via {{package|sys-apps/flashrom}} directly from your system. In this case only what you need is BIOS image. Please check first list of [http://flashrom.org/Supported_hardware supported hardware].
+
 首先我们检查 BIOS 镜像：
 {{RootCmd|flashrom -v W7235IMS.1A0}}
 
-如果没有问题，让我们进行更新：
+{{RootCmd|flashrom -v W7235IMS.1A0}}
+
+If all OK, let's flash'em:
+
 {{RootCmd|flashrom -vw W7235IMS.1A0}}
 
 == 另见 ==
+* [[Bootable DOS USB stick]]
+
 * [[Bootable DOS USB stick]]
 
 [[Category:Core system]]
