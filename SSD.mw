@@ -6,19 +6,19 @@ This article assumes describes how to set up SSDs (Solid State Drives) on Gentoo
 
 == Considerations ==
 
-=== rootfs ===
-The <tt>-odiscard</tt> option on a rootfs mount should not be used. <tt>discard</tt> is the "TRIM" command that tells the SSD to do its magic. Having discard running constantly could potentially cause performance degradation on older SSDs. Modern SSDs use discard by default. Rather the following command can be used manually or be setup as a cron job (see below) to run twice a day, which should suffice for the rootfs:
+=== Rootfs ===
+The <code>-odiscard</code> option on a rootfs mount should not be used. <tt>discard</tt> is the "TRIM" command that tells the SSD to do its magic. Having discard running constantly could potentially cause performance degradation on older SSDs. Modern SSDs use discard by default. Rather the following command can be used manually or be setup as a cron job (see below) to run twice a day, which should suffice for the rootfs:
 
 {{RootCmd|fstrim -v /}}
 
-=== mountpoint===
-If you're going to have a low write directory mounted on SSD, using "discard" option will be fine in fstab. See below. If you're going to mount a database to an SSD, you probably want timed TRIM commands rather than the discard option. 
+=== Mountpoint===
+If you're going to have a low write directory mounted on SSD, using the "discard" option will be fine in {{Path|/etc/fstab}}. See below. If you're going to mount a database to an SSD, you probably want timed TRIM commands rather than the discard option. 
 
 == After hardware installation ==
 
 === Partitioning ===
-You can use usual fdisk (sys-apps/util-linux>=2.24.1-r2). Here's example for GPT partition table with BIOS motherboard.
-Use "fdisk /dev/sda" to run fdisk, use m option for help. Type g and [Enter] to create a new empty GPT partition table on your SSD. Type n [Enter], [Enter], [Enter], +2M [Enter], t [Enter], 4 [Enter] to create BIOS boot partition.
+You can use usual <tt>fdisk</tt> (sys-apps/util-linux>=2.24.1-r2). Here is an example for GPT partition table with BIOS motherboard.
+Use type <kbd>fdisk /dev/sda</kbd> to run <tt>fdisk</tt>, use {{Key|m}} option for help. Type {{Key|g}}+{{Key|Enter}} to create a new empty GPT partition table on the SSD. Type {{Key|n}}+{{Key|Enter}}, {{Key|Enter}}, {{Key|Enter}}, {{Key|+2M}}+{{Key|Enter}}, {{Key|t}}+{{Key|Enter}}, {{Key|4}}+{{Key|Enter}} to create BIOS boot partition.
 
    Command (m for help): n
    Partition number (1-128, default 1): 
@@ -75,13 +75,13 @@ Then we create system root partition and write changes:
    Calling ioctl() to re-read partition table.
    Syncing disks.
 
-So, as you can see, you don't need anything special with new fdisk from linux utils. You can also use alternative common tool that you prefer:  gdisk, gparted, parted there if you don't like fdisk. All of them (newer versions) handle partition alignment automatically. But if you have some doubt whether partition is aligned, check that each partition starts on a MiB boundary (multiple of 2048 sectors), which should be fine for any device.
+So, as you can see, you don't need anything special with new <tt>fdisk</tt> from linux utils. You can also use alternative common tool that you prefer:  <tt>gdisk</tt>, <tt>gparted</tt>, <tt>parted</tt> there if you don't like <tt>fdisk</tt>. All of them (newer versions) handle partition alignment automatically. But if you have some doubt whether partition is aligned, check that each partition starts on a MiB boundary (multiple of 2048 sectors), which should be fine for any device.
 
 ==== LVM ====
 
 LVM aligns to MiB boundaries and allows discards by default. No special configuration is required.
 
-In order to TRIM all unused space in your VG, you can use the blkdiscard utility:
+In order to TRIM all unused space in the VG use the <tt>blkdiscard</tt> utility:
 
 {{RootCmd
 |lvcreate -l100%FREE -n trim yourvg
@@ -89,7 +89,7 @@ In order to TRIM all unused space in your VG, you can use the blkdiscard utility
 |lvremove yourvg/trim
 }}
 
-Alternatively, there is a discard option in lvm.conf which makes LVM discard entire LV on lvremove, lvreduce, pvmove and other actions that free physical extents (PE) in your VG. However, enabling it will immediately render you unable to undo any changes to your LV layout.
+Alternatively, there is a discard option in {{Path|lvm.conf}} which makes LVM discard entire LV on lvremove, lvreduce, pvmove and other actions that free physical extents (PE) in your VG. However, enabling it will immediately render you unable to undo any changes to your LV layout.
 
 {{FileBox|filename=/etc/lvm/lvm.conf|1=
 devices {
@@ -134,17 +134,17 @@ https://wiki.archlinux.org/index.php/SSD
 
    mkfs.ext4 -E stride=128,stripe-width=128 /dev/sda3
 
-==== <code>blkdiscard</code> ====
-If you are formatting a previously used device and your preferred <code>mkfs</code> does not support bulk discards when creating the filesystem, you can use <code>blkdiscard</code> (from {{Package|1=sys-apps/util-linux-2.23}} or later) before creating the filesystem.
+==== <tt>blkdiscard</tt> ====
+If you are formatting a previously used device and your preferred <tt>mkfs</tt> does not support bulk discards when creating the filesystem, you can use <tt>blkdiscard</tt> (from {{Package|1=sys-apps/util-linux-2.23}} or later) before creating the filesystem.
 
 === Mounting ===
 Given the considerations above, either add something similar to this:
    /dev/sda3          /          ext4          defaults,relatime,discard          0 1
 Or this:
    /dev/sda3          /          ext4          defaults,relatime                  0 1
-If you choose the latter, see the section on the cronjob needed if you don't want to manually TRIM the drive.
+If you choose the latter, see the [[SSD#Cron|cron]] section below you don't want to manually TRIM the drive.
 
-Once you've set up /etc/fstab you can run the following command to have the drive mounted:
+Once you've set up {{Path|/etc/fstab}} you can run the following command to have the drive mounted:
    mount -a
 
 In the same way you can add discard option to the swap line in fstab too. The following example shows you how you can parallelize your SSD disk swap with your SATA disk swap:
