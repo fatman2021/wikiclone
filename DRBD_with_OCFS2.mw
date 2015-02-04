@@ -1,26 +1,26 @@
 
 = Introduction =
-This is a guide for DRBR with OCFS2.<br />
-The tough came with found that samba Active Directory (AD) Domain Controller (DC) sysvol is not being replicated between DC as current Samba4 known limitation.<br />
+This is a guide for DRBD with OCFS2.<br />
+The tough part came with finding that Samba Active Directory (AD) Domain Controller (DC) sysvol is not being replicated between DC – a current Samba4 known limitation.<br />
 {{Warning|
-Drop the sysvol though, bad idea. without CTDB, files would corrupted with 2 access. But CTDB is not compatible with Samba AD.}}
+Dropping the sysvol though is a bad idea. Without CTDB, files would corrupted with accessed twice simultaneously, however CTDB is not compatible with Samba AD.}}
 
 {{Warning|
-With this guide, the OCFS2 don't have a DLM, that required Corosync, cman, openais and pacemaker, I've yet to have a proper configure and thus the current way is in-proper. Also will not run with share lock on CTDB.}}
+With this guide, the OCFS2 does not have a DLM, required by Corosync, cman, openais and pacemaker.  I've yet to have a proper configuration and thus the current way is improper. Also it will not run with a shared lock on CTDB.}}
 
 Q: Why DRBD only is not enough...<br />
-There might be case where there are multiple write access to the block device by multiple server, thus without cluster files system we will have trouble on files locking and etc since the DRBD volume are being mount by 2 or more server, so OCFS2 is selected for it performance and also popularity.<br />
+There might be case in which there is multiple write access to the block device by multiple servers, thus without cluster files system we will have trouble on file locking etc. due to the fact that DRBD volumes are being mounted by two or more servers, so OCFS2 is selected for its performance and also its popularity.<br />
 
-You can use always other Cluster files system.<br />
+You can use always use other cluster files system.<br />
 
-This guide only 2 node, dual primary configuration. If you required more node, please check on drbd for more information.
+This guide covers only a two node, dual primary configuration. If you required more nodes, please read up on DRBD for more information.
 
 {{Warning|
-Samba Team don't suggest to use this solution, so this is '''''purely experimental'''''. But still DRBD + OCFS2 example are everywhere we can make use of that.<br />
+The Samba team does not suggest using this solution, so this is '''''purely experimental'''''. But still, other DRBD + OCFS2 examples are available to assist in other configurations.<br />
 }}
 
-= Prerequisite =
-Below are the kernel need.
+= Prerequisites =
+Below are the kernel needs.
 {{kernelBox|title=3.10.25-gentoo|1=
 File systems --->   
     [*] OCFS2 file system support
@@ -49,8 +49,8 @@ Please emerge the following package
 
 Check more on [[DRBD]]
 
-DRBD 8.4 guide do suggest the use of heartbeat and also pacemaker. But I think that was just too complicated...<br />
-You are welcome to try and add on an option with heartbeat and peacemaker. 
+The DRBD 8.4 guide does suggest the use of heartbeat and also pacemaker, but I think that was just too complicated...<br />
+You are welcome to try and add on an option with heartbeat and pacemaker. 
 
 {{Emerge|sys-fs/ocfs2-tools|}}
 {{USEflag
@@ -64,7 +64,7 @@ You are welcome to try and add on an option with heartbeat and peacemaker.
 We will now configure DRBD.
 {{Note|DRBD version check and prompt are a bit annoying as it will suggest you to upgrade every time you execute a command.}}
 
-Please check the DRBD User’s Guide Ver 8.4<ref name="drbdManual">[http://www.drbd.org/users-guide/drbd-users-guide.html The DRBD User’s Guide Ver 8.4], The DRBD User’s Guide</ref> on their website it is well written with example.
+Please check the DRBD User’s Guide Ver 8.4<ref name="drbdManual">[http://www.drbd.org/users-guide/drbd-users-guide.html The DRBD User’s Guide Ver 8.4], The DRBD User’s Guide</ref> on their website it is well written with examples.
 
 
 This is a Global DRBD configuration.
@@ -119,15 +119,15 @@ common {
         }
 }
 }}
-{{Note|DRBD manual don't recommended to set the allow-two-primaries option to yes until the initial resource synchronization has completed.}}
+{{Note|DRBD manual doesn't recommended to set the allow-two-primaries option to yes until the initial resource synchronization has completed.}}
 
-{{Warning|By configuring auto-recovery policies, you are configuring effectively configuring automatic data-loss! Be sure you understand the implications. - By DRBD Manual}}
+{{Warning|By configuring auto-recovery policies, you are effectively configuring automatic data-loss! Be sure you understand the implications. - By DRBD Manual}}
 
 Please create the files below.<br />
 If you have multiple resource setup, you can do it one resource per files to avoid confusion.<br />
 
 Below files is a 2 Node Resource example.
-Note on the Comment Part, they will need to be uncomment at a much later part when we enable dual primary.
+Note on the Comment Part, they will need to be uncommented later when we enable dual primary.
 {{FileBox|filename=/etc/drdb.d/r0.res|title=Resource name r0 DRBD |1=
 resource r0 {
         handlers {
@@ -158,7 +158,7 @@ resource r0 {
 }
 }}
 
-In plain English, we will use {{Path|/dev/sda5}} on serverNode01 (IP 192.168.11.23) and {{Path|/dev/sda5}} on serverNode02 (IP 192.168.11.27) to create a drbd node {{Path|/dev/drbd1}} respectively on both server. Both drbd node will store the metadata on internally.
+In plain English, we will use {{Path|/dev/sda5}} on serverNode01 (IP 192.168.11.23) and {{Path|/dev/sda5}} on serverNode02 (IP 192.168.11.27) to create a drbd node {{Path|/dev/drbd1}} respectively on both server. Both drbd nodes will store the metadata internally.
 
 {| class="wikitable"
 |-
@@ -169,23 +169,23 @@ In plain English, we will use {{Path|/dev/sda5}} on serverNode01 (IP 192.168.11.
 | on serverNode01<br />on serverNode01
  || The Server Name for each node for your reference.
 |-
-| device    /dev/drbd1; || The device node which will be created by BRDB that need to be mount.
+| device    /dev/drbd1; || The device node which will be created by DRBD that need to be mounted.
 |-
 | disk      /dev/sda5; || The physical partition that DRBD will be using to store the information. 
 |-
 | address   192.168.11.23:7789;<br />address   192.168.11.27:7789;
- || The server ip address for DRBD will use to sync between all nodes, You will have to assign this ip to the interface.<br />
-Also DRBD don't support multiple ip address. Use Channel Bonding/Teaming like LACP.<br />
+ || The server ip address for DRBD will be used to sync between all nodes, you will have to assign this ip to the interface.<br />
+Also DRBD does not support multiple ip address. Use Channel Bonding/Teaming like LACP.<br />
 |-
-| meta-disk internal; || This tell DRBD where to store the metadata, it can be external as well. 
+| meta-disk internal; || This tells DRBD where to store the metadata; it can be external as well. 
 |}
 
 = OCFS2 Configuration =
-We will now continue with OCFS2 Setup.<br />
-Unfortunately ocfs2 configuration don't include the cluster files example and thus you will need to copy the files below as an example.<br />
-Please change what even which suit your needm
+We will now continue with OCFS2 setup.<br />
+Unfortunately ocfs2 configuration doesn't include the cluster files example and thus you will need to copy the files below as an example.<br />
+Please change as necessary to suit your needs:
 
-{{FileBox|filename=/etc/ocfs2/cluster.conf|title=Create this files|lang=yaml|1=
+{{FileBox|filename=/etc/ocfs2/cluster.conf|title=Create this file (and directory) |lang=yaml|1=
 cluster:
         node_count = 2
         name = ocfs2cluster
@@ -211,18 +211,18 @@ node:
 |-
 | cluster: || OCFS2 cluster declaration 
 |-
-| node_count = 2 || How many node do we have in this cluster?
+| node_count = 2 || How many nodes do we have in this cluster?
 |-
 | name = ocfs2cluster|| The ocfs2 cluster name
 |-
 | node: || The Node declaration
 |-
 | number = 1<br />number = 2
- || The node number, it must be different on all node 
+ || The node number, it must be different on all nodes
 |-
 | cluster = ocfs2cluster|| The name of the cluster
 |-
-| ip_port = 7777 || The ocfs2 node service port, you can change it you want to.
+| ip_port = 7777 || The ocfs2 node service port, you can change it if you want to.
 |-
 | ip_address = 192.168.11.23<br />ip_address = 192.168.11.27|| The ocfs2 node ip address. Please change this to your interface ip
 |-
@@ -264,7 +264,7 @@ New drbd meta data block successfully created.
 success
 </pre>}}
 
-Let us up this DRBD devices.
+Let us up the DRBD devices.
 {{Note|Run this command on both node.}}
 {{RootCmd|drbdadm up r0|output=<pre>
 DRBD module version: 8.4.3
@@ -272,8 +272,7 @@ DRBD module version: 8.4.3
 you should upgrade your drbd tools!
 </pre>}}
 
-When both node is up.
-We can check on the BRDB status.
+When both nodes are up we can check on the BRDB status.
 {{RootCmd|cat /proc/drbd|output=<pre>
 version: 8.4.3 (api:1/proto:86-101)
 built-in
@@ -294,10 +293,10 @@ built-in
 
 We now have the DRBD device.
 {{Note|
-I do have question if we should format this partition to OCFS2 at this time then only sync it or not...<br />
+I do have a question, should we format this partition to OCFS2 at this time then only sync it or not?<br />
 Please try and let me know.
 }}
-Let start to synchronization both node BRDB by making it primary<br />
+Lets start to synchronize both DRBD nodes by making it primary<br />
 {{Note|
 We should only run this command on one node only}}
 {{RootCmd|drbdadm primary --force r0|output=<pre>
@@ -340,11 +339,11 @@ Let start the DRBD services
 |/etc/init.d/drbd start
 }}
 
-Yes, Our DRBD cluster are done.
-Now let continue to the OCFS2 Setup
+Yes, our DRBD cluster are done.
+Now lets continue to the OCFS2 Setup
 
 = OCFS2 Setup =
-The 1st things we need to do is to mount the required kernel config and dlm that needed by OCFS2.
+The 1st things that we need to do are to mount the required kernel config and dlm that is needed by OCFS2.
 Since that we already modified the {{Path|/etc/fstab}}.
 You can simple follow the command below.
 
@@ -387,7 +386,7 @@ mkfs.ocfs2 successful
 </pre>}}
 
 == Enable Dual-Primary Mode == 
-To enable Dual-Primary mode is easy, just uncomment the resources files we have made on top.
+Enabling Dual-Primary mode is easy, just uncomment the resources files we have made on top.
 
 {{FileBox|filename=/etc/drdb.d/r0.res|title=Resource name r0 DRBD Dual Primary |1=
 resource r0 {
@@ -419,7 +418,7 @@ resource r0 {
 }
 }}
 
-Than time to make change on both node, in sequence primary then only secondary.
+Then it's time to make changes on both nodes, in sequence primary then only secondary.
 {{RootCmd
 |drbdadm adjust r0
 |drbdadm primary r0
@@ -449,9 +448,8 @@ Summary from <ref name="ManualSplitBrinaRecovery">[http://www.drbd.org/users-gui
 Under certain condition, Split Brain will happen and cannot be recover automatically by system.
 And we have to manually recovery the DRBD disk.
 
-== Split Brain Victim, Choose a node which that the changes will be discarded  ==
-We will disconnect this node, make it secondary and connect it back to the drbd array and we will discard all the different.
-So that it will sync with the latest version from other node.
+== Split Brain Victim, Choose a node upon which the changes will be discarded  ==
+We will disconnect this node, make it secondary and connect it back to the drbd array and we will discard all the differences so that it will sync with the latest version from other node.
 
 {{RootCmd
 |drbdadm disconnect r0
@@ -459,8 +457,8 @@ So that it will sync with the latest version from other node.
 |drbdadm connect --discard-my-data r0
 }}
 
-== Split Brain Survivor, Choose The node which we have the latest version of files  ==
-We just connect this back to the drbd array so secondary will sync from here.
+== Split Brain Survivor, Choose The node upon which we have the latest version of files  ==
+We just connect this back to the drbd array so the secondary will sync from here.
 
 {{RootCmd
 |drbdadm connect r0
