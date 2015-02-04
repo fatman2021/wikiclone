@@ -1,0 +1,66 @@
+Gentoo developers willing to work with the ebuilds often check out the complete gentoo-x86 CVS repository. This page describes a method of creating and maintaining a ''lightweight CVS checkout'' backed up by regular (rsync or git) Gentoo repository.
+
+== Why lightweight checkout? ==
+Unlike standard CVS checkout which involves fetching all the files from the gentoo-x86 repository, the lightweight method allows you to get only the files you are working on. The remaining files are obtained from a regular repository — obtained through rsync, git, webrsync…
+
+The advantages of this method are:
+* bandwidth and space efficiency — only needed files are fetched and stored,
+* improved performance — only modified files need to be recached, the supplied md5-cache is used for the remaining ebuilds,
+* improved maintainability — there's no longer need to keep all ebuilds up-to-date in the CVS checkout. Instead, just remove them when done and let the regularly synced repository supply them.
+
+The disadvantages of this method are:
+* necessity of manually fetching additional files as they are worked on,
+* inability to run tree-wide repoman scans without merging two repositories.
+
+== How to create a lightweight checkout? ==
+=== Before starting ===
+Ensure that you have a Gentoo repository synced via method other than CVS. If you used to sync against CVS, please switch your Package Manager to use rsync, git or another supported method instead.
+
+=== Automated script ===
+The repository can be easily created using ''lcvs-init'' script from [https://bitbucket.org/mgorny/lightweight-cvs-toolkit lightweight-cvs-toolkit].
+
+{{Cmd|1=git clone https://bitbucket.org/mgorny/lightweight-cvs-toolkit.git|2=cd lightweight-cvs-toolkit|3=./lcvs-init /home/myuser/gentoo-x86 myuser}}
+
+The script takes three parameters:
+# location where the repository should be created,
+# CVS username (optional, defaults to current user's username),
+# Repository name (optional, defaults to ''gentoo-cvs'').
+
+Before creating the repository, the script will check system sanity, output the resulting configuration and ask the user for confirmation.
+
+=== Manual method ===
+Then create a new CVS checkout using the ''-l'' option (local) to disable recursive fetching:
+
+{{Cmd|1=cvs -dmyuser@cvs.gentoo.org:/var/cvsroot co -l gentoo-x86}}
+
+(change ''myuser'' to your Gentoo username)
+
+It is also convenient to fetch (non-recursively) directories for all ebuild categories. For example:
+
+{{Cmd|1=cd gentoo-x86|2=cvs up -dl $(</usr/portage/profiles/categories)}}
+
+Afterwards, the metadata for repository should be fetched and layout.conf file updated to state a new repository name, and name ''gentoo'' as its master repository. This will allow the checkout to be used as a regular overlay on top of the rsync/git repository.
+
+{{Cmd|1=cvs up -dP metadata|2=vim metadata/layout.conf}}
+
+{{FileBox|filename=metadata/layout.conf|title=Additions to layout.conf|1=
+repo-name = gentoo-cvs
+masters = gentoo
+}}
+
+It is recommended to consistently use the name ''gentoo-cvs'' since that provides a convenient way of locating the CVS checkout for scripts.
+
+{{Note|The ''repo-name'' in ''metadata/layout.conf'' overrides ''profiles/repo_name''. This way, it is possible to conveniently change the repository name without introducing any changes in ''profiles'' directory — that could be accidentally committed along with profile changes.}}
+
+At this point the repository is ready. It is also a good idea to create a git repository on top of it and store the current state. This can be used to conveniently remove checked out ebuild later and restore the repository to vanilla state.
+
+{{Cmd|1=git init|2=git add -A|3=git commit -m "Initialize CVS checkout"}}
+
+Finally, add the repository to repos.conf:
+
+{{FileBox|filename=/etc/portage/repos.conf/cvs.conf|Configuration for repos.conf|1=
+[gentoo-cvs]
+location = /home/myuser/gentoo-x86
+}}
+
+{{Warning|Do not add a ''sync-uri'' or otherwise ''emerge --sync'' will update ''all'' ebuilds in the repository, converting it to a regular checkout.}}
