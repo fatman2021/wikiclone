@@ -40,7 +40,36 @@ This stage should take care of system initialization.
 
 ==== Init Stage 2 ====
 
-This stage should ''exec'' into ''runsvdir'' in order to hold the supervised process tree.
+This stage should ''exec'' into ''runsvdir'' (supervisor utility) in order to have PID 2 hold the supervised process tree.
+
+{{FileBox|filename=/etc/runit/2|title=Stage-2|lang=bash|1=
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/X11R6/bin:/usr/local/bin:/usr/local/sbin
+SV_SVCDIR=/etc/service
+SV_RUNDIR=/run/runsvdir
+
+RUNLEVEL=S rc boot
+if grep -q nonetwork /proc/cmdline; then
+   rc nonetwork
+elif grep -q single /proc/cmdline; then
+   rc single
+else
+   rc default
+fi
+
+mkdir -p /run
+rm -fr "${SV_RUNDIR}"
+cp -a "${SV_SVCDIR}" "${SV_RUNDIR}"
+
+exec env - PATH=$PATH \
+runsvdir "${SV_RUNDIR}" \
+'log: .........................................................................'
+}}
+
+See the forums thread to know the details about why boot and default run levels are included in stage 2 rather in stage 1.
+Simply put, ''CTRL-ALT-DEL'' signal is inactive on stage 1, so this will prevent to have to hold the power switch in case something goes wrong and hang when doing further system initialization&mdash;an extended boot run level.
+
+And lastly, copying ''/service/'' directory to a tmpfs based filesystem would prevent unecessary disk seeks related to runtime service supervision. And this is a sane default becasue many init systems&mdash;like OpenRC&mdash;does this as well. Further (disk seek) optimization could be achieved by copying whole service directories instead of symlinking them from ''/etc/sv''.
 
 ==== Init Stage 3 ====
 
