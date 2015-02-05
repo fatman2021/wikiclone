@@ -84,7 +84,27 @@ And lastly, copying ''/service/'' directory to a tmpfs based filesystem would pr
 ==== Init Stage 3 ====
 
 Stage should take care of system halt and reboot.
-See [[Runit#External Ressources]] for a OpenRC friendly implementation.
+
+{{FileBox|filename=/etc/runit/3|title=Stage-3|lang=bash|1=
+#!/bin/sh
+exec >/dev/console 2>&1
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+SV_RUNDIR=/run/runsvdir
+
+echo 'Waiting for getties to stop...'
+sv -w 10 force-shutdown ${SV_RUNDIR}/getty-*
+echo 'Waiting for services to stop...'
+sv -w 300 force-shutdown ${SV_RUNDIR}/*
+
+echo 'Shutdown...'
+if test -x /etc/runit/reboot; then
+   RUNLEVEL=6 rc reboot
+else
+   RUNLEVEL=0 rc shutdown
+fi
+}}
+
+See [[Runit#External Ressources]] for another OpenRC friendly implementation.
 
 ==== SysVinit Reboot and Shutdown Compatibility Service ====
 
