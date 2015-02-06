@@ -35,7 +35,25 @@ Outside chroot:
 
 TODO: Not all of these files are necessary.  We should weed out the ones that aren't.  AFAIK, just the bcm4329 firmware is required.  See make menuconfig for more information.
 
-Compile your own kernel (see below) to populate {{Path|/lib/modules}}. Comment all serial consoles and ttyX where X > 1 in your {{Path|/etc/inittab}}.
+Compile your own kernel (see below) to populate {{Path|/lib/modules}}.
+
+Comment all serial consoles and ttyX where X > 1 in your {{Path|/etc/inittab}} and in {{Path|/etc/syslog-ng/syslog-ng.conf}}, if you use syslog-ng 
+
+{{FileBox|filename=/etc/inittab|lang=bash|1=
+# ------ 8< --
+# TERMINALS
+c1:12345:respawn:/sbin/agetty 38400 tty1 linux
+#c2:2345:respawn:/sbin/agetty 38400 tty2 linux
+#c3:2345:respawn:/sbin/agetty 38400 tty3 linux
+#c4:2345:respawn:/sbin/agetty 38400 tty4 linux
+#c5:2345:respawn:/sbin/agetty 38400 tty5 linux
+#c6:2345:respawn:/sbin/agetty 38400 tty6 linux
+
+# SERIAL CONSOLES
+#s0:12345:respawn:/sbin/agetty -L 9600 ttyS0 vt100
+#s1:12345:respawn:/sbin/agetty -L 9600 ttyS1 vt100
+# ------ >8 --
+}}
 
 Add to {{Path|/etc/conf.d/modules}}:
 
@@ -48,15 +66,38 @@ I found that mounting {{Path|/dev/pts}} to {{Path|/sdcard/gentoo/dev/pts}} befor
 
 You can either add -userfetch to {{Path|make.conf}} FEATURES (to fix an emerge error about the user being unable to fetch packages) or add the portage user to the 3003 group.  See [https://github.com/keesj/gomo/wiki/AndroidSecurityUserAndGroups AndroidSecurityUserAndGroups]. See also CONFIG_ANDROID_PARANOID_NETWORK=y.
 
-You will also need to establish {{Path|/etc/resolv.conf}} by hand, by adding "nameserver x.x.x.x" to it inside the chroot.  You can get the  in Android by running getprop.
+{{RootCmd
+|groupadd -g 3003 inet
+|usermod -aG inet portage
+}}
 
-You must install {{Package|wpa_supplicant}}, {{Package|dhcpcd}}, and {{Package|sshd}} and add them to the default run-level.
+You will also need to establish {{Path|/etc/resolv.conf}} by hand, by adding "nameserver x.x.x.x" to use it inside the chroot.  You can get the  in Android by running getprop.
 
-It would be easiest to disable qt4 USE flag with respect to wpa_supplicant (for now).
+You must install {{Package|wpa_supplicant}}, {{Package|dhcpcd}}, and {{Package|sshd}} and add them to the default run-level. It would be easiest to disable qt4 USE flag with respect to wpa_supplicant (for now).
+
+{{RootCmd
+|emerge wpa_supplicant
+|emerge dhcpcd
+|emerge sshd
+|rc-update add sshd default
+}}
+
+TODO: Configure {{Path|/etc/wpa_supplicant/wpa_supplicant.conf}}, {{Path|/etc/conf.d/net}}, etc.
+
+TIPS
 
 If you get a "sandbox violation" error while emerging, you have to emerge the single package that cause you this as follows (ideally, these should be reported as bug reports to [https://bugs.gentoo.org/ Gentoo Bugzilla]):
 
 {{RootCmd|<nowiki>FEATURES="-sandbox" emerge -1 packagename</nowiki>}}
+
+If you have emerge errors like "/dev/fd/<number> file or directory not found", needs to be done after every chroot:
+{{RootCmd
+|cd /dev
+|ln -s /proc/self/fd
+}}
+
+If you have emerge errors because you have no internet connection:
+{{RootCmd|chmod 644 /etc/resolv.conf}}
 
 ===== Installing the kernel =====
 
