@@ -130,7 +130,111 @@ cleaning it up to a reasonable state.}}
 <!--T:30-->
 Finally, know that some Portage FEATURES may not work in your LiveCD. Especially watch out for <code>userpriv</code> and <code>usersandbox</code>. If you find yourself getting errors, it might be wise to disable some or all of the optional FEATURES.
 
-== Diskless install using PXE boot == <!--T:31-->
+== Diskless install using PXE boot and SquashFS image ==
+
+Save the following script and make sure it is executable and in <code>$PATH</code> or follow its steps manually.
+
+{{CodeBox|<nowiki>
+#!/bin/bash -xe
+
+tftproot="$1"
+image="$2"
+tmp="./tmp"
+
+test -z "$tftproot" -o -z "$image" && echo "Usage: $0 <tftproot> <gentoo-iso>" >&2 && exit 1
+test -e "$tmp" && echo "Temporary path '$tmp' already exists." >&2 && exit 1
+
+iso="$tmp/iso"
+initrd="$tmp/initrd.dir"
+
+# prepare directories
+mkdir -p "$tmp" "$iso" "$initrd/mnt/cdrom"
+
+# extract files from ISO image
+mount -o ro,loop "$image" "$iso"
+cp "$iso"/{image.squashfs,isolinux/gentoo,isolinux/gentoo.igz} "$tmp"
+umount "$iso"
+
+# rename kernel
+mv "$tmp/gentoo" "$tmp/kernel"
+
+# patch initramfs and add squashfs to it
+xz -dc "$tmp/gentoo.igz" | ( cd "$initrd" && cpio -idv )
+patch -d "$initrd" -p0 <<'EOF'
+--- init.orig	2012-05-21 16:14:35.000000000 +0400
++++ init	2012-05-21 18:14:43.000000000 +0400
+@@ -368,10 +368,10 @@
+ 		[ ! -e "${NEW_ROOT}/dev/tty1" ] && mknod "${NEW_ROOT}/dev/tty1" c 4 1
+ 	fi
+ 
+-	if [ "${REAL_ROOT}" != "/dev/nfs" ] && [ "${LOOPTYPE}" != "sgimips" ]
+-	then
+-		bootstrapCD
+-	fi
++#	if [ "${REAL_ROOT}" != "/dev/nfs" ] && [ "${LOOPTYPE}" != "sgimips" ]
++#	then
++#		bootstrapCD
++#	fi
+ 
+ 	if [ "${REAL_ROOT}" = '' ]
+ 	then
+@@ -456,7 +456,7 @@
+ 		else
+ 			bad_msg "Block device ${REAL_ROOT} is not a valid root device..."
+ 			REAL_ROOT=""
+-			got_good_root=0
++			got_good_root=1
+ 		fi
+ 	done
+ 
+@@ -520,7 +520,7 @@
+ 	[ -z "${LOOP}" ] && find_loop
+ 	[ -z "${LOOPTYPE}" ] && find_looptype
+ 
+-	cache_cd_contents
++	#cache_cd_contents
+ 
+ 	# If encrypted, find key and mount, otherwise mount as usual
+ 	if [ -n "${CRYPT_ROOT}" ]
+EOF
+cp "$tmp/image.squashfs" "$initrd/mnt/cdrom"
+( cd "$initrd" && find . -print | cpio -o -H newc | gzip -9 -c - ) > "$tmp/initrd"
+
+# prepare boot data
+grub2-mknetdir -v --net-directory=.
+cat > "boot/grub/grub.cfg" <<'EOF'
+menuentry "Test" {
+    linux /boot/kernel root=/dev/ram0 init=/linuxrc loop=/image.squashfs looptype=squashfs cdroot=1 real_root=/
+    initrd /boot/initrd
+}
+EOF
+cp "$tmp"/{kernel,initrd} "boot"
+
+# cleanup
+rm -rf "$tmp"
+</nowiki>}}
+
+Download <code>install-amd64-minimal-20141204.iso</code> (or try with the current version if it differs). Install {{Package|net-ftp/tftp-hpa}}, make sure it serves <code>/tftproot</code> and start it.
+
+Run the script with the appropriate parameters.
+
+{{RootCmd|gentoo-pxe-boot /tftproot install-amd64-minimal-20141204.iso}}
+
+Now your tftp boot service is ready and you need to configure your DHCP
+service. You can set up DHCP server on the same machine and make sure
+booted machines are connected to it, or you can just tweak the configuration
+of your existing router.
+
+Example configuration for OpenWRT dhcp service follows:
+
+{{CodeBox|1=
+config boot linux                   
+        option filename boot/grub/i386-pc/core.0
+        option servername boot
+        option serveraddress 84.246.161.86
+}}
+
+== Diskless install using PXE boot and NFS == <!--T:31-->
 
 === Requirements === <!--T:32-->
 
