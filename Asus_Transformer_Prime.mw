@@ -289,11 +289,11 @@ Once you have created this file, reboot and it should boot into Linux.  However,
 
 There are not steps, but pointers. Update: Compile the kernel sould be fine
 
-To generate a blob you need to copmile a kernel with kexec hardboot capabilities, an initial ramdisk which contains the kernel_loader as init and the kernel, and put all together in a flashable blob.
+To generate a blob you need to compile a kernel with kexec hardboot capabilities, an initial ramdisk which contains the kernel_loader as init and the kernel, and put all together in a flashable blob.
 
 '''Compile the host kernel:'''
 
-Regenerate the zImage (kernel): you will want to apply the JB15.patch in our git kernel/ directory, fixing many problems. The kernel we used was the one from ASUS: {{Path|kernel_v10_4_2_15.zip}}.  The patch also applies our {{Path|.config}} file.
+Regenerate the zImage (kernel): you will want to apply the JB15.patch (update: not any more in our git repo). The kernel we used was the one from ASUS: {{Path|kernel_v10_4_2_15.zip}}.  The patch also applies our {{Path|.config}} file.
 
 {{Cmd|wget http://dlcdnet.asus.com/pub/ASUS/EeePAD/TF201/kernel_V10_4_2_15.zip}}
 
@@ -304,7 +304,7 @@ Now unzip and untar the kernel sources. Go to the directory and insert the patch
 |make oldconfig
 |make menuconfig }}
 
-The kernel needs hardboot porperty and is called host kernel. It can load another kernel a so called guest kernel. At least you will need following configurations. The configuration has these flags set, just check it. Well you see it's experimental, but seems to work.
+The kernel needs the property of hardboot and is called host kernel. It can load and start another kernel a so called guest kernel. At least you will need following configurations. The configuration has these flags set, just check it. Well you see it's experimental, but seems to work. You can find additional infos at [http://forum.xda-developers.com/showthread.php?t=2104706 XDA KexecHardboot guest kernel]
 
 {{KernelBox|1=
   Boot options  --->
@@ -315,11 +315,46 @@ The kernel needs hardboot porperty and is called host kernel. It can load anothe
 
 Now compile the kernel.
 
-{{Cmd| make }}
+{{Cmd| make -j<X>}}
 
 If all went fine your kernel is at <code>arch/arm/boot/zImage</code>
 
-{{Note|For crosscmpiling you should sth. like 'make ARCH{{=}}arm CROSS_COMPILE{{=}}arm-linux-gnueabihf- menuconfig' and for compiling 'make -j<X> ARCH{{=}}arm CROSS_COMPILE{{=}}arm-linux-gnueabihf-' where X is a number to define the number of cores used for compilation. Use less cores than your Computer has or it will be unresponsive}}
+{{Note|For crosscmpiling you should sth. like 'make ARCH{{=}}arm CROSS_COMPILE{{=}}arm-linux-gnueabihf- menuconfig' and for compiling 'make -j<X> ARCH{{=}}arm CROSS_COMPILE{{=}}arm-linux-gnueabihf-' where X is a number to define the number of cores used for compilation. make -j2 will compile using 2 cores. Use less cores than your Computer has or it will be unresponsive.}}
+
+'''compile kernel_chooser and create initrd'''
+
+You need the sources of tux-minds repository. You will get it via git.
+
+{{Cmd|git clone https://github.com/tux-mind/tf201-dev
+|cd tf201-dev/kernel_chooser}}
+
+The kernel_chooser is made very comfortable. With 'make' you start the compile process and the packing to an initial ramdisk. In the Makefile you can change the flag 'Development' to '1' to get a rescue shell for the kernel_chooser. The filesystem is in the directory initramfs. It contains busybox and mdev as binraies. If you would like to have additional programms, feel free to add what you need. The Blob has an maximum size of ~8MB.
+
+{{Note|You should compile the root_chooser via chroot because it uses some libraries. The libraries are statically linked, so croscompile will not work unless you don't use explicitly arm binary libs.}}
+
+{{Cmd|make
+|mv initrd.gz initrd.img}}
+
+The result will be the ready to use initrd.gz, which is an gz-packed initial ramdisk. Rename it to <code>initrd.img</code>
+
+{{Note|Execute the new kernel automatically on a system crash is done if "KEXEC_ON_CRASH" flag is activated. The kernel_chooser does not set up a crash kernel properly. see [http://man7.org/linux/man-pages/man2/kexec_load.2.html kexec manpage KEXEC_ON_CRASH]}}
+
+'''make the blob'''
+
+You need your already generated files, these are <code>zImage</code> from {{Path|asus_kernel_v10_4_2_15/arch/arm/boot/zImage}}, the <code>initrd.img</code>, and an old unpacked test.blob, also <code>test.blob.LNX</code>.
+You will find blobpack at [https://github.com/AndroidRoot/android_device_asus_tf201 AndroidRoot]
+TODO: link for blobunpack.
+
+Unpack the blob and regenerate the .LNX file:
+{{Cmd|blobunpack test.blob
+|abootimg --create test.blob.LNX -r initrd.img -k zImage}}
+
+Pack the new blob:
+{{Cmd|blobpack newTest.blob LNX test.blob.LNX}}
+
+Now you have <code>newTest.blob</code> and you can flash it via fastboot.
+
+{{Note|Be sure you have the right blobpack program for the TF201, there exists a different one for the TF101}}
 
 '''modify initrd'''
 
