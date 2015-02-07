@@ -34,7 +34,7 @@ Follow the standard Gentoo Installation Guide. You should use the [http://distfi
 |sudo umount gentoo/
 }}
 
-Changeroot to gentoo on the microSD card.
+Changeroot to gentoo on the microSD card. You will also need to establish {{Path|/etc/resolv.conf}} by hand, by adding "nameserver x.x.x.x" to use it inside the chroot.  You can get the  in Android by running getprop. I found that mounting {{Path|/dev/pts}} to {{Path|/sdcard/gentoo/dev/pts}} before you chroot allows tmux to work.
 
 {{RootCmd
 |mount -t ext4 /dev/block/mmcblk1p1 /sdcard/gentoo
@@ -43,10 +43,11 @@ Changeroot to gentoo on the microSD card.
 |busybox mount -o bind /sys /gentoo/sys
 |busybox mount -t proc /proc /gentoo/proc
 |sysctl -w net.ipv4.ip_forward=1
-|echo "nameserver 8.8.8.8" > /gentoo/etc/resolv.conf
-|echo "nameserver 8.8.4.4" >> /gentoo/etc/resolv.conf
+|echo "nameserver 8.8.8.8" > /gentoo/etc/resolv.conf  # google DNS-Server for simplicity
+|echo "nameserver 8.8.4.4" >> /gentoo/etc/resolv.conf # google DNS-Server for simplicity
 |echo "127.0.0.1 localhost" > /gentoo/etc/hosts
-|chroot loop/ /bin/su
+|chroot gentoo/ /bin/su
+|source /etc/profile 
 }}
 
 Download and extract [https://github.com/tux-mind/tf201-dev/blob/master/v3/root_patch.tar.gz root_patch.tar.gz] inside your chroot. This will install some configuration files and the kernel modules and the (binary) firmware.
@@ -90,16 +91,12 @@ modules="bcm4329"
 module_bcm4329_args="iface_name=wlan0"
 }}
 
-I found that mounting {{Path|/dev/pts}} to {{Path|/sdcard/gentoo/dev/pts}} before you chroot allows tmux to work.
-
 You can either add -userfetch to {{Path|make.conf}} FEATURES (to fix an emerge error about the user being unable to fetch packages) or add the portage user to the 3003 group.  See [https://github.com/keesj/gomo/wiki/AndroidSecurityUserAndGroups AndroidSecurityUserAndGroups]. See also CONFIG_ANDROID_PARANOID_NETWORK=y.
 
 {{RootCmd
 |groupadd -g 3003 inet
 |usermod -aG inet portage
 }}
-
-You will also need to establish {{Path|/etc/resolv.conf}} by hand, by adding "nameserver x.x.x.x" to use it inside the chroot.  You can get the  in Android by running getprop.
 
 You must install {{Package|wpa_supplicant}}, {{Package|dhcpcd}}, and {{Package|sshd}} and add them to the default run-level. It would be easiest to disable qt4 USE flag with respect to wpa_supplicant (for now).
 
@@ -111,6 +108,46 @@ You must install {{Package|wpa_supplicant}}, {{Package|dhcpcd}}, and {{Package|s
 }}
 
 TODO: Configure {{Path|/etc/wpa_supplicant/wpa_supplicant.conf}}, {{Path|/etc/conf.d/net}}, etc.
+
+Verify if you have the right profile.
+{{RootCmd|eselect profile list}}
+
+Configure your timezone:
+{{FileBox|filename=/etc/timezone|lang=bash|1=
+Europe/Brussels
+}}
+
+Enabling US and DE locales with the appropriate character formats
+{{FileBox|filename=/etc/locale.gen|lang=bash|1=
+en_US ISO-8859-1
+en_US.UTF-8 UTF-8
+de_DE ISO-8859-1
+de_DE@euro ISO-8859-15
+de_DE.UTF-8 UTF-8
+}}
+Generare the locales.
+{{RootCmd|locale-gen}}
+
+Print the locales which were generated.
+{{RootCmd|eselect locale list|output=<pre>
+Available targets for the LANG variable:
+  [1] C
+  [2] POSIX
+  [3] en_US
+  [4] en_US.iso88591
+  [5] en_US.utf8
+  [6] de_DE
+  [7] de_DE.iso88591
+  [8] de_DE.iso885915
+  [9] de_DE.utf8
+  [ ] (free form)</pre>
+}}
+
+Selest your locales.
+{{RootCmd|eselect locale set 9}}
+
+Now reload the environment:
+{{RootCmd|env-update && source /etc/profile}}
 
 Exit the chroot environment.
 
