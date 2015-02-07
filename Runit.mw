@@ -113,13 +113,13 @@ Runit isn't directly compatible with sysvinit's "telinit", "halt", "poweroff", "
 If all else fails, use <tt>'''runit-init 0'''</tt> to shut down or <tt>'''runit-init 6'''</tt> to reboot.
 
 === OpenRC Supervision Service ===
-
 Runit can supervise processes without running as init, or even necessarily as root:
 
 {{Cmd|mkdir /path/to/service-dir/}}
 {{GenericCmd|(Create your service directories and run scripts here, using the same layout as /etc/runit/runsvdir/all/)}}
 {{Cmd|chmod a+x /path/to/service-dir/*/run}}
 
+==== Local Service ====
 OpenRC can start this for you using <tt>/etc/init.d/local</tt> (see <tt>/etc/local.d/README</tt> for more details):
 
 {{FileBox|filename=/etc/local.d/runsvdir.start|lang=bash|1=
@@ -132,6 +132,28 @@ start-stop-daemon --start --background --make-pidfile \
 {{FileBox|filename=/etc/local.d/runsvdir.stop|lang=bash|1=
 #!/bin/sh
 start-stop-daemon --stop --pidfile /run/runsvdir.pid
+}}
+
+==== System Service ====
+
+{{FileBox|filename=/etc/init.d/supervision|lang=bash|title=Supervision-Service|1=
+#!/sbin/runscript
+
+command="$(type -p runsvdir)"
+command_args="/etc/service"
+pidfile="/run/runsvdir.pid"
+command_background="Yes"
+description="Supervision Daemon Service"
+
+depend() {
+    need localmount
+    provide supervision
+}
+
+stop() {
+    # This should be enough as stop() to clean up runsv (supervisor) processes
+    kill -HUP $(cat ${pidfile})
+}
 }}
 
 == Process Supervision ==
