@@ -23,15 +23,14 @@ A directory is a specialized database designed for frequent queries but infreque
 
 All information inside a directory is structured hierarchically. Even more, if you want to enter data inside a directory, the directory must know how to store this data inside a tree. Lets take a look at a fictional company and an Internet-like tree: 
 
-{{Code|Organisational structure for GenFic, a Fictional Gentoo company|<pre>
+{{CodeBox|title=Organisational structure for GenFic, a Fictional Gentoo company|1=
 dc:         com
-             |
+             {{!}}
 dc:        genfic         ## (Organisation)
           /      \
 ou:   People   servers    ## (Organisational Units)
       /    \     ..
 uid: ..   John            ## (OU-specific data)
-</pre>
 }}
 
 Since you don't feed data to the database in this ascii-art like manner, every node of such a tree must be defined. To name such nodes, LDAP uses a naming scheme. Most LDAP distributions (including OpenLDAP) already contain quite a number of predefined (and general approved) schemas, such as the ''inetOrgPerson'', or a frequently used schema to define users which Unix/Linux boxes can use, called ''posixAccount''. Note there are GUI web based tools to make managing LDAP painless: see [[#Working_with_OpenLDAP|Working with OpenLDAP]] for an non-exhaustive list.
@@ -163,12 +162,11 @@ If you want to be able to change OpenLDAP server's configuration, you must defin
 
 The example below shows how to grant manage access to OLC (''cn=config'' database) to the system administrator (root user) by adding the proper lines at the end of the {{Path|slapd.conf}} file:
 
-{{File|/etc/openldap/slapd.conf|Granting root Linux account manage rights to cn{{=}}config|<pre>
+{{FileBox|filename=/etc/openldap/slapd.conf|title=Granting root Linux account manage rights to cn{{=}}config|1=
 database config
 access to *
         by dn.exact="gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth" manage
         by * none
-</pre>
 }}
 
 {{RootCmd|mkdir /etc/openldap/slapd.d}}
@@ -205,16 +203,14 @@ Some examples of updates on the OLC-style configuration are mentioned below.
 
 For instance, to change the location of the OLC configuration directory:
 
-{{Code|fix-configs.ldif|<pre>
+{{FileBox|filename=fix-configs.ldif|1=
 dn: cn=config
 changetype: modify
 delete: olcConfigFile
-
 dn: cn=config
 changetype: modify
 replace: olcConfigDir
 olcConfigDir: /etc/openldap/slapd.d
-</pre>
 }}
 
 To change the log level used by the OpenLDAP instance:
@@ -289,7 +285,7 @@ ldap_uri = ldap://X.X.X.X,ldap://X.X.X.X
 
 Add sss to the end as shown below to enable the lookup to be handed to the sssd system service. Once you have finished editing start the sssd daemon.
 
-{{File|/etc/nsswitch.conf|Example nsswitch.conf with SSSD support|<pre>
+{{FileBox|filename=/etc/nsswitch.conf|title=Example nsswitch.conf with SSSD support|1=
 passwd:     files sss
 shadow:     files sss
 group:      files sss
@@ -297,29 +293,29 @@ group:      files sss
 netgroup:   files sss
 automount:  files sss
 sudoers:    files sss
-</pre>}}
+}}
 
-The last file is the most critical. Open an extra root terminal as a fallback before editing this. The lines in bold have been added to enable remote authentication. Note the use of {{Path|pam_mkhomedir.so}} to support creating the user home directories.
+The last file is the most critical. Open an extra root terminal as a fallback before editing this. The lines that end with <code>#</code> have been added to enable remote authentication. Note the use of {{Path|pam_mkhomedir.so}} to support creating the user home directories.
 
-{{File|/etc/pam.d/system-auth|Enable pam_sss support|<pre>
+{{FileBox|filename=/etc/pam.d/system-auth|title=Enable pam_sss support|1=
 #%PAM-1.0
 # This file is auto-generated.
 # User changes will be destroyed the next time authconfig is run.
 auth        required      pam_env.so
 auth        sufficient    pam_unix.so nullok try_first_pass
 auth        requisite     pam_succeed_if.so uid >= 500 quiet
-'''auth        sufficient    pam_sss.so use_first_pass'''
+auth        sufficient    pam_sss.so use_first_pass                                         #
 auth        required      pam_deny.so
   
 account     required      pam_unix.so
 account     sufficient    pam_localuser.so
 account     sufficient    pam_succeed_if.so uid < 500 quiet
-'''account     [default=bad success=ok user_unknown=ignore] pam_sss.so'''
+account     [default=bad success=ok user_unknown=ignore] pam_sss.so                         #
 account     required      pam_permit.so
   
 password    requisite     pam_cracklib.so try_first_pass retry=3
 password    sufficient    pam_unix.so md5 shadow nullok try_first_pass use_authtok
-'''password    sufficient    pam_sss.so use_authtok'''
+password    sufficient    pam_sss.so use_authtok                                            #
 password    required      pam_deny.so
   
 session     required      pam_mkhomedir.so skel=/etc/skel/ umask=0077
@@ -327,8 +323,8 @@ session     optional      pam_keyinit.so revoke
 session     required      pam_limits.so
 session     [success=1 default=ignore] pam_succeed_if.so service in crond quiet use_uid
 session     required      pam_unix.so
-'''session     optional      pam_sss.so'''
-</pre>}}
+session     optional      pam_sss.so                                                        #
+}}
 
 Now try logging in from another box.
 
@@ -338,7 +334,7 @@ First, we will configure PAM to allow LDAP authorization. Install {{Package|sys-
 
 {{Emerge|pam_ldap nss_ldap}}
 
-The last file is the most critical. Open a few extra root terminals as a backup before editing this. The lines in bold have been added to enable remote authentication.
+The last file is the most critical. Open a few extra root terminals as a backup before editing this. The lines that end with <code>#</code> have been added to enable remote authentication.
 
 {{Code|/etc/pam.d/system-auth|<pre>
 #%PAM-1.0
@@ -511,7 +507,7 @@ This gives you access to everything a user should be able to change. If it's you
 
 The next ACL is a bit more secure as it blocks normal users to read other people their shadowed password: 
 
-{{Code|/etc/openldap/slapd.conf|<pre>
+{{FileBox|filename=/etc/openldap/slapd.conf|1=
 access to attrs="userPassword"
   by dn="uid=root,ou=People,dc=genfic,dc=com" write
   by dn="uid=John,ou=People,dc=genfic,dc=com" write
@@ -523,7 +519,6 @@ access to *
   by dn="uid=root,ou=People,dc=genfic,dc=com" write
   by dn="uid=John,ou=People,dc=genfic,dc=com" write
   by * search
-</pre>
 }}
 
 This example gives root and John access to read/write/search for everything in the the tree below {{Path|dc{{=}}genfic,dc{{=}}com}}. This also lets users change their own <code>userPassword</code>'s. As for the ending statement everyone else just has a search ability meaning they can fill in a search filter, but can't read the search results. Now you can have multiple ACLs but the rule of the thumb is it processes from bottom up, so your toplevel should be the most restrictive one.
