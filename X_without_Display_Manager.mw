@@ -39,6 +39,46 @@ The ''exec'' command causes the login shell to be replaced by the X11 session. T
 
 {{Note|The ''DISPLAY'' check is fairly fragile. For example, if you ''unset DISPLAY'' in a terminal and start bash afterwards, it will try to start X11.}}
 
+=== Multiple X Session/Virtual Console ===
+An alternate methode is to auto-login to a Window Manager (WM) or a Desktop Environment (DE) depending on the Virtual Console (VT) used to login.
+A ''fallback'' session can be easilty achieved in this manner. Just grab the following file exerpts to get going.
+
+First, set up the sessions or WM or DE to use depending on the VT.
+{{FileBox|filename=[https://github.com/tokiclover/dotfiles/blob/master/.xinitrc ~/.xinitrc]|lang=bash|1=
+# $Header: ~/.xinitrc, 2014/11/22 Exp $
+...
+case $(tty {{!}} cut -b9-) in
+	(1) exec enlightenment_start;;
+	(2) exec lxsession          ;;
+	(3) exec openbox-session    ;;
+esac
+}}
+And then set up the login shell accordingly.
+{{FileBox|filename=[https://github.com/tokiclover/dotfiles/blob/master/.bash_login ~/.bash_login]|lang=bash|1=
+# $Header: ~/.bash_login, 2014/11/30 Exp $
+...
+# Auto startx depending on the VT
+if [[ -z "$DISPLAY" ]] && (( $EUID != 0 )); then
+    TTY=$(tty)
+    [[ "${TTY/tty}" != "$TYY" ]] && (( ${TTY:8:1} <= 3 )) &&
+        startx 1>~/.log/xsession-errors 2>&1 &
+    unset TTY
+fi
+...}}
+Or else, a [[zsh]] variant could be used instead.
+{{FileBox|filename=[https://github.com/tokiclover/dotfiles/blob/master/.zlogin ~/.zlogin]|lang=bash|1=
+# $Header: ~/.zlogin, 2014/11/30 Exp $
+...
+# Auto startx depending on the tty
+if [[ -z $DISPLAY ]] && (( $EUID != 0 )) {
+    [[ ${TTY/tty} != $TTY ]] && (( ${TTY:8:1} <= 3 )) &&
+        startx 1>~/.log/xsession-errors 2>&1 &
+}
+...}}
+
+The previous files can be used to login into an [[Enlightenment]] or [[LXDE]] session without needing any ''middle man'' or rather Diplay Manager (DM)! and [[OpenBox]] session as a fallback session using VT 1, 2 & 3.
+Adapt it to your favorite DE or WM.
+
 === X11 autologin with systemd ===
 
 ==== Method 1 ====
