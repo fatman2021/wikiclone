@@ -1,0 +1,73 @@
+<languages/>
+
+{{Metadata|abstract=The efibootmgr application interacts with the UEFI firmware on the system, and is a popular tool to manipulate the EFI settings in order to create and manage boot entries that are capable of booting Linux (or other operating systems).}}
+
+The <tt>efibootmgr</tt> application interacts with the UEFI firmware on the system, and is a popular tool to manipulate the EFI settings in order to create and manage boot entries that are capable of booting Linux (or other operating systems).
+
+{{InfoBox stack
+|{{InfoBox homepage|https://github.com/vathpela/efibootmgr|header=true}}
+}}
+
+== EFIbootmgr is not a boot loader ==
+
+The {{Package|sys-boot/efibootmgr}} application is not a boot loader. It is a tool that interacts with the EFI firmware of the system, which itself is acting as a boot loader. With the <tt>efibootmgr</tt> application, boot entries can be created, reshuffled and updated.
+
+== Configuration ==
+
+The {{Package|sys-boot/efibootmgr}} application does not require any configuration. All that is needed is to install it.
+
+{{Emerge|sys-boot/efibootmgr}}
+
+However, in order to successfully use the <tt>efibootmgr</tt> application, the EFI variables file system must be accessible. This requires that the system is already booted with EFI (and not through the BIOS) as otherwise the EFI variables themselves are not accessible.
+
+{{RootCmd|mount {{!}} grep efivars|output=<pre>
+efivarfs on /sys/firmware/efi/efivars type efivarfs (rw,nosuid,nodev,noexec,relatime)
+</pre>}}
+
+If it is not mounted yet (it should be mounted through the {{Path|sysfs}} init script), it is possible to manually mount it like so:
+
+{{RootCmd|mount -t efivars efivars /sys/firmware/efi/efivars}}
+
+== Managing EFI boot entries ==
+
+=== Listing boot entries ===
+
+To list the current boot entries, just use <kbd>efibootmgr</kbd>. Use the <kbd>--verbose (-v)</kbd> option to get some additional information:
+
+{{RootCmd|efibootmgr -v|output=<pre>
+BootCurrent: 0002
+Timeout: 3 seconds
+BootOrder: 0003,0003,0002,0000,0004
+Boot0000* CD/DVD Drive  BIOS(3,0,00)
+Boot0001* Hard Drive    BIOS(2,0,00)
+Boot0002* Gentoo        HD(1,800,61800,6d98f360-cb3e-4727-8fed-5ce0c040365d)File(\EFI\boot\bootx64.efi)
+Boot0003* Hard Drive    BIOS(2,0,00)P0: ST1500DM003-9YN16G
+</pre>}}
+
+=== Creating a boot entry ===
+
+To create an EFI boot entry, a couple of arguments are passed to <tt>efibootmgr</tt>:
+
+* <code>--create (-c)</code> to create a new entry
+* <code>--part (-p)</code> followed by the partition number on which the EFI System Partition is hosted
+* <code>--disk (-d)</code> followed by the disk on which the EFI System Partition is hosted
+* <code>--label (-L)</code> followed by the label to use as the boot entry
+* <code>--loader (-l)</code> followed by the path of the EFI image to boot
+
+{{Important|The path of the EFI image to boot must use {{Key|\}} instead of {{Key|/}} as path separator.}}
+
+For instance:
+
+{{RootCmd|efibootmgr -c -d /dev/sda -p 2 -L "Gentoo" -l "\efi\boot\bootx64.efi"}}
+
+=== Deleting a boot entry ===
+
+Before deleting an entry, first figure out what ID the entry has.
+
+To delete the Gentoo entry as shown above (which has ''Boot0002'' as the identifier), ask <tt>efibootmgr</tt> to delete the entry with id 2, passing the arguments <kbd>--bootnum (-b)</kbd> with the identifier, and <kbd>--delete-bootnum (-B)</kbd> to delete the entry:
+
+{{RootCmd|efibootmgr -b 2 -B}}
+
+== See also ==
+
+* [[EFI_stub_kernel|EFI stub kernel]] explains how to configure the Linux kernel to be able to be booted from EFI directly
