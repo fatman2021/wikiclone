@@ -113,7 +113,7 @@ As Workdowg himself explains on XDA:
 
 At this point you have a working dual-boot on your tablet, we need to build gentoo so you also have something to dual-boot!
 
-== Build Gentoo ==
+== Installing Gentoo: before first boot ==
 
 This is basically the standard Gentoo Handbook, so i will not bore you on the basics, but a few important things must be noted, so please keep reading.
 
@@ -127,41 +127,110 @@ I assume your microSD has already been formatted and that the first partition is
 
 We need to mount the EXT4 partition, so:
 * From android, open your Android Terminal Emulator and become su: ''su bash''
-- create a temporary folder: '''mkdir tmpGentoo'''
-- mount the microSD: '''mount -t ext4 /dev/mmcblk1p0 tmpGentoo''' (mmcblk1 is the microSD)
+* create a temporary folder: '''mkdir tmpGentoo'''
+* mount the microSD: '''mount -t ext4 /dev/mmcblk1p0 tmpGentoo''' (mmcblk1 is the microSD)
 
 === Download stage3 for ARM-hf ===
+
 The tablet is an ARMv7 with hard floating point. The binary NVIDIA packages which we are forced to install do require you to install this architecture, so go to the [http://distfiles.gentoo.org/releases/arm/autobuilds/current-stage3-armv7a_hardfp/ gentoo ARM download page] and download on your tablet the latest Stage3.
 
-Extracting it into the mounted partition can be hard depending on your busybox, decompressing the stage3 is left to your exercize. If you are desperate, just decompress it on a linux pc then mount the microSD on the tablet.
+Extracting it into the mounted partition can be hard depending on your busybox, decompressing the stage3 is left to your exercise (if you are desperate, just decompress it on a linux pc then mount the microSD on the tablet).
 
-=== do the usual gentoo initial stuff ===
-chroot into the uncompressed stage3 and follow the gentoo handbook to install it. Just bear in mind your only network interface is wlan0, you do want to specify the "xxx,noatime" mount option to ensure maximum life and speed from your solid state memories (either mSD or internal).
-Also, remember you must NOT install any bootloader (lilo, grub, etc) and you CANNOT install a linux kernel, you must use the same kernel you are using in the dual boot we have set up.
-Since some stuff will need the kernel sources to compile, just emerge git and download there sources <xxx> to /usr/src and make a symlink called /usr/src/linux to them.
-You can now reboot android and try out the dual boot, if all goes well, you will get to a grentoo login and you can login as root.
+=== Prepre your stage3 before first boot ===
+
+(make sure to do these steps from your tablet and not from the PC)
+Follow the gentoo handbook to install it. In short, these are the steps:
+* cd into your gentoo mounted parttion: ''cd tmpGentoo''
+* remount with bind dev, proc, run, sys: ''for i in dev proc run sys; do mount -o bind /$i $i; done''
+* create your ''etc/resolv.conf'', put inside your DNS server (Android does not have one, so you must create it from scratch)
+* chroot: ''chroot ./ /bin/bash''
+* change the root password immediately: ''passwd''
+* DO NOT INSTALL A KERNEL: you must use the provided that10 kernel.
+* DO NOT INSTALL GRUB OR ANY BOOTLOADER: you have multiboot already in place.
+* DO NOT INSTALL LOG MANAGERS: metalog, syslog-ng and the likes, will only slow down and add wear to your microSD.
+* Take a look at the Gentoo Handbook to see if you need something else which i clearly forgot here.
+* Don't forget to prepare your portage tree ('''emerge --sync''') and update it as needed.
 
 === Mask and unmask packages ===
-The provided tegra drivers works only with X up to 1.14 (which is not very stable) and since 1.13 has been masked due to security flaws, you must mask any xorg-server above or equal to 1.13. I recomend the following accept_keywords and mask:
-<here files...>
+The provided tegra drivers works only with X up to 1.14 (which is not very stable) and since 1.13 has been masked due to security flaws, you must mask any xorg-server above or equal to 1.13. Also, many ebuilds are not yet classified as "stable" for ARM, but are nevertheless very much usable. You will need to unmask a lot of stuff, i am posting here my '''/etc/portage/packages.accept_keywords''' for you to copy:
+ # Firefox after v.32 do not compile on ARM
+ <=www-client/firefox-32 ~arm 
+ dev-libs/nss ~arm
+ dev-libs/botan ~arm
+ # These works great:
+ media-gfx/gimp ~arm
+ net-analyzer/wireshark ~arm
+ dev-libs/tinyxml ~arm
+ x11-libs/wxGTK ~arm
+ media-libs/babl ~arm
+ sys-apps/texinfo ~arm
+ net-libs/gnutls ~arm
+ media-libs/gegl ~arm
+ sys-devel/gettext ~arm
+ =net-misc/networkmanager-1.0.0 ~arm
+ =gnome-extra/nm-applet-1.0.0
+ =net-wireless/gnome-bluetooth-3.14.0 ~arm
+ =x11-themes/gnome-icon-theme-symbolic-3.12.0 ~arm
+ app-arch/p7zip ~arm
 
-=== Install Tegra packages ===
-Download the NVIDIA binary package for Tegra3 <here>
-DEcompress.... copy the following files:
-<....>
+As a rule of thumb, if a package has the ~arm keyword, try it out! They usually work very well (with Filezilla the only exception so far for me).
 
-=== Install touchscreen and touchpad drivers ===
-from here <> and here <>
+Then mask the packages for the NVIDIA blob to work, in your '''/etc/portage/package.mask''':
+ >=x11-base/xorg-server-1.13.0
 
-=== Suggested configuration from here ===
-You have only 1gb of ram and swap file is strongly discouraged. So i suggest you install lxde-meta and the nice XDM replacement °slim°. 
-I usually configure it for auto-login due to some strange long delays in the login.
+Since the tablet has only WiFi, i suggest strongly to install NetworkManager and use it. Since i am going to use LXDE i have also unmasked the needed packages for the nm-applet which works great with LXDE.
 
-=== Fine tuning some things ===
-Video standby simply hangs 75% of the times, so forget it. Disable any screen blanking from your screensaver. Instead, use this script:
-<------------>
+This is my /etc/portage/make.conf:
+ CFLAGS="-O2 -pipe -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard"
+ CXXFLAGS="${CFLAGS}"
+ CHOST="armv7a-hardfloat-linux-gnueabi"
+ USE="bindist"
+ PORTDIR="/usr/portage"
+ DISTDIR="${PORTDIR}/distfiles"
+ PKGDIR="${PORTDIR}/packages"
+ USE="alsa opengl mp3 aacs v4l x264 consolekit neon minizip sqlite bluetooth truetype networkmanager gudev bindist X policykit jpg jpeg tiff png dbus pdf cups udev samba"
+ MAKEOPTS="-j4"
+ VIDEO_CARDS="v4l"
+ INPUT_DEVICES="evdev keyboard"
+ FEATURES="ccache -sandbox -usersandbox"
 
-install xbindkeys and the following scripts:
-<------------->
+I have enabled ccache to speed up build times and help the microSD. Since we have a quad-core i have set the -j4 to speed up make. I had to disable sandbox because some packages will not build on ARM. The various useflags are just an example, adapt to your needs. Of course, you need to ''emerge ccache'' and enable it too.
 
-In this way you can lock the screen and put the brightness to 0 by pressing the power button. If you don'y do this, well, simply the metal dock will keep pressing randomly your touchscreen all the time... and this is NOT what you want!
+=== Setup the kernel ===
+
+No, you cannot recompile any sources provided by Gentoo nor i had any luck whatsoever with the NVIDIA provided kernel sources, since the 3.10 brach seems to work only on newer devices and the "official" branch is an obsolete 2.6 kernel.
+
+What you have to do now is copy the same kernel your Android is using (or choose a kernel from the package which contains the multiboot loader) to the /boot folder of your Gentoo partition. I leave this as an exercise for you, you want to end up with these files:
+ /boot/initrd.img
+ /boot/zImage
+
+So copy both from your Android system partition.
+
+Since some packages needs the kernel sources to be built, we need to download the sources associated to your kernel: 
+* fetch t[https://github.com/that1/android_kernel_asus_tf700t this] URL with git (or download it and unpack) and put it under '''/usr/src/linux'''.
+* Copy your current kernel config: ''cp /proc/config.gz /usr/src/linux''
+* decompress: ''cd /usr/src/linux && gunzip config.gz''
+* rename: mv config .config
+
+=== Install driver packages ===
+
+At this moment the only way to get X to start is using the NVIDIA provided binary blob. It sucks, albeit it works, but since i am not able to recompile any 3.10 kernel and try OpenTegra, there is no other way to go.
+
+Touch screen and trackpad works great but we need to download and install the proper drviers too.
+
+* Build Xorg, it will take some time, so you can sart building it while doing the rest of the steps: ''emerge xorg-server xorg-drivers''
+* While it builds, download the package: [http://developer.download.nvidia.com/mobile/tegra/l4t/r16.5.0/cardhu_release_armhf/Tegra30_Linux_R16.5_armhf.tbz2 from here]
+* then unpack it into your root user home folder in the gentoo partition (i suggest to keep it there in case you need some files later on)
+* Now doenload the trackpad drivers from this link: [http://www.gardiol.org/tf700/xorg-x11-drv-mtev-0.1.13.tar.bz2 my website](this is a patched version of the sources you can find around the web, which will not compile)
+* download the touch-screen drivers here: [http://www.gardiol.org/tf700/Multitouch-X-Driver.tar.bz2 my website]
+
+Now wait for Xorg to be completely built and installed.
+
+* decompress, build and install (''make install'' is enough) both the touchpad and the touchscreen drivers.
+* Decompress the Linux 4 Tegra package
+* Decompress the archive nvidia_drivers.tbz2 found within ''/root/Linux_for_Tegra/nv_tegra'', it will create some folders like usr, etc and lib, DO NOT EXPAND IN YOUR ROOT FOLDER! For the following instructions i assume you will expand it into the nv_tegra folder where the archive is.
+* Copy the xorg driver from ''/root/Linux_for_Tegra/nv_tegra/usr/lib/xorg/modules/drivers'' to ''/usr/lib/xorg/modules/drivers''. Pick the right one (the ABI12 in our case) and copy to the destination folder and rename it to tegra_drv.so.
+* Copy MOST of the libraries from ''/root/Linux_for_Tegra/nv_tegra/usr/lib'' to ''/usr/lib'' but be VERY CAREFULL not to replace ''libjpeg.so'', you want to keep your copy of it.
+* Poke around the ''/root/Linux_for_Tegra/nv_tegra'' folder, check if there are more files you want to copy to your filesystem (probably not).
+
+You can now reboot android and try out the dual boot, if all goes well, you will get to a grentoo login console prompt and you can login as root!
