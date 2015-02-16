@@ -648,7 +648,80 @@ Now you can play around with X... you will immediately notice a few things like,
 == Lock screen and bind keys ==
 You don't notice on Android, but then you close the lid Android will automatically lock your screen, which means actually it will lock your TOUCH screen. Linux does not do it for you, so you must set it up manually. 
 
-To do this ...
+Also, it's handy to be able to use those "useless" volume keysm for example to regulare screen brightness... We can use '''xbindkeys''' to achieve all this, keep reading...
+
+First of all install the tools: ''emerge xbindkeys xinput''. 
+
+Now, create these two scripts under '''/etc/tf700''':
+
+Create '''/etc/tf700-lock-screen.sh''':
+<pre>
+#!/bin/bash
+if [ $(xinput --list-props 8 | grep Enabled | cut -d: -f 2) -gt 0 ]
+then
+	xinput disable 8
+	xinput disable 9
+	cat /sys/class/backlight/pwm-backlight/brightness > /tmp/.lock_touchscreen_last_brightness
+	echo 0 >> /sys/class/backlight/pwm-backlight/brightness
+else
+	LAST_BRIGHTNESS=100
+	if [ -e /tmp/.lock_touchscreen_last_brightness ]
+	then
+		LAST_BRIGHTNESS=$(cat /tmp/.lock_touchscreen_last_brightness)
+	fi
+	xinput enable 8
+	xinput enable 9
+	echo $LAST_BRIGHTNESS >> /sys/class/backlight/pwm-backlight/brightness
+fi
+</pre>
+
+This script will lock the screen by disabling touchpad and touchscreen, and turns off the screen by setting the brightness to zero.vBy the way this is the only way to turn your screen black, beware '''DO NOT''' use any screensaver, and '''DO NOT''' use any apm/dpms related methods to turn your diplay off, as 75% of the times this will hang your tablet and wil require an hard-reset to reboot!
+
+
+And create '''/etc/tf700/brightness.sh''':
+<pre>
+tf700t tf700 # ls
+brightness.sh  lock_touchpad.sh  SpecialKeysX  tf700.map
+tf700t tf700 # cat brightness.sh 
+#!/bin/bash
+CURRENT=$(cat /sys/class/backlight/pwm-backlight/brightness)
+MIN=5
+MAX=$(cat /sys/class/backlight/pwm-backlight/max_brightness)
+if [ "$1" == "" ]
+then
+	echo $CURRENT
+else
+	if [ $1 -gt 0 ]
+	then
+		CURRENT=$(expr $CURRENT + $1 )
+	elif [ $1 -lt 0 ]
+	then
+		CURRENT=$(expr $CURRENT + $1 )
+	fi
+	if [ $CURRENT -ge $MIN -a $CURRENT -le $MAX ]
+	then
+		echo $CURRENT >> /sys/class/backlight/pwm-backlight/brightness
+	fi
+fi
+</pre>
+This script will let you turn up and down the screen brightness.
+
+To bind these scripts to the power button and the sound volume buttins, add this to your '''~/.xbindkeys''' file:
+<pre>
+"/etc/tf700/lock_touchpad.sh"
+    m:0x0 + c:124
+    XF86PowerOff
+
+"/etc/tf700/brightness.sh -10"
+    m:0x0 + c:122
+    XF86AudioRaiseVolume
+
+"/etc/tf700/brightness.sh 10"
+    m:0x0 + c:123
+    F12
+</pre>
+
+Then add '''xbindkeys''' to LXDE startup, and now you can safely close yout lid, just remmber to press the lock button before!
 
 == Conky ==
 The proprietary NVIDIA drivers provides you with many more details like battery status... We would like to know how much battery we have left! I find '''conky''' a nifty little tool, so let's use it here:
