@@ -512,15 +512,148 @@ tf700dock = +tf700dock
 
 You can now reboot android and try out the dual boot, if all goes well, you will get to a grentoo login console prompt and you can login as root!
 
-= First boot: setup X =
+= First boot: setup network and X =
+
+Our first boot will take us to the console prompt. The NVIDIA provided binary blob for the graphic driver has the nasty habit of not being able to go back to console after starting the X server, so if anything goes wrong you cannot go back. For this reason, it's better to do the first boot text-only and switch on the X server only after you have everythinf sorted out.
+
+== Setup networking ==
+For the above mentioned issue, it's a good idea at this point to setup your network and your SSH server. If you followed all the instructions to setup the keyboard, you should have a working keyboard at this point in console, including the ESC key. 
+
+So, let's install and configure the network with NetworkManager (of course feel free to use any other method you prefer):
+* start ssh: ''/etc/init.d/sshd start''
+* add sshd st boot: ''rc-update add sshd default''
+* install network manager: ''emerge networkmanager''
+* now use nmcli to connect to your preferred wifi: ''nmcli d wifi connect <your AP> password <your password>''
+
+At this point if you loose the console for any reason you can always login remotely via SSH and reboot the tablet, no harm done to your microSD.
+
+
 
 == Try out X ==
+First of all we need to setup a basic xorg.conf file which will work, this is mine as an example, copy it in a file called '''/etc/X11/xorg.conf''':
+
+<pre>
+Section "ServerLayout"
+    Identifier    "Layout0"
+    Screen      0 "ScreenLVDS" 0 0
+EndSection
+
+Section "Extensions"
+    Option "Composite" "Enable"
+EndSection
+
+Section "Module"
+    Load  "glx"
+    Load  "record"
+    Load  "i2c"
+EndSection
+
+Section "Screen"
+    Identifier    "ScreenLVDS"
+    Device        "DeviceLVDS"
+    Monitor       "MonitorLVDS"
+    DefaultDepth   24
+EndSection
+
+Section "Device"
+    Identifier    "DeviceLVDS"
+    Driver        "tegra"
+    Option        "ARGBHWCursor"
+    Option	  "RenderAccel" "true"
+    Option	  "AllowGLXWithComposite" "true"
+    Option        "Monitor-HDMI-1"  "MonitorHDMI"
+EndSection
+
+Section "Monitor"
+    Identifier    "MonitorLVDS"
+    VendorName    "Nvidia"
+    ModelName     "T33 Tegra3"
+    Option        "DPMS" "true"
+    DisplaySize   218 136
+EndSection
+
+Section "Monitor"
+    Identifier    "MonitorHDMI"
+    VendorName    "Nvidia"
+    ModelName     "T33 Tegra3"
+    Option        "DPMS" "true"
+EndSection
+
+Section "InputClass"
+    Identifier       "catched touchpad"
+    Driver           "multitouch"
+    MatchDevicePath "/dev/input/event*"
+    MatchProduct    "elantech_touchscreen"
+
+    Option "CorePointer" "true"
+EndSection
+
+Section "InputClass"
+    Identifier       "catched touchscreen"
+    Driver           "mtev"
+    MatchDevicePath "/dev/input/event*"
+    MatchProduct    "elan-touchscreen"
+
+    Option "CorePointer" "true"
+EndSection
+
+Section "InputClass"
+    Identifier      "tf700 keyboard"
+    Driver          "evdev"
+    MatchDevicePath "/dev/input/event*"
+    MatchIsKeyboard "true"
+    MatchProduct    "asusdec"
+
+    Option "AutoRepeat"   "200 50"
+    Option "XkbModel" "pc104"
+    Option "XkbLayout" "us"
+EndSection
+</pre>
+
+It will also configure the touchscreen and the trackpad. Yes you need also to specify the tegra driver as it will NOT be detected automatically.
+
+At this point, type X and enjoy your first X server on the TF700T. If everything goes well, you should get an X working! Type CTRL+ALT+BACKSPACE (or type CTRL+ALT+F1 to switch back to console and then type CTRL+C). Of course your console will be borked and unsuable, but if you just type '''reboot''' it should reboot...
+
+So if you got the working X, you can proceed. If, otherwise, you got errors check your '''/var/log/Xorg.0.log''' file for errors and fix them. If you got a garbled/unusable screen, well, check a few things:
+* you are using an ARMv7 hardfp Gentoo stage3 (a softfp will NOT work)
+* the tegra_drv.so you are using matches the same ABI of your xorg (ex. xorg v.12 requires the v.12 tegra_drv.so)
+* ... try to look for help, but it will be hard, since not many and playing with Gentoo on the TF700T. Still the Gentoo forums might be a good place to start at least to work out possible Gentoo-general issues.
+
 
 == Install LXDE and slim ==
 
+I assume you can now start a working X server, well you now need somthing to use it with. 
+
+Due to the limited RAM and slow storage, my recomendation goes to a clean LXDE installation. As a bonus point LXTerminal seems to be basically the only terminal which adapts properly to the odd DPI size of the tablet!
+
+Also we need a login manager. For some reason loggin in is a slow process, with at least one or two seconds delay between username and password... i guess it's due to the slow storage, but i find the best way to overcome this is setup an autologging display manager. Yes some of you might don't like it, just skip the "slim" part and propose here your valid alternative.
+
+So, let's proceed, sfter you have your WiFi turned on of course:
+* Install LXDE, be patient, take a bath, have dinner and sleep a bit: ''emerge lxde-meta'' (you might have to unmask some packages here for arm)
+* Install slim: ''emerge slim'' 
+* Set slim as your default XDM in ''/etc/conf.d/xdm''
+* Configure slim for autologin by editing file ''/etc/slim.conf'', check the two values '''default_user''' and '''auto-login'''
+
+It's worth to do one last experiment before setting slim to start on boot, try it manually:
+* ''/etc/init.d/xdm start''
+
+If all goes well, you are in your new shimy LXDE session! At this point we can setup automatic X startup at boot:
+* ''rc-update add xdm default''
+
+Now you can play around with X... you will immediately notice a few things like, there is no battery indicator, then you close the lid strange things will start happening on the screen, and so on. Read on to fix these issues.
+
+
+== Fixing the display for touch interaction ==
+
 == Lock screen and bind keys ==
+You don't notice on Android, but then you close the lid Android will automatically lock your screen, which means actually it will lock your TOUCH screen. Linux does not do it for you, so you must set it up manually. 
 
+To do this ...
 
+== Conky ==
+The proprietary NVIDIA drivers provides you with many more details like battery status... We would like to know how much battery we have left! I find '''conky''' a nifty little tool, so let's use it here:
+
+*
 
 = References =
 * [http://achurch.org/gentoo-tf700/ Previous attempt by Andrew Church]
